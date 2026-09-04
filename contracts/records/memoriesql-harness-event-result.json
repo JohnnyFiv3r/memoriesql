@@ -1,0 +1,237 @@
+{
+  "contract": {
+    "$defs": {
+      "CaptureIngressStatus": {
+        "enum": [
+          "detected",
+          "received",
+          "duplicate",
+          "quarantined",
+          "accepted",
+          "amended",
+          "deleted"
+        ],
+        "title": "CaptureIngressStatus",
+        "type": "string"
+      },
+      "CaptureSubmissionReceipt": {
+        "additionalProperties": false,
+        "properties": {
+          "authority_principal_id": {
+            "format": "uuid",
+            "title": "Authority Principal Id",
+            "type": "string"
+          },
+          "checkpoint_sequence": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Checkpoint Sequence"
+          },
+          "delivery_id": {
+            "format": "uuid",
+            "title": "Delivery Id",
+            "type": "string"
+          },
+          "durable": {
+            "const": true,
+            "default": true,
+            "title": "Durable",
+            "type": "boolean"
+          },
+          "event_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Event Id"
+          },
+          "idempotency_receipt_id": {
+            "format": "uuid",
+            "title": "Idempotency Receipt Id",
+            "type": "string"
+          },
+          "ingress_status": {
+            "$ref": "#/$defs/CaptureIngressStatus"
+          },
+          "operation_id": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Operation Id",
+            "type": "string"
+          },
+          "replayed": {
+            "title": "Replayed",
+            "type": "boolean"
+          },
+          "request_hash": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Request Hash",
+            "type": "string"
+          }
+        },
+        "required": [
+          "delivery_id",
+          "idempotency_receipt_id",
+          "operation_id",
+          "request_hash",
+          "ingress_status",
+          "authority_principal_id",
+          "replayed"
+        ],
+        "title": "CaptureSubmissionReceipt",
+        "type": "object"
+      },
+      "HarnessBridgeDiagnostic": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+            "title": "Code",
+            "type": "string"
+          },
+          "detail": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Detail",
+            "type": "string"
+          },
+          "event_id": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Event Id"
+          }
+        },
+        "required": [
+          "code",
+          "detail"
+        ],
+        "title": "HarnessBridgeDiagnostic",
+        "type": "object"
+      },
+      "HarnessBridgeResultStatus": {
+        "enum": [
+          "accepted",
+          "replayed",
+          "finalized",
+          "capture_failed",
+          "rejected"
+        ],
+        "title": "HarnessBridgeResultStatus",
+        "type": "string"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "capture_receipt": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/CaptureSubmissionReceipt"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "diagnostics": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/HarnessBridgeDiagnostic"
+        },
+        "maxItems": 16,
+        "title": "Diagnostics",
+        "type": "array"
+      },
+      "envelope_hash": {
+        "anyOf": [
+          {
+            "pattern": "^[a-f0-9]{64}$",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Envelope Hash"
+      },
+      "event_hash": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Event Hash",
+        "type": "string"
+      },
+      "event_id": {
+        "maxLength": 512,
+        "minLength": 1,
+        "title": "Event Id",
+        "type": "string"
+      },
+      "idempotency_key": {
+        "anyOf": [
+          {
+            "maxLength": 512,
+            "minLength": 1,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Idempotency Key"
+      },
+      "status": {
+        "$ref": "#/$defs/HarnessBridgeResultStatus"
+      },
+      "turn_key": {
+        "anyOf": [
+          {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Turn Key"
+      }
+    },
+    "required": [
+      "event_id",
+      "status",
+      "event_hash"
+    ],
+    "title": "HarnessBridgeEventResult",
+    "type": "object"
+  },
+  "id": "memoriesql.harness.event-result",
+  "status": "available",
+  "summary": "Versioned SQL-13 capture contract implemented by PR-02F.",
+  "version": "1"
+}

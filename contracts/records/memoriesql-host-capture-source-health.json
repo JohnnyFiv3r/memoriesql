@@ -1,0 +1,459 @@
+{
+  "contract": {
+    "$defs": {
+      "DurableCursorAcknowledgement": {
+        "additionalProperties": false,
+        "properties": {
+          "authority_principal_id": {
+            "format": "uuid",
+            "title": "Authority Principal Id",
+            "type": "string"
+          },
+          "operation_id": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Operation Id",
+            "type": "string"
+          },
+          "proposal": {
+            "$ref": "#/$defs/ProposedSourceCursor"
+          },
+          "receipt_delivery_id": {
+            "format": "uuid",
+            "title": "Receipt Delivery Id",
+            "type": "string"
+          },
+          "receipt_event_id": {
+            "format": "uuid",
+            "title": "Receipt Event Id",
+            "type": "string"
+          },
+          "receipt_request_hash": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Receipt Request Hash",
+            "type": "string"
+          },
+          "replayed": {
+            "title": "Replayed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "proposal",
+          "operation_id",
+          "receipt_request_hash",
+          "receipt_event_id",
+          "receipt_delivery_id",
+          "authority_principal_id",
+          "replayed"
+        ],
+        "title": "DurableCursorAcknowledgement",
+        "type": "object"
+      },
+      "FileIdentity": {
+        "additionalProperties": false,
+        "properties": {
+          "birth_time_ns": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Birth Time Ns"
+          },
+          "device": {
+            "minimum": 0,
+            "title": "Device",
+            "type": "integer"
+          },
+          "inode": {
+            "minimum": 0,
+            "title": "Inode",
+            "type": "integer"
+          },
+          "platform": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Platform",
+            "type": "string"
+          }
+        },
+        "required": [
+          "platform",
+          "device",
+          "inode"
+        ],
+        "title": "FileIdentity",
+        "type": "object"
+      },
+      "HostCaptureState": {
+        "enum": [
+          "healthy",
+          "waiting_for_complete_record",
+          "degraded",
+          "quarantined",
+          "permission_revoked",
+          "identity_changed"
+        ],
+        "title": "HostCaptureState",
+        "type": "string"
+      },
+      "ProposedSourceCursor": {
+        "additionalProperties": false,
+        "properties": {
+          "capability_id": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+            "title": "Capability Id",
+            "type": "string"
+          },
+          "end_offset": {
+            "minimum": 1,
+            "title": "End Offset",
+            "type": "integer"
+          },
+          "envelope_hash": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Envelope Hash",
+            "type": "string"
+          },
+          "expected_checkpoint_sequence": {
+            "minimum": 0,
+            "title": "Expected Checkpoint Sequence",
+            "type": "integer"
+          },
+          "file_identity": {
+            "$ref": "#/$defs/FileIdentity"
+          },
+          "next_checkpoint_sequence": {
+            "minimum": 1,
+            "title": "Next Checkpoint Sequence",
+            "type": "integer"
+          },
+          "proposal_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Proposal Version",
+            "type": "integer"
+          },
+          "source_bytes_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Source Bytes Sha256",
+            "type": "string"
+          },
+          "start_offset": {
+            "minimum": 0,
+            "title": "Start Offset",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "capability_id",
+          "file_identity",
+          "start_offset",
+          "end_offset",
+          "source_bytes_sha256",
+          "envelope_hash",
+          "expected_checkpoint_sequence",
+          "next_checkpoint_sequence"
+        ],
+        "title": "ProposedSourceCursor",
+        "type": "object"
+      },
+      "ScopeExclusionReason": {
+        "enum": [
+          "off_date",
+          "missing_source_time",
+          "cross_midnight"
+        ],
+        "title": "ScopeExclusionReason",
+        "type": "string"
+      },
+      "ScopeExclusionReasonCount": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "maximum": 1024,
+            "minimum": 1,
+            "title": "Count",
+            "type": "integer"
+          },
+          "reason": {
+            "$ref": "#/$defs/ScopeExclusionReason"
+          }
+        },
+        "required": [
+          "reason",
+          "count"
+        ],
+        "title": "ScopeExclusionReasonCount",
+        "type": "object"
+      },
+      "SourceFailureCapsule": {
+        "additionalProperties": false,
+        "description": "Bounded topology-only diagnostics; source values are never admitted.",
+        "properties": {
+          "active_turn_present": {
+            "title": "Active Turn Present",
+            "type": "boolean"
+          },
+          "assembly_state_version": {
+            "enum": [
+              2,
+              3,
+              4
+            ],
+            "title": "Assembly State Version",
+            "type": "integer"
+          },
+          "byte_offset": {
+            "minimum": 0,
+            "title": "Byte Offset",
+            "type": "integer"
+          },
+          "capsule_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Capsule Version",
+            "type": "integer"
+          },
+          "history_record_count": {
+            "maximum": 4096,
+            "minimum": 0,
+            "title": "History Record Count",
+            "type": "integer"
+          },
+          "lineage_map_count": {
+            "maximum": 4096,
+            "minimum": 0,
+            "title": "Lineage Map Count",
+            "type": "integer"
+          },
+          "logical_terminal_pending": {
+            "title": "Logical Terminal Pending",
+            "type": "boolean"
+          },
+          "parent_in_history_records": {
+            "title": "Parent In History Records",
+            "type": "boolean"
+          },
+          "parent_in_parent_turns": {
+            "title": "Parent In Parent Turns",
+            "type": "boolean"
+          },
+          "parent_in_pending_records": {
+            "title": "Parent In Pending Records",
+            "type": "boolean"
+          },
+          "pending_record_count": {
+            "maximum": 1024,
+            "minimum": 0,
+            "title": "Pending Record Count",
+            "type": "integer"
+          },
+          "record_classification": {
+            "$ref": "#/$defs/SourceStructuralRecordClass"
+          },
+          "record_index": {
+            "minimum": 0,
+            "title": "Record Index",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "record_index",
+          "byte_offset",
+          "record_classification",
+          "parent_in_pending_records",
+          "parent_in_history_records",
+          "parent_in_parent_turns",
+          "pending_record_count",
+          "history_record_count",
+          "lineage_map_count",
+          "logical_terminal_pending",
+          "active_turn_present",
+          "assembly_state_version"
+        ],
+        "title": "SourceFailureCapsule",
+        "type": "object"
+      },
+      "SourceStructuralRecordClass": {
+        "description": "Closed, content-free record classes permitted in failure capsules.",
+        "enum": [
+          "user.external",
+          "user.tool-result",
+          "user.other",
+          "assistant.end-turn-thinking",
+          "assistant.end-turn-visible",
+          "assistant.other",
+          "system.stop-hook-summary",
+          "system.other",
+          "attachment",
+          "progress",
+          "queue-operation",
+          "other"
+        ],
+        "title": "SourceStructuralRecordClass",
+        "type": "string"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "acknowledged_offset": {
+        "minimum": 0,
+        "title": "Acknowledged Offset",
+        "type": "integer"
+      },
+      "acknowledged_record_index": {
+        "minimum": 0,
+        "title": "Acknowledged Record Index",
+        "type": "integer"
+      },
+      "capability_id": {
+        "maxLength": 128,
+        "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+        "title": "Capability Id",
+        "type": "string"
+      },
+      "checkpoint_sequence": {
+        "minimum": 0,
+        "title": "Checkpoint Sequence",
+        "type": "integer"
+      },
+      "diagnostic_code": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Diagnostic Code"
+      },
+      "failure_capsule": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/SourceFailureCapsule"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "file_identity": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/FileIdentity"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "health_version": {
+        "const": 1,
+        "default": 1,
+        "title": "Health Version",
+        "type": "integer"
+      },
+      "lag_bytes": {
+        "minimum": 0,
+        "title": "Lag Bytes",
+        "type": "integer"
+      },
+      "last_acknowledgement": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/DurableCursorAcknowledgement"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "observed_size": {
+        "minimum": 0,
+        "title": "Observed Size",
+        "type": "integer"
+      },
+      "pending_assembly_bytes": {
+        "maximum": 8388608,
+        "minimum": 0,
+        "title": "Pending Assembly Bytes",
+        "type": "integer"
+      },
+      "pending_partial_tail_bytes": {
+        "maximum": 262144,
+        "minimum": 0,
+        "title": "Pending Partial Tail Bytes",
+        "type": "integer"
+      },
+      "quarantine_count": {
+        "maximum": 32,
+        "minimum": 0,
+        "title": "Quarantine Count",
+        "type": "integer"
+      },
+      "quarantine_overflow_count": {
+        "minimum": 0,
+        "title": "Quarantine Overflow Count",
+        "type": "integer"
+      },
+      "retry_attempts": {
+        "maximum": 8,
+        "minimum": 0,
+        "title": "Retry Attempts",
+        "type": "integer"
+      },
+      "scope_exclusion_count": {
+        "default": 0,
+        "maximum": 1024,
+        "minimum": 0,
+        "title": "Scope Exclusion Count",
+        "type": "integer"
+      },
+      "scope_exclusion_reason_counts": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/ScopeExclusionReasonCount"
+        },
+        "maxItems": 3,
+        "title": "Scope Exclusion Reason Counts",
+        "type": "array"
+      },
+      "source_state": {
+        "$ref": "#/$defs/HostCaptureState"
+      }
+    },
+    "required": [
+      "capability_id",
+      "source_state",
+      "file_identity",
+      "acknowledged_offset",
+      "acknowledged_record_index",
+      "checkpoint_sequence",
+      "pending_partial_tail_bytes",
+      "pending_assembly_bytes",
+      "observed_size",
+      "lag_bytes",
+      "retry_attempts",
+      "quarantine_count",
+      "quarantine_overflow_count"
+    ],
+    "title": "HostCaptureHealth",
+    "type": "object"
+  },
+  "id": "memoriesql.host-capture.source-health",
+  "status": "available",
+  "summary": "Versioned SQL-13 capture contract implemented by PR-02B.",
+  "version": "1"
+}

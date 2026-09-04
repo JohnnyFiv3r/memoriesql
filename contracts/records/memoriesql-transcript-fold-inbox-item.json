@@ -1,0 +1,125 @@
+{
+  "contract": {
+    "$defs": {
+      "TranscriptFoldOutcomeKind": {
+        "enum": [
+          "exact_turn",
+          "transcript_span",
+          "policy_disposition"
+        ],
+        "title": "TranscriptFoldOutcomeKind",
+        "type": "string"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "adapter_profile_version": {
+        "anyOf": [
+          {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Adapter Profile Version"
+      },
+      "byte_end_exclusive": {
+        "exclusiveMinimum": 0,
+        "title": "Byte End Exclusive",
+        "type": "integer"
+      },
+      "byte_start": {
+        "minimum": 0,
+        "title": "Byte Start",
+        "type": "integer"
+      },
+      "disposition_code": {
+        "anyOf": [
+          {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Disposition Code"
+      },
+      "end_record_index": {
+        "minimum": 0,
+        "title": "End Record Index",
+        "type": "integer"
+      },
+      "exact_envelope_sha256": {
+        "anyOf": [
+          {
+            "pattern": "^[a-f0-9]{64}$",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Exact Envelope Sha256"
+      },
+      "folded_at": {
+        "format": "date-time",
+        "title": "Folded At",
+        "type": "string"
+      },
+      "outcome_kind": {
+        "$ref": "#/$defs/TranscriptFoldOutcomeKind"
+      },
+      "outcome_ordinal": {
+        "minimum": 0,
+        "title": "Outcome Ordinal",
+        "type": "integer"
+      },
+      "source_bytes_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Source Bytes Sha256",
+        "type": "string"
+      },
+      "source_object_id": {
+        "format": "uuid",
+        "title": "Source Object Id",
+        "type": "string"
+      },
+      "start_record_index": {
+        "minimum": 0,
+        "title": "Start Record Index",
+        "type": "integer"
+      },
+      "transcript_fold_receipt_id": {
+        "format": "uuid",
+        "title": "Transcript Fold Receipt Id",
+        "type": "string"
+      }
+    },
+    "required": [
+      "transcript_fold_receipt_id",
+      "outcome_ordinal",
+      "source_object_id",
+      "outcome_kind",
+      "byte_start",
+      "byte_end_exclusive",
+      "start_record_index",
+      "end_record_index",
+      "source_bytes_sha256",
+      "folded_at"
+    ],
+    "title": "TranscriptFoldInboxItem",
+    "type": "object"
+  },
+  "id": "memoriesql.transcript-fold.inbox-item",
+  "status": "available",
+  "summary": "Versioned SQL-13 capture contract implemented by PR-02M.",
+  "version": "1"
+}

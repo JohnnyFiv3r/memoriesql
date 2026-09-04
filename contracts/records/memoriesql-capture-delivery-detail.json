@@ -1,0 +1,825 @@
+{
+  "contract": {
+    "$defs": {
+      "CaptureEventKind": {
+        "enum": [
+          "source_observed",
+          "source_amended",
+          "source_deleted",
+          "turn_finalized",
+          "turn_amended"
+        ],
+        "title": "CaptureEventKind",
+        "type": "string"
+      },
+      "CapturePolicyReferences": {
+        "additionalProperties": false,
+        "properties": {
+          "access_policy_ref": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Access Policy Ref",
+            "type": "string"
+          },
+          "capture_policy_id": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+            "title": "Capture Policy Id",
+            "type": "string"
+          },
+          "observation_unit_policy_version": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Observation Unit Policy Version",
+            "type": "string"
+          },
+          "retention_policy_ref": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Retention Policy Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "capture_policy_id",
+          "access_policy_ref",
+          "retention_policy_ref",
+          "observation_unit_policy_version"
+        ],
+        "title": "CapturePolicyReferences",
+        "type": "object"
+      },
+      "ClientIdentity": {
+        "additionalProperties": false,
+        "properties": {
+          "agent_name": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Agent Name"
+          },
+          "client_id": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+            "title": "Client Id",
+            "type": "string"
+          },
+          "client_version": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Client Version",
+            "type": "string"
+          },
+          "model_name": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Model Name"
+          },
+          "provider_name": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Provider Name"
+          }
+        },
+        "required": [
+          "client_id",
+          "client_version"
+        ],
+        "title": "ClientIdentity",
+        "type": "object"
+      },
+      "ConversationIdentity": {
+        "additionalProperties": false,
+        "properties": {
+          "branch_id": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Branch Id"
+          },
+          "conversation_id": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "parent_turn_id": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Parent Turn Id"
+          },
+          "session_id": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Session Id",
+            "type": "string"
+          },
+          "turn_id": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Turn Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "conversation_id",
+          "session_id",
+          "turn_id"
+        ],
+        "title": "ConversationIdentity",
+        "type": "object"
+      },
+      "ParserCoverageReceipt": {
+        "additionalProperties": false,
+        "properties": {
+          "diagnostics": {
+            "default": [],
+            "items": {
+              "$ref": "#/$defs/ParserDiagnostic"
+            },
+            "maxItems": 32,
+            "title": "Diagnostics",
+            "type": "array"
+          },
+          "diagnostics_count": {
+            "maximum": 32,
+            "minimum": 0,
+            "title": "Diagnostics Count",
+            "type": "integer"
+          },
+          "first_source_position": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/SourcePosition"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "known_omissions": {
+            "default": [],
+            "items": {
+              "$ref": "#/$defs/ParserOmission"
+            },
+            "maxItems": 32,
+            "title": "Known Omissions",
+            "type": "array"
+          },
+          "last_source_position": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/SourcePosition"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "outcome_code": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Outcome Code"
+          },
+          "parser_id": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+            "title": "Parser Id",
+            "type": "string"
+          },
+          "parser_version": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Parser Version",
+            "type": "string"
+          },
+          "source_items_emitted": {
+            "maximum": 1000000,
+            "minimum": 0,
+            "title": "Source Items Emitted",
+            "type": "integer"
+          },
+          "source_items_quarantined": {
+            "maximum": 1000000,
+            "minimum": 0,
+            "title": "Source Items Quarantined",
+            "type": "integer"
+          },
+          "source_items_seen": {
+            "maximum": 1000000,
+            "minimum": 0,
+            "title": "Source Items Seen",
+            "type": "integer"
+          },
+          "status": {
+            "$ref": "#/$defs/ParserCoverageStatus"
+          }
+        },
+        "required": [
+          "parser_id",
+          "parser_version",
+          "status",
+          "source_items_seen",
+          "source_items_emitted",
+          "source_items_quarantined",
+          "diagnostics_count"
+        ],
+        "title": "ParserCoverageReceipt",
+        "type": "object"
+      },
+      "ParserCoverageStatus": {
+        "enum": [
+          "complete",
+          "partial",
+          "error"
+        ],
+        "title": "ParserCoverageStatus",
+        "type": "string"
+      },
+      "ParserDiagnostic": {
+        "additionalProperties": false,
+        "properties": {
+          "affected_items": {
+            "default": 1,
+            "maximum": 1000000,
+            "minimum": 1,
+            "title": "Affected Items",
+            "type": "integer"
+          },
+          "code": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+            "title": "Code",
+            "type": "string"
+          },
+          "position": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/SourcePosition"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "severity": {
+            "$ref": "#/$defs/ParserDiagnosticSeverity"
+          }
+        },
+        "required": [
+          "code",
+          "severity"
+        ],
+        "title": "ParserDiagnostic",
+        "type": "object"
+      },
+      "ParserDiagnosticSeverity": {
+        "enum": [
+          "info",
+          "warning",
+          "error"
+        ],
+        "title": "ParserDiagnosticSeverity",
+        "type": "string"
+      },
+      "ParserOmission": {
+        "additionalProperties": false,
+        "properties": {
+          "affected_items": {
+            "maximum": 1000000,
+            "minimum": 1,
+            "title": "Affected Items",
+            "type": "integer"
+          },
+          "code": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+            "title": "Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "affected_items"
+        ],
+        "title": "ParserOmission",
+        "type": "object"
+      },
+      "ParticipantIdentity": {
+        "additionalProperties": false,
+        "properties": {
+          "display_name": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Display Name"
+          },
+          "kind": {
+            "$ref": "#/$defs/ParticipantKind"
+          },
+          "participant_id": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Participant Id",
+            "type": "string"
+          },
+          "role": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "participant_id",
+          "kind",
+          "role"
+        ],
+        "title": "ParticipantIdentity",
+        "type": "object"
+      },
+      "ParticipantKind": {
+        "enum": [
+          "human",
+          "agent",
+          "service"
+        ],
+        "title": "ParticipantKind",
+        "type": "string"
+      },
+      "ProjectHint": {
+        "additionalProperties": false,
+        "properties": {
+          "repository_id": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Repository Id"
+          },
+          "source_project_id": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Source Project Id"
+          },
+          "worktree_id": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Worktree Id"
+          }
+        },
+        "title": "ProjectHint",
+        "type": "object"
+      },
+      "SourceIdentity": {
+        "additionalProperties": false,
+        "properties": {
+          "device_id": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Device Id"
+          },
+          "external_id_scope": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "External Id Scope",
+            "type": "string"
+          },
+          "installation_id": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Installation Id"
+          },
+          "source_account_ref": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Source Account Ref"
+          },
+          "source_format_version": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Source Format Version",
+            "type": "string"
+          },
+          "source_identity_key": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Source Identity Key",
+            "type": "string"
+          },
+          "source_object_kind": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+            "title": "Source Object Kind",
+            "type": "string"
+          },
+          "source_object_stable_id": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Source Object Stable Id",
+            "type": "string"
+          },
+          "source_product": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+            "title": "Source Product",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_product",
+          "source_format_version",
+          "external_id_scope",
+          "source_identity_key",
+          "source_object_kind",
+          "source_object_stable_id"
+        ],
+        "title": "SourceIdentity",
+        "type": "object"
+      },
+      "SourceLocator": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact_type": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+            "title": "Artifact Type",
+            "type": "string"
+          },
+          "byte_offset": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Byte Offset"
+          },
+          "json_pointer": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Json Pointer"
+          },
+          "line": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Line"
+          },
+          "native_ref": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Native Ref"
+          },
+          "record_index": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Record Index"
+          },
+          "row_id": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Row Id"
+          }
+        },
+        "required": [
+          "artifact_type"
+        ],
+        "title": "SourceLocator",
+        "type": "object"
+      },
+      "SourcePosition": {
+        "additionalProperties": false,
+        "properties": {
+          "byte_offset": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Byte Offset"
+          },
+          "column": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Column"
+          },
+          "json_pointer": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Json Pointer"
+          },
+          "line": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Line"
+          },
+          "record_index": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Record Index"
+          }
+        },
+        "title": "SourcePosition",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "client": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/ClientIdentity"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "conversation": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/ConversationIdentity"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "delivery_id": {
+        "format": "uuid",
+        "title": "Delivery Id",
+        "type": "string"
+      },
+      "event_kind": {
+        "$ref": "#/$defs/CaptureEventKind"
+      },
+      "parser_receipt": {
+        "$ref": "#/$defs/ParserCoverageReceipt"
+      },
+      "participants": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/ParticipantIdentity"
+        },
+        "title": "Participants",
+        "type": "array"
+      },
+      "policies": {
+        "$ref": "#/$defs/CapturePolicyReferences"
+      },
+      "project_hint": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/ProjectHint"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "source_identity": {
+        "$ref": "#/$defs/SourceIdentity"
+      },
+      "source_locator": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/SourceLocator"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "supersedes_event_id": {
+        "anyOf": [
+          {
+            "format": "uuid",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Supersedes Event Id"
+      }
+    },
+    "required": [
+      "delivery_id",
+      "event_kind",
+      "parser_receipt",
+      "source_identity",
+      "policies"
+    ],
+    "title": "CaptureDeliveryDetail",
+    "type": "object"
+  },
+  "id": "memoriesql.capture.delivery-detail",
+  "status": "available",
+  "summary": "Versioned SQL-13 capture contract implemented by PR-02A.",
+  "version": "1"
+}

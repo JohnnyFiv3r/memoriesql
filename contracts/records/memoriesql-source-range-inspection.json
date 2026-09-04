@@ -1,0 +1,222 @@
+{
+  "contract": {
+    "$defs": {
+      "SourceRangeInterpretationStatus": {
+        "enum": [
+          "pending_interpretation"
+        ],
+        "title": "SourceRangeInterpretationStatus",
+        "type": "string"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "byte_end_exclusive": {
+        "exclusiveMinimum": 0,
+        "title": "Byte End Exclusive",
+        "type": "integer"
+      },
+      "byte_offset": {
+        "anyOf": [
+          {
+            "minimum": 0,
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Byte Offset"
+      },
+      "byte_start": {
+        "minimum": 0,
+        "title": "Byte Start",
+        "type": "integer"
+      },
+      "chunk_count": {
+        "maximum": 256,
+        "minimum": 1,
+        "title": "Chunk Count",
+        "type": "integer"
+      },
+      "connector_id": {
+        "maxLength": 128,
+        "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+        "title": "Connector Id",
+        "type": "string"
+      },
+      "diagnostic_code": {
+        "anyOf": [
+          {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Diagnostic Code"
+      },
+      "failing_field_name": {
+        "anyOf": [
+          {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Failing Field Name"
+      },
+      "file_identity_key": {
+        "maxLength": 256,
+        "minLength": 1,
+        "title": "File Identity Key",
+        "type": "string"
+      },
+      "interpretation_status": {
+        "$ref": "#/$defs/SourceRangeInterpretationStatus"
+      },
+      "json_pointer": {
+        "anyOf": [
+          {
+            "maxLength": 512,
+            "minLength": 1,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Json Pointer"
+      },
+      "observed_connector_version": {
+        "anyOf": [
+          {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Observed Connector Version"
+      },
+      "observed_source_format_version": {
+        "anyOf": [
+          {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Observed Source Format Version"
+      },
+      "parser_profile_version": {
+        "anyOf": [
+          {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Parser Profile Version"
+      },
+      "payload_byte_count": {
+        "maximum": 262144,
+        "minimum": 1,
+        "title": "Payload Byte Count",
+        "type": "integer"
+      },
+      "payload_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Payload Sha256",
+        "type": "string"
+      },
+      "raw_bytes_available": {
+        "title": "Raw Bytes Available",
+        "type": "boolean"
+      },
+      "recognized_record_type": {
+        "anyOf": [
+          {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Recognized Record Type"
+      },
+      "record_index": {
+        "anyOf": [
+          {
+            "minimum": 0,
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Record Index"
+      },
+      "source_object_id": {
+        "format": "uuid",
+        "title": "Source Object Id",
+        "type": "string"
+      },
+      "source_range_receipt_id": {
+        "format": "uuid",
+        "title": "Source Range Receipt Id",
+        "type": "string"
+      },
+      "source_revision_key": {
+        "maxLength": 512,
+        "minLength": 1,
+        "title": "Source Revision Key",
+        "type": "string"
+      }
+    },
+    "required": [
+      "source_range_receipt_id",
+      "source_object_id",
+      "source_revision_key",
+      "file_identity_key",
+      "byte_start",
+      "byte_end_exclusive",
+      "payload_byte_count",
+      "payload_sha256",
+      "chunk_count",
+      "connector_id",
+      "interpretation_status",
+      "raw_bytes_available"
+    ],
+    "title": "SourceRangeInspection",
+    "type": "object"
+  },
+  "id": "memoriesql.source-range.inspection",
+  "status": "available",
+  "summary": "Versioned SQL-13 capture contract implemented by PR-02L.",
+  "version": "1"
+}

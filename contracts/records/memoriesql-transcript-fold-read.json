@@ -1,0 +1,248 @@
+{
+  "contract": {
+    "$defs": {
+      "DurableTranscriptReadStatus": {
+        "enum": [
+          "data",
+          "end_of_durable_ranges"
+        ],
+        "title": "DurableTranscriptReadStatus",
+        "type": "string"
+      },
+      "FileIdentity": {
+        "additionalProperties": false,
+        "properties": {
+          "birth_time_ns": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Birth Time Ns"
+          },
+          "device": {
+            "minimum": 0,
+            "title": "Device",
+            "type": "integer"
+          },
+          "inode": {
+            "minimum": 0,
+            "title": "Inode",
+            "type": "integer"
+          },
+          "platform": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Platform",
+            "type": "string"
+          }
+        },
+        "required": [
+          "platform",
+          "device",
+          "inode"
+        ],
+        "title": "FileIdentity",
+        "type": "object"
+      },
+      "TranscriptFoldSourceRange": {
+        "additionalProperties": false,
+        "description": "One exact retained-range slice contributing to a fold outcome.",
+        "properties": {
+          "byte_end_exclusive": {
+            "exclusiveMinimum": 0,
+            "title": "Byte End Exclusive",
+            "type": "integer"
+          },
+          "byte_start": {
+            "minimum": 0,
+            "title": "Byte Start",
+            "type": "integer"
+          },
+          "receipt_byte_end_exclusive": {
+            "exclusiveMinimum": 0,
+            "title": "Receipt Byte End Exclusive",
+            "type": "integer"
+          },
+          "receipt_byte_start": {
+            "minimum": 0,
+            "title": "Receipt Byte Start",
+            "type": "integer"
+          },
+          "receipt_payload_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Receipt Payload Sha256",
+            "type": "string"
+          },
+          "source_bytes_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Source Bytes Sha256",
+            "type": "string"
+          },
+          "source_range_receipt_id": {
+            "format": "uuid",
+            "title": "Source Range Receipt Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_range_receipt_id",
+          "receipt_byte_start",
+          "receipt_byte_end_exclusive",
+          "receipt_payload_sha256",
+          "byte_start",
+          "byte_end_exclusive",
+          "source_bytes_sha256"
+        ],
+        "title": "TranscriptFoldSourceRange",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "description": "Owner-confirmed bytes reconstructed only from immutable range receipts.",
+    "properties": {
+      "byte_end_exclusive": {
+        "minimum": 0,
+        "title": "Byte End Exclusive",
+        "type": "integer"
+      },
+      "byte_start": {
+        "minimum": 0,
+        "title": "Byte Start",
+        "type": "integer"
+      },
+      "connector_id": {
+        "anyOf": [
+          {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Connector Id"
+      },
+      "durable_end_offset": {
+        "minimum": 0,
+        "title": "Durable End Offset",
+        "type": "integer"
+      },
+      "file_identity": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/FileIdentity"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "file_identity_key": {
+        "maxLength": 256,
+        "minLength": 1,
+        "title": "File Identity Key",
+        "type": "string"
+      },
+      "first_captured_at": {
+        "anyOf": [
+          {
+            "format": "date-time",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "First Captured At"
+      },
+      "observed_connector_version": {
+        "anyOf": [
+          {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Observed Connector Version"
+      },
+      "observed_source_format_version": {
+        "anyOf": [
+          {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Observed Source Format Version"
+      },
+      "payload_hex": {
+        "default": "",
+        "pattern": "^(?:[a-f0-9]{2})*$",
+        "title": "Payload Hex",
+        "type": "string"
+      },
+      "payload_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Payload Sha256",
+        "type": "string"
+      },
+      "ranges": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/TranscriptFoldSourceRange"
+        },
+        "maxItems": 1024,
+        "title": "Ranges",
+        "type": "array"
+      },
+      "source_object_id": {
+        "format": "uuid",
+        "title": "Source Object Id",
+        "type": "string"
+      },
+      "source_revision_key": {
+        "maxLength": 512,
+        "minLength": 1,
+        "title": "Source Revision Key",
+        "type": "string"
+      },
+      "status": {
+        "$ref": "#/$defs/DurableTranscriptReadStatus"
+      }
+    },
+    "required": [
+      "status",
+      "source_object_id",
+      "source_revision_key",
+      "file_identity_key",
+      "byte_start",
+      "byte_end_exclusive",
+      "durable_end_offset",
+      "payload_sha256"
+    ],
+    "title": "DurableTranscriptRead",
+    "type": "object"
+  },
+  "id": "memoriesql.transcript-fold.read",
+  "status": "available",
+  "summary": "Versioned SQL-13 capture contract implemented by PR-02M.",
+  "version": "1"
+}

@@ -1,0 +1,80 @@
+{
+  "contract": {
+    "additionalProperties": false,
+    "properties": {
+      "authority_principal_id": {
+        "format": "uuid",
+        "title": "Authority Principal Id",
+        "type": "string"
+      },
+      "byte_end_exclusive": {
+        "exclusiveMinimum": 0,
+        "title": "Byte End Exclusive",
+        "type": "integer"
+      },
+      "byte_start": {
+        "minimum": 0,
+        "title": "Byte Start",
+        "type": "integer"
+      },
+      "checkpoint_sequence": {
+        "minimum": 1,
+        "title": "Checkpoint Sequence",
+        "type": "integer"
+      },
+      "end_record_index": {
+        "minimum": 0,
+        "title": "End Record Index",
+        "type": "integer"
+      },
+      "idempotency_receipt_id": {
+        "format": "uuid",
+        "title": "Idempotency Receipt Id",
+        "type": "string"
+      },
+      "outcomes_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Outcomes Sha256",
+        "type": "string"
+      },
+      "replayed": {
+        "title": "Replayed",
+        "type": "boolean"
+      },
+      "source_bytes_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Source Bytes Sha256",
+        "type": "string"
+      },
+      "start_record_index": {
+        "minimum": 0,
+        "title": "Start Record Index",
+        "type": "integer"
+      },
+      "transcript_fold_receipt_id": {
+        "format": "uuid",
+        "title": "Transcript Fold Receipt Id",
+        "type": "string"
+      }
+    },
+    "required": [
+      "transcript_fold_receipt_id",
+      "idempotency_receipt_id",
+      "byte_start",
+      "byte_end_exclusive",
+      "start_record_index",
+      "end_record_index",
+      "source_bytes_sha256",
+      "outcomes_sha256",
+      "checkpoint_sequence",
+      "authority_principal_id",
+      "replayed"
+    ],
+    "title": "DurableTranscriptFoldAcknowledgement",
+    "type": "object"
+  },
+  "id": "memoriesql.transcript-fold.acknowledgement",
+  "status": "available",
+  "summary": "Versioned SQL-13 capture contract implemented by PR-02M.",
+  "version": "1"
+}

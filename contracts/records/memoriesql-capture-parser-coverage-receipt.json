@@ -1,0 +1,269 @@
+{
+  "contract": {
+    "$defs": {
+      "ParserCoverageStatus": {
+        "enum": [
+          "complete",
+          "partial",
+          "error"
+        ],
+        "title": "ParserCoverageStatus",
+        "type": "string"
+      },
+      "ParserDiagnostic": {
+        "additionalProperties": false,
+        "properties": {
+          "affected_items": {
+            "default": 1,
+            "maximum": 1000000,
+            "minimum": 1,
+            "title": "Affected Items",
+            "type": "integer"
+          },
+          "code": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+            "title": "Code",
+            "type": "string"
+          },
+          "position": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/SourcePosition"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "severity": {
+            "$ref": "#/$defs/ParserDiagnosticSeverity"
+          }
+        },
+        "required": [
+          "code",
+          "severity"
+        ],
+        "title": "ParserDiagnostic",
+        "type": "object"
+      },
+      "ParserDiagnosticSeverity": {
+        "enum": [
+          "info",
+          "warning",
+          "error"
+        ],
+        "title": "ParserDiagnosticSeverity",
+        "type": "string"
+      },
+      "ParserOmission": {
+        "additionalProperties": false,
+        "properties": {
+          "affected_items": {
+            "maximum": 1000000,
+            "minimum": 1,
+            "title": "Affected Items",
+            "type": "integer"
+          },
+          "code": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+            "title": "Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "affected_items"
+        ],
+        "title": "ParserOmission",
+        "type": "object"
+      },
+      "SourcePosition": {
+        "additionalProperties": false,
+        "properties": {
+          "byte_offset": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Byte Offset"
+          },
+          "column": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Column"
+          },
+          "json_pointer": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Json Pointer"
+          },
+          "line": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Line"
+          },
+          "record_index": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Record Index"
+          }
+        },
+        "title": "SourcePosition",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "diagnostics": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/ParserDiagnostic"
+        },
+        "maxItems": 32,
+        "title": "Diagnostics",
+        "type": "array"
+      },
+      "diagnostics_count": {
+        "maximum": 32,
+        "minimum": 0,
+        "title": "Diagnostics Count",
+        "type": "integer"
+      },
+      "first_source_position": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/SourcePosition"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "known_omissions": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/ParserOmission"
+        },
+        "maxItems": 32,
+        "title": "Known Omissions",
+        "type": "array"
+      },
+      "last_source_position": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/SourcePosition"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "outcome_code": {
+        "anyOf": [
+          {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Outcome Code"
+      },
+      "parser_id": {
+        "maxLength": 128,
+        "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+        "title": "Parser Id",
+        "type": "string"
+      },
+      "parser_version": {
+        "maxLength": 128,
+        "minLength": 1,
+        "title": "Parser Version",
+        "type": "string"
+      },
+      "source_items_emitted": {
+        "maximum": 1000000,
+        "minimum": 0,
+        "title": "Source Items Emitted",
+        "type": "integer"
+      },
+      "source_items_quarantined": {
+        "maximum": 1000000,
+        "minimum": 0,
+        "title": "Source Items Quarantined",
+        "type": "integer"
+      },
+      "source_items_seen": {
+        "maximum": 1000000,
+        "minimum": 0,
+        "title": "Source Items Seen",
+        "type": "integer"
+      },
+      "status": {
+        "$ref": "#/$defs/ParserCoverageStatus"
+      }
+    },
+    "required": [
+      "parser_id",
+      "parser_version",
+      "status",
+      "source_items_seen",
+      "source_items_emitted",
+      "source_items_quarantined",
+      "diagnostics_count"
+    ],
+    "title": "ParserCoverageReceipt",
+    "type": "object"
+  },
+  "id": "memoriesql.capture.parser-coverage-receipt",
+  "status": "available",
+  "summary": "Versioned SQL-13 capture contract implemented by PR-02A.",
+  "version": "1"
+}

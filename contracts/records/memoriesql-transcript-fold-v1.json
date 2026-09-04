@@ -1,0 +1,24 @@
+{
+  "contract": {
+    "command": "memoriesql.application.capture.transcript_fold.CommitTranscriptFoldCommand",
+    "contract_version": 1,
+    "creates_derived_observations": false,
+    "cursor_store": "memoriesql.infrastructure.host_capture.JsonTranscriptFoldCursorStore",
+    "cursor_version": 3,
+    "fallback_boundary": "exact_topology_reconstruction_only",
+    "fold_loop": "memoriesql.application.capture.transcript_fold.DurableTranscriptFoldLoop",
+    "model_or_provider_calls": false,
+    "outcomes": [
+      "exact_turn",
+      "transcript_span",
+      "policy_disposition"
+    ],
+    "read_port": "memoriesql.infrastructure.postgres.transcript_fold.PostgresAuthorizedTranscriptFoldSession",
+    "schema_version": 14,
+    "source_of_bytes": "retained_source_ranges"
+  },
+  "id": "memoriesql.transcript-fold.v1",
+  "status": "available",
+  "summary": "Schema-14 exact-turn-first fold over retained source ranges with transcript-span fallback, explicit policy disposition, durable checkpointing, and in-place adapter-cursor migration.",
+  "version": "1"
+}

@@ -1,0 +1,28 @@
+{
+  "contract": {
+    "assembly_transition": "memoriesql.application.capture.source_adapter.SourceAssemblyStep",
+    "cursor_store": "memoriesql.infrastructure.host_capture.JsonCaptureCursorStore",
+    "cursor_version": 2,
+    "database_credentials_in_helper": false,
+    "descriptor_reader": "memoriesql.infrastructure.host_capture.DescriptorScopedHostReader",
+    "filesystem_scope": "explicit_capabilities_only",
+    "host_protocol": "memoriesql.application.capture.host_protocol",
+    "operations": [
+      "initialize",
+      "read_append",
+      "health",
+      "shutdown"
+    ],
+    "packaged_entrypoint": "memoriesql.interfaces.host_capture_helper:main",
+    "pending_range_version": 1,
+    "platform_notarization": "not_performed",
+    "platform_signing": "not_performed",
+    "source_adapter_sdk": "memoriesql.application.capture.source_adapter",
+    "synthetic_envelope_builder": "memoriesql.application.capture.SyntheticEnvelopeBuilder",
+    "synthetic_extractor": "memoriesql.application.capture.SyntheticAppendOnlyExtractor"
+  },
+  "id": "memoriesql.source-adapter.v4",
+  "status": "available",
+  "summary": "Permission-scoped append-only acquisition, pure extraction, envelope construction, durable submission, and exact cursor ack.",
+  "version": "4"
+}

@@ -1,0 +1,10 @@
+include LICENSE
+include NOTICE
+include PYPI_README.md
+include pyproject.toml
+include src/memoriesql/__init__.py
+include src/memoriesql/cli.py
+include src/memoriesql/contracts/__init__.py
+recursive-include src/memoriesql/contracts/_catalogs *.json
+global-exclude *.py[cod]
+global-exclude .DS_Store

@@ -1,0 +1,300 @@
+{
+  "contract": {
+    "$defs": {
+      "DurableTranscriptFoldAcknowledgement": {
+        "additionalProperties": false,
+        "properties": {
+          "authority_principal_id": {
+            "format": "uuid",
+            "title": "Authority Principal Id",
+            "type": "string"
+          },
+          "byte_end_exclusive": {
+            "exclusiveMinimum": 0,
+            "title": "Byte End Exclusive",
+            "type": "integer"
+          },
+          "byte_start": {
+            "minimum": 0,
+            "title": "Byte Start",
+            "type": "integer"
+          },
+          "checkpoint_sequence": {
+            "minimum": 1,
+            "title": "Checkpoint Sequence",
+            "type": "integer"
+          },
+          "end_record_index": {
+            "minimum": 0,
+            "title": "End Record Index",
+            "type": "integer"
+          },
+          "idempotency_receipt_id": {
+            "format": "uuid",
+            "title": "Idempotency Receipt Id",
+            "type": "string"
+          },
+          "outcomes_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Outcomes Sha256",
+            "type": "string"
+          },
+          "replayed": {
+            "title": "Replayed",
+            "type": "boolean"
+          },
+          "source_bytes_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Source Bytes Sha256",
+            "type": "string"
+          },
+          "start_record_index": {
+            "minimum": 0,
+            "title": "Start Record Index",
+            "type": "integer"
+          },
+          "transcript_fold_receipt_id": {
+            "format": "uuid",
+            "title": "Transcript Fold Receipt Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "transcript_fold_receipt_id",
+          "idempotency_receipt_id",
+          "byte_start",
+          "byte_end_exclusive",
+          "start_record_index",
+          "end_record_index",
+          "source_bytes_sha256",
+          "outcomes_sha256",
+          "checkpoint_sequence",
+          "authority_principal_id",
+          "replayed"
+        ],
+        "title": "DurableTranscriptFoldAcknowledgement",
+        "type": "object"
+      },
+      "FileIdentity": {
+        "additionalProperties": false,
+        "properties": {
+          "birth_time_ns": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Birth Time Ns"
+          },
+          "device": {
+            "minimum": 0,
+            "title": "Device",
+            "type": "integer"
+          },
+          "inode": {
+            "minimum": 0,
+            "title": "Inode",
+            "type": "integer"
+          },
+          "platform": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Platform",
+            "type": "string"
+          }
+        },
+        "required": [
+          "platform",
+          "device",
+          "inode"
+        ],
+        "title": "FileIdentity",
+        "type": "object"
+      },
+      "HostCaptureState": {
+        "enum": [
+          "healthy",
+          "waiting_for_complete_record",
+          "degraded",
+          "quarantined",
+          "permission_revoked",
+          "identity_changed"
+        ],
+        "title": "HostCaptureState",
+        "type": "string"
+      },
+      "TranscriptFoldPendingRange": {
+        "additionalProperties": false,
+        "properties": {
+          "byte_end_exclusive": {
+            "exclusiveMinimum": 0,
+            "title": "Byte End Exclusive",
+            "type": "integer"
+          },
+          "byte_start": {
+            "minimum": 0,
+            "title": "Byte Start",
+            "type": "integer"
+          },
+          "end_record_index": {
+            "exclusiveMinimum": 0,
+            "title": "End Record Index",
+            "type": "integer"
+          },
+          "source_bytes_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Source Bytes Sha256",
+            "type": "string"
+          },
+          "start_record_index": {
+            "minimum": 0,
+            "title": "Start Record Index",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "byte_start",
+          "byte_end_exclusive",
+          "start_record_index",
+          "end_record_index",
+          "source_bytes_sha256"
+        ],
+        "title": "TranscriptFoldPendingRange",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "description": "Cursor-v3 replacement for the existing exact-turn adapter cursor.",
+    "properties": {
+      "acknowledged_offset": {
+        "default": 0,
+        "minimum": 0,
+        "title": "Acknowledged Offset",
+        "type": "integer"
+      },
+      "acknowledged_record_index": {
+        "default": 0,
+        "minimum": 0,
+        "title": "Acknowledged Record Index",
+        "type": "integer"
+      },
+      "capability_id": {
+        "maxLength": 128,
+        "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+        "title": "Capability Id",
+        "type": "string"
+      },
+      "checkpoint_sequence": {
+        "default": 0,
+        "minimum": 0,
+        "title": "Checkpoint Sequence",
+        "type": "integer"
+      },
+      "cursor_version": {
+        "const": 3,
+        "default": 3,
+        "title": "Cursor Version",
+        "type": "integer"
+      },
+      "diagnostic_code": {
+        "anyOf": [
+          {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Diagnostic Code"
+      },
+      "durable_end_offset": {
+        "default": 0,
+        "minimum": 0,
+        "title": "Durable End Offset",
+        "type": "integer"
+      },
+      "extractor_state_base64": {
+        "default": "",
+        "maxLength": 87384,
+        "title": "Extractor State Base64",
+        "type": "string"
+      },
+      "extractor_state_sha256": {
+        "default": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Extractor State Sha256",
+        "type": "string"
+      },
+      "file_identity": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/FileIdentity"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "last_acknowledgement": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/DurableTranscriptFoldAcknowledgement"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "pending_ranges": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/TranscriptFoldPendingRange"
+        },
+        "maxItems": 128,
+        "title": "Pending Ranges",
+        "type": "array"
+      },
+      "pending_tail_byte_count": {
+        "default": 0,
+        "minimum": 0,
+        "title": "Pending Tail Byte Count",
+        "type": "integer"
+      },
+      "pending_tail_sha256": {
+        "default": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Pending Tail Sha256",
+        "type": "string"
+      },
+      "revision": {
+        "default": 0,
+        "minimum": 0,
+        "title": "Revision",
+        "type": "integer"
+      },
+      "source_state": {
+        "$ref": "#/$defs/HostCaptureState",
+        "default": "healthy"
+      }
+    },
+    "required": [
+      "capability_id"
+    ],
+    "title": "TranscriptFoldCursorState",
+    "type": "object"
+  },
+  "id": "memoriesql.transcript-fold.cursor",
+  "status": "available",
+  "summary": "Versioned SQL-13 capture contract implemented by PR-02M.",
+  "version": "1"
+}

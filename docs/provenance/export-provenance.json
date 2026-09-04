@@ -1,0 +1,511 @@
+{
+  "exports": [
+    {
+      "classification": "proposed_open_core",
+      "public_path": ".github/workflows/python-package.yml",
+      "public_sha256": "a9144e6c51dc80c1414c392def8db402f79796008741b966760084ad59b72774",
+      "reason": "Reviewed packaging-spike input ported or adapted for the public bootstrap.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "e1aea0a0ef2e13647d18eacdfb3753b8ee5ea93956724a23d1617496db722b1b"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "MANIFEST.in",
+      "public_sha256": "a9e35e82baa619016244f71933b2d10b4fee59ababbb1ec7de0cf98862dfc6a2",
+      "reason": "Reviewed packaging-spike input ported or adapted for the public bootstrap.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "3a487bdf2210c634a958942e90a793e33931cce80d01845dd07646805d979181"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "PYPI_README.md",
+      "public_sha256": "6030b5d1457b253d38dc7925b07b5cd6cae410b8f96a6274f6980664dbaa53cb",
+      "reason": "Reviewed packaging-spike input ported or adapted for the public bootstrap.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "df43020f9b9e24e3f9a3a2e5325bef1888cb69139cf5021406777a2418e0953e"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "assets/trademarks/memoriesql-readme-banner.png",
+      "public_sha256": "c5d663f27c291bbe12730855895712e8e7ae06ba28a769227a16760589ca9cbd",
+      "reason": "Reviewed packaging-spike input ported or adapted for the public bootstrap.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "c5d663f27c291bbe12730855895712e8e7ae06ba28a769227a16760589ca9cbd"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "contracts/records/memoriesql-capture-connector-cursor.json",
+      "public_sha256": "6a76032afc3386dfcb9a4cf262a579e69081f96dfcbcd3abf4f41b6b2211bb39",
+      "reason": "Owner-approved provider-neutral contract record.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "43ba2d431c91a93c51c6566e7ec4bbc067490bb2c409840363e447abac7539e8"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "contracts/records/memoriesql-capture-conversation-event-envelope.json",
+      "public_sha256": "5caba26cfafa64112136c8e07733dc203fc0cb6da2776e19ca2873ae2f7befc2",
+      "reason": "Owner-approved provider-neutral contract record.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "3649490d9627f6b49e2c6cfe02c27ce85ce2f1c50044d2ab5504941d1c4b6bd8"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "contracts/records/memoriesql-capture-delivery-detail.json",
+      "public_sha256": "4bc7e02285a2436179e6979225ad4016f6fc9ff5de39c13ad4d322659172aa8b",
+      "reason": "Owner-approved provider-neutral contract record.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "ddc738afaa8aeacd5bd3ba65b7209e2733c527386dc0c6d8269211a8ebf9caeb"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "contracts/records/memoriesql-capture-inbox-item.json",
+      "public_sha256": "7edaa4c3b3f86f9ca253752dd5e319aad398745978087d713c03989a11d44f17",
+      "reason": "Owner-approved provider-neutral contract record.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "1d2fe70d16f8b1267031fa9c6166a796ae7818e1d7a60537e73712fa2f3e015d"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "contracts/records/memoriesql-capture-parser-coverage-receipt.json",
+      "public_sha256": "e8d2b69d0ecdced73f0b3cfef3cd43df23588c2428659a1e29f7bfee56afa61f",
+      "reason": "Owner-approved provider-neutral contract record.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "7bdbfd55cfb886d8c5e53c671239faee680eb13e25d3d9f95f203a7ffbbadb12"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "contracts/records/memoriesql-capture-source-event-envelope.json",
+      "public_sha256": "cfda15669e82ec41b39fcd98d296664ef6dac05e8a5dbdaa66a5ec8bc7b49346",
+      "reason": "Owner-approved provider-neutral contract record.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "f3f54f06948feb6815e5a637003f8db265e568d2860376a49987ed4e5dad9d4c"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "contracts/records/memoriesql-capture-status-event.json",
+      "public_sha256": "40100bc3b1092bb4f73dcd59d33395bbb270c27ec6b5230b28eda102be3dccb8",
+      "reason": "Owner-approved provider-neutral contract record.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "4fdb349c77e447b2c24f789f2506a48af5bdb813aa40ad22cf7127dcdbe6f54f"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "contracts/records/memoriesql-capture-submission-receipt.json",
+      "public_sha256": "3376f9c261d31238212c778510d4720fabef14c4806722ffdfb62e222cefe6d4",
+      "reason": "Owner-approved provider-neutral contract record.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "3b25c0b3bb46b2039a016d14b99ac045eb06d7fcd281ee868268dd65ffdf0a5c"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "contracts/records/memoriesql-capture-v1.json",
+      "public_sha256": "59efed2e28ab10e22d67611b56cad3d3085064fc6ad30ef84b77573497ccf8ab",
+      "reason": "Owner-approved provider-neutral contract record.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "837d3887d806299275360dea6611fe27f30333372ed1978bd581eacef8eb231e"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "contracts/records/memoriesql-harness-bridge-v1.json",
+      "public_sha256": "50eeed5c9eafb5615676e3cccbe4b45bafff6b103e645e75c6dade18c16cc1fe",
+      "reason": "Owner-approved provider-neutral contract record.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "bdade92e2728c5ec1e53040dca43d9116696c15941496e00796012f903e595e2"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "contracts/records/memoriesql-harness-event-result.json",
+      "public_sha256": "97d9cd8e987c9bbf208a614269b38cfa3f03fe815b00af4b1bcc74c78f140ae0",
+      "reason": "Owner-approved provider-neutral contract record.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "0f6363a02582fef9541000683f3559239d5fec9ebe9fdec6fa5d930ff9af742d"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "contracts/records/memoriesql-harness-health.json",
+      "public_sha256": "57f151f1168f319b90b66b21ff5193a5d7becd9fd02d35d936c8593a9ea4da34",
+      "reason": "Owner-approved provider-neutral contract record.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "f189988e8d3c33c4ee3cafd5b7f6310db54e42079113c5a00f4791b8d80602c3"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "contracts/records/memoriesql-harness-lifecycle-event.json",
+      "public_sha256": "30a76721d3b764f36829b35acd0d369419ae8ac3b8e83ea54c2253e1bd5644f8",
+      "reason": "Owner-approved provider-neutral contract record.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "bd5298f761222af263b6f413058c353844efedace051ef9f04aaa1a426901a43"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "contracts/records/memoriesql-host-capture-bootstrap-request.json",
+      "public_sha256": "462e3b21aa55882f88481f8d97c0e298976080097809e6f0c4148dbb09ce8283",
+      "reason": "Owner-approved provider-neutral contract record.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "aa0678b0f7606f55a9eeadbd12990557d9ab10dd1ca349259ec553c7522bb205"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "contracts/records/memoriesql-host-capture-bootstrap-response.json",
+      "public_sha256": "a00eedaf9d894c0598d84e8f6c99a88004553ef2eb4d548fbc5a749ea6db1430",
+      "reason": "Owner-approved provider-neutral contract record.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "454a60c0a01af8cb2568fac91721daa973cc7fd22a914597c1bf05c8e5397507"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "contracts/records/memoriesql-host-capture-cursor-state.json",
+      "public_sha256": "c0d9668a827bea0215779e453c21d04a393c7676d358765aa5ff74360d5e8862",
+      "reason": "Owner-approved provider-neutral contract record.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "a1b92edc0dcdd5617c5e3e51364fcb1ae1f36dc271c46ff80f93f7cae3ea3117"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "contracts/records/memoriesql-host-capture-health-request.json",
+      "public_sha256": "aeba0462503a8f1083c2de7565dcdf64a5c8ef76f68d4b9f05bbfec0a84ecbfc",
+      "reason": "Owner-approved provider-neutral contract record.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "e5dc6027825b4368967fd81f1047012d7d902b1a0c0a5662039a6eaef5d8c341"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "contracts/records/memoriesql-host-capture-health-response.json",
+      "public_sha256": "07b69ea88a4d19d721f8206d505ae06f41848768e1e90fce19d3daeb44c16f35",
+      "reason": "Owner-approved provider-neutral contract record.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "c0667dce7460dbf1980481ca133ed5693450537668e58e4654a5a3152fe35228"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "contracts/records/memoriesql-host-capture-proposed-cursor.json",
+      "public_sha256": "3aef19be891bd845deb8249ca24bc583707f20415f0608e7fee189a0b2658ddd",
+      "reason": "Owner-approved provider-neutral contract record.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "c90921f1c133b8d127d29e796b9cf5ee9d39de8cbbe43aee6717a8682bfbc46d"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "contracts/records/memoriesql-host-capture-read-request.json",
+      "public_sha256": "55eeea7c4210241d5b1a7250925897b43c8adbc68edc3a7d45c305628dbe05a9",
+      "reason": "Owner-approved provider-neutral contract record.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "c92db74d87468fdd506b7ebc53436717401f9b1e905258143dc21719fb87cae1"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "contracts/records/memoriesql-host-capture-read-response.json",
+      "public_sha256": "28dc70654c548a5660179db11bc88d233a4cd250f8bd168ac44e16f19dc6e1f7",
+      "reason": "Owner-approved provider-neutral contract record.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "b0e10322a8097539c4b89be2dc73949857c2a4ad802f212de70701a6478387a2"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "contracts/records/memoriesql-host-capture-shutdown-request.json",
+      "public_sha256": "845aa625e966dfd232d6f658baeb8136a581fee88fbf273a3379a6d95c2f81b7",
+      "reason": "Owner-approved provider-neutral contract record.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "353abfb719b18cfe4b53e277a508e19cc57a97d8f31d0e483a98148bcbc4ea56"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "contracts/records/memoriesql-host-capture-shutdown-response.json",
+      "public_sha256": "ce8a37a5c142383feae31dd0419fffae021ef33b8280b220686fa749fb5085eb",
+      "reason": "Owner-approved provider-neutral contract record.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "3c11a3e61364e5770dbfab77d12750f78fdda787b3be0dab6277160a09491c38"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "contracts/records/memoriesql-host-capture-source-health.json",
+      "public_sha256": "2e8938ee37cefbaedbb8bdee0cc779a87fe20ddbf6b7bf790e5a9628fff1f7ea",
+      "reason": "Owner-approved provider-neutral contract record.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "44c90789470e410174bfdad84f81d6c96ab63030319b766e45334d95762eed8a"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "contracts/records/memoriesql-source-adapter-v4.json",
+      "public_sha256": "9c4303d42cfe146df056df1383cab475f0acad4f9074bac23be6b1fdb5f3d46a",
+      "reason": "Owner-approved provider-neutral contract record.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "a6bd1f0c7ff590c271baac31afac526e788c387b4b126843d1e60f7415bfe792"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "contracts/records/memoriesql-source-range-capture-command.json",
+      "public_sha256": "83bf6189af492deff3457b1ffa47df33c391bdfdc8aed8f4ee0caa9f65c004d4",
+      "reason": "Owner-approved provider-neutral contract record.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "c2720f0416c26377d41c0008754ed86c701f96472e3c2c06f10fb42a2f0dc10a"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "contracts/records/memoriesql-source-range-capture-receipt.json",
+      "public_sha256": "1fc2a54f3712439a2239a0fc58270ea3519e318a9252fa0fee3b8b3de165130a",
+      "reason": "Owner-approved provider-neutral contract record.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "54d1169d65e52797b5fa197b6eb6dfe56d5eddafce50e8724105648f29f72868"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "contracts/records/memoriesql-source-range-capture-result.json",
+      "public_sha256": "fe9aa274501d02b78565cf39be79985725b11e25d631e1284b39562c8d6aa700",
+      "reason": "Owner-approved provider-neutral contract record.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "09042258a46914289edb787091a1b81ccc0215258ad31721f145ecdaf7731c60"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "contracts/records/memoriesql-source-range-capture-v1.json",
+      "public_sha256": "18168de723642a8ff0970cf60b1f2e66671e82c5161a0448a6fcf989e8127693",
+      "reason": "Owner-approved provider-neutral contract record.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "0080547daec88bf351c634b89e42f6d461ef7753e9acaa77d70fcb046eca603c"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "contracts/records/memoriesql-source-range-inspection.json",
+      "public_sha256": "2d6c7eff952faae18e8d9e0cf848f5fa3fe2b4249a652370515dcd6e6b7dd834",
+      "reason": "Owner-approved provider-neutral contract record.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "d50ccc7bdfea05f7770829815fea08a43f7670ff8bb1150606365a40a2d96273"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "contracts/records/memoriesql-source-range-raw-cursor.json",
+      "public_sha256": "7205c59ed5250e8a8995cc589f5a09c106687744b5c0149d33e9e68eb0d3de46",
+      "reason": "Owner-approved provider-neutral contract record.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "a8a61bd352810d4ba366441d98b4ed39b3699501e696f9cb4585930dad8d9d83"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "contracts/records/memoriesql-source-range-raw-detail.json",
+      "public_sha256": "86d24228a6726865a41253759fed4c88c52f34e28ac1eb3606f452df5cf5c626",
+      "reason": "Owner-approved provider-neutral contract record.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "65f1ae0b7c60fbf863014c23423209403d68611d14c248e08cd4ab6ca0908e31"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "contracts/records/memoriesql-synthetic.json",
+      "public_sha256": "bc64077101c4f3b6dcb23194b2172c21d8f90b06bc6ff49a4e99ea7a4e256c1d",
+      "reason": "Owner-approved provider-neutral contract record.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "b95f7c3929b0a5421c0238374a3d63baad4c9189772c7c457f8f6c342d884531"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "contracts/records/memoriesql-transcript-fold-acknowledgement.json",
+      "public_sha256": "b4cfb5a7d60b88728d1d2f3225765fc6a413d408846fc8ab89f1dd47249afe6a",
+      "reason": "Owner-approved provider-neutral contract record.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "7d665e4d667616646dc5235d037e59bdb73a2eadceaefec5a6a0869aaae597e7"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "contracts/records/memoriesql-transcript-fold-checkpoint.json",
+      "public_sha256": "f79b76f9291262c98a5df2b5c97d0a584f6da7bf0807121705fbe3d1953a6d08",
+      "reason": "Owner-approved provider-neutral contract record.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "01824785a6ec1114d64ba99a0d8f0e0545d409b0b172df0a9fa6ceb3d2cfa6ab"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "contracts/records/memoriesql-transcript-fold-commit-command.json",
+      "public_sha256": "73798370f6b712692cfdc2c80a9ea92bb53b08396a4841022ac6a6ded4335563",
+      "reason": "Owner-approved provider-neutral contract record.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "26e11670ae23615944196624e4fdd98fd1ef7814b28e7a6b20d40d5cc71493a2"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "contracts/records/memoriesql-transcript-fold-commit-receipt.json",
+      "public_sha256": "b9a56f264f799a6ffea265b72972a5e8a002c9d475321c329168fefb111c2eee",
+      "reason": "Owner-approved provider-neutral contract record.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "49abbac4227f590b05a58ac7e5ed97583b0e22d55fc73c4739d2f6016d9f712f"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "contracts/records/memoriesql-transcript-fold-cursor.json",
+      "public_sha256": "357766372218222fc307b354ab454598f390017c13022ee4b50fdd030e07d754",
+      "reason": "Owner-approved provider-neutral contract record.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "7abd32d89baa9ee10ae4d8da1e534a9dfa1dd4f1bc15681365f6ebb4652c9453"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "contracts/records/memoriesql-transcript-fold-exact-turn.json",
+      "public_sha256": "c9355abd900a12de5056976e1e2b12ab34aa42c3760589ee109c55ab2491d347",
+      "reason": "Owner-approved provider-neutral contract record.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "6aef67e3aad57e24274b82718e8a539a289051897720dd050497a87856b82a6e"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "contracts/records/memoriesql-transcript-fold-health.json",
+      "public_sha256": "204251c2090e51e9357a45cbc9b8e88a12f5bd977ed746e1e248fba9f47e7c33",
+      "reason": "Owner-approved provider-neutral contract record.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "c43a9d2f0b8ecfdcb49cc5b413bd32d7261949c91106df71d2feca86b801adc4"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "contracts/records/memoriesql-transcript-fold-inbox-item.json",
+      "public_sha256": "39ae9d8d7096f726e8beb98c3f2618de29482972167aa7cb7ee4abcc10c64ac3",
+      "reason": "Owner-approved provider-neutral contract record.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "45e5a3e94a801b1cc79bd1375b003e089d5d184127d86e92b37d1be17970f841"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "contracts/records/memoriesql-transcript-fold-legacy-cursor-binding.json",
+      "public_sha256": "13a352e84a30c88a2fec93eebe6570047ea9f09acd88ba21efa376f461527beb",
+      "reason": "Owner-approved provider-neutral contract record.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "be649d3c1be1e6491e658db117dd5809c1dc9b0419021dfad16c9ff4cc194775"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "contracts/records/memoriesql-transcript-fold-outcome.json",
+      "public_sha256": "de5e79c3a207b2e92163bd7551d05ba3aa0dfdcdccce665ac566e5442e39d6de",
+      "reason": "Owner-approved provider-neutral contract record.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "dcf3f00e87595df31880bdf6259a941429c61090643703fb7d5dfce15f59870a"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "contracts/records/memoriesql-transcript-fold-policy-disposition.json",
+      "public_sha256": "c410db1074fa8991e2065ba0afcdad1e5f77c6bca73183ec8e440f24569917d2",
+      "reason": "Owner-approved provider-neutral contract record.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "3574b88123f000820df0ceaabc8786eababe16d71395caf758c3ee59d83ddb8b"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "contracts/records/memoriesql-transcript-fold-read-request.json",
+      "public_sha256": "d3b1198cdfba49b92da59632db12a89f743bf40ce4135eb2150742a9146fc2c0",
+      "reason": "Owner-approved provider-neutral contract record.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "7273fad1915adf3ed9d1341dca2c381cd1c723f3051e6f08a25a1ece672607b8"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "contracts/records/memoriesql-transcript-fold-read.json",
+      "public_sha256": "058a7f8d84dd609f5c43ed9c1b0cb2ad0bf71bea4eadc6fbddc8b2125e8834f3",
+      "reason": "Owner-approved provider-neutral contract record.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "df06ac4dc90c938194525add2fe451b54ac345ad245fcab558145d78a6f05b44"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "contracts/records/memoriesql-transcript-fold-source-range.json",
+      "public_sha256": "adad8efb40a9f0d589a749d5d4d62e1bf78b10104735ab3287320e2bd43771ee",
+      "reason": "Owner-approved provider-neutral contract record.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "19d0b64b44495cec1922cc18431396b7b1682eb46bbb54b11afe79394586d514"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "contracts/records/memoriesql-transcript-fold-transcript-span.json",
+      "public_sha256": "3e7fc3801cf05277a7757de6b4142fb61f93f1e8c48c6ce7a4efac1b4fe5c571",
+      "reason": "Owner-approved provider-neutral contract record.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "b737eed8a664048228e9b8264f78f46a37d99a7cfd0823ccbeb4b1ed98ffef4d"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "contracts/records/memoriesql-transcript-fold-v1.json",
+      "public_sha256": "74c1445cac165b4d644bf0ccf99b6a8bfe66f9f7ba5488c941d1d3e89cb50f27",
+      "reason": "Owner-approved provider-neutral contract record.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "35d997efcc63f678bdecc08be6db1df187d4a1a614a9351f3ed3f12f93ddae31"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "docs/templates/publish-pypi.yml.template",
+      "public_sha256": "e06287f8b2dce4313168ad3c4e1365c9d6e900f45ea8c44ccafde522cee25b88",
+      "reason": "Reviewed packaging-spike input ported or adapted for the public bootstrap.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "6fb95e5d7f18bbd40f495ff1b941fb703fbcffe7aee56d079a871495950da65b"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "pyproject.toml",
+      "public_sha256": "5e44d3799bed5ec012c32a235bd90b6e2c09c45e94e2386c2e95c95f9ff9b6d3",
+      "reason": "Reviewed packaging-spike input ported or adapted for the public bootstrap.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "9ccf7c2de02f1ce31763577686ea04a60ba9bb2cd03a4aa53a87298e57ae0cc0"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "requirements-dev.txt",
+      "public_sha256": "35b2f7ba75fb7b6a5ff932886fc7635f6026a08d02b4378b146c219920b8b728",
+      "reason": "Reviewed packaging-spike input ported or adapted for the public bootstrap.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "3b95d42547c085a370513637c2e50821b1921049b7b04f396b58fdbd5537cec0"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "scripts/inspect_python_distribution.py",
+      "public_sha256": "a6de4148fbd8c5d97b2945f183aa991e4dc35d7f3caac66efec331519b9e3ef7",
+      "reason": "Reviewed packaging-spike input ported or adapted for the public bootstrap.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "17f72b342444381ac5c5aab2004ed261509877f04298c42d03ea0bd186e13f62"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "scripts/normalize_python_sdist.py",
+      "public_sha256": "8abac614d84829f3a06b60fbccde4c7dd17a8782698e8cc943e1c60c096e053e",
+      "reason": "Reviewed packaging-spike input ported or adapted for the public bootstrap.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "8abac614d84829f3a06b60fbccde4c7dd17a8782698e8cc943e1c60c096e053e"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "scripts/prove_package_isolation.py",
+      "public_sha256": "60dbf2ca6940d40cab47a31c2fe1731f368d58fb6d97e707f4c50cb8c1b95e26",
+      "reason": "Reviewed packaging-spike input ported or adapted for the public bootstrap.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "0e61cf129885b35fc9c37f2ee3ff9b3307808c83bbe5c0edca3a4c93daa74779"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "src/memoriesql/__init__.py",
+      "public_sha256": "52c6bdbeca66f03319398ceb843bd2a98cdc238e82dd07cdfa7faf55194d5f53",
+      "reason": "Reviewed packaging-spike input ported or adapted for the public bootstrap.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "52c6bdbeca66f03319398ceb843bd2a98cdc238e82dd07cdfa7faf55194d5f53"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "src/memoriesql/cli.py",
+      "public_sha256": "8009b214ba56653fc8a2f6c346c0e97687a89299ec9282d14f886c9cf1f02b91",
+      "reason": "Reviewed packaging-spike input ported or adapted for the public bootstrap.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "7875b535a9284302fb801bfd6ab5e5a6914b3f21614593396b930371feef820c"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "src/memoriesql/contracts/__init__.py",
+      "public_sha256": "93d4ce1fb41de8c0c836f63c3c441f1a84f137fa1c86565d32d0c4acfb8ea081",
+      "reason": "Reviewed packaging-spike input ported or adapted for the public bootstrap.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "a20cddb44caaa1414d512bd8a749afe3bcfcfcbfec3d7a031c7119ec7769823e"
+    },
+    {
+      "classification": "proposed_open_core",
+      "public_path": "tests/unit/test_contract_catalog_preview.py",
+      "public_sha256": "f4e90ca5f5b25969a57e962ce3060d9efe71eb6a730881c5bfcb7bc90d3c814d",
+      "reason": "Reviewed packaging-spike input ported or adapted for the public bootstrap.",
+      "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+      "reviewed_spike_source_sha256": "a9d5f267ab2313fa87a37191f0c0c6aba36469ebe1dbe8bc3942b88e03d5e989"
+    }
+  ],
+  "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
+  "schema_version": 1,
+  "scope": "Public files ported or mechanically derived from reviewed spike inputs; newly authored public-only governance files are outside this mapping."
+}

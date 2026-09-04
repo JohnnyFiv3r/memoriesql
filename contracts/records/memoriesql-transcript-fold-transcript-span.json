@@ -1,0 +1,84 @@
+{
+  "contract": {
+    "additionalProperties": false,
+    "description": "Minimal evidence record for complete records with unknown topology.",
+    "properties": {
+      "byte_end_exclusive": {
+        "exclusiveMinimum": 0,
+        "title": "Byte End Exclusive",
+        "type": "integer"
+      },
+      "byte_start": {
+        "minimum": 0,
+        "title": "Byte Start",
+        "type": "integer"
+      },
+      "content_storage": {
+        "const": "retained_source_ranges",
+        "default": "retained_source_ranges",
+        "title": "Content Storage",
+        "type": "string"
+      },
+      "end_record_index": {
+        "exclusiveMinimum": 0,
+        "title": "End Record Index",
+        "type": "integer"
+      },
+      "file_identity_key": {
+        "maxLength": 256,
+        "minLength": 1,
+        "title": "File Identity Key",
+        "type": "string"
+      },
+      "source_bytes_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Source Bytes Sha256",
+        "type": "string"
+      },
+      "source_object_id": {
+        "format": "uuid",
+        "title": "Source Object Id",
+        "type": "string"
+      },
+      "source_revision_key": {
+        "maxLength": 512,
+        "minLength": 1,
+        "title": "Source Revision Key",
+        "type": "string"
+      },
+      "start_record_index": {
+        "minimum": 0,
+        "title": "Start Record Index",
+        "type": "integer"
+      },
+      "topology_status": {
+        "const": "unknown",
+        "default": "unknown",
+        "title": "Topology Status",
+        "type": "string"
+      },
+      "transcript_span_version": {
+        "const": 1,
+        "default": 1,
+        "title": "Transcript Span Version",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "source_object_id",
+      "source_revision_key",
+      "file_identity_key",
+      "byte_start",
+      "byte_end_exclusive",
+      "start_record_index",
+      "end_record_index",
+      "source_bytes_sha256"
+    ],
+    "title": "TranscriptSpanEvidence",
+    "type": "object"
+  },
+  "id": "memoriesql.transcript-fold.transcript-span",
+  "status": "available",
+  "summary": "Versioned SQL-13 capture contract implemented by PR-02M.",
+  "version": "1"
+}

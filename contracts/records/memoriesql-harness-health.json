@@ -1,0 +1,143 @@
+{
+  "contract": {
+    "$defs": {
+      "HarnessBridgeDiagnostic": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+            "title": "Code",
+            "type": "string"
+          },
+          "detail": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Detail",
+            "type": "string"
+          },
+          "event_id": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Event Id"
+          }
+        },
+        "required": [
+          "code",
+          "detail"
+        ],
+        "title": "HarnessBridgeDiagnostic",
+        "type": "object"
+      },
+      "HarnessBridgeHealthStatus": {
+        "enum": [
+          "healthy",
+          "degraded",
+          "incompatible"
+        ],
+        "title": "HarnessBridgeHealthStatus",
+        "type": "string"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "active_runs": {
+        "minimum": 0,
+        "title": "Active Runs",
+        "type": "integer"
+      },
+      "active_sessions": {
+        "minimum": 0,
+        "title": "Active Sessions",
+        "type": "integer"
+      },
+      "active_turns": {
+        "minimum": 0,
+        "title": "Active Turns",
+        "type": "integer"
+      },
+      "bridge_id": {
+        "maxLength": 128,
+        "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+        "title": "Bridge Id",
+        "type": "string"
+      },
+      "bridge_version": {
+        "minimum": 1,
+        "title": "Bridge Version",
+        "type": "integer"
+      },
+      "capture_failures": {
+        "minimum": 0,
+        "title": "Capture Failures",
+        "type": "integer"
+      },
+      "finalized_turns": {
+        "minimum": 0,
+        "title": "Finalized Turns",
+        "type": "integer"
+      },
+      "last_diagnostics": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/HarnessBridgeDiagnostic"
+        },
+        "maxItems": 16,
+        "title": "Last Diagnostics",
+        "type": "array"
+      },
+      "rejected_events": {
+        "minimum": 0,
+        "title": "Rejected Events",
+        "type": "integer"
+      },
+      "retained_finalized_turns": {
+        "minimum": 0,
+        "title": "Retained Finalized Turns",
+        "type": "integer"
+      },
+      "retained_replay_events": {
+        "minimum": 0,
+        "title": "Retained Replay Events",
+        "type": "integer"
+      },
+      "status": {
+        "$ref": "#/$defs/HarnessBridgeHealthStatus"
+      },
+      "target_event_version": {
+        "minimum": 1,
+        "title": "Target Event Version",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "bridge_id",
+      "bridge_version",
+      "target_event_version",
+      "status",
+      "active_runs",
+      "active_sessions",
+      "active_turns",
+      "finalized_turns",
+      "retained_replay_events",
+      "retained_finalized_turns",
+      "capture_failures",
+      "rejected_events"
+    ],
+    "title": "HarnessBridgeHealth",
+    "type": "object"
+  },
+  "id": "memoriesql.harness.health",
+  "status": "available",
+  "summary": "Versioned SQL-13 capture contract implemented by PR-02F.",
+  "version": "1"
+}

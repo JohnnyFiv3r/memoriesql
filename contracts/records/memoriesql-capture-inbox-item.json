@@ -1,0 +1,123 @@
+{
+  "contract": {
+    "$defs": {
+      "CaptureIngressStatus": {
+        "enum": [
+          "detected",
+          "received",
+          "duplicate",
+          "quarantined",
+          "accepted",
+          "amended",
+          "deleted"
+        ],
+        "title": "CaptureIngressStatus",
+        "type": "string"
+      },
+      "EnrichmentStatus": {
+        "enum": [
+          "not_applicable",
+          "enrichment_pending",
+          "enrichment_failed",
+          "ready"
+        ],
+        "title": "EnrichmentStatus",
+        "type": "string"
+      },
+      "MaterializationStatus": {
+        "enum": [
+          "none",
+          "thin_bead",
+          "ready"
+        ],
+        "title": "MaterializationStatus",
+        "type": "string"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "checkpoint_sequence": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Checkpoint Sequence"
+      },
+      "delivered_at": {
+        "format": "date-time",
+        "title": "Delivered At",
+        "type": "string"
+      },
+      "delivery_id": {
+        "format": "uuid",
+        "title": "Delivery Id",
+        "type": "string"
+      },
+      "enrichment_status": {
+        "$ref": "#/$defs/EnrichmentStatus"
+      },
+      "envelope_kind": {
+        "enum": [
+          "source_event",
+          "conversation_event"
+        ],
+        "title": "Envelope Kind",
+        "type": "string"
+      },
+      "event_id": {
+        "anyOf": [
+          {
+            "format": "uuid",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Event Id"
+      },
+      "ingress_status": {
+        "$ref": "#/$defs/CaptureIngressStatus"
+      },
+      "materialization_status": {
+        "$ref": "#/$defs/MaterializationStatus"
+      },
+      "source_identity_key": {
+        "title": "Source Identity Key",
+        "type": "string"
+      },
+      "source_object_id": {
+        "format": "uuid",
+        "title": "Source Object Id",
+        "type": "string"
+      },
+      "source_product": {
+        "title": "Source Product",
+        "type": "string"
+      }
+    },
+    "required": [
+      "delivery_id",
+      "source_object_id",
+      "envelope_kind",
+      "source_product",
+      "source_identity_key",
+      "ingress_status",
+      "materialization_status",
+      "enrichment_status",
+      "delivered_at"
+    ],
+    "title": "CaptureInboxItem",
+    "type": "object"
+  },
+  "id": "memoriesql.capture.inbox-item",
+  "status": "available",
+  "summary": "Versioned SQL-13 capture contract implemented by PR-02A.",
+  "version": "1"
+}

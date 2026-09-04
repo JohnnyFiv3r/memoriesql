@@ -1,0 +1,154 @@
+{
+  "contract": {
+    "$defs": {
+      "FileIdentity": {
+        "additionalProperties": false,
+        "properties": {
+          "birth_time_ns": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Birth Time Ns"
+          },
+          "device": {
+            "minimum": 0,
+            "title": "Device",
+            "type": "integer"
+          },
+          "inode": {
+            "minimum": 0,
+            "title": "Inode",
+            "type": "integer"
+          },
+          "platform": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Platform",
+            "type": "string"
+          }
+        },
+        "required": [
+          "platform",
+          "device",
+          "inode"
+        ],
+        "title": "FileIdentity",
+        "type": "object"
+      },
+      "HostReadStatus": {
+        "enum": [
+          "data",
+          "end_of_file",
+          "permission_revoked",
+          "permission_denied",
+          "source_unavailable",
+          "truncated",
+          "rotated_or_replaced",
+          "identity_drift"
+        ],
+        "title": "HostReadStatus",
+        "type": "string"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "data_base64": {
+        "maxLength": 349528,
+        "title": "Data Base64",
+        "type": "string"
+      },
+      "data_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Data Sha256",
+        "type": "string"
+      },
+      "diagnostic_code": {
+        "anyOf": [
+          {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Diagnostic Code"
+      },
+      "end_of_file": {
+        "title": "End Of File",
+        "type": "boolean"
+      },
+      "end_offset": {
+        "minimum": 0,
+        "title": "End Offset",
+        "type": "integer"
+      },
+      "file_identity": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/FileIdentity"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "observed_size": {
+        "minimum": 0,
+        "title": "Observed Size",
+        "type": "integer"
+      },
+      "protocol_version": {
+        "const": 1,
+        "default": 1,
+        "title": "Protocol Version",
+        "type": "integer"
+      },
+      "request_id": {
+        "format": "uuid",
+        "title": "Request Id",
+        "type": "string"
+      },
+      "response_kind": {
+        "const": "read",
+        "default": "read",
+        "title": "Response Kind",
+        "type": "string"
+      },
+      "start_offset": {
+        "minimum": 0,
+        "title": "Start Offset",
+        "type": "integer"
+      },
+      "status": {
+        "$ref": "#/$defs/HostReadStatus"
+      }
+    },
+    "required": [
+      "request_id",
+      "status",
+      "start_offset",
+      "end_offset",
+      "observed_size",
+      "data_base64",
+      "data_sha256",
+      "end_of_file"
+    ],
+    "title": "HostReadResponse",
+    "type": "object"
+  },
+  "id": "memoriesql.host-capture.read-response",
+  "status": "available",
+  "summary": "Versioned SQL-13 capture contract implemented by PR-02B.",
+  "version": "1"
+}

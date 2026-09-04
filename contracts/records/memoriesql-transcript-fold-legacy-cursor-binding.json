@@ -1,0 +1,61 @@
+{
+  "contract": {
+    "additionalProperties": false,
+    "properties": {
+      "acknowledged_byte_offset": {
+        "exclusiveMinimum": 0,
+        "title": "Acknowledged Byte Offset",
+        "type": "integer"
+      },
+      "acknowledged_record_index": {
+        "minimum": 0,
+        "title": "Acknowledged Record Index",
+        "type": "integer"
+      },
+      "checkpoint_sequence": {
+        "minimum": 0,
+        "title": "Checkpoint Sequence",
+        "type": "integer"
+      },
+      "cursor_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Cursor Sha256",
+        "type": "string"
+      },
+      "cursor_version": {
+        "enum": [
+          1,
+          2
+        ],
+        "title": "Cursor Version",
+        "type": "integer"
+      },
+      "last_receipt_event_id": {
+        "anyOf": [
+          {
+            "format": "uuid",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Last Receipt Event Id"
+      }
+    },
+    "required": [
+      "cursor_version",
+      "cursor_sha256",
+      "acknowledged_byte_offset",
+      "acknowledged_record_index",
+      "checkpoint_sequence"
+    ],
+    "title": "LegacyAdapterCursorBinding",
+    "type": "object"
+  },
+  "id": "memoriesql.transcript-fold.legacy-cursor-binding",
+  "status": "available",
+  "summary": "Versioned SQL-13 capture contract implemented by PR-02M.",
+  "version": "1"
+}
