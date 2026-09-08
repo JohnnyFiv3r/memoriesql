@@ -1,0 +1,1277 @@
+{
+  "contract": {
+    "$defs": {
+      "CanonicalAttribute": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "title": "Key",
+            "type": "string"
+          },
+          "value": {
+            "maxLength": 512,
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "value"
+        ],
+        "title": "CanonicalAttribute",
+        "type": "object"
+      },
+      "CaptureEventKind": {
+        "enum": [
+          "source_observed",
+          "source_amended",
+          "source_deleted",
+          "turn_finalized",
+          "turn_amended"
+        ],
+        "title": "CaptureEventKind",
+        "type": "string"
+      },
+      "CapturePolicyReferences": {
+        "additionalProperties": false,
+        "properties": {
+          "access_policy_ref": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Access Policy Ref",
+            "type": "string"
+          },
+          "capture_policy_id": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+            "title": "Capture Policy Id",
+            "type": "string"
+          },
+          "observation_unit_policy_version": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Observation Unit Policy Version",
+            "type": "string"
+          },
+          "retention_policy_ref": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Retention Policy Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "capture_policy_id",
+          "access_policy_ref",
+          "retention_policy_ref",
+          "observation_unit_policy_version"
+        ],
+        "title": "CapturePolicyReferences",
+        "type": "object"
+      },
+      "CaptureSurface": {
+        "enum": [
+          "artifact",
+          "live_hook",
+          "harness",
+          "browser",
+          "import",
+          "explicit_checkpoint",
+          "synthetic"
+        ],
+        "title": "CaptureSurface",
+        "type": "string"
+      },
+      "ConversationTurnDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "branch_id": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Branch Id"
+          },
+          "conversation_id": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "detail_kind": {
+            "const": "conversation_turn",
+            "default": "conversation_turn",
+            "title": "Detail Kind",
+            "type": "string"
+          },
+          "participant_id": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Participant Id"
+          },
+          "participant_role": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Participant Role",
+            "type": "string"
+          },
+          "session_id": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Session Id",
+            "type": "string"
+          },
+          "turn_id": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Turn Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "conversation_id",
+          "session_id",
+          "turn_id",
+          "participant_role"
+        ],
+        "title": "ConversationTurnDetail",
+        "type": "object"
+      },
+      "DocumentSegmentDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "char_end": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Char End"
+          },
+          "char_start": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Char Start"
+          },
+          "detail_kind": {
+            "const": "document_segment",
+            "default": "document_segment",
+            "title": "Detail Kind",
+            "type": "string"
+          },
+          "page_number": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Page Number"
+          },
+          "section_path": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Section Path",
+            "type": "array"
+          }
+        },
+        "title": "DocumentSegmentDetail",
+        "type": "object"
+      },
+      "MediaSegmentDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "detail_kind": {
+            "const": "media_segment",
+            "default": "media_segment",
+            "title": "Detail Kind",
+            "type": "string"
+          },
+          "speaker_ref": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Speaker Ref"
+          },
+          "track_id": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Track Id"
+          },
+          "transcript_language": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Transcript Language"
+          }
+        },
+        "title": "MediaSegmentDetail",
+        "type": "object"
+      },
+      "ParserCoverageReceipt": {
+        "additionalProperties": false,
+        "properties": {
+          "diagnostics": {
+            "default": [],
+            "items": {
+              "$ref": "#/$defs/ParserDiagnostic"
+            },
+            "maxItems": 32,
+            "title": "Diagnostics",
+            "type": "array"
+          },
+          "diagnostics_count": {
+            "maximum": 32,
+            "minimum": 0,
+            "title": "Diagnostics Count",
+            "type": "integer"
+          },
+          "first_source_position": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/SourcePosition"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "known_omissions": {
+            "default": [],
+            "items": {
+              "$ref": "#/$defs/ParserOmission"
+            },
+            "maxItems": 32,
+            "title": "Known Omissions",
+            "type": "array"
+          },
+          "last_source_position": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/SourcePosition"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "outcome_code": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Outcome Code"
+          },
+          "parser_id": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+            "title": "Parser Id",
+            "type": "string"
+          },
+          "parser_version": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Parser Version",
+            "type": "string"
+          },
+          "source_items_emitted": {
+            "maximum": 1000000,
+            "minimum": 0,
+            "title": "Source Items Emitted",
+            "type": "integer"
+          },
+          "source_items_quarantined": {
+            "maximum": 1000000,
+            "minimum": 0,
+            "title": "Source Items Quarantined",
+            "type": "integer"
+          },
+          "source_items_seen": {
+            "maximum": 1000000,
+            "minimum": 0,
+            "title": "Source Items Seen",
+            "type": "integer"
+          },
+          "status": {
+            "$ref": "#/$defs/ParserCoverageStatus"
+          }
+        },
+        "required": [
+          "parser_id",
+          "parser_version",
+          "status",
+          "source_items_seen",
+          "source_items_emitted",
+          "source_items_quarantined",
+          "diagnostics_count"
+        ],
+        "title": "ParserCoverageReceipt",
+        "type": "object"
+      },
+      "ParserCoverageStatus": {
+        "enum": [
+          "complete",
+          "partial",
+          "error"
+        ],
+        "title": "ParserCoverageStatus",
+        "type": "string"
+      },
+      "ParserDiagnostic": {
+        "additionalProperties": false,
+        "properties": {
+          "affected_items": {
+            "default": 1,
+            "maximum": 1000000,
+            "minimum": 1,
+            "title": "Affected Items",
+            "type": "integer"
+          },
+          "code": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+            "title": "Code",
+            "type": "string"
+          },
+          "position": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/SourcePosition"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "severity": {
+            "$ref": "#/$defs/ParserDiagnosticSeverity"
+          }
+        },
+        "required": [
+          "code",
+          "severity"
+        ],
+        "title": "ParserDiagnostic",
+        "type": "object"
+      },
+      "ParserDiagnosticSeverity": {
+        "enum": [
+          "info",
+          "warning",
+          "error"
+        ],
+        "title": "ParserDiagnosticSeverity",
+        "type": "string"
+      },
+      "ParserOmission": {
+        "additionalProperties": false,
+        "properties": {
+          "affected_items": {
+            "maximum": 1000000,
+            "minimum": 1,
+            "title": "Affected Items",
+            "type": "integer"
+          },
+          "code": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+            "title": "Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "affected_items"
+        ],
+        "title": "ParserOmission",
+        "type": "object"
+      },
+      "ProjectHint": {
+        "additionalProperties": false,
+        "properties": {
+          "repository_id": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Repository Id"
+          },
+          "source_project_id": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Source Project Id"
+          },
+          "worktree_id": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Worktree Id"
+          }
+        },
+        "title": "ProjectHint",
+        "type": "object"
+      },
+      "RecordEventDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "changed_fields": {
+            "default": [],
+            "items": {
+              "$ref": "#/$defs/CanonicalAttribute"
+            },
+            "title": "Changed Fields",
+            "type": "array"
+          },
+          "detail_kind": {
+            "const": "record_event",
+            "default": "record_event",
+            "title": "Detail Kind",
+            "type": "string"
+          },
+          "effective_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Effective At"
+          },
+          "record_action": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Record Action",
+            "type": "string"
+          },
+          "record_object_key": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Record Object Key",
+            "type": "string"
+          },
+          "record_object_type": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Record Object Type",
+            "type": "string"
+          },
+          "record_system": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Record System",
+            "type": "string"
+          }
+        },
+        "required": [
+          "record_system",
+          "record_object_type",
+          "record_object_key",
+          "record_action"
+        ],
+        "title": "RecordEventDetail",
+        "type": "object"
+      },
+      "SourceIdentity": {
+        "additionalProperties": false,
+        "properties": {
+          "device_id": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Device Id"
+          },
+          "external_id_scope": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "External Id Scope",
+            "type": "string"
+          },
+          "installation_id": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Installation Id"
+          },
+          "source_account_ref": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Source Account Ref"
+          },
+          "source_format_version": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Source Format Version",
+            "type": "string"
+          },
+          "source_identity_key": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Source Identity Key",
+            "type": "string"
+          },
+          "source_object_kind": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+            "title": "Source Object Kind",
+            "type": "string"
+          },
+          "source_object_stable_id": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Source Object Stable Id",
+            "type": "string"
+          },
+          "source_product": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+            "title": "Source Product",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_product",
+          "source_format_version",
+          "external_id_scope",
+          "source_identity_key",
+          "source_object_kind",
+          "source_object_stable_id"
+        ],
+        "title": "SourceIdentity",
+        "type": "object"
+      },
+      "SourceLocator": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact_type": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+            "title": "Artifact Type",
+            "type": "string"
+          },
+          "byte_offset": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Byte Offset"
+          },
+          "json_pointer": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Json Pointer"
+          },
+          "line": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Line"
+          },
+          "native_ref": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Native Ref"
+          },
+          "record_index": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Record Index"
+          },
+          "row_id": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Row Id"
+          }
+        },
+        "required": [
+          "artifact_type"
+        ],
+        "title": "SourceLocator",
+        "type": "object"
+      },
+      "SourcePosition": {
+        "additionalProperties": false,
+        "properties": {
+          "byte_offset": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Byte Offset"
+          },
+          "column": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Column"
+          },
+          "json_pointer": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Json Pointer"
+          },
+          "line": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Line"
+          },
+          "record_index": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Record Index"
+          }
+        },
+        "title": "SourcePosition",
+        "type": "object"
+      },
+      "SourceTimePrecision": {
+        "enum": [
+          "instant",
+          "second",
+          "minute",
+          "hour",
+          "day",
+          "month",
+          "year",
+          "interval",
+          "unknown"
+        ],
+        "title": "SourceTimePrecision",
+        "type": "string"
+      },
+      "SourceType": {
+        "enum": [
+          "transcript",
+          "document",
+          "media",
+          "relational",
+          "operational"
+        ],
+        "title": "SourceType",
+        "type": "string"
+      },
+      "SourceUnitInput": {
+        "additionalProperties": false,
+        "properties": {
+          "content_hash": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "content_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Content Text"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ConversationTurnDetail"
+              },
+              {
+                "$ref": "#/$defs/DocumentSegmentDetail"
+              },
+              {
+                "$ref": "#/$defs/MediaSegmentDetail"
+              },
+              {
+                "$ref": "#/$defs/RecordEventDetail"
+              }
+            ],
+            "title": "Detail"
+          },
+          "external_unit_id": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "External Unit Id",
+            "type": "string"
+          },
+          "hydration_ref": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Hydration Ref"
+          },
+          "is_observation": {
+            "title": "Is Observation",
+            "type": "boolean"
+          },
+          "parent_unit_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Parent Unit Id"
+          },
+          "schema_version": {
+            "minimum": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "source_unit_id": {
+            "format": "uuid",
+            "title": "Source Unit Id",
+            "type": "string"
+          },
+          "structure": {
+            "default": [],
+            "items": {
+              "$ref": "#/$defs/CanonicalAttribute"
+            },
+            "title": "Structure",
+            "type": "array"
+          },
+          "time_end_seconds": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Time End Seconds"
+          },
+          "time_start_seconds": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Time Start Seconds"
+          },
+          "unit_kind": {
+            "enum": [
+              "turn",
+              "section",
+              "chunk",
+              "element",
+              "media_window",
+              "record_change"
+            ],
+            "title": "Unit Kind",
+            "type": "string"
+          },
+          "unit_ordinal": {
+            "minimum": 0,
+            "title": "Unit Ordinal",
+            "type": "integer"
+          },
+          "unit_source_occurred_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Unit Source Occurred At"
+          },
+          "unit_source_occurred_end_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Unit Source Occurred End At"
+          },
+          "unit_time_precision": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/SourceTimePrecision"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "source_unit_id",
+          "unit_kind",
+          "is_observation",
+          "external_unit_id",
+          "unit_ordinal",
+          "content_hash",
+          "schema_version",
+          "detail"
+        ],
+        "title": "SourceUnitInput",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "capture_surface": {
+        "$ref": "#/$defs/CaptureSurface"
+      },
+      "captured_at": {
+        "format": "date-time",
+        "title": "Captured At",
+        "type": "string"
+      },
+      "connector_id": {
+        "maxLength": 128,
+        "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+        "title": "Connector Id",
+        "type": "string"
+      },
+      "connector_version": {
+        "maxLength": 128,
+        "minLength": 1,
+        "title": "Connector Version",
+        "type": "string"
+      },
+      "content_hash": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Content Hash",
+        "type": "string"
+      },
+      "envelope_kind": {
+        "default": "source_event",
+        "enum": [
+          "source_event",
+          "conversation_event"
+        ],
+        "title": "Envelope Kind",
+        "type": "string"
+      },
+      "event_id": {
+        "format": "uuid",
+        "title": "Event Id",
+        "type": "string"
+      },
+      "event_kind": {
+        "$ref": "#/$defs/CaptureEventKind"
+      },
+      "external_event_id": {
+        "anyOf": [
+          {
+            "maxLength": 512,
+            "minLength": 1,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "External Event Id"
+      },
+      "parser_receipt": {
+        "$ref": "#/$defs/ParserCoverageReceipt"
+      },
+      "policies": {
+        "$ref": "#/$defs/CapturePolicyReferences"
+      },
+      "project_hint": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/ProjectHint"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "schema_version": {
+        "const": 1,
+        "default": 1,
+        "title": "Schema Version",
+        "type": "integer"
+      },
+      "source_identity": {
+        "$ref": "#/$defs/SourceIdentity"
+      },
+      "source_locator": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/SourceLocator"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "source_occurred_at": {
+        "anyOf": [
+          {
+            "format": "date-time",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Source Occurred At"
+      },
+      "source_occurred_at_raw": {
+        "anyOf": [
+          {
+            "maxLength": 512,
+            "minLength": 1,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Source Occurred At Raw"
+      },
+      "source_occurred_end_at": {
+        "anyOf": [
+          {
+            "format": "date-time",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Source Occurred End At"
+      },
+      "source_revision_key": {
+        "anyOf": [
+          {
+            "maxLength": 512,
+            "minLength": 1,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Source Revision Key"
+      },
+      "source_sequence": {
+        "anyOf": [
+          {
+            "minimum": 0,
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Source Sequence"
+      },
+      "source_time_precision": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/SourceTimePrecision"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "source_timezone": {
+        "anyOf": [
+          {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Source Timezone"
+      },
+      "source_type": {
+        "$ref": "#/$defs/SourceType"
+      },
+      "supersedes_source_identity_key": {
+        "anyOf": [
+          {
+            "maxLength": 512,
+            "minLength": 1,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Supersedes Source Identity Key"
+      },
+      "units": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/SourceUnitInput"
+        },
+        "maxItems": 256,
+        "title": "Units",
+        "type": "array"
+      }
+    },
+    "required": [
+      "connector_id",
+      "connector_version",
+      "capture_surface",
+      "source_identity",
+      "event_id",
+      "event_kind",
+      "captured_at",
+      "source_type",
+      "content_hash",
+      "parser_receipt",
+      "policies"
+    ],
+    "title": "SourceEventEnvelope",
+    "type": "object"
+  },
+  "id": "memoriesql.capture.source-event-envelope",
+  "status": "available",
+  "summary": "Versioned SQL-13 capture contract implemented by PR-02A.",
+  "version": "1"
+}

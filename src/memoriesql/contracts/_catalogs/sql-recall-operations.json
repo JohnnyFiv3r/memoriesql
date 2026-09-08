@@ -1,0 +1,11 @@
+{
+  "_generated": true,
+  "canonical_sources": [
+    "contracts/public-registry.json"
+  ],
+  "entries": [],
+  "interface_version": "1",
+  "kind": "sql_recall_operations",
+  "note": "No SQL recall records are included in this preview.",
+  "status": "not_implemented"
+}

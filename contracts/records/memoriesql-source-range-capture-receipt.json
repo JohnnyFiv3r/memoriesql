@@ -1,0 +1,126 @@
+{
+  "contract": {
+    "additionalProperties": false,
+    "properties": {
+      "already_exists": {
+        "title": "Already Exists",
+        "type": "boolean"
+      },
+      "authority_principal_id": {
+        "format": "uuid",
+        "title": "Authority Principal Id",
+        "type": "string"
+      },
+      "byte_end_exclusive": {
+        "exclusiveMinimum": 0,
+        "title": "Byte End Exclusive",
+        "type": "integer"
+      },
+      "byte_start": {
+        "minimum": 0,
+        "title": "Byte Start",
+        "type": "integer"
+      },
+      "captured_at": {
+        "format": "date-time",
+        "title": "Captured At",
+        "type": "string"
+      },
+      "checkpoint_key": {
+        "maxLength": 128,
+        "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+        "title": "Checkpoint Key",
+        "type": "string"
+      },
+      "checkpoint_sequence": {
+        "minimum": 1,
+        "title": "Checkpoint Sequence",
+        "type": "integer"
+      },
+      "chunk_count": {
+        "maximum": 256,
+        "minimum": 1,
+        "title": "Chunk Count",
+        "type": "integer"
+      },
+      "durable": {
+        "const": true,
+        "default": true,
+        "title": "Durable",
+        "type": "boolean"
+      },
+      "file_identity_key": {
+        "maxLength": 256,
+        "minLength": 1,
+        "title": "File Identity Key",
+        "type": "string"
+      },
+      "idempotency_receipt_id": {
+        "format": "uuid",
+        "title": "Idempotency Receipt Id",
+        "type": "string"
+      },
+      "interpretation_status": {
+        "const": "pending_interpretation",
+        "default": "pending_interpretation",
+        "title": "Interpretation Status",
+        "type": "string"
+      },
+      "payload_byte_count": {
+        "maximum": 262144,
+        "minimum": 1,
+        "title": "Payload Byte Count",
+        "type": "integer"
+      },
+      "payload_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Payload Sha256",
+        "type": "string"
+      },
+      "replayed": {
+        "title": "Replayed",
+        "type": "boolean"
+      },
+      "source_object_id": {
+        "format": "uuid",
+        "title": "Source Object Id",
+        "type": "string"
+      },
+      "source_range_receipt_id": {
+        "format": "uuid",
+        "title": "Source Range Receipt Id",
+        "type": "string"
+      },
+      "source_revision_key": {
+        "maxLength": 512,
+        "minLength": 1,
+        "title": "Source Revision Key",
+        "type": "string"
+      }
+    },
+    "required": [
+      "source_range_receipt_id",
+      "idempotency_receipt_id",
+      "source_object_id",
+      "source_revision_key",
+      "file_identity_key",
+      "byte_start",
+      "byte_end_exclusive",
+      "payload_byte_count",
+      "payload_sha256",
+      "chunk_count",
+      "checkpoint_key",
+      "checkpoint_sequence",
+      "authority_principal_id",
+      "captured_at",
+      "already_exists",
+      "replayed"
+    ],
+    "title": "CaptureSourceRangeReceipt",
+    "type": "object"
+  },
+  "id": "memoriesql.source-range.capture-receipt",
+  "status": "available",
+  "summary": "Versioned SQL-13 capture contract implemented by PR-02L.",
+  "version": "1"
+}

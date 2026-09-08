@@ -1,0 +1,44 @@
+{
+  "contract": {
+    "$defs": {
+      "ScopeExclusionReason": {
+        "enum": [
+          "off_date",
+          "missing_source_time",
+          "cross_midnight"
+        ],
+        "title": "ScopeExclusionReason",
+        "type": "string"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "disposition_code": {
+        "maxLength": 128,
+        "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+        "title": "Disposition Code",
+        "type": "string"
+      },
+      "scope_reason": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/ScopeExclusionReason"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      }
+    },
+    "required": [
+      "disposition_code"
+    ],
+    "title": "TranscriptPolicyDisposition",
+    "type": "object"
+  },
+  "id": "memoriesql.transcript-fold.policy-disposition",
+  "status": "available",
+  "summary": "Versioned SQL-13 capture contract implemented by PR-02M.",
+  "version": "1"
+}

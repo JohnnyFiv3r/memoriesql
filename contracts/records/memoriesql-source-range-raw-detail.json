@@ -1,0 +1,53 @@
+{
+  "contract": {
+    "additionalProperties": false,
+    "properties": {
+      "byte_end_exclusive": {
+        "exclusiveMinimum": 0,
+        "title": "Byte End Exclusive",
+        "type": "integer"
+      },
+      "byte_start": {
+        "minimum": 0,
+        "title": "Byte Start",
+        "type": "integer"
+      },
+      "chunk_ordinal": {
+        "minimum": 0,
+        "title": "Chunk Ordinal",
+        "type": "integer"
+      },
+      "payload_hex": {
+        "maxLength": 131072,
+        "minLength": 2,
+        "pattern": "^(?:[a-f0-9]{2})+$",
+        "title": "Payload Hex",
+        "type": "string"
+      },
+      "payload_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Payload Sha256",
+        "type": "string"
+      },
+      "source_range_receipt_id": {
+        "format": "uuid",
+        "title": "Source Range Receipt Id",
+        "type": "string"
+      }
+    },
+    "required": [
+      "source_range_receipt_id",
+      "chunk_ordinal",
+      "byte_start",
+      "byte_end_exclusive",
+      "payload_sha256",
+      "payload_hex"
+    ],
+    "title": "SourceRangeRawDetail",
+    "type": "object"
+  },
+  "id": "memoriesql.source-range.raw-detail",
+  "status": "available",
+  "summary": "Versioned SQL-13 capture contract implemented by PR-02L.",
+  "version": "1"
+}

@@ -1,0 +1,11 @@
+{
+  "_generated": true,
+  "canonical_sources": [
+    "contracts/public-registry.json"
+  ],
+  "entries": [],
+  "interface_version": "1",
+  "kind": "module",
+  "note": "No product module manifests are included in this preview.",
+  "status": "not_implemented"
+}

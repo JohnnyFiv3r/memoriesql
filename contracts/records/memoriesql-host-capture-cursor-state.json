@@ -1,0 +1,597 @@
+{
+  "contract": {
+    "$defs": {
+      "DurableCursorAcknowledgement": {
+        "additionalProperties": false,
+        "properties": {
+          "authority_principal_id": {
+            "format": "uuid",
+            "title": "Authority Principal Id",
+            "type": "string"
+          },
+          "operation_id": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Operation Id",
+            "type": "string"
+          },
+          "proposal": {
+            "$ref": "#/$defs/ProposedSourceCursor"
+          },
+          "receipt_delivery_id": {
+            "format": "uuid",
+            "title": "Receipt Delivery Id",
+            "type": "string"
+          },
+          "receipt_event_id": {
+            "format": "uuid",
+            "title": "Receipt Event Id",
+            "type": "string"
+          },
+          "receipt_request_hash": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Receipt Request Hash",
+            "type": "string"
+          },
+          "replayed": {
+            "title": "Replayed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "proposal",
+          "operation_id",
+          "receipt_request_hash",
+          "receipt_event_id",
+          "receipt_delivery_id",
+          "authority_principal_id",
+          "replayed"
+        ],
+        "title": "DurableCursorAcknowledgement",
+        "type": "object"
+      },
+      "FileIdentity": {
+        "additionalProperties": false,
+        "properties": {
+          "birth_time_ns": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Birth Time Ns"
+          },
+          "device": {
+            "minimum": 0,
+            "title": "Device",
+            "type": "integer"
+          },
+          "inode": {
+            "minimum": 0,
+            "title": "Inode",
+            "type": "integer"
+          },
+          "platform": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Platform",
+            "type": "string"
+          }
+        },
+        "required": [
+          "platform",
+          "device",
+          "inode"
+        ],
+        "title": "FileIdentity",
+        "type": "object"
+      },
+      "HostCaptureState": {
+        "enum": [
+          "healthy",
+          "waiting_for_complete_record",
+          "degraded",
+          "quarantined",
+          "permission_revoked",
+          "identity_changed"
+        ],
+        "title": "HostCaptureState",
+        "type": "string"
+      },
+      "PendingAssemblyRange": {
+        "additionalProperties": false,
+        "description": "One independently verifiable acquisition range for cursor v2.",
+        "properties": {
+          "byte_count": {
+            "maximum": 8388608,
+            "minimum": 1,
+            "title": "Byte Count",
+            "type": "integer"
+          },
+          "end_offset": {
+            "minimum": 1,
+            "title": "End Offset",
+            "type": "integer"
+          },
+          "end_record_index": {
+            "minimum": 1,
+            "title": "End Record Index",
+            "type": "integer"
+          },
+          "file_identity": {
+            "$ref": "#/$defs/FileIdentity"
+          },
+          "range_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Range Version",
+            "type": "integer"
+          },
+          "source_bytes_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Source Bytes Sha256",
+            "type": "string"
+          },
+          "start_offset": {
+            "minimum": 0,
+            "title": "Start Offset",
+            "type": "integer"
+          },
+          "start_record_index": {
+            "minimum": 0,
+            "title": "Start Record Index",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "file_identity",
+          "start_offset",
+          "end_offset",
+          "start_record_index",
+          "end_record_index",
+          "byte_count",
+          "source_bytes_sha256"
+        ],
+        "title": "PendingAssemblyRange",
+        "type": "object"
+      },
+      "PendingAssemblyRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "end_offset": {
+            "minimum": 1,
+            "title": "End Offset",
+            "type": "integer"
+          },
+          "record_index": {
+            "minimum": 0,
+            "title": "Record Index",
+            "type": "integer"
+          },
+          "source_bytes_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Source Bytes Sha256",
+            "type": "string"
+          },
+          "start_offset": {
+            "minimum": 0,
+            "title": "Start Offset",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "start_offset",
+          "end_offset",
+          "record_index",
+          "source_bytes_sha256"
+        ],
+        "title": "PendingAssemblyRecord",
+        "type": "object"
+      },
+      "ProposedSourceCursor": {
+        "additionalProperties": false,
+        "properties": {
+          "capability_id": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+            "title": "Capability Id",
+            "type": "string"
+          },
+          "end_offset": {
+            "minimum": 1,
+            "title": "End Offset",
+            "type": "integer"
+          },
+          "envelope_hash": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Envelope Hash",
+            "type": "string"
+          },
+          "expected_checkpoint_sequence": {
+            "minimum": 0,
+            "title": "Expected Checkpoint Sequence",
+            "type": "integer"
+          },
+          "file_identity": {
+            "$ref": "#/$defs/FileIdentity"
+          },
+          "next_checkpoint_sequence": {
+            "minimum": 1,
+            "title": "Next Checkpoint Sequence",
+            "type": "integer"
+          },
+          "proposal_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Proposal Version",
+            "type": "integer"
+          },
+          "source_bytes_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Source Bytes Sha256",
+            "type": "string"
+          },
+          "start_offset": {
+            "minimum": 0,
+            "title": "Start Offset",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "capability_id",
+          "file_identity",
+          "start_offset",
+          "end_offset",
+          "source_bytes_sha256",
+          "envelope_hash",
+          "expected_checkpoint_sequence",
+          "next_checkpoint_sequence"
+        ],
+        "title": "ProposedSourceCursor",
+        "type": "object"
+      },
+      "QuarantineEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "diagnostic_code": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+            "title": "Diagnostic Code",
+            "type": "string"
+          },
+          "end_offset": {
+            "minimum": 0,
+            "title": "End Offset",
+            "type": "integer"
+          },
+          "file_identity": {
+            "$ref": "#/$defs/FileIdentity"
+          },
+          "occurrences": {
+            "default": 1,
+            "maximum": 1000000,
+            "minimum": 1,
+            "title": "Occurrences",
+            "type": "integer"
+          },
+          "source_bytes_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Source Bytes Sha256",
+            "type": "string"
+          },
+          "start_offset": {
+            "minimum": 0,
+            "title": "Start Offset",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "file_identity",
+          "start_offset",
+          "end_offset",
+          "source_bytes_sha256",
+          "diagnostic_code"
+        ],
+        "title": "QuarantineEntry",
+        "type": "object"
+      },
+      "ScopeExclusionDispositionKind": {
+        "enum": [
+          "finalized_turn",
+          "scope_start"
+        ],
+        "title": "ScopeExclusionDispositionKind",
+        "type": "string"
+      },
+      "ScopeExclusionEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "approved_date": {
+            "format": "date",
+            "title": "Approved Date",
+            "type": "string"
+          },
+          "capability_id": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+            "title": "Capability Id",
+            "type": "string"
+          },
+          "disposition_kind": {
+            "$ref": "#/$defs/ScopeExclusionDispositionKind",
+            "default": "finalized_turn"
+          },
+          "end_offset": {
+            "minimum": 1,
+            "title": "End Offset",
+            "type": "integer"
+          },
+          "end_record_index": {
+            "minimum": 1,
+            "title": "End Record Index",
+            "type": "integer"
+          },
+          "excluded_logical_turn_count": {
+            "anyOf": [
+              {
+                "maximum": 1000000,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": 1,
+            "title": "Excluded Logical Turn Count"
+          },
+          "file_identity": {
+            "$ref": "#/$defs/FileIdentity"
+          },
+          "reason": {
+            "$ref": "#/$defs/ScopeExclusionReason"
+          },
+          "source_bytes_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Source Bytes Sha256",
+            "type": "string"
+          },
+          "start_offset": {
+            "minimum": 0,
+            "title": "Start Offset",
+            "type": "integer"
+          },
+          "start_record_index": {
+            "minimum": 0,
+            "title": "Start Record Index",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "capability_id",
+          "file_identity",
+          "start_offset",
+          "end_offset",
+          "start_record_index",
+          "end_record_index",
+          "source_bytes_sha256",
+          "approved_date",
+          "reason"
+        ],
+        "title": "ScopeExclusionEntry",
+        "type": "object"
+      },
+      "ScopeExclusionReason": {
+        "enum": [
+          "off_date",
+          "missing_source_time",
+          "cross_midnight"
+        ],
+        "title": "ScopeExclusionReason",
+        "type": "string"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "acknowledged_offset": {
+        "default": 0,
+        "minimum": 0,
+        "title": "Acknowledged Offset",
+        "type": "integer"
+      },
+      "acknowledged_record_index": {
+        "default": 0,
+        "minimum": 0,
+        "title": "Acknowledged Record Index",
+        "type": "integer"
+      },
+      "capability_id": {
+        "maxLength": 128,
+        "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+        "title": "Capability Id",
+        "type": "string"
+      },
+      "checkpoint_sequence": {
+        "default": 0,
+        "minimum": 0,
+        "title": "Checkpoint Sequence",
+        "type": "integer"
+      },
+      "cursor_version": {
+        "default": 2,
+        "enum": [
+          1,
+          2
+        ],
+        "title": "Cursor Version",
+        "type": "integer"
+      },
+      "diagnostic_code": {
+        "anyOf": [
+          {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Diagnostic Code"
+      },
+      "extractor_state_base64": {
+        "default": "",
+        "maxLength": 87384,
+        "title": "Extractor State Base64",
+        "type": "string"
+      },
+      "extractor_state_sha256": {
+        "default": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Extractor State Sha256",
+        "type": "string"
+      },
+      "file_identity": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/FileIdentity"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "last_acknowledgement": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/DurableCursorAcknowledgement"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "observed_size": {
+        "default": 0,
+        "minimum": 0,
+        "title": "Observed Size",
+        "type": "integer"
+      },
+      "partial_tail_base64": {
+        "default": "",
+        "maxLength": 349528,
+        "title": "Partial Tail Base64",
+        "type": "string"
+      },
+      "partial_tail_sha256": {
+        "default": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Partial Tail Sha256",
+        "type": "string"
+      },
+      "pending_assembly_bytes": {
+        "default": 0,
+        "maximum": 8388608,
+        "minimum": 0,
+        "title": "Pending Assembly Bytes",
+        "type": "integer"
+      },
+      "pending_assembly_ranges": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/PendingAssemblyRange"
+        },
+        "maxItems": 128,
+        "title": "Pending Assembly Ranges",
+        "type": "array"
+      },
+      "pending_assembly_records": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/PendingAssemblyRecord"
+        },
+        "maxItems": 1024,
+        "title": "Pending Assembly Records",
+        "type": "array"
+      },
+      "pending_assembly_sha256": {
+        "default": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Pending Assembly Sha256",
+        "type": "string"
+      },
+      "pending_capture_recorded_at": {
+        "anyOf": [
+          {
+            "format": "date-time",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Pending Capture Recorded At"
+      },
+      "quarantine": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/QuarantineEntry"
+        },
+        "maxItems": 32,
+        "title": "Quarantine",
+        "type": "array"
+      },
+      "quarantine_overflow_count": {
+        "default": 0,
+        "maximum": 1000000,
+        "minimum": 0,
+        "title": "Quarantine Overflow Count",
+        "type": "integer"
+      },
+      "retry_attempts": {
+        "default": 0,
+        "maximum": 8,
+        "minimum": 0,
+        "title": "Retry Attempts",
+        "type": "integer"
+      },
+      "revision": {
+        "default": 0,
+        "minimum": 0,
+        "title": "Revision",
+        "type": "integer"
+      },
+      "scope_exclusions": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/ScopeExclusionEntry"
+        },
+        "maxItems": 1024,
+        "title": "Scope Exclusions",
+        "type": "array"
+      },
+      "source_state": {
+        "$ref": "#/$defs/HostCaptureState",
+        "default": "healthy"
+      }
+    },
+    "required": [
+      "capability_id"
+    ],
+    "title": "HostCaptureCursorState",
+    "type": "object"
+  },
+  "id": "memoriesql.host-capture.cursor-state",
+  "status": "available",
+  "summary": "Versioned SQL-13 capture contract implemented by PR-02B.",
+  "version": "1"
+}

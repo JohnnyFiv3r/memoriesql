@@ -1,0 +1,372 @@
+{
+  "contract": {
+    "$defs": {
+      "CaptureSurface": {
+        "enum": [
+          "artifact",
+          "live_hook",
+          "harness",
+          "browser",
+          "import",
+          "explicit_checkpoint",
+          "synthetic"
+        ],
+        "title": "CaptureSurface",
+        "type": "string"
+      },
+      "CapturedSourceRangeChunk": {
+        "additionalProperties": false,
+        "properties": {
+          "byte_end_exclusive": {
+            "exclusiveMinimum": 0,
+            "title": "Byte End Exclusive",
+            "type": "integer"
+          },
+          "byte_start": {
+            "minimum": 0,
+            "title": "Byte Start",
+            "type": "integer"
+          },
+          "chunk_ordinal": {
+            "maximum": 255,
+            "minimum": 0,
+            "title": "Chunk Ordinal",
+            "type": "integer"
+          },
+          "payload_byte_count": {
+            "maximum": 65536,
+            "minimum": 1,
+            "title": "Payload Byte Count",
+            "type": "integer"
+          },
+          "payload_hex": {
+            "maxLength": 131072,
+            "minLength": 2,
+            "pattern": "^(?:[a-f0-9]{2})+$",
+            "title": "Payload Hex",
+            "type": "string"
+          },
+          "payload_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Payload Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "chunk_ordinal",
+          "byte_start",
+          "byte_end_exclusive",
+          "payload_byte_count",
+          "payload_sha256",
+          "payload_hex"
+        ],
+        "title": "CapturedSourceRangeChunk",
+        "type": "object"
+      },
+      "FileIdentity": {
+        "additionalProperties": false,
+        "properties": {
+          "birth_time_ns": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Birth Time Ns"
+          },
+          "device": {
+            "minimum": 0,
+            "title": "Device",
+            "type": "integer"
+          },
+          "inode": {
+            "minimum": 0,
+            "title": "Inode",
+            "type": "integer"
+          },
+          "platform": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Platform",
+            "type": "string"
+          }
+        },
+        "required": [
+          "platform",
+          "device",
+          "inode"
+        ],
+        "title": "FileIdentity",
+        "type": "object"
+      },
+      "KernelCaptureBinding": {
+        "additionalProperties": false,
+        "description": "Authority resolved by the kernel, never from adapter envelope fields.",
+        "properties": {
+          "access_scope_id": {
+            "format": "uuid",
+            "title": "Access Scope Id",
+            "type": "string"
+          },
+          "expected_source_object_schema_version": {
+            "minimum": 1,
+            "title": "Expected Source Object Schema Version",
+            "type": "integer"
+          },
+          "source_object_id": {
+            "format": "uuid",
+            "title": "Source Object Id",
+            "type": "string"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "workspace_id",
+          "access_scope_id",
+          "source_object_id",
+          "expected_source_object_schema_version"
+        ],
+        "title": "KernelCaptureBinding",
+        "type": "object"
+      },
+      "SourceByteCheckpoint": {
+        "additionalProperties": false,
+        "properties": {
+          "checkpoint_hash": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Checkpoint Hash",
+            "type": "string"
+          },
+          "checkpoint_key": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+            "title": "Checkpoint Key",
+            "type": "string"
+          },
+          "expected_byte_offset": {
+            "minimum": 0,
+            "title": "Expected Byte Offset",
+            "type": "integer"
+          },
+          "expected_sequence": {
+            "minimum": 0,
+            "title": "Expected Sequence",
+            "type": "integer"
+          },
+          "file_identity_key": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "File Identity Key",
+            "type": "string"
+          },
+          "next_byte_offset": {
+            "exclusiveMinimum": 0,
+            "title": "Next Byte Offset",
+            "type": "integer"
+          },
+          "next_sequence": {
+            "minimum": 1,
+            "title": "Next Sequence",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "checkpoint_key",
+          "expected_sequence",
+          "next_sequence",
+          "expected_byte_offset",
+          "next_byte_offset",
+          "file_identity_key",
+          "checkpoint_hash"
+        ],
+        "title": "SourceByteCheckpoint",
+        "type": "object"
+      },
+      "SourceRangePolicyReferences": {
+        "additionalProperties": false,
+        "properties": {
+          "capture_policy_id": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+            "title": "Capture Policy Id",
+            "type": "string"
+          },
+          "retention_policy_ref": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Retention Policy Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "capture_policy_id",
+          "retention_policy_ref"
+        ],
+        "title": "SourceRangePolicyReferences",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "binding": {
+        "$ref": "#/$defs/KernelCaptureBinding"
+      },
+      "byte_end_exclusive": {
+        "exclusiveMinimum": 0,
+        "title": "Byte End Exclusive",
+        "type": "integer"
+      },
+      "byte_start": {
+        "minimum": 0,
+        "title": "Byte Start",
+        "type": "integer"
+      },
+      "capability_id": {
+        "maxLength": 128,
+        "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+        "title": "Capability Id",
+        "type": "string"
+      },
+      "capture_surface": {
+        "$ref": "#/$defs/CaptureSurface"
+      },
+      "checkpoint": {
+        "$ref": "#/$defs/SourceByteCheckpoint"
+      },
+      "chunks": {
+        "items": {
+          "$ref": "#/$defs/CapturedSourceRangeChunk"
+        },
+        "maxItems": 256,
+        "minItems": 1,
+        "title": "Chunks",
+        "type": "array"
+      },
+      "connector_id": {
+        "maxLength": 128,
+        "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+        "title": "Connector Id",
+        "type": "string"
+      },
+      "contract_version": {
+        "const": 1,
+        "default": 1,
+        "title": "Contract Version",
+        "type": "integer"
+      },
+      "expected_schema_version": {
+        "const": 13,
+        "default": 13,
+        "title": "Expected Schema Version",
+        "type": "integer"
+      },
+      "file_identity": {
+        "$ref": "#/$defs/FileIdentity"
+      },
+      "file_identity_key": {
+        "maxLength": 256,
+        "minLength": 1,
+        "title": "File Identity Key",
+        "type": "string"
+      },
+      "idempotency_key": {
+        "maxLength": 512,
+        "minLength": 1,
+        "title": "Idempotency Key",
+        "type": "string"
+      },
+      "observed_connector_version": {
+        "anyOf": [
+          {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Observed Connector Version"
+      },
+      "observed_source_format_version": {
+        "anyOf": [
+          {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Observed Source Format Version"
+      },
+      "operation": {
+        "const": "capture_source_range",
+        "default": "capture_source_range",
+        "title": "Operation",
+        "type": "string"
+      },
+      "payload_byte_count": {
+        "maximum": 262144,
+        "minimum": 1,
+        "title": "Payload Byte Count",
+        "type": "integer"
+      },
+      "payload_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Payload Sha256",
+        "type": "string"
+      },
+      "policies": {
+        "$ref": "#/$defs/SourceRangePolicyReferences"
+      },
+      "source_revision_key": {
+        "maxLength": 512,
+        "minLength": 1,
+        "title": "Source Revision Key",
+        "type": "string"
+      }
+    },
+    "required": [
+      "idempotency_key",
+      "binding",
+      "capability_id",
+      "connector_id",
+      "capture_surface",
+      "source_revision_key",
+      "file_identity",
+      "file_identity_key",
+      "byte_start",
+      "byte_end_exclusive",
+      "payload_byte_count",
+      "payload_sha256",
+      "chunks",
+      "policies",
+      "checkpoint"
+    ],
+    "title": "CaptureSourceRangeCommand",
+    "type": "object"
+  },
+  "id": "memoriesql.source-range.capture-command",
+  "status": "available",
+  "summary": "Versioned SQL-13 capture contract implemented by PR-02L.",
+  "version": "1"
+}

@@ -1,0 +1,241 @@
+{
+  "contract": {
+    "$defs": {
+      "CanonicalAttribute": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "title": "Key",
+            "type": "string"
+          },
+          "value": {
+            "maxLength": 512,
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "value"
+        ],
+        "title": "CanonicalAttribute",
+        "type": "object"
+      },
+      "HarnessLifecycleEventKind": {
+        "enum": [
+          "run_started",
+          "session_started",
+          "turn_started",
+          "final_user_input",
+          "tool_request",
+          "tool_result",
+          "handoff",
+          "final_agent_output",
+          "turn_failed",
+          "turn_cancelled",
+          "session_ended",
+          "run_ended"
+        ],
+        "title": "HarnessLifecycleEventKind",
+        "type": "string"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "branch_id": {
+        "anyOf": [
+          {
+            "maxLength": 512,
+            "minLength": 1,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Branch Id"
+      },
+      "captured_at": {
+        "format": "date-time",
+        "title": "Captured At",
+        "type": "string"
+      },
+      "content_text": {
+        "anyOf": [
+          {
+            "maxLength": 1536,
+            "minLength": 1,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Content Text"
+      },
+      "correlation_id": {
+        "anyOf": [
+          {
+            "maxLength": 512,
+            "minLength": 1,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Correlation Id"
+      },
+      "event_id": {
+        "maxLength": 512,
+        "minLength": 1,
+        "title": "Event Id",
+        "type": "string"
+      },
+      "event_version": {
+        "default": 1,
+        "minimum": 1,
+        "title": "Event Version",
+        "type": "integer"
+      },
+      "kind": {
+        "$ref": "#/$defs/HarnessLifecycleEventKind"
+      },
+      "metadata": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/CanonicalAttribute"
+        },
+        "maxItems": 16,
+        "title": "Metadata",
+        "type": "array"
+      },
+      "name": {
+        "anyOf": [
+          {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Name"
+      },
+      "occurred_at": {
+        "format": "date-time",
+        "title": "Occurred At",
+        "type": "string"
+      },
+      "outcome_code": {
+        "anyOf": [
+          {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Outcome Code"
+      },
+      "participant_id": {
+        "anyOf": [
+          {
+            "maxLength": 512,
+            "minLength": 1,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Participant Id"
+      },
+      "run_id": {
+        "maxLength": 512,
+        "minLength": 1,
+        "title": "Run Id",
+        "type": "string"
+      },
+      "session_id": {
+        "anyOf": [
+          {
+            "maxLength": 512,
+            "minLength": 1,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Session Id"
+      },
+      "source_identity_key": {
+        "anyOf": [
+          {
+            "maxLength": 512,
+            "minLength": 1,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Source Identity Key"
+      },
+      "target_participant_id": {
+        "anyOf": [
+          {
+            "maxLength": 512,
+            "minLength": 1,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Target Participant Id"
+      },
+      "turn_id": {
+        "anyOf": [
+          {
+            "maxLength": 512,
+            "minLength": 1,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Turn Id"
+      }
+    },
+    "required": [
+      "event_id",
+      "kind",
+      "run_id",
+      "occurred_at",
+      "captured_at"
+    ],
+    "title": "HarnessLifecycleEvent",
+    "type": "object"
+  },
+  "id": "memoriesql.harness.lifecycle-event",
+  "status": "available",
+  "summary": "Versioned SQL-13 capture contract implemented by PR-02F.",
+  "version": "1"
+}

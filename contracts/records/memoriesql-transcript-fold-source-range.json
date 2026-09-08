@@ -1,0 +1,58 @@
+{
+  "contract": {
+    "additionalProperties": false,
+    "description": "One exact retained-range slice contributing to a fold outcome.",
+    "properties": {
+      "byte_end_exclusive": {
+        "exclusiveMinimum": 0,
+        "title": "Byte End Exclusive",
+        "type": "integer"
+      },
+      "byte_start": {
+        "minimum": 0,
+        "title": "Byte Start",
+        "type": "integer"
+      },
+      "receipt_byte_end_exclusive": {
+        "exclusiveMinimum": 0,
+        "title": "Receipt Byte End Exclusive",
+        "type": "integer"
+      },
+      "receipt_byte_start": {
+        "minimum": 0,
+        "title": "Receipt Byte Start",
+        "type": "integer"
+      },
+      "receipt_payload_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Receipt Payload Sha256",
+        "type": "string"
+      },
+      "source_bytes_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Source Bytes Sha256",
+        "type": "string"
+      },
+      "source_range_receipt_id": {
+        "format": "uuid",
+        "title": "Source Range Receipt Id",
+        "type": "string"
+      }
+    },
+    "required": [
+      "source_range_receipt_id",
+      "receipt_byte_start",
+      "receipt_byte_end_exclusive",
+      "receipt_payload_sha256",
+      "byte_start",
+      "byte_end_exclusive",
+      "source_bytes_sha256"
+    ],
+    "title": "TranscriptFoldSourceRange",
+    "type": "object"
+  },
+  "id": "memoriesql.transcript-fold.source-range",
+  "status": "available",
+  "summary": "Versioned SQL-13 capture contract implemented by PR-02M.",
+  "version": "1"
+}

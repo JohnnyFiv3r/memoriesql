@@ -1,0 +1,54 @@
+{
+  "contract": {
+    "additionalProperties": false,
+    "properties": {
+      "byte_start": {
+        "minimum": 0,
+        "title": "Byte Start",
+        "type": "integer"
+      },
+      "confirmation": {
+        "const": "confirm_local_transcript_fold",
+        "default": "confirm_local_transcript_fold",
+        "title": "Confirmation",
+        "type": "string"
+      },
+      "file_identity_key": {
+        "maxLength": 256,
+        "minLength": 1,
+        "title": "File Identity Key",
+        "type": "string"
+      },
+      "max_bytes": {
+        "maximum": 67108864,
+        "minimum": 1,
+        "title": "Max Bytes",
+        "type": "integer"
+      },
+      "source_object_id": {
+        "format": "uuid",
+        "title": "Source Object Id",
+        "type": "string"
+      },
+      "source_revision_key": {
+        "maxLength": 512,
+        "minLength": 1,
+        "title": "Source Revision Key",
+        "type": "string"
+      }
+    },
+    "required": [
+      "source_object_id",
+      "source_revision_key",
+      "file_identity_key",
+      "byte_start",
+      "max_bytes"
+    ],
+    "title": "DurableTranscriptReadRequest",
+    "type": "object"
+  },
+  "id": "memoriesql.transcript-fold.read-request",
+  "status": "available",
+  "summary": "Versioned SQL-13 capture contract implemented by PR-02M.",
+  "version": "1"
+}

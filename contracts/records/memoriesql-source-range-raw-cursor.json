@@ -1,0 +1,199 @@
+{
+  "contract": {
+    "$defs": {
+      "DurableSourceRangeAcknowledgement": {
+        "additionalProperties": false,
+        "properties": {
+          "already_exists": {
+            "title": "Already Exists",
+            "type": "boolean"
+          },
+          "authority_principal_id": {
+            "format": "uuid",
+            "title": "Authority Principal Id",
+            "type": "string"
+          },
+          "byte_end_exclusive": {
+            "exclusiveMinimum": 0,
+            "title": "Byte End Exclusive",
+            "type": "integer"
+          },
+          "byte_start": {
+            "minimum": 0,
+            "title": "Byte Start",
+            "type": "integer"
+          },
+          "checkpoint_key": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+            "title": "Checkpoint Key",
+            "type": "string"
+          },
+          "checkpoint_sequence": {
+            "minimum": 1,
+            "title": "Checkpoint Sequence",
+            "type": "integer"
+          },
+          "file_identity_key": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "File Identity Key",
+            "type": "string"
+          },
+          "idempotency_receipt_id": {
+            "format": "uuid",
+            "title": "Idempotency Receipt Id",
+            "type": "string"
+          },
+          "payload_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Payload Sha256",
+            "type": "string"
+          },
+          "replayed": {
+            "title": "Replayed",
+            "type": "boolean"
+          },
+          "source_object_id": {
+            "format": "uuid",
+            "title": "Source Object Id",
+            "type": "string"
+          },
+          "source_range_receipt_id": {
+            "format": "uuid",
+            "title": "Source Range Receipt Id",
+            "type": "string"
+          },
+          "source_revision_key": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Source Revision Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_range_receipt_id",
+          "idempotency_receipt_id",
+          "source_object_id",
+          "source_revision_key",
+          "file_identity_key",
+          "payload_sha256",
+          "byte_start",
+          "byte_end_exclusive",
+          "checkpoint_key",
+          "checkpoint_sequence",
+          "authority_principal_id",
+          "already_exists",
+          "replayed"
+        ],
+        "title": "DurableSourceRangeAcknowledgement",
+        "type": "object"
+      },
+      "FileIdentity": {
+        "additionalProperties": false,
+        "properties": {
+          "birth_time_ns": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Birth Time Ns"
+          },
+          "device": {
+            "minimum": 0,
+            "title": "Device",
+            "type": "integer"
+          },
+          "inode": {
+            "minimum": 0,
+            "title": "Inode",
+            "type": "integer"
+          },
+          "platform": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Platform",
+            "type": "string"
+          }
+        },
+        "required": [
+          "platform",
+          "device",
+          "inode"
+        ],
+        "title": "FileIdentity",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "acknowledged_byte_offset": {
+        "default": 0,
+        "minimum": 0,
+        "title": "Acknowledged Byte Offset",
+        "type": "integer"
+      },
+      "capability_id": {
+        "maxLength": 128,
+        "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+        "title": "Capability Id",
+        "type": "string"
+      },
+      "checkpoint_sequence": {
+        "default": 0,
+        "minimum": 0,
+        "title": "Checkpoint Sequence",
+        "type": "integer"
+      },
+      "cursor_version": {
+        "const": 1,
+        "default": 1,
+        "title": "Cursor Version",
+        "type": "integer"
+      },
+      "file_identity": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/FileIdentity"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "last_acknowledgement": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/DurableSourceRangeAcknowledgement"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "revision": {
+        "default": 0,
+        "minimum": 0,
+        "title": "Revision",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "capability_id"
+    ],
+    "title": "RawSourceCursorState",
+    "type": "object"
+  },
+  "id": "memoriesql.source-range.raw-cursor",
+  "status": "available",
+  "summary": "Versioned SQL-13 capture contract implemented by PR-02L.",
+  "version": "1"
+}

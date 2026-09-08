@@ -1,0 +1,111 @@
+{
+  "contract": {
+    "$defs": {
+      "FileIdentity": {
+        "additionalProperties": false,
+        "properties": {
+          "birth_time_ns": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Birth Time Ns"
+          },
+          "device": {
+            "minimum": 0,
+            "title": "Device",
+            "type": "integer"
+          },
+          "inode": {
+            "minimum": 0,
+            "title": "Inode",
+            "type": "integer"
+          },
+          "platform": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Platform",
+            "type": "string"
+          }
+        },
+        "required": [
+          "platform",
+          "device",
+          "inode"
+        ],
+        "title": "FileIdentity",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "capability_id": {
+        "maxLength": 128,
+        "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+        "title": "Capability Id",
+        "type": "string"
+      },
+      "end_offset": {
+        "minimum": 1,
+        "title": "End Offset",
+        "type": "integer"
+      },
+      "envelope_hash": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Envelope Hash",
+        "type": "string"
+      },
+      "expected_checkpoint_sequence": {
+        "minimum": 0,
+        "title": "Expected Checkpoint Sequence",
+        "type": "integer"
+      },
+      "file_identity": {
+        "$ref": "#/$defs/FileIdentity"
+      },
+      "next_checkpoint_sequence": {
+        "minimum": 1,
+        "title": "Next Checkpoint Sequence",
+        "type": "integer"
+      },
+      "proposal_version": {
+        "const": 1,
+        "default": 1,
+        "title": "Proposal Version",
+        "type": "integer"
+      },
+      "source_bytes_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Source Bytes Sha256",
+        "type": "string"
+      },
+      "start_offset": {
+        "minimum": 0,
+        "title": "Start Offset",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "capability_id",
+      "file_identity",
+      "start_offset",
+      "end_offset",
+      "source_bytes_sha256",
+      "envelope_hash",
+      "expected_checkpoint_sequence",
+      "next_checkpoint_sequence"
+    ],
+    "title": "ProposedSourceCursor",
+    "type": "object"
+  },
+  "id": "memoriesql.host-capture.proposed-cursor",
+  "status": "available",
+  "summary": "Versioned SQL-13 capture contract implemented by PR-02B.",
+  "version": "1"
+}

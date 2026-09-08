@@ -1,0 +1,102 @@
+{
+  "contract": {
+    "$defs": {
+      "CaptureIngressStatus": {
+        "enum": [
+          "detected",
+          "received",
+          "duplicate",
+          "quarantined",
+          "accepted",
+          "amended",
+          "deleted"
+        ],
+        "title": "CaptureIngressStatus",
+        "type": "string"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "authority_principal_id": {
+        "format": "uuid",
+        "title": "Authority Principal Id",
+        "type": "string"
+      },
+      "checkpoint_sequence": {
+        "anyOf": [
+          {
+            "minimum": 1,
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Checkpoint Sequence"
+      },
+      "delivery_id": {
+        "format": "uuid",
+        "title": "Delivery Id",
+        "type": "string"
+      },
+      "durable": {
+        "const": true,
+        "default": true,
+        "title": "Durable",
+        "type": "boolean"
+      },
+      "event_id": {
+        "anyOf": [
+          {
+            "format": "uuid",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Event Id"
+      },
+      "idempotency_receipt_id": {
+        "format": "uuid",
+        "title": "Idempotency Receipt Id",
+        "type": "string"
+      },
+      "ingress_status": {
+        "$ref": "#/$defs/CaptureIngressStatus"
+      },
+      "operation_id": {
+        "maxLength": 512,
+        "minLength": 1,
+        "title": "Operation Id",
+        "type": "string"
+      },
+      "replayed": {
+        "title": "Replayed",
+        "type": "boolean"
+      },
+      "request_hash": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Request Hash",
+        "type": "string"
+      }
+    },
+    "required": [
+      "delivery_id",
+      "idempotency_receipt_id",
+      "operation_id",
+      "request_hash",
+      "ingress_status",
+      "authority_principal_id",
+      "replayed"
+    ],
+    "title": "CaptureSubmissionReceipt",
+    "type": "object"
+  },
+  "id": "memoriesql.capture.submission-receipt",
+  "status": "available",
+  "summary": "Versioned SQL-13 capture contract implemented by PR-02A.",
+  "version": "1"
+}

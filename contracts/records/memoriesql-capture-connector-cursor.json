@@ -1,0 +1,40 @@
+{
+  "contract": {
+    "additionalProperties": false,
+    "properties": {
+      "checkpoint_hash": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Checkpoint Hash",
+        "type": "string"
+      },
+      "checkpoint_key": {
+        "maxLength": 128,
+        "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+        "title": "Checkpoint Key",
+        "type": "string"
+      },
+      "expected_sequence": {
+        "minimum": 0,
+        "title": "Expected Sequence",
+        "type": "integer"
+      },
+      "next_sequence": {
+        "minimum": 1,
+        "title": "Next Sequence",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "checkpoint_key",
+      "expected_sequence",
+      "next_sequence",
+      "checkpoint_hash"
+    ],
+    "title": "ConnectorCursor",
+    "type": "object"
+  },
+  "id": "memoriesql.capture.connector-cursor",
+  "status": "available",
+  "summary": "Versioned SQL-13 capture contract implemented by PR-02A.",
+  "version": "1"
+}

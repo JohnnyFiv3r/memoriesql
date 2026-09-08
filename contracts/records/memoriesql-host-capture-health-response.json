@@ -1,0 +1,105 @@
+{
+  "contract": {
+    "$defs": {
+      "HostHelperState": {
+        "enum": [
+          "ready",
+          "stopping"
+        ],
+        "title": "HostHelperState",
+        "type": "string"
+      },
+      "HostReadStatus": {
+        "enum": [
+          "data",
+          "end_of_file",
+          "permission_revoked",
+          "permission_denied",
+          "source_unavailable",
+          "truncated",
+          "rotated_or_replaced",
+          "identity_drift"
+        ],
+        "title": "HostReadStatus",
+        "type": "string"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "configured_capabilities": {
+        "maximum": 32,
+        "minimum": 0,
+        "title": "Configured Capabilities",
+        "type": "integer"
+      },
+      "last_read_request_id": {
+        "anyOf": [
+          {
+            "format": "uuid",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Last Read Request Id"
+      },
+      "last_read_status": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/HostReadStatus"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "protocol_version": {
+        "const": 1,
+        "default": 1,
+        "title": "Protocol Version",
+        "type": "integer"
+      },
+      "request_id": {
+        "format": "uuid",
+        "title": "Request Id",
+        "type": "string"
+      },
+      "response_kind": {
+        "const": "health",
+        "default": "health",
+        "title": "Response Kind",
+        "type": "string"
+      },
+      "revoked_capabilities": {
+        "maximum": 32,
+        "minimum": 0,
+        "title": "Revoked Capabilities",
+        "type": "integer"
+      },
+      "session_id": {
+        "format": "uuid",
+        "title": "Session Id",
+        "type": "string"
+      },
+      "state": {
+        "$ref": "#/$defs/HostHelperState"
+      }
+    },
+    "required": [
+      "request_id",
+      "session_id",
+      "state",
+      "configured_capabilities",
+      "revoked_capabilities"
+    ],
+    "title": "HostHealthResponse",
+    "type": "object"
+  },
+  "id": "memoriesql.host-capture.health-response",
+  "status": "available",
+  "summary": "Versioned SQL-13 capture contract implemented by PR-02B.",
+  "version": "1"
+}

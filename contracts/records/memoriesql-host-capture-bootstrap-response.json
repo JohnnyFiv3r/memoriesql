@@ -1,0 +1,52 @@
+{
+  "contract": {
+    "additionalProperties": false,
+    "properties": {
+      "configured_capabilities": {
+        "maximum": 32,
+        "minimum": 1,
+        "title": "Configured Capabilities",
+        "type": "integer"
+      },
+      "protocol_version": {
+        "const": 1,
+        "default": 1,
+        "title": "Protocol Version",
+        "type": "integer"
+      },
+      "request_id": {
+        "format": "uuid",
+        "title": "Request Id",
+        "type": "string"
+      },
+      "response_kind": {
+        "const": "initialize",
+        "default": "initialize",
+        "title": "Response Kind",
+        "type": "string"
+      },
+      "session_id": {
+        "format": "uuid",
+        "title": "Session Id",
+        "type": "string"
+      },
+      "state": {
+        "const": "ready",
+        "default": "ready",
+        "title": "State",
+        "type": "string"
+      }
+    },
+    "required": [
+      "request_id",
+      "session_id",
+      "configured_capabilities"
+    ],
+    "title": "HostBootstrapResponse",
+    "type": "object"
+  },
+  "id": "memoriesql.host-capture.bootstrap-response",
+  "status": "available",
+  "summary": "Versioned SQL-13 capture contract implemented by PR-02B.",
+  "version": "1"
+}

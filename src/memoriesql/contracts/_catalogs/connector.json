@@ -1,0 +1,61 @@
+{
+  "_generated": true,
+  "canonical_sources": [
+    "contracts/public-registry.json"
+  ],
+  "entries": [
+    {
+      "contract": {
+        "adapter_id": "memoriesql.synthetic",
+        "adapter_version": "1",
+        "capture_surfaces": {
+          "artifact": "supported",
+          "browser": "unsupported",
+          "explicit_checkpoint": "deferred",
+          "harness": "unsupported",
+          "import": "unsupported",
+          "live_hook": "unsupported",
+          "synthetic": "supported"
+        },
+        "coverage": {
+          "amendment": "supported",
+          "approved_path_acquisition": "supported",
+          "branch_identity": "supported",
+          "client_identity": "supported",
+          "deletion_control": "supported",
+          "device_identity": "supported",
+          "message_detail": "deferred",
+          "parser_complete_partial_error": "supported",
+          "partial_tail_restart": "supported",
+          "participant_identity": "supported",
+          "provider_calls": "unsupported",
+          "real_source_discovery": "unsupported",
+          "stable_finalization": "supported",
+          "supervised_host_protocol": "supported",
+          "timestamp_fidelity": "supported",
+          "tool_result_detail": "deferred"
+        },
+        "implementation_status": "synthetic_only",
+        "known_omissions": [
+          "No real source discovery, provider format, or provider integration.",
+          "No model calls, semantic authorship, browser, MCP, HTTP, installer, platform signing, or notarization claim."
+        ],
+        "source_products": [
+          "synthetic"
+        ],
+        "source_schema_versions": [
+          "synthetic.v1",
+          "synthetic.append.v1"
+        ]
+      },
+      "id": "memoriesql.synthetic",
+      "status": "available",
+      "summary": "Synthetic append-only adapter and permission-scoped host-helper proof; no real product source integration.",
+      "version": "1"
+    }
+  ],
+  "interface_version": "1",
+  "kind": "connector",
+  "note": "Only the provider-neutral synthetic reference connector is included.",
+  "status": "available"
+}

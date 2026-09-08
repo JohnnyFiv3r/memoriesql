@@ -1,0 +1,29 @@
+{
+  "contract": {
+    "additionalProperties": false,
+    "description": "The unchanged canonical exact-turn result, retained without applying it.",
+    "properties": {
+      "envelope_canonical_json": {
+        "maxLength": 1048576,
+        "minLength": 2,
+        "title": "Envelope Canonical Json",
+        "type": "string"
+      },
+      "envelope_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Envelope Sha256",
+        "type": "string"
+      }
+    },
+    "required": [
+      "envelope_canonical_json",
+      "envelope_sha256"
+    ],
+    "title": "ExactTurnFoldEvidence",
+    "type": "object"
+  },
+  "id": "memoriesql.transcript-fold.exact-turn",
+  "status": "available",
+  "summary": "Versioned SQL-13 capture contract implemented by PR-02M.",
+  "version": "1"
+}

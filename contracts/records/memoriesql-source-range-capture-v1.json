@@ -1,0 +1,25 @@
+{
+  "contract": {
+    "capture_port": "memoriesql.infrastructure.postgres.source_range.PostgresAuthorizedSourceRangeSession",
+    "chunk_max_bytes": 65536,
+    "command": "memoriesql.application.capture.source_range.CaptureSourceRangeCommand",
+    "contract_version": 1,
+    "creates_derived_observations": false,
+    "cursor_store": "memoriesql.infrastructure.host_capture.JsonRawSourceCursorStore",
+    "host_loop": "memoriesql.application.capture.source_range.RawSourceCaptureLoop",
+    "hosted_raw_upload": "deferred",
+    "interpretation_status": "pending_interpretation",
+    "model_or_provider_calls": false,
+    "operations": [
+      "capture_source_range",
+      "inspect_captured_source_range",
+      "read_captured_source_range_bytes"
+    ],
+    "schema_version": 13,
+    "transaction_max_bytes": 262144
+  },
+  "id": "memoriesql.source-range-capture.v1",
+  "status": "available",
+  "summary": "Schema-13 permission-scoped raw byte ingress with immutable chunks, durable receipt, byte checkpoint, minimal cursor, and owner-only audited inspection.",
+  "version": "1"
+}

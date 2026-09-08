@@ -1,0 +1,628 @@
+{
+  "contract": {
+    "$defs": {
+      "ExactTurnFoldEvidence": {
+        "additionalProperties": false,
+        "description": "The unchanged canonical exact-turn result, retained without applying it.",
+        "properties": {
+          "envelope_canonical_json": {
+            "maxLength": 1048576,
+            "minLength": 2,
+            "title": "Envelope Canonical Json",
+            "type": "string"
+          },
+          "envelope_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Envelope Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "envelope_canonical_json",
+          "envelope_sha256"
+        ],
+        "title": "ExactTurnFoldEvidence",
+        "type": "object"
+      },
+      "FileIdentity": {
+        "additionalProperties": false,
+        "properties": {
+          "birth_time_ns": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Birth Time Ns"
+          },
+          "device": {
+            "minimum": 0,
+            "title": "Device",
+            "type": "integer"
+          },
+          "inode": {
+            "minimum": 0,
+            "title": "Inode",
+            "type": "integer"
+          },
+          "platform": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Platform",
+            "type": "string"
+          }
+        },
+        "required": [
+          "platform",
+          "device",
+          "inode"
+        ],
+        "title": "FileIdentity",
+        "type": "object"
+      },
+      "KernelCaptureBinding": {
+        "additionalProperties": false,
+        "description": "Authority resolved by the kernel, never from adapter envelope fields.",
+        "properties": {
+          "access_scope_id": {
+            "format": "uuid",
+            "title": "Access Scope Id",
+            "type": "string"
+          },
+          "expected_source_object_schema_version": {
+            "minimum": 1,
+            "title": "Expected Source Object Schema Version",
+            "type": "integer"
+          },
+          "source_object_id": {
+            "format": "uuid",
+            "title": "Source Object Id",
+            "type": "string"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "workspace_id",
+          "access_scope_id",
+          "source_object_id",
+          "expected_source_object_schema_version"
+        ],
+        "title": "KernelCaptureBinding",
+        "type": "object"
+      },
+      "LegacyAdapterCursorBinding": {
+        "additionalProperties": false,
+        "properties": {
+          "acknowledged_byte_offset": {
+            "exclusiveMinimum": 0,
+            "title": "Acknowledged Byte Offset",
+            "type": "integer"
+          },
+          "acknowledged_record_index": {
+            "minimum": 0,
+            "title": "Acknowledged Record Index",
+            "type": "integer"
+          },
+          "checkpoint_sequence": {
+            "minimum": 0,
+            "title": "Checkpoint Sequence",
+            "type": "integer"
+          },
+          "cursor_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Cursor Sha256",
+            "type": "string"
+          },
+          "cursor_version": {
+            "enum": [
+              1,
+              2
+            ],
+            "title": "Cursor Version",
+            "type": "integer"
+          },
+          "last_receipt_event_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Last Receipt Event Id"
+          }
+        },
+        "required": [
+          "cursor_version",
+          "cursor_sha256",
+          "acknowledged_byte_offset",
+          "acknowledged_record_index",
+          "checkpoint_sequence"
+        ],
+        "title": "LegacyAdapterCursorBinding",
+        "type": "object"
+      },
+      "ScopeExclusionReason": {
+        "enum": [
+          "off_date",
+          "missing_source_time",
+          "cross_midnight"
+        ],
+        "title": "ScopeExclusionReason",
+        "type": "string"
+      },
+      "TranscriptFoldCheckpoint": {
+        "additionalProperties": false,
+        "properties": {
+          "checkpoint_hash": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Checkpoint Hash",
+            "type": "string"
+          },
+          "checkpoint_key": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+            "title": "Checkpoint Key",
+            "type": "string"
+          },
+          "expected_sequence": {
+            "minimum": 0,
+            "title": "Expected Sequence",
+            "type": "integer"
+          },
+          "next_sequence": {
+            "minimum": 1,
+            "title": "Next Sequence",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "checkpoint_key",
+          "expected_sequence",
+          "next_sequence",
+          "checkpoint_hash"
+        ],
+        "title": "TranscriptFoldCheckpoint",
+        "type": "object"
+      },
+      "TranscriptFoldOutcome": {
+        "additionalProperties": false,
+        "properties": {
+          "byte_end_exclusive": {
+            "exclusiveMinimum": 0,
+            "title": "Byte End Exclusive",
+            "type": "integer"
+          },
+          "byte_start": {
+            "minimum": 0,
+            "title": "Byte Start",
+            "type": "integer"
+          },
+          "end_record_index": {
+            "minimum": 0,
+            "title": "End Record Index",
+            "type": "integer"
+          },
+          "exact_turn": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ExactTurnFoldEvidence"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "lineage": {
+            "items": {
+              "$ref": "#/$defs/TranscriptFoldSourceRange"
+            },
+            "maxItems": 1024,
+            "minItems": 1,
+            "title": "Lineage",
+            "type": "array"
+          },
+          "outcome_kind": {
+            "$ref": "#/$defs/TranscriptFoldOutcomeKind"
+          },
+          "policy_disposition": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/TranscriptPolicyDisposition"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "source_bytes_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Source Bytes Sha256",
+            "type": "string"
+          },
+          "start_record_index": {
+            "minimum": 0,
+            "title": "Start Record Index",
+            "type": "integer"
+          },
+          "transcript_span": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/TranscriptSpanEvidence"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "outcome_kind",
+          "byte_start",
+          "byte_end_exclusive",
+          "start_record_index",
+          "end_record_index",
+          "source_bytes_sha256",
+          "lineage"
+        ],
+        "title": "TranscriptFoldOutcome",
+        "type": "object"
+      },
+      "TranscriptFoldOutcomeKind": {
+        "enum": [
+          "exact_turn",
+          "transcript_span",
+          "policy_disposition"
+        ],
+        "title": "TranscriptFoldOutcomeKind",
+        "type": "string"
+      },
+      "TranscriptFoldSourceRange": {
+        "additionalProperties": false,
+        "description": "One exact retained-range slice contributing to a fold outcome.",
+        "properties": {
+          "byte_end_exclusive": {
+            "exclusiveMinimum": 0,
+            "title": "Byte End Exclusive",
+            "type": "integer"
+          },
+          "byte_start": {
+            "minimum": 0,
+            "title": "Byte Start",
+            "type": "integer"
+          },
+          "receipt_byte_end_exclusive": {
+            "exclusiveMinimum": 0,
+            "title": "Receipt Byte End Exclusive",
+            "type": "integer"
+          },
+          "receipt_byte_start": {
+            "minimum": 0,
+            "title": "Receipt Byte Start",
+            "type": "integer"
+          },
+          "receipt_payload_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Receipt Payload Sha256",
+            "type": "string"
+          },
+          "source_bytes_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Source Bytes Sha256",
+            "type": "string"
+          },
+          "source_range_receipt_id": {
+            "format": "uuid",
+            "title": "Source Range Receipt Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_range_receipt_id",
+          "receipt_byte_start",
+          "receipt_byte_end_exclusive",
+          "receipt_payload_sha256",
+          "byte_start",
+          "byte_end_exclusive",
+          "source_bytes_sha256"
+        ],
+        "title": "TranscriptFoldSourceRange",
+        "type": "object"
+      },
+      "TranscriptPolicyDisposition": {
+        "additionalProperties": false,
+        "properties": {
+          "disposition_code": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+            "title": "Disposition Code",
+            "type": "string"
+          },
+          "scope_reason": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ScopeExclusionReason"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "disposition_code"
+        ],
+        "title": "TranscriptPolicyDisposition",
+        "type": "object"
+      },
+      "TranscriptSpanEvidence": {
+        "additionalProperties": false,
+        "description": "Minimal evidence record for complete records with unknown topology.",
+        "properties": {
+          "byte_end_exclusive": {
+            "exclusiveMinimum": 0,
+            "title": "Byte End Exclusive",
+            "type": "integer"
+          },
+          "byte_start": {
+            "minimum": 0,
+            "title": "Byte Start",
+            "type": "integer"
+          },
+          "content_storage": {
+            "const": "retained_source_ranges",
+            "default": "retained_source_ranges",
+            "title": "Content Storage",
+            "type": "string"
+          },
+          "end_record_index": {
+            "exclusiveMinimum": 0,
+            "title": "End Record Index",
+            "type": "integer"
+          },
+          "file_identity_key": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "File Identity Key",
+            "type": "string"
+          },
+          "source_bytes_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Source Bytes Sha256",
+            "type": "string"
+          },
+          "source_object_id": {
+            "format": "uuid",
+            "title": "Source Object Id",
+            "type": "string"
+          },
+          "source_revision_key": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Source Revision Key",
+            "type": "string"
+          },
+          "start_record_index": {
+            "minimum": 0,
+            "title": "Start Record Index",
+            "type": "integer"
+          },
+          "topology_status": {
+            "const": "unknown",
+            "default": "unknown",
+            "title": "Topology Status",
+            "type": "string"
+          },
+          "transcript_span_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Transcript Span Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "source_object_id",
+          "source_revision_key",
+          "file_identity_key",
+          "byte_start",
+          "byte_end_exclusive",
+          "start_record_index",
+          "end_record_index",
+          "source_bytes_sha256"
+        ],
+        "title": "TranscriptSpanEvidence",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "adapter_profile_version": {
+        "anyOf": [
+          {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Adapter Profile Version"
+      },
+      "binding": {
+        "$ref": "#/$defs/KernelCaptureBinding"
+      },
+      "byte_end_exclusive": {
+        "exclusiveMinimum": 0,
+        "title": "Byte End Exclusive",
+        "type": "integer"
+      },
+      "byte_start": {
+        "minimum": 0,
+        "title": "Byte Start",
+        "type": "integer"
+      },
+      "capability_id": {
+        "maxLength": 128,
+        "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+        "title": "Capability Id",
+        "type": "string"
+      },
+      "checkpoint": {
+        "$ref": "#/$defs/TranscriptFoldCheckpoint"
+      },
+      "complete_record_count": {
+        "maximum": 1000000,
+        "minimum": 0,
+        "title": "Complete Record Count",
+        "type": "integer"
+      },
+      "connector_id": {
+        "maxLength": 128,
+        "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+        "title": "Connector Id",
+        "type": "string"
+      },
+      "contract_version": {
+        "const": 1,
+        "default": 1,
+        "title": "Contract Version",
+        "type": "integer"
+      },
+      "end_record_index": {
+        "minimum": 0,
+        "title": "End Record Index",
+        "type": "integer"
+      },
+      "expected_schema_version": {
+        "const": 14,
+        "default": 14,
+        "title": "Expected Schema Version",
+        "type": "integer"
+      },
+      "file_identity": {
+        "$ref": "#/$defs/FileIdentity"
+      },
+      "file_identity_key": {
+        "maxLength": 256,
+        "minLength": 1,
+        "title": "File Identity Key",
+        "type": "string"
+      },
+      "idempotency_key": {
+        "maxLength": 512,
+        "minLength": 1,
+        "title": "Idempotency Key",
+        "type": "string"
+      },
+      "legacy_cursor": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/LegacyAdapterCursorBinding"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "observed_source_format_version": {
+        "anyOf": [
+          {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Observed Source Format Version"
+      },
+      "operation": {
+        "const": "commit_transcript_fold",
+        "default": "commit_transcript_fold",
+        "title": "Operation",
+        "type": "string"
+      },
+      "outcomes": {
+        "items": {
+          "$ref": "#/$defs/TranscriptFoldOutcome"
+        },
+        "maxItems": 256,
+        "minItems": 1,
+        "title": "Outcomes",
+        "type": "array"
+      },
+      "outcomes_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Outcomes Sha256",
+        "type": "string"
+      },
+      "source_bytes_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Source Bytes Sha256",
+        "type": "string"
+      },
+      "source_revision_key": {
+        "maxLength": 512,
+        "minLength": 1,
+        "title": "Source Revision Key",
+        "type": "string"
+      },
+      "start_record_index": {
+        "minimum": 0,
+        "title": "Start Record Index",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "idempotency_key",
+      "binding",
+      "capability_id",
+      "connector_id",
+      "source_revision_key",
+      "file_identity",
+      "file_identity_key",
+      "byte_start",
+      "byte_end_exclusive",
+      "start_record_index",
+      "end_record_index",
+      "complete_record_count",
+      "source_bytes_sha256",
+      "outcomes_sha256",
+      "outcomes",
+      "checkpoint"
+    ],
+    "title": "CommitTranscriptFoldCommand",
+    "type": "object"
+  },
+  "id": "memoriesql.transcript-fold.commit-command",
+  "status": "available",
+  "summary": "Versioned SQL-13 capture contract implemented by PR-02M.",
+  "version": "1"
+}

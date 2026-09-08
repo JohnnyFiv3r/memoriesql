@@ -1,0 +1,52 @@
+{
+  "contract": {
+    "$defs": {
+      "CaptureIngressStatus": {
+        "enum": [
+          "detected",
+          "received",
+          "duplicate",
+          "quarantined",
+          "accepted",
+          "amended",
+          "deleted"
+        ],
+        "title": "CaptureIngressStatus",
+        "type": "string"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "delivery_id": {
+        "format": "uuid",
+        "title": "Delivery Id",
+        "type": "string"
+      },
+      "ingress_status": {
+        "$ref": "#/$defs/CaptureIngressStatus"
+      },
+      "occurred_at": {
+        "format": "date-time",
+        "title": "Occurred At",
+        "type": "string"
+      },
+      "status_sequence": {
+        "minimum": 1,
+        "title": "Status Sequence",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "delivery_id",
+      "status_sequence",
+      "ingress_status",
+      "occurred_at"
+    ],
+    "title": "CaptureStatusEvent",
+    "type": "object"
+  },
+  "id": "memoriesql.capture.status-event",
+  "status": "available",
+  "summary": "Versioned SQL-13 capture contract implemented by PR-02A.",
+  "version": "1"
+}

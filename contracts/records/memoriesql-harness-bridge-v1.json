@@ -1,0 +1,18 @@
+{
+  "contract": {
+    "capture_port": "CaptureSubmissionPort",
+    "constructor": "memoriesql.application.capture.HarnessCaptureBridge",
+    "event_contract": "memoriesql.application.capture.HarnessLifecycleEvent",
+    "model_or_provider_calls": false,
+    "observation_units_per_turn": 1,
+    "operations": [
+      "emit",
+      "emit_payload",
+      "health"
+    ]
+  },
+  "id": "memoriesql.harness-bridge.v1",
+  "status": "available",
+  "summary": "Framework-neutral run/session/turn lifecycle bridge over the existing capture submission port.",
+  "version": "1"
+}
