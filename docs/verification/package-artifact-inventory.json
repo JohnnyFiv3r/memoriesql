@@ -22,8 +22,8 @@
         "memoriesql/contracts/_catalogs/python.json",
         "memoriesql/contracts/_catalogs/sql-recall-operations.json"
       ],
-      "sha256": "34cd998f8c1ce5dd2aacbeeeb89a291fee2efabad4ae1a51521ac26fcead24cc",
-      "size_bytes": 35620
+      "sha256": "fc076ce88a83ca13e9cc7ca987f44f847d74b3ee9b50a70b175ef4733c367822",
+      "size_bytes": 36010
     },
     {
       "filename": "memoriesql-0.0.1a1.tar.gz",
@@ -59,8 +59,8 @@
         "memoriesql-0.0.1a1/src/memoriesql/contracts/_catalogs/python.json",
         "memoriesql-0.0.1a1/src/memoriesql/contracts/_catalogs/sql-recall-operations.json"
       ],
-      "sha256": "e0087975db108519a789e471a71a2eb6c567c996b7c0cbbf11bd75d15beee5b0",
-      "size_bytes": 31332
+      "sha256": "f9e4c9bddabe05ad1f920a4dff8c1b89830131878e5af01f6cf96f91cf81b9bf",
+      "size_bytes": 31696
     }
   ],
   "distribution": "memoriesql",

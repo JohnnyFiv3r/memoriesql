@@ -9,3 +9,4 @@ This repository is the staged public boundary for the memoriesQL open core. Keep
 - Generated catalogs must be refreshed with `python scripts/generate_catalogs.py` and verified with `--check`.
 - Treat all 0.x APIs as experimental. Preserve an already published contract ID and version payload; model breaking changes as a new contract version.
 - Every contribution must carry a Developer Certificate of Origin sign-off.
+- Open requested PRs in non-draft state, subscribe to their comments, and address, answer, and resolve actionable review threads. Require CI on the final PR commit. For this bootstrap, request one broad review and at most one focused rereview; do not merge, publish, or change repository visibility without owner authorization.

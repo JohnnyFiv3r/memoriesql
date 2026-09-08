@@ -90,6 +90,8 @@ def load_registry() -> tuple[dict[str, object], ...]:
         path = ROOT / raw_path
         if path.parent != RECORD_ROOT or path.suffix != ".json":
             raise ValueError(f"record path is not a direct JSON child: {raw_path}")
+        if path.is_symlink() or path.resolve() != RECORD_ROOT.resolve() / path.name:
+            raise ValueError(f"record path is redirected: {raw_path}")
         registered_paths.add(path)
         data = path.read_bytes()
         if _sha256(data) != record.get("public_sha256"):
@@ -100,7 +102,7 @@ def load_registry() -> tuple[dict[str, object], ...]:
         if str(payload.get("version")) != record.get("version"):
             raise ValueError(f"record version mismatch: {raw_path}")
 
-    discovered_paths = set(RECORD_ROOT.glob("*.json"))
+    discovered_paths = set(RECORD_ROOT.iterdir())
     if discovered_paths != registered_paths:
         missing = sorted(path.name for path in registered_paths - discovered_paths)
         denied = sorted(path.name for path in discovered_paths - registered_paths)
@@ -134,14 +136,18 @@ def expected_outputs() -> dict[Path, bytes]:
 
 
 def generate(*, check: bool) -> None:
+    expected = expected_outputs()
+    unexpected = set(OUTPUT_ROOT.glob("*.json")) - set(expected)
+    if unexpected:
+        raise ValueError("unregistered generated catalog")
     failures: list[str] = []
-    for path, expected in expected_outputs().items():
+    for path, content in expected.items():
         if check:
-            if not path.exists() or path.read_bytes() != expected:
+            if not path.exists() or path.read_bytes() != content:
                 failures.append(path.relative_to(ROOT).as_posix())
         else:
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(expected)
+            path.write_bytes(content)
     if failures:
         raise SystemExit("generated catalog drift: " + ", ".join(failures))
 

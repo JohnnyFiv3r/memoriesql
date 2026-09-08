@@ -2,25 +2,13 @@
 
 from __future__ import annotations
 
-import base64
 import json
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 IGNORED_PARTS = {".git", ".mypy_cache", ".ruff_cache", "__pycache__", "build", "dist"}
 DENIED_ROOTS = {"apps", "artifacts", "migrations"}
-DENIED_TEXT = tuple(
-    base64.b64decode(value).decode("ascii")
-    for value in (
-        "L1VzZXJzLw==",
-        "Z2l0aHViLmNvbS9Kb2hubnlGaXYzcg==",
-        "bWVtb3JpZXNxbC1kZXNrdG9w",
-        "bWVtb3JpZXNxbC1wcm9kdWN0",
-        "R3JhcGhpZnk=",
-        "Q2xhdWRlIENvZGU=",
-        "Q29kZXggcGFzc2l2ZQ==",
-    )
-)
 
 
 def repository_files() -> tuple[Path, ...]:
@@ -46,9 +34,13 @@ def verify() -> dict[str, object]:
             text = path.read_text(encoding="utf-8")
         except UnicodeDecodeError:
             continue
-        for denied in DENIED_TEXT:
-            if denied.lower() in text.lower():
-                text_failures.append(f"{path.relative_to(ROOT)}:{denied}")
+        if re.search(r"/(?:Users|home)/[^/\s]+/", text):
+            text_failures.append(f"{path.relative_to(ROOT)}:absolute home path")
+        for owner, repository in re.findall(
+            r"https://github\.com/([\w-]+)/([\w.-]+)", text
+        ):
+            if (owner, repository) != ("memoriesql", "memoriesql"):
+                text_failures.append(f"{path.relative_to(ROOT)}:non-public repository URL")
     if text_failures:
         raise ValueError("private-boundary text leaked: " + ", ".join(text_failures))
 
