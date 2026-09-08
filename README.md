@@ -2,7 +2,7 @@
 
 # memoriesQL contract preview
 
-This private staging repository contains the proposed public bootstrap for memoriesQL: a small, read-only Python package exposing 49 provider-neutral contract records through eight generated catalogs and 12 experimental Python/CLI APIs.
+This public repository contains the memoriesQL contract preview: a small, read-only Python package exposing 49 provider-neutral contract records through eight generated catalogs and 12 experimental Python/CLI APIs.
 
 It is a pre-alpha contract preview—not the memoriesQL desktop product, a database runtime, a capture service, a recall engine, a background service, or a provider integration. It does not inspect local projects, transcripts, databases, credentials, or network services.
 
@@ -37,4 +37,4 @@ See [compatibility policy](docs/architecture/compatibility.md) and [repository b
 
 Source code and designated materials are licensed under [Apache License 2.0](LICENSE). The memoriesQL name and banner remain subject to [trademark guidance](TRADEMARKS.md). Contributions use the [Developer Certificate of Origin](CONTRIBUTING.md), not a contributor license agreement.
 
-The repository remains private while the owner reviews this bootstrap. No package has been released, no Trusted Publisher is configured, and the publishing workflow is retained only as an inert template outside `.github/workflows`.
+The repository is public; package publication is a separate owner-approved step. The release workflow is restricted to the approved preview tag, exact-main-head CI artifacts, and the protected `pypi` environment. See [release controls](docs/releasing.md). Until the first upload, use a locally built wheel as shown above; an enabled workflow is not a published package.

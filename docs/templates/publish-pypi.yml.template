@@ -1,4 +1,6 @@
 # NON-LIVE TEMPLATE. Keep outside .github/workflows.
+# Historical spike evidence only. The canonical release controls are documented
+# in docs/releasing.md and implemented by .github/workflows/publish-pypi.yml.
 # Do not activate or register a Trusted Publisher until the repository is public
 # and the owner approves the final repository, workflow filename, environment,
 # tag convention, package name, and release controls.

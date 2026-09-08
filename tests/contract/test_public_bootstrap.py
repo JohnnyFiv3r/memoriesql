@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import tomllib
 import unittest
 from pathlib import Path
@@ -74,9 +75,23 @@ class PublicBootstrapTests(unittest.TestCase):
         self.assertIn("assets/trademarks/memoriesql-readme-banner.png", readme)
         self.assertTrue((ROOT / "assets/trademarks/memoriesql-readme-banner.png").is_file())
 
-    def test_publisher_is_only_an_inert_template(self) -> None:
-        workflow_files = set((ROOT / ".github/workflows").glob("*"))
-        self.assertFalse(any("publish" in path.name for path in workflow_files))
+    def test_publisher_has_narrow_owner_approved_controls(self) -> None:
+        workflow = (ROOT / ".github/workflows/publish-pypi.yml").read_text()
+        self.assertIn('tags: ["v0.0.1a1"]', workflow)
+        self.assertIn("github.repository == 'JohnnyFiv3r/memoriesql'", workflow)
+        self.assertIn("github.repository_id == '1357510758'", workflow)
+        self.assertIn("github.event.created == true", workflow)
+        self.assertIn("name: pypi", workflow)
+        self.assertIn("needs: verify", workflow)
+        self.assertEqual(workflow.count("id-token: write"), 1)
+        self.assertIn("scripts/verify_release.py ci", workflow)
+        self.assertIn("scripts/verify_release.py artifacts", workflow)
+        self.assertNotIn("workflow_dispatch", workflow)
+        self.assertNotIn("pull_request", workflow)
+        self.assertNotIn("python -m build", workflow)
+        self.assertNotIn("id-token:", workflow.split("  publish:")[0])
+        for action in re.findall(r"uses: (\S+)", workflow):
+            self.assertRegex(action, r"@[0-9a-f]{40}$")
         template = (ROOT / "docs/templates/publish-pypi.yml.template").read_text()
         self.assertIn("NON-LIVE TEMPLATE", template)
         self.assertIn("FINAL_PUBLIC_REPOSITORY", template)

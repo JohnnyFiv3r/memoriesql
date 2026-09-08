@@ -8,7 +8,7 @@ The bootstrap and its review corrections were verified as described below. Build
 
 - Explicit registry: 49 records; default-deny; 43 JSON Schema, five Python, one synthetic connector.
 - Boundary scan: no denied roots or private-boundary text.
-- Complete export provenance: 71 reviewed exports and 24 public-authored files, plus the manifest itself; every other repository file denied.
+- Complete export provenance: 71 reviewed exports and 28 public-authored files, plus the manifest itself; every other repository file denied. Publishing setup adds four public-owned configuration, documentation, verification, and test files to the original 24.
 - Reviewed spike source-file hashes verified separately from canonical record-payload hashes; all 49 payloads unchanged.
 - Initial unit/contract suite: 16 tests passed, including unregistered files, symlink records, unexpected generated outputs, and payload drift after a public-hash refresh. The review follow-up adds four focused regression tests.
 - Ruff: passed.
@@ -17,7 +17,7 @@ The bootstrap and its review corrections were verified as described below. Build
 - `twine check --strict`: wheel and source distribution passed.
 - Determinism: the initial two builds were byte-identical after source-distribution normalization; hosted CI independently compares two builds for each changed head.
 - Current wheel: `17e09b1c985d5bb0b7dcd044773a7471cab14c8b9caebf76c961e48d0a1580ad` (18 members; 36,020 bytes).
-- Current source distribution: `47aa5521497a55afb14a41dc9f8f20ba0d26b9ee04026a08de50637d094256b7` (30 members; 31,704 bytes).
+- Current source distribution: `d55736b7125f85d5a22bfe1a52344b8ecd8ab8d557107316d1941d7752f6d3a7` (30 members; 31,740 bytes).
 - Complete, unmodified Apache License 2.0 text matched the upstream file byte-for-byte, including its appendix (SHA256 `cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30`). The explicit John Inniger trademark ownership statement remains separate from the source-code license.
 - GitHub-rendered README HTML was inspected in a local browser with UTF-8 encoding; the approved banner loaded and all eight relative link/image references resolved. This is not a claim of public site availability.
 
@@ -32,6 +32,15 @@ The local builds used the pinned development tool environment with `build --no-i
 - Unchanged runtime suites, local interpreter installations, and README rendering were not rerun merely to repeat evidence. The changed final head receives the complete hosted lane and exact-artifact Python matrix.
 
 ## Isolated interpreter matrix
+
+The later publishing-setup change corrects the README's obsolete private-staging
+statement. One focused local build and strict archive inspection refreshed the
+sdist inventory; the wheel remains byte-identical to the reviewed bootstrap
+wheel. Seven release-control regression tests and the updated workflow-control
+test passed. The new workflow passed actionlint 1.7.12; changed Python files
+passed Ruff and strict mypy. The release CI selector also accepted the existing
+successful merged-main CI metadata without running CI again or creating a tag.
+This setup verification does not exercise OIDC or upload a distribution.
 
 The completed-license baseline wheel was installed with `--no-index --no-deps` into clean virtual environments and exercised from outside the repository. This local runtime evidence is retained because the current wheel's installed package modules and catalogs are byte-identical; hosted CI installs the exact current wheel independently.
 
