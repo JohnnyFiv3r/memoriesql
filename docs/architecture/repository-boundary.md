@@ -6,7 +6,7 @@ The initial `0.0.1a1` preview contains only the explicit contract registry, 49 a
 
 Private product material stays outside this repository: desktop surfaces and supervision, installers, signing, updates, hosted services, sync, provider-specific discovery/parsing/acquisition/support profiles, Connections product behavior, product module manifests, private evidence, and user data.
 
-The eventual product repository may depend on released or pinned public-core interfaces. The public core must never import the product repository. Public and product migrations will use separate namespaces and ledgers; product migrations must not alter public-core tables.
+The eventual product repository may depend only on released, pinned public-core versions. The public core must never import the product repository. Public and product migrations will use separate namespaces and ledgers; product migrations must not alter public-core tables.
 
 ## Default-deny extraction
 

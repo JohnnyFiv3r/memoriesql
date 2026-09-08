@@ -771,7 +771,7 @@
     {
       "classification": "public_bootstrap",
       "public_path": "docs/architecture/repository-boundary.md",
-      "public_sha256": "8ae1cc09ede774d98234e5620a06317b16aa54472e1b92c1925e9564e1f36554",
+      "public_sha256": "82e7b1eda7ac97f919ebc05657b34cd6bfe65c07d67733cedc3b57c86ea3c874",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {
