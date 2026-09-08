@@ -39,7 +39,7 @@ def verify() -> dict[str, object]:
         for owner, repository in re.findall(
             r"https://github\.com/([\w-]+)/([\w.-]+)", text
         ):
-            if (owner, repository) != ("memoriesql", "memoriesql"):
+            if (owner, repository) != ("JohnnyFiv3r", "memoriesql"):
                 text_failures.append(f"{path.relative_to(ROOT)}:non-public repository URL")
     if text_failures:
         raise ValueError("private-boundary text leaked: " + ", ".join(text_failures))

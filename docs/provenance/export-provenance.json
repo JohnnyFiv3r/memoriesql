@@ -539,7 +539,7 @@
       "classification": "proposed_open_core",
       "license": "Apache-2.0",
       "public_path": "pyproject.toml",
-      "public_sha256": "5e44d3799bed5ec012c32a235bd90b6e2c09c45e94e2386c2e95c95f9ff9b6d3",
+      "public_sha256": "6be3585da43f111690a5f54142d19e18ef35b3dd2a42fa2e1bbd9907233c3038",
       "reason": "Reviewed packaging-spike input ported or adapted for the public bootstrap.",
       "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
       "reviewed_spike_source_sha256": "9ccf7c2de02f1ce31763577686ea04a60ba9bb2cd03a4aa53a87298e57ae0cc0"
@@ -692,144 +692,168 @@
   "public_only": [
     {
       "classification": "public_bootstrap",
+      "license": "Apache-2.0",
       "public_path": ".github/CODEOWNERS",
       "public_sha256": "93dbcfbb8b24b93769dfee35476d59007af5cb22b14f7f9fe259e7985f03fa6f",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {
       "classification": "public_bootstrap",
+      "license": "Apache-2.0",
       "public_path": ".github/pull_request_template.md",
       "public_sha256": "96ff35d4c9ebe6b7dd9f0a7684c90fb479009f4b32b1f8d2ca201a5f142ef612",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {
       "classification": "public_bootstrap",
+      "license": "Apache-2.0",
       "public_path": ".gitignore",
       "public_sha256": "8a103661ee4a94dfde340d681c6f6037e0ce72a2bf34764ca7dadbd711740e9d",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {
       "classification": "public_bootstrap",
+      "license": "Apache-2.0",
       "public_path": "AGENTS.md",
       "public_sha256": "152e3b7e681bd9dc2a26c4d55fe72a26421aabab02748226fa1217a10f6ff770",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {
       "classification": "public_bootstrap",
+      "license": "Apache-2.0",
       "public_path": "CONTRIBUTING.md",
       "public_sha256": "570db0e0b5c96c12bd674fa10e3878fef7c0fcc2333ede830aa550524ac45d4c",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {
       "classification": "public_bootstrap",
+      "license": "Apache-2.0",
       "public_path": "LICENSE",
       "public_sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {
       "classification": "public_bootstrap",
+      "license": "Apache-2.0",
       "public_path": "NOTICE",
       "public_sha256": "ecf0b154ad51d6db0452098cba3cb2000c34c9b5c8629a07f17562de6ccd6d61",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {
       "classification": "public_bootstrap",
+      "license": "Apache-2.0",
       "public_path": "README.md",
       "public_sha256": "e74997b39d676d372c0d8448f62152fe5687818bbf80f00b79f6b35728b434fa",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {
       "classification": "public_bootstrap",
+      "license": "Apache-2.0",
       "public_path": "SECURITY.md",
-      "public_sha256": "f22ff1cd643c5b8d1f818610e7e30ec16750175f852e4336ebdc738343dab037",
+      "public_sha256": "2ec882080ffe3404d1510754eab16c922099f7e1acb923d2c8ce6f49086c5f96",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {
       "classification": "public_bootstrap",
+      "license": "Apache-2.0",
       "public_path": "TRADEMARKS.md",
       "public_sha256": "d15530fcd6673496f9408b41b0b421bd189bfe69f8de05f6c70349150afa2700",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {
       "classification": "public_bootstrap",
+      "license": "Apache-2.0",
       "public_path": "contracts/public-registry.json",
-      "public_sha256": "a1bcbdfb6b5aeecb0d5e98e7c089f9c54a6c2edef3883e0ca9fa730022dab297",
+      "public_sha256": "51522021f91cce6d074fc05582bc23c4b6f1eb0a432507d67153fc232ea0cebb",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {
       "classification": "public_bootstrap",
+      "license": "Apache-2.0",
       "public_path": "docs/architecture/compatibility.md",
       "public_sha256": "f71c6320fd1877b2c7fdf55c3fe119ddec4fbf8b75b2a76262fffad9c4826597",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {
       "classification": "public_bootstrap",
+      "license": "Apache-2.0",
       "public_path": "docs/architecture/public-api-inventory.md",
       "public_sha256": "c6c30345d56f7d884b8cdf8c550a502d340f8064dd9654a6e01f780000420023",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {
       "classification": "public_bootstrap",
+      "license": "Apache-2.0",
       "public_path": "docs/architecture/repository-boundary.md",
-      "public_sha256": "82e7b1eda7ac97f919ebc05657b34cd6bfe65c07d67733cedc3b57c86ea3c874",
+      "public_sha256": "5682a015353b409bdbe962aad06c072e0ca91a3a779aaba8d560b6742869570e",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {
       "classification": "public_bootstrap",
+      "license": "Apache-2.0",
       "public_path": "docs/verification/local-verification.md",
-      "public_sha256": "bef56c1ff2d2353d666e869ed3e8972372f383ef8388cd9ee10b020c6c75b96f",
+      "public_sha256": "3211687fa59a309e66826e846f9ebd1df32041d7b791e2b31fe33b5e311e0d19",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {
       "classification": "public_bootstrap",
+      "license": "Apache-2.0",
       "public_path": "docs/verification/package-artifact-inventory.json",
-      "public_sha256": "50eeaa93a3249a75ae9e7eea6e3eb43a89d4e3814e3bac5f8792c00885b0b68d",
+      "public_sha256": "ecb11af89178aa867748323d300a8928bc3415d0517e0f17e804f8587da1bd78",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {
       "classification": "public_bootstrap",
+      "license": "Apache-2.0",
       "public_path": "scripts/generate_catalogs.py",
-      "public_sha256": "aa05eed5bb9a99efc83ca3c9d43aa1cb024eb2477892c68624767e630d6a42a9",
+      "public_sha256": "e4d1cf1e5b9299c53e95c343a03beb49262253e88c6bae773be8c7bbcced09cd",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {
       "classification": "public_bootstrap",
+      "license": "Apache-2.0",
       "public_path": "scripts/verify_export_provenance.py",
-      "public_sha256": "a8753dab2d5ad485a914096d73e76638faa151a0dad3c6c65ff029402a33393c",
+      "public_sha256": "9a310b02ff553478357ba5e17212ee67299bde33a8ddb244039db73e8d9eab43",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {
       "classification": "public_bootstrap",
+      "license": "Apache-2.0",
       "public_path": "scripts/verify_public_boundary.py",
-      "public_sha256": "6733f1d79723264af4085ffc23f312655117d498392e574cdd3e04bd6345df26",
+      "public_sha256": "81a89515885666ec4fc287f3327830b01d77b81340121ffc044848bd0142d5f7",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {
       "classification": "public_bootstrap",
+      "license": "Apache-2.0",
       "public_path": "tests/__init__.py",
       "public_sha256": "621f6a713b8a7ad621fd7685d4d8666b338cb79a7ebcc17d072cc00c0ff17837",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {
       "classification": "public_bootstrap",
+      "license": "Apache-2.0",
       "public_path": "tests/contract/__init__.py",
       "public_sha256": "d5cd057a66ba4115fb22457bc28a586ab2e87bbf632522ad09743fc8d4be4910",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {
       "classification": "public_bootstrap",
+      "license": "Apache-2.0",
       "public_path": "tests/contract/test_export_denial.py",
-      "public_sha256": "e8b4868437c55e0b98d262a2caec6fb6e7cc2590c86cfe9d79c7461e2c0217a3",
+      "public_sha256": "ef9dc280f412ffb1402f78ab07cf84f69eb88babe1a5d2b997504a2b6735c7b1",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {
       "classification": "public_bootstrap",
+      "license": "Apache-2.0",
       "public_path": "tests/contract/test_public_bootstrap.py",
-      "public_sha256": "937b1788b666bed79c4d94180a82b1354fb0ae3579fd027fff41a628db3f6071",
+      "public_sha256": "03f3823d901499719052853f950a212e81e0ccef9237818122c7b0bec4abb296",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {
       "classification": "public_bootstrap",
+      "license": "Apache-2.0",
       "public_path": "tests/unit/__init__.py",
       "public_sha256": "3b2bec5485bb3fb3bb29a41ff8b1d86feb92bbc6587a20491c94a0b29d2a195b",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."

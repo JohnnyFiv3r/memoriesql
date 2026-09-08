@@ -6,7 +6,12 @@ import tomllib
 import unittest
 from pathlib import Path
 
-from scripts.generate_catalogs import CATALOG_FILES, expected_outputs, load_registry
+from memoriesql.contracts import CATALOG_KINDS
+from scripts.generate_catalogs import (
+    expected_outputs,
+    load_catalog_definitions,
+    load_registry,
+)
 from scripts.verify_public_boundary import verify
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -24,14 +29,16 @@ class PublicBootstrapTests(unittest.TestCase):
         self.assertEqual(project["authors"], [{"name": "John Inniger"}])
         self.assertNotIn("dependencies", project)
         self.assertEqual(
-            project["urls"]["Repository"], "https://github.com/memoriesql/memoriesql"
+            project["urls"]["Repository"], "https://github.com/JohnnyFiv3r/memoriesql"
         )
 
     def test_registry_is_explicit_complete_and_default_deny(self) -> None:
         records = load_registry()
         self.assertEqual(len(records), 49)
         self.assertEqual(len({record["id"] for record in records}), 49)
-        counts = {kind: 0 for kind in CATALOG_FILES}
+        catalogs = load_catalog_definitions()
+        self.assertEqual(tuple(item.kind for item in catalogs), CATALOG_KINDS)
+        counts = {item.kind: 0 for item in catalogs}
         for record in records:
             counts[str(record["catalog"])] += 1
             self.assertEqual(record["classification"], "proposed_open_core")

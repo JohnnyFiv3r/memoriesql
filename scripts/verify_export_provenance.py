@@ -50,6 +50,13 @@ def verify(root: Path = ROOT) -> dict[str, int]:
             raise ValueError(f"public hash drift: {path}")
         if not row.get("reason") or not row.get("classification"):
             raise ValueError(f"missing inclusion decision: {path}")
+        expected_license = (
+            "trademark_asset_not_apache"
+            if path.parts[:2] == ("assets", "trademarks")
+            else "Apache-2.0"
+        )
+        if row.get("license") != expected_license:
+            raise ValueError(f"invalid license disposition: {path}")
     for row in exports:
         if row.get("reviewed_spike_commit") != SPIKE_COMMIT:
             raise ValueError("export commit mismatch")

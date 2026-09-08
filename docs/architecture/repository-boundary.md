@@ -1,6 +1,6 @@
 # Repository boundary
 
-This repository is the staged public authority for provider-neutral memoriesQL contracts and, after separate audits, the open-core ledger, authorization, idempotency, capture protocol, typed retrieval, and canonical schema migrations.
+The canonical repository, `JohnnyFiv3r/memoriesql`, is the staged public authority for provider-neutral memoriesQL contracts and, after separate audits, the open-core ledger, authorization, idempotency, capture protocol, typed retrieval, and canonical schema migrations. It remains private until the owner authorizes a visibility change.
 
 The initial `0.0.1a1` preview contains only the explicit contract registry, 49 approved records, generated catalogs, the read-only Python/CLI facade, focused verification, and minimal project governance. It intentionally contains no runtime implementation candidates or migrations.
 

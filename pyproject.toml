@@ -28,10 +28,10 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/memoriesql/memoriesql"
-Repository = "https://github.com/memoriesql/memoriesql"
-Issues = "https://github.com/memoriesql/memoriesql/issues"
-Security = "https://github.com/memoriesql/memoriesql/security/policy"
+Homepage = "https://github.com/JohnnyFiv3r/memoriesql"
+Repository = "https://github.com/JohnnyFiv3r/memoriesql"
+Issues = "https://github.com/JohnnyFiv3r/memoriesql/issues"
+Security = "https://github.com/JohnnyFiv3r/memoriesql/security/policy"
 
 [project.scripts]
 memoriesql = "memoriesql.cli:main"

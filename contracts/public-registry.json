@@ -1,5 +1,63 @@
 {
   "authority": "This explicit registry is the sole catalog-generation authority for the public repository.",
+  "catalogs": [
+    {
+      "disposition": "empty",
+      "expected_record_count": 0,
+      "filename": "cli.json",
+      "kind": "cli",
+      "note": "No product command records are included in this preview."
+    },
+    {
+      "disposition": "include",
+      "expected_record_count": 1,
+      "filename": "connector.json",
+      "kind": "connector",
+      "note": "Only the provider-neutral synthetic reference connector is included."
+    },
+    {
+      "disposition": "empty",
+      "expected_record_count": 0,
+      "filename": "http-openapi.json",
+      "kind": "http_openapi",
+      "note": "No public HTTP records are included in this preview."
+    },
+    {
+      "disposition": "include",
+      "expected_record_count": 43,
+      "filename": "json-schema.json",
+      "kind": "json_schema",
+      "note": "Provider-neutral capture, host, source-range, transcript-fold, and harness-lifecycle schemas."
+    },
+    {
+      "disposition": "empty",
+      "expected_record_count": 0,
+      "filename": "mcp.json",
+      "kind": "mcp",
+      "note": "No MCP records are included in this preview."
+    },
+    {
+      "disposition": "empty",
+      "expected_record_count": 0,
+      "filename": "module.json",
+      "kind": "module",
+      "note": "No product module manifests are included in this preview."
+    },
+    {
+      "disposition": "include",
+      "expected_record_count": 5,
+      "filename": "python.json",
+      "kind": "python",
+      "note": "Provider-neutral protocols, SDK surfaces, and synthetic reference records."
+    },
+    {
+      "disposition": "empty",
+      "expected_record_count": 0,
+      "filename": "sql-recall-operations.json",
+      "kind": "sql_recall_operations",
+      "note": "No SQL recall records are included in this preview."
+    }
+  ],
   "compatibility": "experimental_0_x_no_general_compatibility_guarantee",
   "default_policy": "deny",
   "records": [
