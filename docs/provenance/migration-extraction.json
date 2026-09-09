@@ -1,0 +1,126 @@
+{
+  "scope": "Canonical migration substrate only",
+  "exports": [
+    {
+      "public_path": "migrations/0001_create_schema_history.sql",
+      "source_sha256": "b0ebd5e58938e76379b21a972a08de4b150c959e96e71b839ce78a1ded28b2a6",
+      "disposition": "copy",
+      "reason": "Preserve historical schema bytes.",
+      "public_sha256": "b0ebd5e58938e76379b21a972a08de4b150c959e96e71b839ce78a1ded28b2a6"
+    },
+    {
+      "public_path": "migrations/0002_create_source_ledger.sql",
+      "source_sha256": "85381cb93938849b39d8474c069e1dbd397b531d9b2d6b82abbce4f40c040ad4",
+      "disposition": "copy",
+      "reason": "Preserve historical schema bytes.",
+      "public_sha256": "85381cb93938849b39d8474c069e1dbd397b531d9b2d6b82abbce4f40c040ad4"
+    },
+    {
+      "public_path": "migrations/0003_create_receipts_and_outbox.sql",
+      "source_sha256": "166305c3b2baacadafc307f535b3cc8ae8ca3e7488a6bf04056395cfd138a448",
+      "disposition": "copy",
+      "reason": "Preserve historical schema bytes.",
+      "public_sha256": "166305c3b2baacadafc307f535b3cc8ae8ca3e7488a6bf04056395cfd138a448"
+    },
+    {
+      "public_path": "migrations/0004_create_thin_observation_views.sql",
+      "source_sha256": "74e1de4f19a6241a90eb623f9bdfc723dbe9b229eabb5998f751f2db50397c82",
+      "disposition": "copy",
+      "reason": "Preserve historical schema bytes.",
+      "public_sha256": "74e1de4f19a6241a90eb623f9bdfc723dbe9b229eabb5998f751f2db50397c82"
+    },
+    {
+      "public_path": "migrations/0005_create_principals_and_access_scopes.sql",
+      "source_sha256": "59fdf57fcf2dd1936d6f0e48f1c7e860f57a9f51861dab541cce540c5d7c99a2",
+      "disposition": "copy",
+      "reason": "Preserve historical schema bytes.",
+      "public_sha256": "59fdf57fcf2dd1936d6f0e48f1c7e860f57a9f51861dab541cce540c5d7c99a2"
+    },
+    {
+      "public_path": "migrations/0006_force_resource_authorization.sql",
+      "source_sha256": "d2aa74dd16c7fc0477ab91cfc0fe2f23a2ba7dddba6e5d42ee53af440793a6f6",
+      "disposition": "copy",
+      "reason": "Preserve historical schema bytes.",
+      "public_sha256": "d2aa74dd16c7fc0477ab91cfc0fe2f23a2ba7dddba6e5d42ee53af440793a6f6"
+    },
+    {
+      "public_path": "migrations/0007_create_stable_semantic_identity.sql",
+      "source_sha256": "fc76c579883bb9279524c5966772061581b01f0650b2547ef305eceb52e18c94",
+      "disposition": "copy",
+      "reason": "Preserve historical schema bytes.",
+      "public_sha256": "fc76c579883bb9279524c5966772061581b01f0650b2547ef305eceb52e18c94"
+    },
+    {
+      "public_path": "migrations/0008_create_semantic_task_queue.sql",
+      "source_sha256": "71c12c0cd2a03e273715e14d6186a2a10e7c95661efa01bfa0e6e0c2f9772e04",
+      "disposition": "copy",
+      "reason": "Preserve historical schema bytes.",
+      "public_sha256": "71c12c0cd2a03e273715e14d6186a2a10e7c95661efa01bfa0e6e0c2f9772e04"
+    },
+    {
+      "public_path": "migrations/0009_integrate_semantic_worker.sql",
+      "source_sha256": "9fe5e6e06e84d1cc03c24d4bf8c083b22be345e5bf7dc0fe2b3f17f85036032a",
+      "disposition": "copy",
+      "reason": "Preserve historical schema bytes.",
+      "public_sha256": "9fe5e6e06e84d1cc03c24d4bf8c083b22be345e5bf7dc0fe2b3f17f85036032a"
+    },
+    {
+      "public_path": "migrations/0010_quality_first_usage_accounting.sql",
+      "source_sha256": "ec7751d5d08497cd07822fa7da831c03e87b178f064ab0f9dfa6428dcf24a1b5",
+      "disposition": "copy",
+      "reason": "Preserve historical schema bytes.",
+      "public_sha256": "ec7751d5d08497cd07822fa7da831c03e87b178f064ab0f9dfa6428dcf24a1b5"
+    },
+    {
+      "public_path": "migrations/0011_canonical_observation_transactions.sql",
+      "source_sha256": "a4a9b8598268266d6311f49d39f526444e489dde349ac70e6be66dd3cbb1f86e",
+      "disposition": "copy",
+      "reason": "Preserve historical schema bytes.",
+      "public_sha256": "a4a9b8598268266d6311f49d39f526444e489dde349ac70e6be66dd3cbb1f86e"
+    },
+    {
+      "public_path": "migrations/0012_capture_envelopes_and_inbox.sql",
+      "source_sha256": "d1313c44154ddc09b2dd6c3727005176d37b90c2df7cb6d5d59e263459d6a971",
+      "disposition": "copy",
+      "reason": "Preserve historical schema bytes.",
+      "public_sha256": "d1313c44154ddc09b2dd6c3727005176d37b90c2df7cb6d5d59e263459d6a971"
+    },
+    {
+      "public_path": "migrations/0013_durable_source_range_capture.sql",
+      "source_sha256": "0408d3cf5fdb313f54721f86fb6dd9c828311094c462090fdf1b1e8c86e1d983",
+      "disposition": "copy",
+      "reason": "Preserve historical schema bytes.",
+      "public_sha256": "0408d3cf5fdb313f54721f86fb6dd9c828311094c462090fdf1b1e8c86e1d983"
+    },
+    {
+      "public_path": "migrations/0014_transcript_span_fold.sql",
+      "source_sha256": "eac7f576c990aa0a827dc400b36e6b18ffba29bdf400a12a0d81f2e6c6bb7c28",
+      "disposition": "copy",
+      "reason": "Preserve historical schema bytes.",
+      "public_sha256": "eac7f576c990aa0a827dc400b36e6b18ffba29bdf400a12a0d81f2e6c6bb7c28"
+    },
+    {
+      "public_path": "src/memoriesql/infrastructure/postgres/migration_runner.py",
+      "source_sha256": "10841bd32cad98d969faf588c5eeff862a4b1dabefc12a4390f72341567c6b22",
+      "disposition": "adapt",
+      "reason": "Use verified installed resources; preserve runner contract 1.",
+      "public_sha256": "941626a5b55a877bdafc97fbd35468a6013cc8b4b034f8f800b8ebd2c405fd5f"
+    },
+    {
+      "public_path": "src/memoriesql/infrastructure/postgres/schema_inspection.py",
+      "source_sha256": "d99eecfb251d7a29ddbba66c7d9715ec751cc778c19482d1f10c08d54a2512c5",
+      "disposition": "copy",
+      "reason": "Preserve schema inspection.",
+      "public_sha256": "d99eecfb251d7a29ddbba66c7d9715ec751cc778c19482d1f10c08d54a2512c5"
+    }
+  ],
+  "test_material": [
+    {
+      "public_path": "tests/fixtures/schema_snapshot.json",
+      "source_sha256": "fda1967afc4655b42e0ae8687af48f0cd7d6ade39e1936dee4be8cee9d6ecce2",
+      "public_sha256": "fda1967afc4655b42e0ae8687af48f0cd7d6ade39e1936dee4be8cee9d6ecce2",
+      "disposition": "copy",
+      "reason": "Approved schema-only parity fixture; not installed runtime data."
+    }
+  ]
+}

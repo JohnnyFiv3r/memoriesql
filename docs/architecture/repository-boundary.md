@@ -12,4 +12,4 @@ The eventual product repository may depend only on released, pinned public-core 
 
 `contracts/public-registry.json` is the only catalog-generation authority. The generator reads only its explicit entries, validates record hashes and dispositions, rejects unregistered record files, and never scans another repository. The prior classification-by-prefix spike is evidence, not authority.
 
-The 14 canonical migrations and runtime candidates require independent file-by-file audits before a later extraction. Their future placement is not approval to include them in this preview.
+The approved migration substrate cut includes only SQL 0001–0014, migration runner, schema inspection, and minimal resource/initializer closure. `contracts/migration-inventory.json` and `docs/provenance/migration-extraction.json` enumerate that public-owned scope. All other runtime candidates remain deferred. See [migration guidance](../migrations.md).

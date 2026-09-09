@@ -23,12 +23,12 @@ class PublicBootstrapTests(unittest.TestCase):
         document = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
         project = document["project"]
         self.assertEqual(project["name"], "memoriesql")
-        self.assertEqual(project["version"], "0.0.1a1")
-        self.assertEqual(project["requires-python"], ">=3.11,<3.15")
+        self.assertEqual(project["version"], "0.0.2a1")
+        self.assertEqual(project["requires-python"], ">=3.13,<3.15")
         self.assertEqual(project["license"], "Apache-2.0")
         self.assertEqual(project["license-files"], ["LICENSE", "NOTICE"])
         self.assertEqual(project["authors"], [{"name": "John Inniger"}])
-        self.assertNotIn("dependencies", project)
+        self.assertEqual(project["dependencies"], ["psycopg[binary]==3.3.3"])
         self.assertEqual(
             project["urls"]["Repository"], "https://github.com/JohnnyFiv3r/memoriesql"
         )

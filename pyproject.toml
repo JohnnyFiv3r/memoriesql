@@ -7,10 +7,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "memoriesql"
-version = "0.0.1a1"
-description = "Experimental read-only access to governed memoriesQL contract catalogs"
+version = "0.0.2a1"
+description = "Experimental memoriesQL contract catalogs and canonical migration substrate"
 readme = "PYPI_README.md"
-requires-python = ">=3.11,<3.15"
+requires-python = ">=3.13,<3.15"
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
 authors = [{name = "John Inniger"}]
@@ -20,12 +20,12 @@ classifiers = [
   "Intended Audience :: Developers",
   "Operating System :: OS Independent",
   "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3.11",
-  "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
   "Programming Language :: Python :: 3.14",
   "Topic :: Software Development :: Libraries :: Python Modules",
 ]
+
+dependencies = ["psycopg[binary]==3.3.3"]
 
 [project.urls]
 Homepage = "https://github.com/JohnnyFiv3r/memoriesql"
@@ -38,21 +38,21 @@ memoriesql = "memoriesql.cli:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
-packages = ["memoriesql", "memoriesql.contracts"]
+packages = ["memoriesql", "memoriesql.contracts", "memoriesql.infrastructure", "memoriesql.infrastructure.postgres"]
 include-package-data = false
 
 [tool.setuptools.package-data]
 "memoriesql.contracts" = ["_catalogs/*.json"]
 
 [tool.ruff]
-target-version = "py311"
+target-version = "py313"
 line-length = 88
 
 [tool.ruff.lint]
 select = ["E4", "E7", "E9", "F", "I", "UP"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.13"
 strict = true
 explicit_package_bases = true
 mypy_path = "src"

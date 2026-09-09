@@ -28,7 +28,8 @@ def verify(root: Path = ROOT) -> dict[str, int]:
         raise ValueError("unexpected reviewed spike commit")
     exports = manifest["exports"]
     public_only = manifest["public_only"]
-    rows = exports + public_only
+    substrate = manifest.get("substrate_exports", [])
+    rows = exports + public_only + substrate
     paths = [row["public_path"] for row in rows]
     if len(set(paths)) != len(paths):
         raise ValueError("duplicate provenance path")
@@ -67,9 +68,16 @@ def verify(root: Path = ROOT) -> dict[str, int]:
             canonical = json.dumps(
                 payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True
             ).encode()
-            if hashlib.sha256(canonical).hexdigest() != row["reviewed_spike_record_sha256"]:
+            if (
+                hashlib.sha256(canonical).hexdigest()
+                != row["reviewed_spike_record_sha256"]
+            ):
                 raise ValueError("approved record payload drift")
-    return {"exported_files": len(exports), "public_authored_files": len(public_only)}
+    return {
+        "exported_files": len(exports),
+        "public_authored_files": len(public_only),
+        "substrate_exports": len(substrate),
+    }
 
 
 def main() -> None:
@@ -79,7 +87,11 @@ def main() -> None:
     if args.refresh_public_hashes:
         path = ROOT / MANIFEST
         manifest = json.loads(path.read_text())
-        for row in manifest["exports"] + manifest["public_only"]:
+        for row in (
+            manifest["exports"]
+            + manifest["public_only"]
+            + manifest.get("substrate_exports", [])
+        ):
             row["public_sha256"] = hashlib.sha256(
                 (ROOT / row["public_path"]).read_bytes()
             ).hexdigest()
