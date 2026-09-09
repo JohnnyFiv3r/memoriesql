@@ -128,10 +128,12 @@
       "source_sha256": "fedb9b376d56b5865774f5a410ce49d16fd4000700b98ca67e32e45d66eaefa5"
     },
     {
-      "disposition": "copy",
+      "base_public_commit": "700d0957f13ec91eb2ab32494a77d681b1222993",
+      "base_public_sha256": "a6b990a6a74461f34e7e757a3e6f7426020f8cef8df4cdbaad2a95f2fcd10398",
+      "disposition": "public-forward",
       "path": "src/memoriesql/infrastructure/jobs/integrated_semantic_worker.py",
-      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
-      "sha256": "a6b990a6a74461f34e7e757a3e6f7426020f8cef8df4cdbaad2a95f2fcd10398",
+      "reason": "Public-authored cancellation cleanup ownership and post-intent dispatch gate; original N2 extraction hash retained as historical provenance.",
+      "sha256": "e7902a299c8c411f155ea23d071206d6f304e14ae50afd4a9fc4d1715da05b5c",
       "source_sha256": "a6b990a6a74461f34e7e757a3e6f7426020f8cef8df4cdbaad2a95f2fcd10398"
     },
     {
@@ -149,10 +151,12 @@
       "source_sha256": "c15f60eace446302ce7dddfc69010c173a714791a92e3765edef87777da4ccc4"
     },
     {
-      "disposition": "copy",
+      "base_public_commit": "700d0957f13ec91eb2ab32494a77d681b1222993",
+      "base_public_sha256": "07d4c861ce40062c227352f6fd240b7445500776ba6216fdd739027020da3b1c",
+      "disposition": "public-forward",
       "path": "src/memoriesql/infrastructure/models/pydanticai_executor.py",
-      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
-      "sha256": "07d4c861ce40062c227352f6fd240b7445500776ba6216fdd739027020da3b1c",
+      "reason": "Public-authored cancellation cleanup ownership and post-intent dispatch gate; original N2 extraction hash retained as historical provenance.",
+      "sha256": "a87f24cfc8e8d652ff90c8acf92f46c0aa47cf4c2f1ef823eda4737aab24eb34",
       "source_sha256": "07d4c861ce40062c227352f6fd240b7445500776ba6216fdd739027020da3b1c"
     },
     {

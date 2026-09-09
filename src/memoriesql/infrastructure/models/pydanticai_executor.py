@@ -598,6 +598,9 @@ class _DispatchGuardedModel(WrapperModel):
             ),
         )
         await state.deps.model_accounting.record_intent(intent)
+        # Cancellation may arrive while the durable intent is being committed.
+        # Keep that intent accountable, but do not start another model call.
+        await state.require_dispatch_open()
         try:
             response = await self.wrapped.request(
                 messages,

@@ -13,11 +13,17 @@ from uuid import UUID
 from psycopg import Connection
 from pydantic import BaseModel, ValidationError
 
+from memoriesql.application.model_accounting import (
+    AccountingPersistenceError,
+    ModelUsageEvent,
+    ProviderRequestIntent,
+)
 from memoriesql.application.module_registry import CompositionHealthReport
 from memoriesql.application.semantic_task_contracts import (
     CancellationSignal,
     EvidenceAccessor,
     EvidenceReference,
+    ModelRequestAccounting,
     ProcessLocalUsageRecorder,
     RetryClass,
     SemanticAuthorizationContext,
@@ -66,6 +72,7 @@ class ProviderExecutionReadiness:
 
 
 class WorkerCycleStatus(StrEnum):
+    CLEANUP_PENDING = "cleanup_pending"
     IDLE = "idle"
     PROVIDER_UNAVAILABLE = "provider_unavailable"
     SETTLED = "settled"
@@ -108,8 +115,16 @@ class SemanticWorkerConfig:
     finalization_margin_seconds: float = 5.0
     executor_contract_version: int = 1
     jitter_basis_points: int = 0
+    cancellation_return_timeout_seconds: float = 5.0
 
     def __post_init__(self) -> None:
+        if (
+            not math.isfinite(self.cancellation_return_timeout_seconds)
+            or self.cancellation_return_timeout_seconds < 0
+        ):
+            raise ValueError(
+                "cancellation return timeout must be finite and nonnegative"
+            )
         if not 90 <= self.lease_seconds <= 3600:
             raise ValueError("lease_seconds must satisfy the SQL-01D lease contract")
         if not self.lease_seconds <= self.deadline_seconds <= 86400:
@@ -271,15 +286,68 @@ class _PostgresRunEventSink:
         self._cancellation = cancellation
 
     async def append(self, event: SemanticRunEvent) -> None:
-        accepted = await asyncio.to_thread(
-            self._worker._record_run_event,
-            self._fence,
-            event,
-            recorded_at=datetime.now(UTC),
+        operation = asyncio.create_task(self._append(event))
+        self._worker._event_writes.add(operation)
+        operation.add_done_callback(self._worker._event_writes.discard)
+        cancellation: asyncio.CancelledError | None = None
+        while True:
+            try:
+                await asyncio.shield(operation)
+            except asyncio.CancelledError as error:
+                if operation.cancelled():
+                    raise
+                cancellation = error
+                continue
+            break
+        if cancellation is not None:
+            raise cancellation
+
+    async def _append(self, event: SemanticRunEvent) -> None:
+        accepted = await self._worker._await_database_call(
+            lambda: self._worker._record_run_event(
+                self._fence, event, recorded_at=datetime.now(UTC)
+            ),
         )
         if not accepted:
             self._cancellation.cancel()
             raise RuntimeError("semantic run event lost its durable attempt fence")
+
+
+# Own active cycles even when a cancelling caller drops its worker reference.
+# These tasks only finish existing claims; they never schedule or claim work.
+_ACTIVE_CYCLES: set[asyncio.Task[SemanticWorkerCycleReceipt]] = set()
+
+
+class _CleanupAccounting:
+    """Keep late ledger failures observable even when executor cleanup discards output."""
+
+    def __init__(self, port: ModelRequestAccounting) -> None:
+        self._port = port
+        self.usage_failed = False
+
+    async def record_intent(self, intent: ProviderRequestIntent) -> None:
+        await self._port.record_intent(intent)
+
+    async def append_usage(self, event: ModelUsageEvent) -> None:
+        operation = asyncio.create_task(self._port.append_usage(event))
+        cancellation: asyncio.CancelledError | None = None
+        while True:
+            try:
+                await asyncio.shield(operation)
+            except asyncio.CancelledError as error:
+                if operation.cancelled():
+                    self.usage_failed = True
+                    raise
+                cancellation = error
+                continue
+            except Exception:
+                self.usage_failed = True
+                if cancellation is not None:
+                    raise cancellation from None
+                raise
+            break
+        if cancellation is not None:
+            raise cancellation
 
 
 class IntegratedSemanticWorker:
@@ -305,6 +373,15 @@ class IntegratedSemanticWorker:
         self._readiness_provider = readiness_provider
         self._outcome_sinks = outcome_sinks
         self._config = config
+        self._cycle_task: asyncio.Task[SemanticWorkerCycleReceipt] | None = None
+        self._foreground_active = False
+        self._cleanup_started = asyncio.Event()
+        self._cleanup_deadline = 0.0
+        self._cleanup_heartbeat: asyncio.Task[None] | None = None
+        self._pending_receipt: SemanticWorkerCycleReceipt | None = None
+        self._cancellation_receipt: SemanticWorkerCycleReceipt | None = None
+        self._cycle_accounting: _CleanupAccounting | None = None
+        self._event_writes: set[asyncio.Task[None]] = set()
         self._model_accounting = PostgresModelRequestAccounting(
             connection_factory=connection_factory,
             credential_sha256=identity.credential_sha256,
@@ -366,19 +443,157 @@ class IntegratedSemanticWorker:
         *,
         output_contract_hash: str,
     ) -> Never:
-        try:
-            await self._settle_preflight_failure_off_loop(
-                claimed,
-                readiness,
-                error_code="worker.cancelled",
-                output_contract_hash=output_contract_hash,
-                status=SemanticResultStatus.CANCELLED,
-            )
-        finally:
-            raise cancellation_error
+        self._cancellation_receipt = await self._settle_preflight_failure_off_loop(
+            claimed,
+            readiness,
+            error_code="worker.cancelled",
+            output_contract_hash=output_contract_hash,
+            status=SemanticResultStatus.CANCELLED,
+        )
+        raise cancellation_error
 
     async def run_once(self) -> SemanticWorkerCycleReceipt:
+        """Run one cycle; cancellation may leave explicitly owned cleanup pending.
+
+        A responsive event loop bounds foreground waiting after cancellation,
+        not underlying work, database writes, settlement or process shutdown.
+        """
+        if self._foreground_active:
+            raise RuntimeError("worker cycle already has a foreground caller")
+        if self._cycle_task is not None:
+            if not self._cycle_task.done():
+                assert self._pending_receipt is not None
+                return self._pending_receipt
+            # Fail closed on an uncompleted cancellation or failed settlement.
+            # wait_for_cleanup exposes the same outcome; never silently retry it.
+            self._cycle_task.result()
+        self._foreground_active = True
+        self._cleanup_started = asyncio.Event()
+        self._pending_receipt = None
+        self._cancellation_receipt = None
+        self._cycle_accounting = None
+        cycle = asyncio.create_task(self._owned_cycle())
+        self._cycle_task = cycle
+        _ACTIVE_CYCLES.add(cycle)
+        cycle.add_done_callback(self._observe_cycle)
+        signal = asyncio.create_task(self._cleanup_started.wait())
+        delayed_cancellation: asyncio.CancelledError | None = None
+        try:
+            while not cycle.done():
+                timeout = (
+                    max(0.0, self._cleanup_deadline - time.monotonic())
+                    if self._cleanup_started.is_set()
+                    else None
+                )
+                if timeout == 0:
+                    break
+                try:
+                    await asyncio.wait(
+                        (cycle,) if self._cleanup_started.is_set() else (cycle, signal),
+                        timeout=timeout,
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+                except asyncio.CancelledError as error:
+                    if delayed_cancellation is None:
+                        delayed_cancellation = error
+                        self._start_cleanup_wait()
+                        cycle.cancel()
+                    # Further caller cancellation cannot restart the deadline or
+                    # repeatedly interrupt the owned cleanup/accounting path.
+            if delayed_cancellation is not None:
+                raise delayed_cancellation
+            if cycle.done():
+                return cycle.result()
+            assert self._pending_receipt is not None
+            return self._pending_receipt
+        finally:
+            signal.cancel()
+            self._foreground_active = False
+
+    @property
+    def cleanup_pending(self) -> bool:
+        return bool(
+            self._cycle_task is not None
+            and not self._cycle_task.done()
+            and self._cleanup_started.is_set()
+        )
+
+    async def wait_for_cleanup(self) -> SemanticWorkerCycleReceipt | None:
+        """Observe the owned cycle, including cancellation/settlement errors.
+
+        This wait is intentionally unbounded. Cancelling this observer does not
+        cancel the cycle. Keep its event loop alive while cleanup is pending.
+        """
+        if self._cycle_task is None:
+            return None
+        return await asyncio.shield(self._cycle_task)
+
+    @staticmethod
+    def _observe_cycle(cycle: asyncio.Task[SemanticWorkerCycleReceipt]) -> None:
+        _ACTIVE_CYCLES.discard(cycle)
+        if not cycle.cancelled():
+            # Retrieve to prevent an unobserved-task warning, but preserve the
+            # exception on the task for wait_for_cleanup and later run_once.
+            cycle.exception()
+
+    def _start_cleanup_wait(self) -> None:
+        if not self._cleanup_started.is_set():
+            self._cleanup_deadline = (
+                time.monotonic() + self._config.cancellation_return_timeout_seconds
+            )
+            self._cleanup_started.set()
+
+    async def _owned_cycle(self) -> SemanticWorkerCycleReceipt:
+        try:
+            try:
+                receipt = await self._run_once()
+            except asyncio.CancelledError:
+                if self._cancellation_receipt is None:
+                    raise
+                receipt = self._cancellation_receipt
+            if (
+                self._cleanup_started.is_set()
+                and self._cycle_accounting is not None
+                and self._cycle_accounting.usage_failed
+            ):
+                raise AccountingPersistenceError("late model usage persistence failed")
+            return receipt
+        finally:
+            # The existing cycle settles before releasing cleanup retention.
+            # On failure, leave recovery to the existing database reaper.
+            heartbeat = self._cleanup_heartbeat
+
+            async def stop_retention() -> None:
+                while self._event_writes:
+                    await asyncio.gather(*self._event_writes, return_exceptions=True)
+                if heartbeat is not None:
+                    heartbeat.cancel()
+                    await asyncio.gather(heartbeat, return_exceptions=True)
+
+            operation = asyncio.create_task(stop_retention())
+            while True:
+                try:
+                    await asyncio.shield(operation)
+                except asyncio.CancelledError:
+                    continue
+                break
+            self._cleanup_heartbeat = None
+
+    async def _await_database_call[T](self, operation: Callable[[], T]) -> T:
+        outcome, cancellation = await self._run_database_call(operation)
+        if cancellation is not None:
+            raise cancellation
+        if outcome.error is not None:
+            raise outcome.error
+        return outcome.value  # type: ignore[return-value]
+
+    async def _run_once(self) -> SemanticWorkerCycleReceipt:
         readiness = self._readiness_provider()
+        self._pending_receipt = SemanticWorkerCycleReceipt(
+            cycle_status=WorkerCycleStatus.CLEANUP_PENDING,
+            provider_state=readiness.state,
+            provider_reason_code=readiness.reason_code,
+        )
         if readiness.state is not ProviderExecutionState.CONFIGURED:
             return SemanticWorkerCycleReceipt(
                 cycle_status=WorkerCycleStatus.PROVIDER_UNAVAILABLE,
@@ -407,6 +622,11 @@ class IntegratedSemanticWorker:
                 provider_state=readiness.state,
                 provider_reason_code=readiness.reason_code,
             )
+        self._pending_receipt = replace(
+            self._pending_receipt,
+            task_id=claimed.fence.task_id,
+            attempt_id=claimed.fence.attempt_id,
+        )
         definition = self._definition_for(claimed)
         sink = self._outcome_sinks.resolve(claimed.target_kind)
         if definition is None:
@@ -445,13 +665,11 @@ class IntegratedSemanticWorker:
                 status=SemanticResultStatus.CANCELLED,
             )
 
-        hydration_outcome, hydration_cancellation = (
-            await self._run_database_call(
-                lambda: self._hydrate(
-                    claimed,
-                    definition,
-                    datetime.now(UTC),
-                )
+        hydration_outcome, hydration_cancellation = await self._run_database_call(
+            lambda: self._hydrate(
+                claimed,
+                definition,
+                datetime.now(UTC),
             )
         )
         if hydration_cancellation is not None:
@@ -491,6 +709,7 @@ class IntegratedSemanticWorker:
             0,
             int((finalization_deadline - datetime.now(UTC).timestamp()) * 1e9),
         )
+        self._cycle_accounting = _CleanupAccounting(self._model_accounting)
         deps = SemanticRunDeps(
             task_id=str(claimed.fence.task_id),
             task_kind=claimed.task_kind,
@@ -518,7 +737,7 @@ class IntegratedSemanticWorker:
             cancellation=cancellation_signal,
             usage=usage_recorder,
             event_sink=event_sink,
-            model_accounting=self._model_accounting,
+            model_accounting=self._cycle_accounting,
             monotonic_deadline_ns=monotonic_deadline_ns,
         )
         try:
@@ -536,10 +755,8 @@ class IntegratedSemanticWorker:
             )
 
         try:
-            cancellation_grace_seconds = (
-                self._executor.cancellation_grace_seconds(
-                    max_delegate_calls=resolved.effective_budget.max_delegate_calls
-                )
+            cancellation_grace_seconds = self._executor.cancellation_grace_seconds(
+                max_delegate_calls=resolved.effective_budget.max_delegate_calls
             )
         except Exception:
             return await self._settle_preflight_failure_off_loop(
@@ -560,10 +777,8 @@ class IntegratedSemanticWorker:
             )
         executor_deadline = finalization_deadline - cancellation_grace_seconds
         try:
-            pre_dispatch_fence_available = await asyncio.to_thread(
-                self._heartbeat,
-                claimed.fence,
-                datetime.now(UTC),
+            pre_dispatch_fence_available = await self._await_database_call(
+                lambda: self._heartbeat(claimed.fence, datetime.now(UTC)),
             )
         except asyncio.CancelledError as error:
             cancellation.cancel()
@@ -632,15 +847,16 @@ class IntegratedSemanticWorker:
                 deadline_exhausted = cancellation_waiter not in done
                 execution_cancelled = not deadline_exhausted
                 cancellation.cancel()
-                cleanup_heartbeat, drain_cancellation = (
-                    await self._retain_cleanup_and_drain_executor(
-                        claimed.fence,
-                        heartbeat,
-                        watcher_database_unavailable,
-                        executor_task,
-                        cancellation,
-                        cancellation_grace_seconds=cancellation_grace_seconds,
-                    )
+                (
+                    cleanup_heartbeat,
+                    drain_cancellation,
+                ) = await self._retain_cleanup_and_drain_executor(
+                    claimed.fence,
+                    heartbeat,
+                    watcher_database_unavailable,
+                    executor_task,
+                    cancellation,
+                    cancellation_grace_seconds=cancellation_grace_seconds,
                 )
                 if drain_cancellation is not None:
                     cancellation_error = drain_cancellation
@@ -650,15 +866,16 @@ class IntegratedSemanticWorker:
                 cancellation.cancel()
                 cancellation_error = error
                 if cleanup_heartbeat is None:
-                    cleanup_heartbeat, drain_cancellation = (
-                        await self._retain_cleanup_and_drain_executor(
-                            claimed.fence,
-                            heartbeat,
-                            watcher_database_unavailable,
-                            executor_task,
-                            cancellation,
-                            cancellation_grace_seconds=cancellation_grace_seconds,
-                        )
+                    (
+                        cleanup_heartbeat,
+                        drain_cancellation,
+                    ) = await self._retain_cleanup_and_drain_executor(
+                        claimed.fence,
+                        heartbeat,
+                        watcher_database_unavailable,
+                        executor_task,
+                        cancellation,
+                        cancellation_grace_seconds=cancellation_grace_seconds,
                     )
                     if drain_cancellation is not None:
                         cancellation_error = drain_cancellation
@@ -668,10 +885,22 @@ class IntegratedSemanticWorker:
             # Only the bounded worker code crosses the durable failure boundary.
             pass
         finally:
+            # Acquire control-only retention before any outcome transaction can
+            # start. Cancellation after normal execution must not leave a
+            # started settlement write without its cleanup lease.
+            if self._cleanup_heartbeat is None:
+                retention_cancellation = await self._retain_for_settlement(
+                    claimed.fence,
+                    heartbeat,
+                    watcher_database_unavailable,
+                    cancellation,
+                )
+                if retention_cancellation is not None:
+                    cancellation_error = retention_cancellation
             teardown_cancellation = await self._teardown_execution_tasks(
                 cancellation_waiter,
                 heartbeat,
-                cleanup_heartbeat,
+                None,
                 cancellation,
             )
             if teardown_cancellation is not None:
@@ -699,9 +928,7 @@ class IntegratedSemanticWorker:
                 output_contract_hash=definition.output_contract.schema_hash,
                 status=SemanticResultStatus.UNAVAILABLE,
             )
-        if execution_cancelled or (
-            result is None and cancellation.is_cancelled()
-        ):
+        if execution_cancelled or (result is None and cancellation.is_cancelled()):
             return await self._settle_preflight_failure_off_loop(
                 claimed,
                 readiness,
@@ -773,9 +1000,13 @@ class IntegratedSemanticWorker:
                 attempt_id=claimed.fence.attempt_id,
                 result_status=SemanticResultStatus(result.status),
             )
-        if late_output_discarded or outcome_status == "stale_fence" or (
-            result.status == SemanticResultStatus.SUCCEEDED
-            and outcome_status != "succeeded"
+        if (
+            late_output_discarded
+            or outcome_status == "stale_fence"
+            or (
+                result.status == SemanticResultStatus.SUCCEEDED
+                and outcome_status != "succeeded"
+            )
         ):
             return SemanticWorkerCycleReceipt(
                 cycle_status=WorkerCycleStatus.LATE_OUTPUT_DISCARDED,
@@ -808,9 +1039,7 @@ class IntegratedSemanticWorker:
         cancellation: _CancellationEvent,
         database_unavailable: asyncio.Event,
     ) -> None:
-        next_heartbeat_at = (
-            time.monotonic() + self._config.heartbeat_interval_seconds
-        )
+        next_heartbeat_at = time.monotonic() + self._config.heartbeat_interval_seconds
         while True:
             await asyncio.sleep(
                 min(
@@ -821,28 +1050,23 @@ class IntegratedSemanticWorker:
             try:
                 reauthorization: ReauthorizationResult | None = None
                 if time.monotonic() >= next_heartbeat_at:
-                    alive = await asyncio.to_thread(
-                        self._heartbeat,
-                        fence,
-                        datetime.now(UTC),
+                    alive = await self._await_database_call(
+                        lambda: self._heartbeat(fence, datetime.now(UTC)),
                     )
                     next_heartbeat_at = (
                         time.monotonic() + self._config.heartbeat_interval_seconds
                     )
                     if not alive:
-                        reauthorization = await asyncio.to_thread(
-                            self._attempt_watch_reauthorization,
-                            fence,
+                        reauthorization = await self._await_database_call(
+                            lambda: self._attempt_watch_reauthorization(fence),
                         )
                 else:
-                    alive = await asyncio.to_thread(
-                        self._attempt_is_live,
-                        fence,
+                    alive = await self._await_database_call(
+                        lambda: self._attempt_is_live(fence),
                     )
                     if not alive:
-                        reauthorization = await asyncio.to_thread(
-                            self._attempt_watch_reauthorization,
-                            fence,
+                        reauthorization = await self._await_database_call(
+                            lambda: self._attempt_watch_reauthorization(fence),
                         )
             except Exception:
                 database_unavailable.set()
@@ -850,9 +1074,7 @@ class IntegratedSemanticWorker:
                 return
             if not alive:
                 cancellation.cancel(
-                    lease_lost=(
-                        reauthorization is ReauthorizationResult.STALE_FENCE
-                    )
+                    lease_lost=(reauthorization is ReauthorizationResult.STALE_FENCE)
                 )
                 return
 
@@ -865,10 +1087,8 @@ class IntegratedSemanticWorker:
         heartbeat.cancel()
         await asyncio.gather(heartbeat, return_exceptions=True)
         try:
-            retained = await asyncio.to_thread(
-                self._retain_cleanup_lease,
-                fence,
-                datetime.now(UTC),
+            retained = await self._await_database_call(
+                lambda: self._retain_cleanup_lease(fence, datetime.now(UTC)),
             )
         except Exception:
             database_unavailable.set()
@@ -900,10 +1120,8 @@ class IntegratedSemanticWorker:
         while True:
             await asyncio.sleep(delay_seconds)
             try:
-                retained = await asyncio.to_thread(
-                    self._retain_cleanup_lease,
-                    fence,
-                    datetime.now(UTC),
+                retained = await self._await_database_call(
+                    lambda: self._retain_cleanup_lease(fence, datetime.now(UTC)),
                 )
             except Exception:
                 database_unavailable.set()
@@ -923,12 +1141,15 @@ class IntegratedSemanticWorker:
         *,
         cancellation_grace_seconds: float,
     ) -> tuple[asyncio.Task[None] | None, asyncio.CancelledError | None]:
+        self._start_cleanup_wait()
+
         async def retain_and_drain() -> asyncio.Task[None] | None:
             cleanup_heartbeat = await self._begin_cleanup_retention(
                 fence,
                 heartbeat,
                 database_unavailable,
             )
+            self._cleanup_heartbeat = cleanup_heartbeat
             await self._cancel_and_drain_executor(
                 executor_task,
                 cancellation_grace_seconds=cancellation_grace_seconds,
@@ -947,6 +1168,29 @@ class IntegratedSemanticWorker:
                     executor_task.cancel()
                 continue
             return cleanup_heartbeat, delayed_cancellation
+
+    async def _retain_for_settlement(
+        self,
+        fence: SemanticTaskFence,
+        heartbeat: asyncio.Task[None],
+        database_unavailable: asyncio.Event,
+        cancellation: _CancellationEvent,
+    ) -> asyncio.CancelledError | None:
+        async def retain() -> None:
+            self._cleanup_heartbeat = await self._begin_cleanup_retention(
+                fence, heartbeat, database_unavailable
+            )
+
+        operation = asyncio.create_task(retain())
+        delayed_cancellation: asyncio.CancelledError | None = None
+        while True:
+            try:
+                await asyncio.shield(operation)
+            except asyncio.CancelledError as error:
+                delayed_cancellation = error
+                cancellation.cancel()
+                continue
+            return delayed_cancellation
 
     @staticmethod
     async def _teardown_execution_tasks(
