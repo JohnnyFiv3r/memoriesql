@@ -400,6 +400,85 @@ class PostgresRuntime(unittest.TestCase):
             (0,),
         )
 
+    def test_cancel_settlement_retains_late_usage_but_not_write_authority(self) -> None:
+        import asyncio
+        from typing import TYPE_CHECKING
+
+        from psycopg.types.json import Jsonb
+        if TYPE_CHECKING:
+            from tests.runtime.test_executor import fixture
+        else:
+            from test_executor import fixture
+        from memoriesql.application.builtin_semantic_tasks import (
+            CANONICAL_AUTHORING_TASK,
+        )
+        from memoriesql.application.semantic_task_contracts import (
+            RetryClass,
+            SemanticResultStatus,
+            SemanticTaskResult,
+        )
+        from memoriesql.infrastructure.models.pydanticai_executor import (
+            CHARACTERIZED_TEST_REQUEST_TARGET,
+        )
+
+        command = self.command()
+        accepted = self.accept(command)
+        self.pair_worker()
+        claimed = self.claim()
+        result = self.authored_result(accepted, command, claimed)
+        executor, task, deps, ports = fixture(request_target=CHARACTERIZED_TEST_REQUEST_TARGET.model_copy(update={"usage_provenance": "provider_reported"}))
+        asyncio.run(executor.execute(task, deps))
+        with self.db.transaction():
+            queue = self.worker_queue()
+            authorization = queue.authorization_snapshot(claimed.fence, checked_at=datetime.now(UTC))
+        intent = ports.intents[0].model_copy(update={
+            "tenant_id": str(self.tenant), "workspace_id": str(self.workspace),
+            "access_scope_id": str(self.scope),
+            "semantic_task_id": str(claimed.fence.task_id),
+            "semantic_attempt_id": str(claimed.fence.attempt_id),
+            "run_id": "orchard.run", "task_kind": claimed.task_kind,
+            "module_key": CANONICAL_AUTHORING_TASK.owning_module,
+            "origin_principal_id": str(authorization.principal_id),
+            "origin_delegation_id": str(authorization.delegation_id) if authorization.delegation_id else None,
+            "policy_revision": authorization.policy_revision,
+            "model_profile_key": CANONICAL_AUTHORING_TASK.model_profile.profile_key,
+            "model_profile_revision": CANONICAL_AUTHORING_TASK.model_profile.revision,
+        })
+        with self.db.transaction():
+            self.worker_queue()
+            self.db.execute("SELECT memoriesql.record_model_provider_request_intent(%s,%s,%s)",
+                            (Jsonb(intent.model_dump(mode="json")), "orchard.worker", "orchard.instance"))
+        with self.db.transaction():
+            queue = self.worker_queue()
+            self.assertTrue(queue.retain_cleanup_lease(claimed.fence, lease_seconds=120, retained_at=datetime.now(UTC)))
+            failure = SemanticTaskResult[Any](
+                status=SemanticResultStatus.CANCELLED, task_id=str(claimed.fence.task_id),
+                attempt_id=str(claimed.fence.attempt_id), task_kind=claimed.task_kind,
+                contract_revision=1, output_contract_hash=result.output_contract_hash,
+                error_code="worker.cancelled", retry_class=RetryClass.NEVER,
+            )
+            self.assertEqual(queue.record_integrated_failure(
+                claimed.fence, failure, error_class="worker", retry_after_seconds=None,
+                jitter_basis_points=0, recorded_at=datetime.now(UTC)), "cancelled")
+        event = ports.usages[0].model_copy(update={"event_kind": "lease_lost_return", "outcome": "lease_lost"})
+        for _ in range(2):
+            with self.db.transaction():
+                self.worker_queue()
+                self.db.execute("SELECT memoriesql.append_model_usage_event(%s,%s,%s)",
+                                (Jsonb(event.model_dump(mode="json")), "orchard.worker", "orchard.instance"))
+        self.assertEqual(self.db.execute("SELECT count(*), max(input_tokens) FROM memoriesql.model_usage_events WHERE request_id=%s", (intent.request_id,)).fetchone(), (1, 11))
+        with self.assertRaises(psycopg.Error), self.db.transaction():
+            self.worker_queue()
+            self.db.execute("SELECT memoriesql.append_model_usage_event(%s,%s,%s)",
+                            (Jsonb(event.model_dump(mode="json")), "orchard.worker", "wrong.instance"))
+        with self.db.transaction():
+            queue = self.worker_queue()
+            self.assertFalse(queue.retain_cleanup_lease(claimed.fence, lease_seconds=120, retained_at=datetime.now(UTC)))
+            self.assertEqual(queue.reauthorize(claimed.fence, phase="hydrate", checked_at=datetime.now(UTC)), "stale_fence")
+        with self.assertRaises(psycopg.Error), self.db.transaction():
+            self.worker_queue().record_canonical_result(claimed.fence, result, recorded_at=datetime.now(UTC))
+        self.assertEqual(self.db.execute("SELECT count(*) FROM memoriesql.bead_versions").fetchone(), (0,))
+
     def authored_result(self, captured: Any, command: Any, claimed: Any) -> Any:
         from memoriesql.application.builtin_semantic_tasks import (
             CANONICAL_AUTHORING_TASK,

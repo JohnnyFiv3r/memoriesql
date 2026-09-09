@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import json
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -32,6 +33,18 @@ def verify(root: Path = ROOT) -> dict[str, int]:
     import sys
 
     for row in rows:
+        if row["disposition"] not in {"copy", "adapt", "public", "public-forward"}:
+            raise ValueError("unknown runtime disposition")
+        if row["disposition"] == "public-forward":
+            if (
+                not re.fullmatch(r"[0-9a-f]{40}", row.get("base_public_commit", ""))
+                or not all(
+                    re.fullmatch(r"[0-9a-f]{64}", row.get(key, ""))
+                    for key in ("source_sha256", "base_public_sha256")
+                )
+                or not row.get("reason")
+            ):
+                raise ValueError("forward runtime change lacks public provenance")
         name = row["path"]
         path = root / name
         if (

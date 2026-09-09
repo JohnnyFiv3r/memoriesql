@@ -40,6 +40,7 @@ from memoriesql.application.semantic_task_contracts import (
 )
 from memoriesql.application.semantic_task_registry import SemanticTaskRegistry
 from memoriesql.infrastructure.models.pydanticai_executor import (
+    CHARACTERIZED_TEST_REQUEST_TARGET,
     ConductorAgentSpec,
     LeafAgentSpec,
     ModelProfileBinding,
@@ -99,7 +100,10 @@ class Ports:
         self.usages.append(event)
 
 
-def fixture(*, conductor: bool = False) -> tuple[Any, Any, SemanticRunDeps, Ports]:
+def fixture(
+    *, conductor: bool = False, model_callback: Any = None,
+    request_target: Any = CHARACTERIZED_TEST_REQUEST_TARGET
+) -> tuple[Any, Any, SemanticRunDeps, Ports]:
     ports = Ports()
     modules = BuiltInModuleRegistry._from_source_controlled(
         (), (ProfileDefinition("core", ()),), {}
@@ -279,7 +283,7 @@ def fixture(*, conductor: bool = False) -> tuple[Any, Any, SemanticRunDeps, Port
         composition_provider=lambda: composition,
         agent_registry=agents,
         model_profiles=PydanticAIModelProfileRegistry(
-            (ModelProfileBinding(profile, FunctionModel(respond)),)
+            (ModelProfileBinding(profile, FunctionModel(model_callback or respond), request_target=request_target),)
         ),
     )
     return executor, resolved, deps, ports
@@ -320,6 +324,22 @@ class ExecutionParity(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.typed_output.answer, "Four fictional trees.")
         self.assertEqual(len(ports.intents), 2)
         self.assertEqual(len(ports.usages), 2)
+
+    async def test_cancel_during_intent_commit_prevents_model_dispatch(self) -> None:
+        executor, task, deps, ports = fixture()
+        original = ports.record_intent
+
+        async def commit_then_cancel(intent: Any) -> None:
+            await original(intent)
+            ports.cancelled = True
+
+        from unittest.mock import patch
+        with patch.object(ports, "record_intent", commit_then_cancel):
+            result = await executor.execute(task, deps)
+        self.assertEqual(result.status, "cancelled")
+        self.assertEqual(len(ports.intents), 1)
+        self.assertEqual(ports.usages, [])
+        self.assertNotIn("model", ports.order)
 
     async def test_cancel_before_dispatch(self) -> None:
         executor, task, deps, ports = fixture()
