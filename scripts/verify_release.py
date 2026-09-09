@@ -14,6 +14,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY = "JohnnyFiv3r/memoriesql"
 REPOSITORY_ID = 1357510758
+APPROVED_VERSION = "0.0.2a1"
 
 
 def select_ci_run(
@@ -21,8 +22,8 @@ def select_ci_run(
 ) -> int:
     if not re.fullmatch(r"[0-9a-f]{40}", sha) or sha != main_sha:
         raise ValueError("release must target the exact current main commit")
-    if version != "0.0.1a1" or tag != f"v{version}":
-        raise ValueError("release tag must match the approved preview version")
+    if version != APPROVED_VERSION or tag != f"v{version}":
+        raise ValueError("release tag must match the approved runtime version")
     candidates = [
         run
         for run in runs
@@ -45,10 +46,12 @@ def select_ci_run(
 
 
 def verify_artifacts(directory: Path, inventory: dict[str, Any]) -> tuple[Path, ...]:
+    if inventory.get("version") != APPROVED_VERSION:
+        raise ValueError("inventory must match the approved runtime version")
     rows = inventory["artifacts"]
     expected = {
-        "memoriesql-0.0.1a1-py3-none-any.whl",
-        "memoriesql-0.0.1a1.tar.gz",
+        "memoriesql-0.0.2a1-py3-none-any.whl",
+        "memoriesql-0.0.2a1.tar.gz",
     }
     if len(rows) != 2 or {row["filename"] for row in rows} != expected:
         raise ValueError("inventory must contain only the approved wheel and sdist")
@@ -93,7 +96,7 @@ def main() -> None:
         print(f"run_id={run_id}")
     else:
         inventory = json.loads(
-            (ROOT / "docs/verification/package-artifact-inventory.json").read_text()
+            (ROOT / "docs/verification/runtime-package-artifact-inventory.json").read_text()
         )
         paths = verify_artifacts(args.directory, inventory)
         if args.output is not None:
