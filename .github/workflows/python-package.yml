@@ -40,7 +40,7 @@ jobs:
         run: |
           export SOURCE_DATE_EPOCH=315532800
           python -m build --sdist --wheel --outdir build/dist-a
-          python scripts/normalize_python_sdist.py build/dist-a/memoriesql-0.0.2a1.tar.gz
+          python scripts/normalize_python_sdist.py build/dist-a/memoriesql-0.0.2.tar.gz
           python -m twine check --strict build/dist-a/*
           python scripts/inspect_python_distribution.py build/dist-a > build/dist-a/python-package-artifacts.json
           python scripts/verify_release.py artifacts build/dist-a
@@ -48,9 +48,9 @@ jobs:
         run: |
           export SOURCE_DATE_EPOCH=315532800
           python -m build --sdist --wheel --outdir build/dist-b
-          python scripts/normalize_python_sdist.py build/dist-b/memoriesql-0.0.2a1.tar.gz
-          cmp build/dist-a/memoriesql-0.0.2a1-py3-none-any.whl build/dist-b/memoriesql-0.0.2a1-py3-none-any.whl
-          cmp build/dist-a/memoriesql-0.0.2a1.tar.gz build/dist-b/memoriesql-0.0.2a1.tar.gz
+          python scripts/normalize_python_sdist.py build/dist-b/memoriesql-0.0.2.tar.gz
+          cmp build/dist-a/memoriesql-0.0.2-py3-none-any.whl build/dist-b/memoriesql-0.0.2-py3-none-any.whl
+          cmp build/dist-a/memoriesql-0.0.2.tar.gz build/dist-b/memoriesql-0.0.2.tar.gz
       - name: Retain exact artifacts and inventory
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
@@ -137,7 +137,7 @@ jobs:
           python -m pip download --no-deps --only-binary=:all: memoriesql==0.0.1a1 --dest candidates
           python -m pip install --no-index --find-links candidates memoriesql
           python -I -c "import importlib.util; from importlib.metadata import version; assert version('memoriesql') == '0.0.1a1'; assert importlib.util.find_spec('memoriesql.infrastructure') is None"
-          if python -m pip install --no-deps candidates/memoriesql-0.0.2a1-py3-none-any.whl; then
+          if python -m pip install --no-deps candidates/memoriesql-0.0.2-py3-none-any.whl; then
             echo 'Unsupported interpreter incorrectly accepted migration artifact'
             exit 1
           fi

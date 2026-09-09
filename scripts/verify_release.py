@@ -14,7 +14,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY = "JohnnyFiv3r/memoriesql"
 REPOSITORY_ID = 1357510758
-APPROVED_VERSION = "0.0.2a1"
+APPROVED_VERSION = "0.0.2"
 
 
 def select_ci_run(
@@ -50,8 +50,8 @@ def verify_artifacts(directory: Path, inventory: dict[str, Any]) -> tuple[Path, 
         raise ValueError("inventory must match the approved runtime version")
     rows = inventory["artifacts"]
     expected = {
-        "memoriesql-0.0.2a1-py3-none-any.whl",
-        "memoriesql-0.0.2a1.tar.gz",
+        "memoriesql-0.0.2-py3-none-any.whl",
+        "memoriesql-0.0.2.tar.gz",
     }
     if len(rows) != 2 or {row["filename"] for row in rows} != expected:
         raise ValueError("inventory must contain only the approved wheel and sdist")

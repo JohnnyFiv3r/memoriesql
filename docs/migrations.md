@@ -1,6 +1,6 @@
 # Canonical migration substrate (unreleased)
 
-The `0.0.2a1` development artifact adds the canonical migration substrate.
+The `0.0.2` development artifact adds the canonical migration substrate.
 **Python 3.13+ is required; the initial qualification matrix is 3.13 and 3.14
 (`>=3.13,<3.15`).** It is not a complete capture, authoring, or recall runtime.
 No release or upload is authorized by this change.
@@ -13,8 +13,8 @@ as a runtime setup instruction:
 
 ```console
 python3.13 -m venv migration-env
-migration-env/bin/python -m pip install ./memoriesql-0.0.2a1-py3-none-any.whl
-migration-env/bin/python -c "from importlib.metadata import version; assert version('memoriesql') == '0.0.2a1'; from memoriesql.infrastructure.postgres.migration_runner import discover_migrations; assert len(discover_migrations()) == 14"
+migration-env/bin/python -m pip install ./memoriesql-0.0.2-py3-none-any.whl
+migration-env/bin/python -c "from importlib.metadata import version; assert version('memoriesql') == '0.0.2'; from memoriesql.infrastructure.postgres.migration_runner import discover_migrations; assert len(discover_migrations()) == 14"
 ```
 
 The installer rejects this artifact on unsupported interpreters. A future runtime
