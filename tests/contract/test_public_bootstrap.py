@@ -28,7 +28,10 @@ class PublicBootstrapTests(unittest.TestCase):
         self.assertEqual(project["license"], "Apache-2.0")
         self.assertEqual(project["license-files"], ["LICENSE", "NOTICE"])
         self.assertEqual(project["authors"], [{"name": "John Inniger"}])
-        self.assertEqual(project["dependencies"], ["psycopg[binary]==3.3.3"])
+        self.assertEqual(
+            project["dependencies"],
+            ["psycopg[binary]==3.3.3", "pydantic==2.13.3", "pydantic-ai-slim==2.27.0"],
+        )
         self.assertEqual(
             project["urls"]["Repository"], "https://github.com/JohnnyFiv3r/memoriesql"
         )
@@ -73,7 +76,9 @@ class PublicBootstrapTests(unittest.TestCase):
         ):
             self.assertIn(expected, combined)
         self.assertIn("assets/trademarks/memoriesql-readme-banner.png", readme)
-        self.assertTrue((ROOT / "assets/trademarks/memoriesql-readme-banner.png").is_file())
+        self.assertTrue(
+            (ROOT / "assets/trademarks/memoriesql-readme-banner.png").is_file()
+        )
 
     def test_publisher_has_narrow_owner_approved_controls(self) -> None:
         workflow = (ROOT / ".github/workflows/publish-pypi.yml").read_text()

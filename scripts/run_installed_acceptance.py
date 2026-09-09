@@ -6,6 +6,7 @@ No checkout paths are accepted or searched. This script itself must be copied.
 
 from __future__ import annotations
 
+import mimetypes
 import os
 import sys
 import tempfile
@@ -21,12 +22,24 @@ def main() -> int:
         Path(p).resolve() for p in (sys.prefix, sys.base_prefix, os.getcwd())
     )
 
+    # PydanticAI reads standard OS MIME databases during import. Permit only
+    # this explicit stdlib list; checkouts and user-home resources remain denied.
+    system_mime_files = frozenset(Path(p).resolve() for p in mimetypes.knownfiles)
+
     def guard(event: str, args: tuple[object, ...]) -> None:
+        if event == "socket.connect":
+            address = args[1]
+            if not isinstance(address, tuple) or address[0] not in {"127.0.0.1", "::1"}:
+                raise PermissionError("installed acceptance denied external network")
+        if event == "subprocess.Popen":
+            raise PermissionError("installed acceptance denied subprocess")
         if event in {"open", "os.listdir", "os.scandir"} and args:
             raw = args[0]
             if isinstance(raw, str | bytes | os.PathLike):
                 path = Path(os.fsdecode(raw)).resolve()
-                if not any(path.is_relative_to(root) for root in allowed):
+                if path not in system_mime_files and not any(
+                    path.is_relative_to(root) for root in allowed
+                ):
                     raise PermissionError(
                         "installed acceptance denied external filesystem access"
                     )

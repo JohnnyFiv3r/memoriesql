@@ -1,0 +1,1 @@
+"""Pure memorieSQL domain contracts."""

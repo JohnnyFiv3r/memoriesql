@@ -5,3 +5,5 @@ setuptools==80.9.0
 twine==6.2.0
 wheel==0.45.1
 psycopg[binary]==3.3.3
+pydantic==2.13.3
+pydantic-ai-slim==2.27.0

@@ -1,0 +1,214 @@
+{
+  "default_policy": "deny",
+  "runtime": [
+    {
+      "disposition": "copy",
+      "path": "src/memoriesql/application/__init__.py",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "sha256": "dd21ab7782ce757833c34b64529abdf7bf065f3210741706cc7385b7f3789927",
+      "source_sha256": "dd21ab7782ce757833c34b64529abdf7bf065f3210741706cc7385b7f3789927"
+    },
+    {
+      "disposition": "copy",
+      "path": "src/memoriesql/application/authorization.py",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "sha256": "508bf5ec02cbec559f019ab1e9c5e596bd238e3a4a0812f8dc266811a18187c5",
+      "source_sha256": "508bf5ec02cbec559f019ab1e9c5e596bd238e3a4a0812f8dc266811a18187c5"
+    },
+    {
+      "disposition": "copy",
+      "path": "src/memoriesql/application/canonical_transactions.py",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "sha256": "f5bcae2ec2de6c7044b542c83d266284851f047ef13cf6574bcadcabb07efef5",
+      "source_sha256": "f5bcae2ec2de6c7044b542c83d266284851f047ef13cf6574bcadcabb07efef5"
+    },
+    {
+      "disposition": "copy",
+      "path": "src/memoriesql/application/capture/contracts.py",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "sha256": "06a76ba092bd6eaec473a6f3556b2ce54ea236c45c6a57d580eeff122c983a57",
+      "source_sha256": "06a76ba092bd6eaec473a6f3556b2ce54ea236c45c6a57d580eeff122c983a57"
+    },
+    {
+      "disposition": "copy",
+      "path": "src/memoriesql/application/capture/host_protocol.py",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "sha256": "de48b8b10c609a5354051eee1c22f7a2f36e86e360eeac7ae990a166ed3c5fda",
+      "source_sha256": "de48b8b10c609a5354051eee1c22f7a2f36e86e360eeac7ae990a166ed3c5fda"
+    },
+    {
+      "disposition": "copy",
+      "path": "src/memoriesql/application/capture/source_adapter.py",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "sha256": "2e414b0be63b654140c563c7caad6728b83945e2c272ab77078c269195d240a0",
+      "source_sha256": "2e414b0be63b654140c563c7caad6728b83945e2c272ab77078c269195d240a0"
+    },
+    {
+      "disposition": "copy",
+      "path": "src/memoriesql/application/capture/source_range.py",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "sha256": "b9a3f845c01a1791abc339c2b9b59075190696bc440b2afb89d9082cb3e8b3cb",
+      "source_sha256": "b9a3f845c01a1791abc339c2b9b59075190696bc440b2afb89d9082cb3e8b3cb"
+    },
+    {
+      "disposition": "copy",
+      "path": "src/memoriesql/application/capture/transcript_fold.py",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "sha256": "1f7c514759112f22f4833bab87295c49943c55718aab1554f280d3a5370752b0",
+      "source_sha256": "1f7c514759112f22f4833bab87295c49943c55718aab1554f280d3a5370752b0"
+    },
+    {
+      "disposition": "copy",
+      "path": "src/memoriesql/application/model_accounting.py",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "sha256": "396313cdaaa6a967df5b1fbee1006453b05d88756fc87711e6751d010d197f4a",
+      "source_sha256": "396313cdaaa6a967df5b1fbee1006453b05d88756fc87711e6751d010d197f4a"
+    },
+    {
+      "disposition": "copy",
+      "path": "src/memoriesql/application/module_registry.py",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "sha256": "33d506a5db278d27fbafac3f6bd97b5ac920d964e8d86315fa7e8c8214f23c0a",
+      "source_sha256": "33d506a5db278d27fbafac3f6bd97b5ac920d964e8d86315fa7e8c8214f23c0a"
+    },
+    {
+      "disposition": "copy",
+      "path": "src/memoriesql/application/semantic_identity.py",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "sha256": "57b3379e6c00813a2020cc55a436865486dd7624fe9324205f7f40bb3a4a4994",
+      "source_sha256": "57b3379e6c00813a2020cc55a436865486dd7624fe9324205f7f40bb3a4a4994"
+    },
+    {
+      "disposition": "copy",
+      "path": "src/memoriesql/application/semantic_task_contracts.py",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "sha256": "fb3705d479663d1f0703b5c1a87839a5ec42997ad0ddfe86739adb6f587c1fbe",
+      "source_sha256": "fb3705d479663d1f0703b5c1a87839a5ec42997ad0ddfe86739adb6f587c1fbe"
+    },
+    {
+      "disposition": "copy",
+      "path": "src/memoriesql/application/semantic_task_registry.py",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "sha256": "91f6b0dbc18235d227cb845789ff75a8485cb567c1adc3f2a7e0e8f950557dd9",
+      "source_sha256": "91f6b0dbc18235d227cb845789ff75a8485cb567c1adc3f2a7e0e8f950557dd9"
+    },
+    {
+      "disposition": "copy",
+      "path": "src/memoriesql/domain/__init__.py",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "sha256": "bb51ec43d3ba25b9c15a2784d4e9092b4a2bafdfbe27343b6917c589f033d05d",
+      "source_sha256": "bb51ec43d3ba25b9c15a2784d4e9092b4a2bafdfbe27343b6917c589f033d05d"
+    },
+    {
+      "disposition": "copy",
+      "path": "src/memoriesql/domain/authorization.py",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "sha256": "218ce1118c25b480d945794744c56403685030f015b4ba092e2dfbd5633fc42f",
+      "source_sha256": "218ce1118c25b480d945794744c56403685030f015b4ba092e2dfbd5633fc42f"
+    },
+    {
+      "disposition": "copy",
+      "path": "src/memoriesql/domain/module_manifest.py",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "sha256": "ab65852724fdacabea9d36e1affe81fc5f11a1be1e95366ba970a7d77a79d5b0",
+      "source_sha256": "ab65852724fdacabea9d36e1affe81fc5f11a1be1e95366ba970a7d77a79d5b0"
+    },
+    {
+      "disposition": "copy",
+      "path": "src/memoriesql/domain/semantic_identity.py",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "sha256": "fac8ac3eaa5cb870d3f86f7baf6f1848a857211249f5bd70c767e4750c7eedec",
+      "source_sha256": "fac8ac3eaa5cb870d3f86f7baf6f1848a857211249f5bd70c767e4750c7eedec"
+    },
+    {
+      "disposition": "copy",
+      "path": "src/memoriesql/infrastructure/jobs/__init__.py",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "sha256": "fedb9b376d56b5865774f5a410ce49d16fd4000700b98ca67e32e45d66eaefa5",
+      "source_sha256": "fedb9b376d56b5865774f5a410ce49d16fd4000700b98ca67e32e45d66eaefa5"
+    },
+    {
+      "disposition": "copy",
+      "path": "src/memoriesql/infrastructure/jobs/integrated_semantic_worker.py",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "sha256": "a6b990a6a74461f34e7e757a3e6f7426020f8cef8df4cdbaad2a95f2fcd10398",
+      "source_sha256": "a6b990a6a74461f34e7e757a3e6f7426020f8cef8df4cdbaad2a95f2fcd10398"
+    },
+    {
+      "disposition": "copy",
+      "path": "src/memoriesql/infrastructure/jobs/postgres_semantic_queue.py",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "sha256": "5bbff727506cd237a9596adc9e59743519defe90f29c14af9e03fc55a445ce80",
+      "source_sha256": "5bbff727506cd237a9596adc9e59743519defe90f29c14af9e03fc55a445ce80"
+    },
+    {
+      "disposition": "copy",
+      "path": "src/memoriesql/infrastructure/models/__init__.py",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "sha256": "c15f60eace446302ce7dddfc69010c173a714791a92e3765edef87777da4ccc4",
+      "source_sha256": "c15f60eace446302ce7dddfc69010c173a714791a92e3765edef87777da4ccc4"
+    },
+    {
+      "disposition": "copy",
+      "path": "src/memoriesql/infrastructure/models/pydanticai_executor.py",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "sha256": "07d4c861ce40062c227352f6fd240b7445500776ba6216fdd739027020da3b1c",
+      "source_sha256": "07d4c861ce40062c227352f6fd240b7445500776ba6216fdd739027020da3b1c"
+    },
+    {
+      "disposition": "copy",
+      "path": "src/memoriesql/infrastructure/postgres/authorization.py",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "sha256": "b428e693e96d06ffdf992d59b43ba4f991059df99be189f56ea78b1abf890c2a",
+      "source_sha256": "b428e693e96d06ffdf992d59b43ba4f991059df99be189f56ea78b1abf890c2a"
+    },
+    {
+      "disposition": "copy",
+      "path": "src/memoriesql/infrastructure/postgres/canonical_transactions.py",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "sha256": "7d2c1ce2f2916f16915ff3b86b6ada6e2dec281ca3d1fc0300dafa47dbc30e0d",
+      "source_sha256": "7d2c1ce2f2916f16915ff3b86b6ada6e2dec281ca3d1fc0300dafa47dbc30e0d"
+    },
+    {
+      "disposition": "copy",
+      "path": "src/memoriesql/infrastructure/postgres/capture.py",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "sha256": "ff404106d39e90bb5c9bc146ba5fa371adfe5e4813c0c5cd3cbbafd76e71b5a1",
+      "source_sha256": "ff404106d39e90bb5c9bc146ba5fa371adfe5e4813c0c5cd3cbbafd76e71b5a1"
+    },
+    {
+      "disposition": "copy",
+      "path": "src/memoriesql/infrastructure/postgres/model_accounting.py",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "sha256": "ac7f826b3a3625401683e8828ea2f553d203f5e6b36cf9c3a7f0dc5db3a583ac",
+      "source_sha256": "ac7f826b3a3625401683e8828ea2f553d203f5e6b36cf9c3a7f0dc5db3a583ac"
+    },
+    {
+      "disposition": "copy",
+      "path": "src/memoriesql/infrastructure/postgres/source_range.py",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "sha256": "4e6b1d9b5e0374a9220c628e6cfa7f26503d7ae07a9a9d3eece0f34d75502b6c",
+      "source_sha256": "4e6b1d9b5e0374a9220c628e6cfa7f26503d7ae07a9a9d3eece0f34d75502b6c"
+    },
+    {
+      "disposition": "copy",
+      "path": "src/memoriesql/infrastructure/postgres/transcript_fold.py",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "sha256": "2b5a8df67980bb545129406f2235f39ae9956b5dc4e34fbb95126ba356d5f621",
+      "source_sha256": "2b5a8df67980bb545129406f2235f39ae9956b5dc4e34fbb95126ba356d5f621"
+    },
+    {
+      "disposition": "adapt",
+      "path": "src/memoriesql/application/builtin_semantic_tasks.py",
+      "reason": "Retain canonical task values; require caller-supplied internal static registry.",
+      "sha256": "2c6bbca2f5f45703c70939dc880d2a8d809aeba4f55874bc12ff9db0eacc8809",
+      "source_sha256": "3b1710fcf2e6f430f56cbaf33681ba49f85dc8ce3bb914decfe00b64ad96ef79"
+    },
+    {
+      "disposition": "public",
+      "path": "src/memoriesql/application/capture/__init__.py",
+      "reason": "Neutral initializer without eager acquisition or adoption imports.",
+      "sha256": "8f473d7e50a204eb208fdfbfae8aa016785392741c6745a3ad9621fd05f87d50"
+    }
+  ]
+}

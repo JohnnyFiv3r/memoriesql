@@ -4,7 +4,7 @@
       "classification": "proposed_open_core",
       "license": "Apache-2.0",
       "public_path": ".github/workflows/python-package.yml",
-      "public_sha256": "2a847ce603d8ca35848dc5fcd2f1573ab6c907fed653b4f36ef2e72ec0c1faf9",
+      "public_sha256": "40bc524d8559b0d65eb4817d819e229103561e4c3132ef1f1f763cdb547deb4f",
       "reason": "Reviewed packaging-spike input ported or adapted for the public bootstrap.",
       "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
       "reviewed_spike_source_sha256": "e1aea0a0ef2e13647d18eacdfb3753b8ee5ea93956724a23d1617496db722b1b"
@@ -13,7 +13,7 @@
       "classification": "proposed_open_core",
       "license": "Apache-2.0",
       "public_path": "MANIFEST.in",
-      "public_sha256": "a11df89218311f5f67c0e9e270a0373e1f2cc4a6ba53eadb9828e9a413547303",
+      "public_sha256": "59fdf4700c85d4cdef3b8e0319c52d4d6bbb818fe2bda7d926d6206328bc2769",
       "reason": "Reviewed packaging-spike input ported or adapted for the public bootstrap.",
       "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
       "reviewed_spike_source_sha256": "3a487bdf2210c634a958942e90a793e33931cce80d01845dd07646805d979181"
@@ -22,7 +22,7 @@
       "classification": "proposed_open_core",
       "license": "Apache-2.0",
       "public_path": "PYPI_README.md",
-      "public_sha256": "d7b931147e5baaf06ee1f9cb33775f4abf8e0f03e8293d6e03dab8a45c300a95",
+      "public_sha256": "274f74dd15b053d904d7879a82d855f6de71137c742111ffc4613d6b90b67abc",
       "reason": "Reviewed packaging-spike input ported or adapted for the public bootstrap.",
       "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
       "reviewed_spike_source_sha256": "df43020f9b9e24e3f9a3a2e5325bef1888cb69139cf5021406777a2418e0953e"
@@ -539,7 +539,7 @@
       "classification": "proposed_open_core",
       "license": "Apache-2.0",
       "public_path": "pyproject.toml",
-      "public_sha256": "a2de3eb200d4fe0367c4f80020ba65d4a99e5c7ff9c00fbaf0a906f5ec1f9207",
+      "public_sha256": "0a5fc3a94046ad888d4425a64ca822310ff0edf209159776d9361c4e3fcae7db",
       "reason": "Reviewed packaging-spike input ported or adapted for the public bootstrap.",
       "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
       "reviewed_spike_source_sha256": "9ccf7c2de02f1ce31763577686ea04a60ba9bb2cd03a4aa53a87298e57ae0cc0"
@@ -548,7 +548,7 @@
       "classification": "proposed_open_core",
       "license": "Apache-2.0",
       "public_path": "requirements-dev.txt",
-      "public_sha256": "c24f2863fb0ad0b22518846be6e09e77cd21b41b477a78d31555255baf52d2e9",
+      "public_sha256": "2d69a4a17d53119c29dfaddda6aea18c35ecf7e8923cb64a7824e7eee5b9e2d4",
       "reason": "Reviewed packaging-spike input ported or adapted for the public bootstrap.",
       "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
       "reviewed_spike_source_sha256": "3b95d42547c085a370513637c2e50821b1921049b7b04f396b58fdbd5537cec0"
@@ -557,7 +557,7 @@
       "classification": "proposed_open_core",
       "license": "Apache-2.0",
       "public_path": "scripts/inspect_python_distribution.py",
-      "public_sha256": "4d9c3072003c9fd64aec912d531fdcdc1e9c3b7acb85426bb7f82e0c2513a6b4",
+      "public_sha256": "6d85362922415ab62037898c3c2710aecb5595ad0b56ac13e477b7643c4b9a9c",
       "reason": "Reviewed packaging-spike input ported or adapted for the public bootstrap.",
       "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
       "reviewed_spike_source_sha256": "17f72b342444381ac5c5aab2004ed261509877f04298c42d03ea0bd186e13f62"
@@ -743,7 +743,7 @@
       "classification": "public_bootstrap",
       "license": "Apache-2.0",
       "public_path": "AGENTS.md",
-      "public_sha256": "3bb727aee947c7723a73a08ac4c324986d7668ef6741e745f609e6979ec4b301",
+      "public_sha256": "f2ebb27a522cf84c51ea984590be4ce5e27d06815fe7ba5ca61b502402f85cde",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {
@@ -771,7 +771,7 @@
       "classification": "public_bootstrap",
       "license": "Apache-2.0",
       "public_path": "README.md",
-      "public_sha256": "abf2b263278b29728dadd61ae034e1cd3131138640021d48490fbdee5d228d44",
+      "public_sha256": "3e036f3b3763fe551d8f6a873be01a83ed6acefe55cab3b6b72993bedce78015",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {
@@ -813,7 +813,7 @@
       "classification": "public_bootstrap",
       "license": "Apache-2.0",
       "public_path": "docs/architecture/repository-boundary.md",
-      "public_sha256": "f7c0c4b7928106805a997312d98ed349c42b933ab8440009c334d1d8b366f864",
+      "public_sha256": "10999afdc37bfa047135fda9b21dd85e7ff67996c1a36a1a8727f9d9925968bb",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {
@@ -876,7 +876,7 @@
       "classification": "public_bootstrap",
       "license": "Apache-2.0",
       "public_path": "tests/contract/test_public_bootstrap.py",
-      "public_sha256": "20808692fa7a1d47c87918b60c2be828c03ba68e8c0701ad8eb2097eab9dfc3a",
+      "public_sha256": "61e3eeed4a549dc00de141861d7fa8ab00c4544f7d6f3726fe77d3260a184117",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {
@@ -918,7 +918,7 @@
       "classification": "approved_migration_substrate",
       "license": "Apache-2.0",
       "public_path": "scripts/run_installed_acceptance.py",
-      "public_sha256": "f896d348e3a6f5ea660811420b2dbdc8fda63fc98f867344d7a07a85b10556a8",
+      "public_sha256": "c01bfcf31c708ae12ca4204582dc4740ffa3448160155b9713643272f0e6705c",
       "reason": "Public-owned N1 inventory; audited copy/adapt details in migration-extraction.json where applicable."
     },
     {
@@ -969,6 +969,55 @@
       "public_path": "src/memoriesql/infrastructure/postgres/__init__.py",
       "public_sha256": "0e20798bab9137400d0287543ab93a75a308a19010aed37fc8fc43fb26acf417",
       "reason": "Public-owned N1 inventory; audited copy/adapt details in migration-extraction.json where applicable."
+    },
+    {
+      "classification": "public-authored",
+      "license": "Apache-2.0",
+      "public_path": "contracts/runtime-inventory.json",
+      "public_sha256": "87342c723fd671fed8c89b9c9a018ea73a423de3d5e33a95644e95715c045348",
+      "reason": "Public N2 dependency inventory and fictional runtime acceptance."
+    },
+    {
+      "classification": "public-authored",
+      "license": "Apache-2.0",
+      "public_path": "scripts/verify_runtime_export.py",
+      "public_sha256": "a73ffed7a7160fabf21ac63f424206ecdebdd4dcbb95285e4bc632fcf79b2b45",
+      "reason": "Public N2 dependency inventory and fictional runtime acceptance."
+    },
+    {
+      "classification": "public-authored",
+      "license": "Apache-2.0",
+      "public_path": "tests/runtime/test_executor.py",
+      "public_sha256": "e5e503482777308e8f01fa60d1179b1ef8fdb2d58c5bf8671c7fe9d481f2a8fe",
+      "reason": "Public N2 dependency inventory and fictional runtime acceptance."
+    },
+    {
+      "classification": "public-authored",
+      "license": "Apache-2.0",
+      "public_path": "tests/runtime/test_postgres_runtime.py",
+      "public_sha256": "0b854a4eeb516ba18e2099a87d7041023f5e446c8b862f262a95b85622f4251b",
+      "reason": "Public N2 dependency inventory and fictional runtime acceptance."
+    },
+    {
+      "classification": "public-authored",
+      "license": "Apache-2.0",
+      "public_path": "tests/runtime/test_retained_bytes.py",
+      "public_sha256": "1b9b66b44f999e5897798985bdaa907478dc3f154d66eb60a6befc9fc3b54a36",
+      "reason": "Public fictional N2 acceptance and runtime scope documentation."
+    },
+    {
+      "classification": "public-authored",
+      "license": "Apache-2.0",
+      "public_path": "docs/runtime.md",
+      "public_sha256": "970b9238c10978b455f8a4c82276a8ab985ec0140bd610fc745d66cdf6c25838",
+      "reason": "Public fictional N2 acceptance and runtime scope documentation."
+    },
+    {
+      "classification": "public-authored",
+      "license": "Apache-2.0",
+      "public_path": "tests/runtime/test_runtime_ownership.py",
+      "public_sha256": "77f6a8e86d1f2a5bb1ac541bb92497859eb781e904f5dbc2b0204bf318211185",
+      "reason": "Installed runtime origin and frozen contract parity checks."
     }
   ],
   "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
@@ -1093,6 +1142,245 @@
       "public_path": "src/memoriesql/infrastructure/postgres/schema_inspection.py",
       "public_sha256": "d99eecfb251d7a29ddbba66c7d9715ec751cc778c19482d1f10c08d54a2512c5",
       "reason": "Public-owned N1 inventory; audited copy/adapt details in migration-extraction.json where applicable."
+    },
+    {
+      "classification": "copy",
+      "license": "Apache-2.0",
+      "public_path": "src/memoriesql/application/__init__.py",
+      "public_sha256": "dd21ab7782ce757833c34b64529abdf7bf065f3210741706cc7385b7f3789927",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "source_sha256": "dd21ab7782ce757833c34b64529abdf7bf065f3210741706cc7385b7f3789927"
+    },
+    {
+      "classification": "copy",
+      "license": "Apache-2.0",
+      "public_path": "src/memoriesql/application/authorization.py",
+      "public_sha256": "508bf5ec02cbec559f019ab1e9c5e596bd238e3a4a0812f8dc266811a18187c5",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "source_sha256": "508bf5ec02cbec559f019ab1e9c5e596bd238e3a4a0812f8dc266811a18187c5"
+    },
+    {
+      "classification": "copy",
+      "license": "Apache-2.0",
+      "public_path": "src/memoriesql/application/canonical_transactions.py",
+      "public_sha256": "f5bcae2ec2de6c7044b542c83d266284851f047ef13cf6574bcadcabb07efef5",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "source_sha256": "f5bcae2ec2de6c7044b542c83d266284851f047ef13cf6574bcadcabb07efef5"
+    },
+    {
+      "classification": "copy",
+      "license": "Apache-2.0",
+      "public_path": "src/memoriesql/application/capture/contracts.py",
+      "public_sha256": "06a76ba092bd6eaec473a6f3556b2ce54ea236c45c6a57d580eeff122c983a57",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "source_sha256": "06a76ba092bd6eaec473a6f3556b2ce54ea236c45c6a57d580eeff122c983a57"
+    },
+    {
+      "classification": "copy",
+      "license": "Apache-2.0",
+      "public_path": "src/memoriesql/application/capture/host_protocol.py",
+      "public_sha256": "de48b8b10c609a5354051eee1c22f7a2f36e86e360eeac7ae990a166ed3c5fda",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "source_sha256": "de48b8b10c609a5354051eee1c22f7a2f36e86e360eeac7ae990a166ed3c5fda"
+    },
+    {
+      "classification": "copy",
+      "license": "Apache-2.0",
+      "public_path": "src/memoriesql/application/capture/source_adapter.py",
+      "public_sha256": "2e414b0be63b654140c563c7caad6728b83945e2c272ab77078c269195d240a0",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "source_sha256": "2e414b0be63b654140c563c7caad6728b83945e2c272ab77078c269195d240a0"
+    },
+    {
+      "classification": "copy",
+      "license": "Apache-2.0",
+      "public_path": "src/memoriesql/application/capture/source_range.py",
+      "public_sha256": "b9a3f845c01a1791abc339c2b9b59075190696bc440b2afb89d9082cb3e8b3cb",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "source_sha256": "b9a3f845c01a1791abc339c2b9b59075190696bc440b2afb89d9082cb3e8b3cb"
+    },
+    {
+      "classification": "copy",
+      "license": "Apache-2.0",
+      "public_path": "src/memoriesql/application/capture/transcript_fold.py",
+      "public_sha256": "1f7c514759112f22f4833bab87295c49943c55718aab1554f280d3a5370752b0",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "source_sha256": "1f7c514759112f22f4833bab87295c49943c55718aab1554f280d3a5370752b0"
+    },
+    {
+      "classification": "copy",
+      "license": "Apache-2.0",
+      "public_path": "src/memoriesql/application/model_accounting.py",
+      "public_sha256": "396313cdaaa6a967df5b1fbee1006453b05d88756fc87711e6751d010d197f4a",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "source_sha256": "396313cdaaa6a967df5b1fbee1006453b05d88756fc87711e6751d010d197f4a"
+    },
+    {
+      "classification": "copy",
+      "license": "Apache-2.0",
+      "public_path": "src/memoriesql/application/module_registry.py",
+      "public_sha256": "33d506a5db278d27fbafac3f6bd97b5ac920d964e8d86315fa7e8c8214f23c0a",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "source_sha256": "33d506a5db278d27fbafac3f6bd97b5ac920d964e8d86315fa7e8c8214f23c0a"
+    },
+    {
+      "classification": "copy",
+      "license": "Apache-2.0",
+      "public_path": "src/memoriesql/application/semantic_identity.py",
+      "public_sha256": "57b3379e6c00813a2020cc55a436865486dd7624fe9324205f7f40bb3a4a4994",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "source_sha256": "57b3379e6c00813a2020cc55a436865486dd7624fe9324205f7f40bb3a4a4994"
+    },
+    {
+      "classification": "copy",
+      "license": "Apache-2.0",
+      "public_path": "src/memoriesql/application/semantic_task_contracts.py",
+      "public_sha256": "fb3705d479663d1f0703b5c1a87839a5ec42997ad0ddfe86739adb6f587c1fbe",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "source_sha256": "fb3705d479663d1f0703b5c1a87839a5ec42997ad0ddfe86739adb6f587c1fbe"
+    },
+    {
+      "classification": "copy",
+      "license": "Apache-2.0",
+      "public_path": "src/memoriesql/application/semantic_task_registry.py",
+      "public_sha256": "91f6b0dbc18235d227cb845789ff75a8485cb567c1adc3f2a7e0e8f950557dd9",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "source_sha256": "91f6b0dbc18235d227cb845789ff75a8485cb567c1adc3f2a7e0e8f950557dd9"
+    },
+    {
+      "classification": "copy",
+      "license": "Apache-2.0",
+      "public_path": "src/memoriesql/domain/__init__.py",
+      "public_sha256": "bb51ec43d3ba25b9c15a2784d4e9092b4a2bafdfbe27343b6917c589f033d05d",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "source_sha256": "bb51ec43d3ba25b9c15a2784d4e9092b4a2bafdfbe27343b6917c589f033d05d"
+    },
+    {
+      "classification": "copy",
+      "license": "Apache-2.0",
+      "public_path": "src/memoriesql/domain/authorization.py",
+      "public_sha256": "218ce1118c25b480d945794744c56403685030f015b4ba092e2dfbd5633fc42f",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "source_sha256": "218ce1118c25b480d945794744c56403685030f015b4ba092e2dfbd5633fc42f"
+    },
+    {
+      "classification": "copy",
+      "license": "Apache-2.0",
+      "public_path": "src/memoriesql/domain/module_manifest.py",
+      "public_sha256": "ab65852724fdacabea9d36e1affe81fc5f11a1be1e95366ba970a7d77a79d5b0",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "source_sha256": "ab65852724fdacabea9d36e1affe81fc5f11a1be1e95366ba970a7d77a79d5b0"
+    },
+    {
+      "classification": "copy",
+      "license": "Apache-2.0",
+      "public_path": "src/memoriesql/domain/semantic_identity.py",
+      "public_sha256": "fac8ac3eaa5cb870d3f86f7baf6f1848a857211249f5bd70c767e4750c7eedec",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "source_sha256": "fac8ac3eaa5cb870d3f86f7baf6f1848a857211249f5bd70c767e4750c7eedec"
+    },
+    {
+      "classification": "copy",
+      "license": "Apache-2.0",
+      "public_path": "src/memoriesql/infrastructure/jobs/__init__.py",
+      "public_sha256": "fedb9b376d56b5865774f5a410ce49d16fd4000700b98ca67e32e45d66eaefa5",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "source_sha256": "fedb9b376d56b5865774f5a410ce49d16fd4000700b98ca67e32e45d66eaefa5"
+    },
+    {
+      "classification": "copy",
+      "license": "Apache-2.0",
+      "public_path": "src/memoriesql/infrastructure/jobs/integrated_semantic_worker.py",
+      "public_sha256": "a6b990a6a74461f34e7e757a3e6f7426020f8cef8df4cdbaad2a95f2fcd10398",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "source_sha256": "a6b990a6a74461f34e7e757a3e6f7426020f8cef8df4cdbaad2a95f2fcd10398"
+    },
+    {
+      "classification": "copy",
+      "license": "Apache-2.0",
+      "public_path": "src/memoriesql/infrastructure/jobs/postgres_semantic_queue.py",
+      "public_sha256": "5bbff727506cd237a9596adc9e59743519defe90f29c14af9e03fc55a445ce80",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "source_sha256": "5bbff727506cd237a9596adc9e59743519defe90f29c14af9e03fc55a445ce80"
+    },
+    {
+      "classification": "copy",
+      "license": "Apache-2.0",
+      "public_path": "src/memoriesql/infrastructure/models/__init__.py",
+      "public_sha256": "c15f60eace446302ce7dddfc69010c173a714791a92e3765edef87777da4ccc4",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "source_sha256": "c15f60eace446302ce7dddfc69010c173a714791a92e3765edef87777da4ccc4"
+    },
+    {
+      "classification": "copy",
+      "license": "Apache-2.0",
+      "public_path": "src/memoriesql/infrastructure/models/pydanticai_executor.py",
+      "public_sha256": "07d4c861ce40062c227352f6fd240b7445500776ba6216fdd739027020da3b1c",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "source_sha256": "07d4c861ce40062c227352f6fd240b7445500776ba6216fdd739027020da3b1c"
+    },
+    {
+      "classification": "copy",
+      "license": "Apache-2.0",
+      "public_path": "src/memoriesql/infrastructure/postgres/authorization.py",
+      "public_sha256": "b428e693e96d06ffdf992d59b43ba4f991059df99be189f56ea78b1abf890c2a",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "source_sha256": "b428e693e96d06ffdf992d59b43ba4f991059df99be189f56ea78b1abf890c2a"
+    },
+    {
+      "classification": "copy",
+      "license": "Apache-2.0",
+      "public_path": "src/memoriesql/infrastructure/postgres/canonical_transactions.py",
+      "public_sha256": "7d2c1ce2f2916f16915ff3b86b6ada6e2dec281ca3d1fc0300dafa47dbc30e0d",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "source_sha256": "7d2c1ce2f2916f16915ff3b86b6ada6e2dec281ca3d1fc0300dafa47dbc30e0d"
+    },
+    {
+      "classification": "copy",
+      "license": "Apache-2.0",
+      "public_path": "src/memoriesql/infrastructure/postgres/capture.py",
+      "public_sha256": "ff404106d39e90bb5c9bc146ba5fa371adfe5e4813c0c5cd3cbbafd76e71b5a1",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "source_sha256": "ff404106d39e90bb5c9bc146ba5fa371adfe5e4813c0c5cd3cbbafd76e71b5a1"
+    },
+    {
+      "classification": "copy",
+      "license": "Apache-2.0",
+      "public_path": "src/memoriesql/infrastructure/postgres/model_accounting.py",
+      "public_sha256": "ac7f826b3a3625401683e8828ea2f553d203f5e6b36cf9c3a7f0dc5db3a583ac",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "source_sha256": "ac7f826b3a3625401683e8828ea2f553d203f5e6b36cf9c3a7f0dc5db3a583ac"
+    },
+    {
+      "classification": "copy",
+      "license": "Apache-2.0",
+      "public_path": "src/memoriesql/infrastructure/postgres/source_range.py",
+      "public_sha256": "4e6b1d9b5e0374a9220c628e6cfa7f26503d7ae07a9a9d3eece0f34d75502b6c",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "source_sha256": "4e6b1d9b5e0374a9220c628e6cfa7f26503d7ae07a9a9d3eece0f34d75502b6c"
+    },
+    {
+      "classification": "copy",
+      "license": "Apache-2.0",
+      "public_path": "src/memoriesql/infrastructure/postgres/transcript_fold.py",
+      "public_sha256": "2b5a8df67980bb545129406f2235f39ae9956b5dc4e34fbb95126ba356d5f621",
+      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "source_sha256": "2b5a8df67980bb545129406f2235f39ae9956b5dc4e34fbb95126ba356d5f621"
+    },
+    {
+      "classification": "adapt",
+      "license": "Apache-2.0",
+      "public_path": "src/memoriesql/application/builtin_semantic_tasks.py",
+      "public_sha256": "2c6bbca2f5f45703c70939dc880d2a8d809aeba4f55874bc12ff9db0eacc8809",
+      "reason": "Retain canonical task values; require caller-supplied internal static registry.",
+      "source_sha256": "3b1710fcf2e6f430f56cbaf33681ba49f85dc8ce3bb914decfe00b64ad96ef79"
+    },
+    {
+      "classification": "public",
+      "license": "Apache-2.0",
+      "public_path": "src/memoriesql/application/capture/__init__.py",
+      "public_sha256": "8f473d7e50a204eb208fdfbfae8aa016785392741c6745a3ad9621fd05f87d50",
+      "reason": "Neutral initializer without eager acquisition or adoption imports."
     }
   ]
 }

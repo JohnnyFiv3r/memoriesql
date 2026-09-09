@@ -1,10 +1,10 @@
 ![memoriesQL — observe, process, store, recall](assets/trademarks/memoriesql-readme-banner.png)
 
-# memoriesQL catalogs and migration substrate
+# memoriesQL catalogs and provider-neutral runtime
 
 This public repository preserves the memoriesQL contract preview: a small, read-only Python package exposing 49 provider-neutral contract records through eight generated catalogs and 12 experimental Python/CLI APIs.
 
-The unreleased `0.0.2a1` adds the canonical PostgreSQL migration substrate. It is not the memoriesQL desktop product, a capture service, a recall engine, a background service, or a provider integration. Catalog reads do not access external services.
+The unreleased `0.0.2a1` adds canonical PostgreSQL migrations and the provider-neutral authorization, canonical transaction, capture/range/fold, queue, executor and accounting runtime. It is not the memoriesQL desktop product, a capture service, a recall engine, a background service, or a provider integration. Catalog reads do not access external services.
 
 ## Preview the catalogs
 
@@ -23,7 +23,7 @@ schemas = load_catalog("json_schema")
 cursor = get_contract("memoriesql.capture.connector-cursor")
 ```
 
-The substrate depends only on `psycopg[binary]==3.3.3`. Catalog reads use immutable package resources and do not import the database dependency. See [migration setup and recovery](docs/migrations.md).
+The runtime depends on `psycopg[binary]==3.3.3`, `pydantic==2.13.3` and `pydantic-ai-slim==2.27.0` without provider extras. Catalog reads use immutable package resources and do not import the database dependency. See [migration setup and recovery](docs/migrations.md).
 
 ## Authority and compatibility
 

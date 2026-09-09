@@ -1,0 +1,1 @@
+"""memorieSQL application composition."""
