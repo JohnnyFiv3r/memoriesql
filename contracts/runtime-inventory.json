@@ -133,7 +133,7 @@
       "disposition": "public-forward",
       "path": "src/memoriesql/infrastructure/jobs/integrated_semantic_worker.py",
       "reason": "Public-authored cancellation cleanup ownership and post-intent dispatch gate; original N2 extraction hash retained as historical provenance.",
-      "sha256": "2c8998301226a988bcdfddd700c6e93eac70d044b0606323935ed25c80967d54",
+      "sha256": "e7902a299c8c411f155ea23d071206d6f304e14ae50afd4a9fc4d1715da05b5c",
       "source_sha256": "a6b990a6a74461f34e7e757a3e6f7426020f8cef8df4cdbaad2a95f2fcd10398"
     },
     {

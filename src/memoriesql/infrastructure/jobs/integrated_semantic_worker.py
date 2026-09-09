@@ -885,6 +885,18 @@ class IntegratedSemanticWorker:
             # Only the bounded worker code crosses the durable failure boundary.
             pass
         finally:
+            # Acquire control-only retention before any outcome transaction can
+            # start. Cancellation after normal execution must not leave a
+            # started settlement write without its cleanup lease.
+            if self._cleanup_heartbeat is None:
+                retention_cancellation = await self._retain_for_settlement(
+                    claimed.fence,
+                    heartbeat,
+                    watcher_database_unavailable,
+                    cancellation,
+                )
+                if retention_cancellation is not None:
+                    cancellation_error = retention_cancellation
             teardown_cancellation = await self._teardown_execution_tasks(
                 cancellation_waiter,
                 heartbeat,
@@ -1156,6 +1168,29 @@ class IntegratedSemanticWorker:
                     executor_task.cancel()
                 continue
             return cleanup_heartbeat, delayed_cancellation
+
+    async def _retain_for_settlement(
+        self,
+        fence: SemanticTaskFence,
+        heartbeat: asyncio.Task[None],
+        database_unavailable: asyncio.Event,
+        cancellation: _CancellationEvent,
+    ) -> asyncio.CancelledError | None:
+        async def retain() -> None:
+            self._cleanup_heartbeat = await self._begin_cleanup_retention(
+                fence, heartbeat, database_unavailable
+            )
+
+        operation = asyncio.create_task(retain())
+        delayed_cancellation: asyncio.CancelledError | None = None
+        while True:
+            try:
+                await asyncio.shield(operation)
+            except asyncio.CancelledError as error:
+                delayed_cancellation = error
+                cancellation.cancel()
+                continue
+            return delayed_cancellation
 
     @staticmethod
     async def _teardown_execution_tasks(

@@ -244,6 +244,49 @@ class CancellationDrain(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(receipt.task_status, "cancelled")
         self.assertTrue(self.retention_alive_at_settlement)
 
+    async def test_lost_generation_classifies_late_usage_without_success(self) -> None:
+        from memoriesql.infrastructure.jobs.postgres_semantic_queue import (
+            ReauthorizationResult,
+        )
+        self.worker._attempt_is_live.return_value = False
+        self.worker._heartbeat.return_value = False
+        self.worker._retain_cleanup_lease.return_value = False
+        self.worker._attempt_watch_reauthorization = Mock(return_value=ReauthorizationResult.STALE_FENCE)
+        receipt = await asyncio.wait_for(self.foreground, 1)
+        self.assertEqual(receipt.cycle_status, "cleanup_pending")
+        self.release.set()
+        await asyncio.wait_for(self.worker.wait_for_cleanup(), 2)
+        self.assertEqual(len(self.ports.usages), 1)
+        self.assertEqual(self.ports.usages[0].outcome, "lease_lost")
+        self.assertEqual(self.ports.usages[0].event_kind, "lease_lost_return")
+        self.assertEqual(self.ports.usages[0].usage.input_tokens, 11)
+
+    async def test_started_terminal_event_write_remains_owned(self) -> None:
+        entered = threading.Event()
+        release = threading.Event()
+
+        def write(*args: Any, **kwargs: Any) -> bool:
+            if args[1].event_kind == "run.failed":
+                entered.set()
+                if not release.wait(3):
+                    raise AssertionError("test did not release run-event write")
+            return True
+
+        self.worker._record_run_event = Mock(side_effect=write)
+        try:
+            await self.cancel_foreground()
+            self.release.set()
+            self.assertTrue(await asyncio.to_thread(entered.wait, 2))
+            self.assertTrue(self.worker.cleanup_pending)
+            self.assertTrue(self.worker._event_writes)
+            self.assertFalse(self.worker._cleanup_heartbeat.done())
+        finally:
+            release.set()
+        receipt = await asyncio.wait_for(self.worker.wait_for_cleanup(), 2)
+        self.assertEqual(receipt.task_status, "cancelled")
+        self.assertEqual(self.worker._event_writes, set())
+        self.assertIsNone(self.worker._cleanup_heartbeat)
+
     async def test_settlement_failure_is_observable_and_not_retried(self) -> None:
         self.settlement_error = True
         await self.cancel_foreground()
@@ -256,6 +299,39 @@ class CancellationDrain(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.worker._persist_result.call_count, 1)
         self.assertIsNone(self.worker._cleanup_heartbeat)
         self.assertEqual(len(self.ports.usages), 1)
+
+    async def test_cancellation_during_normal_settlement_keeps_cleanup_lease(self) -> None:
+        self.release_settlement.clear()
+
+        def persist(*args: Any, **kwargs: Any) -> tuple[str, bool]:
+            self.assertEqual(args[1].status, "succeeded")
+            self.retention_alive_at_settlement = (
+                self.worker._cleanup_heartbeat is not None
+                and not self.worker._cleanup_heartbeat.done()
+            )
+            self.settlement_started.set()
+            if not self.release_settlement.wait(3):
+                raise AssertionError("test did not release settlement")
+            return "succeeded", True
+
+        self.worker._persist_result = Mock(side_effect=persist)
+        self.release.set()
+        self.assertTrue(await asyncio.to_thread(self.settlement_started.wait, 2))
+        self.foreground.cancel()
+        with self.assertRaises(asyncio.CancelledError):
+            await asyncio.wait_for(self.foreground, 1)
+        self.assertTrue(self.worker.cleanup_pending)
+        self.assertTrue(self.retention_alive_at_settlement)
+        self.assertFalse(self.worker._cleanup_heartbeat.done())
+        self.assertEqual((await self.worker.run_once()).cycle_status, "cleanup_pending")
+        self.assertEqual(self.worker._claim.call_count, 1)
+        self.release_settlement.set()
+        # Preserve cancellation precedence after the started transaction finishes;
+        # a cancelled observer result is not a claim about its commit outcome.
+        with self.assertRaises(asyncio.CancelledError):
+            await asyncio.wait_for(self.worker.wait_for_cleanup(), 2)
+        self.assertIsNone(self.worker._cleanup_heartbeat)
+        self.assertEqual(self.worker._persist_result.call_count, 1)
 
     async def test_normal_accounting_failure_keeps_existing_failure_receipt(self) -> None:
         from unittest.mock import AsyncMock

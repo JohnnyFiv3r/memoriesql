@@ -56,13 +56,15 @@ With a responsive event loop, a caller receives `CancelledError`, or a
 `cleanup_pending` cycle receipt for internally requested cancellation/deadline
 cleanup. Pending receipts name the attempt when known and claim no durable result.
 
-The owning worker keeps its existing cycle alive, retains the cleanup lease through
-settlement, and refuses another claim while cleanup remains pending.
+The owning worker keeps its existing cycle alive, acquires cleanup retention before
+normal outcome persistence as well as cancellation drains, retains it through settlement, and refuses another claim while cleanup remains pending.
 `cleanup_pending` reports whether cleanup is still active.
 `await worker.wait_for_cleanup()` observes its eventual receipt or error; cancelling
 that observer does not cancel cleanup. Successful cancellation settlement returns
 a cancelled task receipt to the observer. A failed cleanup remains observable and
-blocks subsequent claims on that instance. Do not replace the instance until the
+blocks subsequent claims on that instance. Caller cancellation during an already-started
+normal outcome write still propagates after the write finishes; that cancellation
+is not proof that the transaction rolled back. Do not replace the instance until the
 old work and lease disposition are understood. There is no second scheduler.
 
 The caller and the owner have separate lifetimes: cancelling an asyncio task is a
