@@ -225,6 +225,55 @@ class CancellationDrain(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(self.worker.cleanup_pending)
         self.assertEqual(self.worker._claim.call_count, 1)
 
+    async def test_blocked_heartbeat_stays_owned_after_executor_finishes(self) -> None:
+        entered = threading.Event()
+        release = threading.Event()
+        finished = threading.Event()
+        teardown_started = asyncio.Event()
+        teardown = self.worker._teardown_execution_tasks
+
+        def heartbeat(*args: Any) -> bool:
+            entered.set()
+            if not release.wait(3):
+                raise AssertionError("test did not release heartbeat")
+            finished.set()
+            return True
+
+        async def observe_teardown(*args: Any) -> Any:
+            teardown_started.set()
+            return await teardown(*args)
+
+        self.worker._heartbeat = Mock(side_effect=heartbeat)
+        self.worker._teardown_execution_tasks = observe_teardown
+        try:
+            self.assertTrue(await asyncio.to_thread(entered.wait, 1))
+            self.foreground.cancel()
+            await asyncio.wait_for(self.cancel_seen.wait(), 1)
+            deadline = self.worker._cleanup_deadline
+            for _ in range(10):
+                self.foreground.cancel()
+                await asyncio.sleep(0)
+            with self.assertRaises(asyncio.CancelledError):
+                await asyncio.wait_for(self.foreground, 1)
+            self.assertEqual(self.worker._cleanup_deadline, deadline)
+            self.release.set()
+            await asyncio.wait_for(teardown_started.wait(), 1)
+            self.assertEqual(self.model_returns, 1)
+            self.assertEqual(len(self.ports.usages), 1)
+            self.assertFalse(finished.is_set())
+            self.assertTrue(self.worker.cleanup_pending)
+            self.assertFalse(self.worker._cleanup_heartbeat.done())
+            self.assertEqual(self.worker._persist_result.call_count, 0)
+            self.assertEqual((await self.worker.run_once()).cycle_status, "cleanup_pending")
+            self.assertEqual(self.worker._claim.call_count, 1)
+        finally:
+            release.set()
+        receipt = await asyncio.wait_for(self.worker.wait_for_cleanup(), 2)
+        self.assertEqual(receipt.task_status, "cancelled")
+        self.assertTrue(finished.is_set())
+        self.assertTrue(self.retention_alive_at_settlement)
+        self.assertIsNone(self.worker._cleanup_heartbeat)
+
     async def test_queue_cancellation_returns_pending_without_caller_cancellation(
         self,
     ) -> None:

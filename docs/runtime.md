@@ -1,6 +1,6 @@
 # Experimental provider-neutral runtime
 
-The unreleased `0.0.2` adds the explicitly inventoried neutral runtime to the
+Published `0.0.2` introduced the explicitly inventoried neutral runtime to the
 migration substrate. Python 3.13 is the support floor; 3.13 and 3.14 are the
 initial qualification matrix (`>=3.13,<3.15`). Install an exact reviewed runtime
 wheel. Older Python requires an explicit `memoriesql==0.0.1a1` pin or `--pre`
@@ -98,10 +98,9 @@ hash, name the public base commit and base hash, and carry a new current content
 hash. Unchanged copies still require byte equality; all inventories still deny
 unlisted members. No private source, history or provenance is added.
 
-Release recommendation: qualify this correction before the staged runtime is
-published. `0.0.2` remains unreleased in this repository; this change grants no
-publication authority. Never replace published artifacts, including `0.0.1a1`;
-if the runtime version is published before this repair lands, use a new version.
+Published `0.0.1a1` and `0.0.2` remain immutable. The next correction is prepared
+as `0.0.3`; this change grants no publication authority. See the
+[release controls](releasing.md).
 
 ## Historical N2 cancellation limitation
 
@@ -113,3 +112,35 @@ is inherited unchanged from the approved worker source (SHA-256
 `a6b990a6a74461f34e7e757a3e6f7426020f8cef8df4cdbaad2a95f2fcd10398`).
 Broad review identified it at PR #4. The separate correction above preserves ownership of unfinished work rather than
 claiming it has terminated. The historical extraction review remains closed.
+
+## Cleanup-lease handoff in 0.0.3
+
+In `0.0.2`, cleanup awaited a cancelled ordinary heartbeat before retaining its
+lease. Cancellation of that heartbeat still owns its started database call, so
+a blocked call could prevent control-only retention while execution remained
+unfinished. The permanent fictional PostgreSQL regression fails on installed
+`0.0.2`: one expired attempt is reaped while zero is required.
+
+The `0.0.3` change cancels the heartbeat and establishes retention independently.
+The existing execution teardown still awaits that heartbeat and every started
+call, with cleanup renewal alive, before settlement and release of ownership.
+No second worker, scheduler, detached operation, schema, or lifecycle contract
+is introduced. Existing SQL makes late ordinary heartbeat writes monotonic
+across the task, attempt and concurrency slot; a late heartbeat cannot clamp
+a retained lease back to the immutable execution deadline.
+
+Independent retention requires the database to service the control operation.
+Transient failures preserve the unavailable signal and retry; total unavailability
+can still lead to expiry. An expired or lost generation cannot be revived.
+The worker remains quarantined while its old work is owned, and observers must
+continue to handle uncertain settlement and late accounting.
+
+`test_cleanup_lease_handoff.py` uses only public fictional fixtures, installed
+migrations, and disposable PostgreSQL. It gates I/O before database arrival and
+uses a short persisted fixture expiry, without modifying production lease bounds.
+It covers expiry/reaping, late ordinary completion, initial/renewal failure, total
+control outage, and lost generations. `test_cancellation_drain.py` also holds an
+ordinary heartbeat through executor completion, repeated caller cancellation,
+late usage and settlement, checking quarantine and eventual complete drainage.
+Existing success, authorization, settlement-failure and late-accounting coverage
+remains part of installed acceptance.
