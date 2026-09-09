@@ -3,9 +3,12 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import runpy
 import tomllib
 import unittest
+from importlib.metadata import PackageNotFoundError
 from pathlib import Path
+from unittest.mock import patch
 
 from memoriesql.contracts import CATALOG_KINDS
 from scripts.generate_catalogs import (
@@ -23,9 +26,10 @@ class PublicBootstrapTests(unittest.TestCase):
         document = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
         project = document["project"]
         self.assertEqual(project["name"], "memoriesql")
-        self.assertEqual(project["version"], "0.0.2a1")
+        self.assertEqual(project["version"], "0.0.2")
         self.assertEqual(project["requires-python"], ">=3.13,<3.15")
         self.assertEqual(project["license"], "Apache-2.0")
+        self.assertIn("Development Status :: 2 - Pre-Alpha", project["classifiers"])
         self.assertEqual(project["license-files"], ["LICENSE", "NOTICE"])
         self.assertEqual(project["authors"], [{"name": "John Inniger"}])
         self.assertEqual(
@@ -35,6 +39,11 @@ class PublicBootstrapTests(unittest.TestCase):
         self.assertEqual(
             project["urls"]["Repository"], "https://github.com/JohnnyFiv3r/memoriesql"
         )
+
+    def test_source_version_fallback_matches_numeric_release(self) -> None:
+        with patch("importlib.metadata.version", side_effect=PackageNotFoundError):
+            namespace = runpy.run_path(str(ROOT / "src/memoriesql/__init__.py"))
+        self.assertEqual(namespace["__version__"], "0.0.2")
 
     def test_registry_is_explicit_complete_and_default_deny(self) -> None:
         records = load_registry()
@@ -82,9 +91,10 @@ class PublicBootstrapTests(unittest.TestCase):
 
     def test_publisher_has_narrow_owner_approved_controls(self) -> None:
         workflow = (ROOT / ".github/workflows/publish-pypi.yml").read_text()
-        self.assertIn('tags: ["v0.0.2a1"]', workflow)
-        self.assertEqual(workflow.count("refs/tags/v0.0.2a1"), 2)
+        self.assertIn('tags: ["v0.0.2"]', workflow)
+        self.assertEqual(workflow.count("refs/tags/v0.0.2"), 2)
         self.assertNotIn("v0.0.1a1", workflow)
+        self.assertNotIn("v0.0.2a1", workflow)
         self.assertNotIn("v*", workflow)
         self.assertIn("github.repository == 'JohnnyFiv3r/memoriesql'", workflow)
         self.assertIn("github.repository_id == '1357510758'", workflow)
@@ -114,14 +124,31 @@ class PublicBootstrapTests(unittest.TestCase):
 
     def test_package_ci_checks_committed_release_hashes(self) -> None:
         workflow = (ROOT / ".github/workflows/python-package.yml").read_text()
-        self.assertIn("python scripts/verify_release.py artifacts build/dist-a", workflow)
+        self.assertIn(
+            "python scripts/verify_release.py artifacts build/dist-a", workflow
+        )
         self.assertLess(
-            workflow.index("python scripts/inspect_python_distribution.py build/dist-a"),
+            workflow.index(
+                "python scripts/inspect_python_distribution.py build/dist-a"
+            ),
             workflow.index("python scripts/verify_release.py artifacts build/dist-a"),
         )
         self.assertLess(
             workflow.index("python scripts/verify_release.py artifacts build/dist-a"),
             workflow.index("name: Retain exact artifacts and inventory"),
+        )
+
+    def test_older_python_fallback_keeps_historical_prerelease_eligible(self) -> None:
+        workflow = (ROOT / ".github/workflows/python-package.yml").read_text()
+        older_python = workflow.split("  older-python:")[1]
+        self.assertIn(
+            "pip install --pre --no-index --find-links candidates memoriesql",
+            older_python,
+        )
+        self.assertIn("memoriesql==0.0.1a1", older_python)
+        self.assertIn(
+            "pip install --no-deps candidates/memoriesql-0.0.2-py3-none-any.whl",
+            older_python,
         )
 
     def test_export_provenance_hashes_are_current(self) -> None:

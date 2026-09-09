@@ -71,7 +71,7 @@ class InstalledMigrations(unittest.TestCase):
                 hashlib.sha256(migration.path.read_bytes()).hexdigest(),
                 migration.sha256,
             )
-        self.assertEqual(distribution.version, "0.0.2a1")
+        self.assertEqual(distribution.version, "0.0.2")
         for name, module in tuple(sys.modules.items()):
             if name == "memoriesql" or name.startswith("memoriesql."):
                 assert module.__file__ is not None
@@ -90,7 +90,7 @@ class InstalledMigrations(unittest.TestCase):
         from memoriesql import __version__
         from memoriesql.contracts import iter_contracts
 
-        self.assertEqual(__version__, "0.0.2a1")
+        self.assertEqual(__version__, "0.0.2")
         from memoriesql.cli import main
 
         output = io.StringIO()
