@@ -21,6 +21,15 @@ RUNTIME_FILES = {
     "memoriesql/infrastructure/postgres/migration_runner.py",
     "memoriesql/infrastructure/postgres/schema_inspection.py",
 }
+RUNTIME_ROWS = json.loads((ROOT / "contracts/runtime-inventory.json").read_text())[
+    "runtime"
+]
+RUNTIME_FILES |= {row["path"].removeprefix("src/") for row in RUNTIME_ROWS}
+DEPENDENCIES = [
+    "Requires-Dist: psycopg[binary]==3.3.3",
+    "Requires-Dist: pydantic==2.13.3",
+    "Requires-Dist: pydantic-ai-slim==2.27.0",
+]
 RESOURCE_FILES = {
     "memoriesql/infrastructure/postgres/_migration_inventory.json",
     *(
@@ -120,6 +129,14 @@ def _wheel_inventory(path: Path) -> list[str]:
             )
             if hashlib.sha256(data).hexdigest() != row["sha256"]:
                 raise ValueError("wheel migration byte drift")
+        for row in RUNTIME_ROWS:
+            if (
+                hashlib.sha256(
+                    archive.read(row["path"].removeprefix("src/"))
+                ).hexdigest()
+                != row["sha256"]
+            ):
+                raise ValueError("wheel runtime byte drift")
         package_members = {name for name in members if name.startswith("memoriesql/")}
         if package_members != EXPECTED_PACKAGE_FILES:
             missing = sorted(EXPECTED_PACKAGE_FILES - package_members)
@@ -141,7 +158,7 @@ def _wheel_inventory(path: Path) -> list[str]:
                 raise ValueError(f"wheel metadata missing: {expected}")
         if [
             line for line in metadata.splitlines() if line.startswith("Requires-Dist:")
-        ] != ["Requires-Dist: psycopg[binary]==3.3.3"]:
+        ] != DEPENDENCIES:
             raise ValueError("unexpected runtime dependency closure")
         for expected in (
             "License-Expression: Apache-2.0",
@@ -195,8 +212,22 @@ def _sdist_inventory(path: Path) -> list[str]:
             f"{root}src/memoriesql/infrastructure/postgres",
             f"{root}src/memoriesql.egg-info/requires.txt",
         }
+        expected_members.add(f"{root}contracts/runtime-inventory.json")
+        for name in RUNTIME_FILES:
+            expected_members.update(
+                str(p)
+                for p in PurePosixPath(f"{root}src/{name}").parents
+                if str(p) != "."
+            )
         if len(members) != len(set(members)):
             raise ValueError("duplicate sdist member")
+        for row in RUNTIME_ROWS:
+            content = archive.extractfile(root + row["path"])
+            if (
+                content is None
+                or hashlib.sha256(content.read()).hexdigest() != row["sha256"]
+            ):
+                raise ValueError("sdist runtime byte drift")
         for row in MIGRATION_ROWS:
             member = archive.extractfile(root + "migrations/" + row["filename"])
             if (
@@ -245,7 +276,7 @@ def _sdist_inventory(path: Path) -> list[str]:
             line
             for line in metadata_text.splitlines()
             if line.startswith("Requires-Dist:")
-        ] != ["Requires-Dist: psycopg[binary]==3.3.3"]:
+        ] != DEPENDENCIES:
             raise ValueError("unexpected runtime dependency closure")
         for expected in (
             "License-Expression: Apache-2.0",

@@ -28,6 +28,7 @@ jobs:
           python scripts/generate_catalogs.py --check
           python scripts/verify_public_boundary.py
           python scripts/verify_migration_export.py
+          python scripts/verify_runtime_export.py
           python scripts/verify_export_provenance.py
           python -m unittest discover -v
           python -m compileall -q src scripts tests
@@ -86,9 +87,9 @@ jobs:
         with:
           name: memoriesql-python-${{ github.event.pull_request.head.sha || github.sha }}
           path: build/reviewed-package
-      - name: Resolve only migration dependencies and record artifact hashes
+      - name: Resolve audited runtime dependencies and record artifact hashes
         run: |
-          python -m pip download 'psycopg[binary]==3.3.3' --only-binary=:all: --dest build/dependencies
+          python -m pip download 'psycopg[binary]==3.3.3' 'pydantic==2.13.3' 'pydantic-ai-slim==2.27.0' --only-binary=:all: --dest build/dependencies
           sha256sum build/dependencies/* > build/dependency-hashes.txt
           python -m pip install setuptools==80.9.0 wheel==0.45.1
       - name: Rebuild wheel independently from the reviewed sdist
@@ -105,8 +106,8 @@ jobs:
             python -m venv "$test_root/venv"
             "$test_root/venv/bin/python" -m pip install --no-index --find-links build/dependencies "$artifact"
             cp scripts/run_installed_acceptance.py scripts/prove_package_isolation.py "$test_root/"
-            cp contracts/public-registry.json "$test_root/"
-            cp tests/migrations/*.py tests/unit/test_contract_catalog_preview.py tests/fixtures/*.json "$test_root/"
+            cp contracts/runtime-inventory.json contracts/public-registry.json "$test_root/"
+            cp tests/migrations/*.py tests/runtime/*.py tests/unit/test_contract_catalog_preview.py tests/fixtures/*.json "$test_root/"
             (cd "$test_root" && venv/bin/python -I prove_package_isolation.py && venv/bin/python -I run_installed_acceptance.py)
           done
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
