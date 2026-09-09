@@ -97,6 +97,12 @@ class PublicBootstrapTests(unittest.TestCase):
         self.assertNotIn("workflow_dispatch", workflow)
         self.assertNotIn("pull_request", workflow)
         self.assertNotIn("python -m build", workflow)
+        self.assertNotIn("skip-existing", workflow)
+        publish_job = workflow.split("  publish:")[1]
+        self.assertNotIn("run:", publish_job)
+        self.assertNotIn("actions/checkout", publish_job)
+        self.assertIn("run-id: ${{ steps.ci.outputs.run_id }}", workflow)
+        self.assertIn("name: memoriesql-python-${{ github.sha }}", workflow)
         self.assertNotIn("id-token:", workflow.split("  publish:")[0])
         for action in re.findall(r"uses: (\S+)", workflow):
             self.assertRegex(action, r"@[0-9a-f]{40}$")
@@ -105,6 +111,18 @@ class PublicBootstrapTests(unittest.TestCase):
         self.assertIn("FINAL_PUBLIC_REPOSITORY", template)
         self.assertIn("FINAL_PYPI_ENVIRONMENT", template)
         self.assertIn("id-token: write", template)
+
+    def test_package_ci_checks_committed_release_hashes(self) -> None:
+        workflow = (ROOT / ".github/workflows/python-package.yml").read_text()
+        self.assertIn("python scripts/verify_release.py artifacts build/dist-a", workflow)
+        self.assertLess(
+            workflow.index("python scripts/inspect_python_distribution.py build/dist-a"),
+            workflow.index("python scripts/verify_release.py artifacts build/dist-a"),
+        )
+        self.assertLess(
+            workflow.index("python scripts/verify_release.py artifacts build/dist-a"),
+            workflow.index("name: Retain exact artifacts and inventory"),
+        )
 
     def test_export_provenance_hashes_are_current(self) -> None:
         manifest = json.loads(

@@ -51,7 +51,8 @@ there is no token fallback and no new publisher registration in this PR.
 
 Release preparation obtains artifacts from this PR's hosted CI, records their
 inventory, then verifies fresh artifacts from the final exact head against it.
-Documentation and verification inventories are excluded from the distributions,
+Release documentation under `docs/` and verification inventories are excluded
+from the distributions,
 so recording these hashes does not introduce a self-referential build. If packaged
 bytes change during review, obtain new hosted artifacts and requalify the final
 head; never substitute old local build output. The later owner merge still needs

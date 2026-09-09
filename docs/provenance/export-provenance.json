@@ -4,7 +4,7 @@
       "classification": "proposed_open_core",
       "license": "Apache-2.0",
       "public_path": ".github/workflows/python-package.yml",
-      "public_sha256": "40bc524d8559b0d65eb4817d819e229103561e4c3132ef1f1f763cdb547deb4f",
+      "public_sha256": "00ba622462f13512f4e4a66a97273b6e5a50bd13f280a4e38db740baac7a674b",
       "reason": "Reviewed packaging-spike input ported or adapted for the public bootstrap.",
       "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
       "reviewed_spike_source_sha256": "e1aea0a0ef2e13647d18eacdfb3753b8ee5ea93956724a23d1617496db722b1b"
@@ -701,7 +701,7 @@
       "classification": "public_release_configuration",
       "license": "Apache-2.0",
       "public_path": "docs/releasing.md",
-      "public_sha256": "ebf461886600eb0dca2e26e7bb08156f0cc0da651960250e5572f56314de1dfd",
+      "public_sha256": "f42bc78a58b96ba17064398401d8611715143e7219f5af17b679634a1eb7dd3a",
       "reason": "Public-owned publisher identity, release controls, and separate owner authorization requirements."
     },
     {
@@ -876,7 +876,7 @@
       "classification": "public_bootstrap",
       "license": "Apache-2.0",
       "public_path": "tests/contract/test_public_bootstrap.py",
-      "public_sha256": "cdd3c1bd561bc1895ffe733b158150cd97bc0f8984a03e1c8b974faa39d1532b",
+      "public_sha256": "227aa3ba8dcbec0dd6e1be4b0ba5320804daa038feb9af2df3deabf0634a0c50",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {
@@ -1037,7 +1037,7 @@
       "classification": "public-authored",
       "license": "Apache-2.0",
       "public_path": "docs/verification/runtime-package-artifact-inventory.json",
-      "public_sha256": "3e7687fa0b2b2e9ea934d9650ac513fea8b065612926bdf096add33ed7f58c47",
+      "public_sha256": "fd3a972f3cb3b7c2f8945d47fab05e49cc891554a06199c6f53b7b180f4f59c2",
       "reason": "Exact hosted runtime release artifact inventory; separate from immutable historical preview evidence."
     }
   ],
