@@ -552,7 +552,8 @@ class IntegratedSemanticWorker:
                     raise
                 receipt = self._cancellation_receipt
             if (
-                self._cycle_accounting is not None
+                self._cleanup_started.is_set()
+                and self._cycle_accounting is not None
                 and self._cycle_accounting.usage_failed
             ):
                 raise AccountingPersistenceError("late model usage persistence failed")

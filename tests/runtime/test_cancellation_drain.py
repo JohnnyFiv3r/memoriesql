@@ -208,6 +208,9 @@ class CancellationDrain(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(self.retention_alive_at_settlement)
         self.assertFalse(self.worker.cleanup_pending)
         self.assertIsNone(self.worker._cleanup_heartbeat)
+        self.worker._claim.return_value = None
+        self.assertEqual((await self.worker.run_once()).cycle_status, "idle")
+        self.assertEqual(self.worker._claim.call_count, 2)
 
     async def test_repeated_cancellation_does_not_extend_deadline(self) -> None:
         self.foreground.cancel()
@@ -253,6 +256,19 @@ class CancellationDrain(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.worker._persist_result.call_count, 1)
         self.assertIsNone(self.worker._cleanup_heartbeat)
         self.assertEqual(len(self.ports.usages), 1)
+
+    async def test_normal_accounting_failure_keeps_existing_failure_receipt(self) -> None:
+        from unittest.mock import AsyncMock
+
+        from memoriesql.application.model_accounting import AccountingPersistenceError
+        cast(Any, self.ports).append_usage = AsyncMock(
+            side_effect=AccountingPersistenceError("fictional ledger failure")
+        )
+        self.release.set()
+        receipt = await asyncio.wait_for(self.foreground, 2)
+        self.assertEqual(receipt.result_status, "unavailable")
+        self.assertFalse(self.worker.cleanup_pending)
+        self.assertEqual(self.worker._persist_result.call_count, 1)
 
     async def test_late_accounting_failure_is_observable(self) -> None:
         from unittest.mock import AsyncMock
