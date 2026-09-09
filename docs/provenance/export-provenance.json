@@ -4,7 +4,7 @@
       "classification": "proposed_open_core",
       "license": "Apache-2.0",
       "public_path": ".github/workflows/python-package.yml",
-      "public_sha256": "81edbedc53ecbe010eba293c71bddc70547213e38a9032724b6255cf2d4a7678",
+      "public_sha256": "2a847ce603d8ca35848dc5fcd2f1573ab6c907fed653b4f36ef2e72ec0c1faf9",
       "reason": "Reviewed packaging-spike input ported or adapted for the public bootstrap.",
       "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
       "reviewed_spike_source_sha256": "e1aea0a0ef2e13647d18eacdfb3753b8ee5ea93956724a23d1617496db722b1b"
