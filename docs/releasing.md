@@ -1,24 +1,22 @@
 # Owner-controlled runtime release readiness
 
-This lane prepares the converged N1/N2 provider-neutral runtime and the cancellation
-correction for `0.0.2`. It does not authorize a merge, tag, upload, or external
-configuration change. The published catalog-only `0.0.1a1` and its artifacts remain
-immutable. The historical inventory is retained in
-`docs/verification/package-artifact-inventory.json`.
+This lane prepares the cleanup-lease handoff repair as `0.0.3`. It does not
+authorize a merge, tag, upload, or external configuration change. Published
+`0.0.1a1` and `0.0.2` and their artifacts remain immutable. Their inventories
+are retained in `docs/verification/package-artifact-inventory.json` and
+`docs/verification/runtime-0.0.2-package-artifact-inventory.json`.
 
-PR #5 merged as `599df3d1c5b0feccbd467d1697614137f4120fda`; reviewed head
-`747f14fed37856bfef3520ba635147dd68ec855d` is ancestral to that public main baseline.
-A read-only check of the [PyPI project JSON](https://pypi.org/pypi/memoriesql/json)
-on 2026-09-09 UTC found only `0.0.1a1`, with two published files, and no `0.0.2`.
-Availability must be checked again immediately before any release. An empty or
-absent version today is not a reservation; never reuse a published version.
+The public base is `5c51863669493117a511abf6d65a63dc6e731f49`. A read-only check of
+[PyPI project JSON](https://pypi.org/pypi/memoriesql/json) on 2026-09-09 found
+`0.0.1a1` and `0.0.2`, and no `0.0.3`. Availability must be checked again before
+release; this check is not a reservation.
 
 Distribution versions follow the owner-approved plain numeric `X.Y.Z` convention,
 with matching `vX.Y.Z` tags. Do not add alpha/beta/rc suffixes unless separately
 requested. Numeric naming does not imply production readiness: the `0.x` line
 remains experimental under the [compatibility policy](architecture/compatibility.md).
 The previously prepared prerelease candidate was never published and must not be
-released as an intermediate version. Build genuine `0.0.2` archives; do not rename
+released as an intermediate version. Build genuine `0.0.3` archives; do not rename
 archives with different embedded metadata.
 
 ## Exact release identity
@@ -29,8 +27,8 @@ archives with different embedded metadata.
 | GitHub repository | `JohnnyFiv3r/memoriesql` (ID `1357510758`) |
 | Workflow | `.github/workflows/publish-pypi.yml` |
 | Environment | `pypi` |
-| Only accepted new tag | `v0.0.2` |
-| Package version | `0.0.2` |
+| Only accepted new tag | `v0.0.3` |
+| Package version | `0.0.3` |
 | Committed release inventory | `docs/verification/runtime-package-artifact-inventory.json` |
 
 The existing Trusted Publisher identity uses the same repository, workflow filename,
@@ -40,9 +38,9 @@ there is no token fallback and no new publisher registration in this PR.
 
 ## Artifact and approval controls
 
-- Only creation of `v0.0.2` can trigger the publishing workflow. Historical tags,
+- Only creation of `v0.0.3` can trigger the publishing workflow. Historical tags,
   wildcard tags, manual dispatch, pull requests and branch pushes cannot trigger it.
-- The tag commit must equal current main, the package version must equal `0.0.2`,
+- The tag commit must equal current main, the package version must equal `0.0.3`,
   and the latest exact-head `python-package.yml` **main push** run must have completed
   successfully. A PR check proves readiness, not eligibility to publish a merge.
 - Download only `memoriesql-python-<exact SHA>` from that selected run ID. Verify the
@@ -75,8 +73,8 @@ wheels and independently rebuilt sdists, with checkout access denied. Python
 that is not a runtime install. An unpinned request may fail rather than fall back
 because pip excludes prereleases by default when a numeric release is present.
 The older-Python CI fallback test explicitly allows prereleases with `--pre` and
-separately proves that the `0.0.2` runtime is rejected.
-After authorized publication, pin `memoriesql==0.0.2` when requesting this runtime
+separately proves that the `0.0.3` runtime is rejected.
+After authorized publication, pin `memoriesql==0.0.3` when requesting this runtime
 and verify the installed version. Preview payload IDs/versions, all 49 payloads,
 twelve preview APIs and fourteen SQL migration resources remain unchanged.
 
@@ -103,15 +101,15 @@ lease/reaper and authorization/fencing rules remain authoritative. See
 1. Review and merge this release-readiness PR only after final exact-head CI and
    review closure. This task leaves it open and unmerged.
 2. **External environment change:** the read-only 2026-09-09 check found that `pypi`
-   permits only the tag `v0.0.1a1`. Replace that exact tag allowance with `v0.0.2`;
+   permits only the tag `v0.0.2`. Replace that exact tag allowance with `v0.0.3`;
    do not allow branches or wildcards. Preserve the required owner reviewer,
    disabled administrator bypass, and existing self-review policy. This change
    has not been performed. Existing immutable historical tags must not be modified.
 3. Recheck PyPI availability, existing Trusted Publisher identity, environment
    protection, current main, its latest successful main-push CI and artifact
    retention. Compare both artifacts with the committed runtime inventory. If
-   `0.0.2` has been published, stop and prepare a separately reviewed new version.
-4. Separately authorize release, then create `v0.0.2` once at that exact main
+   `0.0.3` has been published, stop and prepare a separately reviewed new version.
+4. Separately authorize release, then create `v0.0.3` once at that exact main
    commit. Do not move, delete, recreate or retarget published tags.
 5. Inspect the selected run, SHA and both artifact hashes before approving the
    waiting `pypi` job. That approval permits the upload; this PR does not.

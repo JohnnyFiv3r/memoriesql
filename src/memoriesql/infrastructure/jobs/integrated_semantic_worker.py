@@ -1085,7 +1085,10 @@ class IntegratedSemanticWorker:
         database_unavailable: asyncio.Event,
     ) -> asyncio.Task[None] | None:
         heartbeat.cancel()
-        await asyncio.gather(heartbeat, return_exceptions=True)
+        # A cancelled heartbeat still owns its started database call. Establish
+        # control-only retention independently before waiting for that call;
+        # teardown retains and drains the heartbeat while renewal stays alive.
+        # The existing SQL makes late ordinary heartbeat lease writes monotonic.
         try:
             retained = await self._await_database_call(
                 lambda: self._retain_cleanup_lease(fence, datetime.now(UTC)),

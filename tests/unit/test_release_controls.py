@@ -32,7 +32,7 @@ def good_run() -> dict[str, Any]:
 
 def select(runs: list[dict[str, Any]]) -> int:
     return select_ci_run(
-        runs, sha=SHA, main_sha=SHA, tag="v0.0.2", version="0.0.2"
+        runs, sha=SHA, main_sha=SHA, tag="v0.0.3", version="0.0.3"
     )
 
 
@@ -44,23 +44,25 @@ class ReleaseControlTests(unittest.TestCase):
         arguments = {
             "sha": SHA,
             "main_sha": SHA,
-            "tag": "v0.0.2",
-            "version": "0.0.2",
+            "tag": "v0.0.3",
+            "version": "0.0.3",
         }
         for field, wrong in (
             ("sha", "malformed"),
             ("main_sha", "b" * 40),
             ("tag", "v0.0.1"),
             ("version", "0.0.1a1"),
-            ("version", "0.0.3"),
-            ("version", "0.0.2a1"),
-            ("version", "0.0.2b1"),
-            ("version", "0.0.2rc1"),
-            ("tag", "v0.0.2a1"),
-            ("tag", "v0.0.2b1"),
-            ("tag", "v0.0.2rc1"),
+            ("version", "0.0.2"),
+            ("tag", "v0.0.2"),
+            ("version", "0.0.4"),
+            ("version", "0.0.3a1"),
+            ("version", "0.0.3b1"),
+            ("version", "0.0.3rc1"),
+            ("tag", "v0.0.3a1"),
+            ("tag", "v0.0.3b1"),
+            ("tag", "v0.0.3rc1"),
             ("tag", "v0.0.1a1"),
-            ("tag", "v0.0.3"),
+            ("tag", "v0.0.4"),
         ):
             with self.subTest(field=field), self.assertRaises(ValueError):
                 select_ci_run([good_run()], **(arguments | {field: wrong}))
@@ -101,7 +103,7 @@ class ReleaseControlTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
             inventory = self.make_artifacts(directory)
-            for version in (None, "0.0.1a1", "0.0.2a1", "0.0.2b1", "0.0.2rc1", "0.0.3"):
+            for version in (None, "0.0.1a1", "0.0.2", "0.0.3a1", "0.0.3b1", "0.0.3rc1", "0.0.4"):
                 with self.subTest(version=version), self.assertRaises(ValueError):
                     verify_artifacts(directory, inventory | {"version": version})
 
@@ -129,7 +131,7 @@ class ReleaseControlTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
             inventory = self.make_artifacts(directory)
-            for name in ("../outside.whl", "memoriesql-0.0.2.tar.gz"):
+            for name in ("../outside.whl", "memoriesql-0.0.3.tar.gz"):
                 altered = deepcopy(inventory)
                 altered["artifacts"][0]["filename"] = name
                 with self.subTest(name=name), self.assertRaises(ValueError):
@@ -139,8 +141,8 @@ class ReleaseControlTests(unittest.TestCase):
     def make_artifacts(directory: Path) -> dict[str, Any]:
         rows = []
         for filename in (
-            "memoriesql-0.0.2-py3-none-any.whl",
-            "memoriesql-0.0.2.tar.gz",
+            "memoriesql-0.0.3-py3-none-any.whl",
+            "memoriesql-0.0.3.tar.gz",
         ):
             payload = b"valid"
             (directory / filename).write_bytes(payload)
@@ -151,4 +153,4 @@ class ReleaseControlTests(unittest.TestCase):
                     "sha256": hashlib.sha256(payload).hexdigest(),
                 }
             )
-        return {"version": "0.0.2", "artifacts": rows}
+        return {"version": "0.0.3", "artifacts": rows}

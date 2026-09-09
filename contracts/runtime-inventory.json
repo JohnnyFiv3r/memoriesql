@@ -128,12 +128,12 @@
       "source_sha256": "fedb9b376d56b5865774f5a410ce49d16fd4000700b98ca67e32e45d66eaefa5"
     },
     {
-      "base_public_commit": "700d0957f13ec91eb2ab32494a77d681b1222993",
-      "base_public_sha256": "a6b990a6a74461f34e7e757a3e6f7426020f8cef8df4cdbaad2a95f2fcd10398",
+      "base_public_commit": "5c51863669493117a511abf6d65a63dc6e731f49",
+      "base_public_sha256": "e7902a299c8c411f155ea23d071206d6f304e14ae50afd4a9fc4d1715da05b5c",
       "disposition": "public-forward",
       "path": "src/memoriesql/infrastructure/jobs/integrated_semantic_worker.py",
-      "reason": "Public-authored cancellation cleanup ownership and post-intent dispatch gate; original N2 extraction hash retained as historical provenance.",
-      "sha256": "e7902a299c8c411f155ea23d071206d6f304e14ae50afd4a9fc4d1715da05b5c",
+      "reason": "Public cleanup-lease handoff correction: independently retain before draining the cancelled heartbeat; existing SQL and owned teardown remain authoritative.",
+      "sha256": "21b68eaa447d18fcf04b91de6ecf83ef74d9e9f3f7f0d15a7c2d4937d0cfb23c",
       "source_sha256": "a6b990a6a74461f34e7e757a3e6f7426020f8cef8df4cdbaad2a95f2fcd10398"
     },
     {
