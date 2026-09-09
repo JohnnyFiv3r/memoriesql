@@ -8,3 +8,10 @@ include src/memoriesql/contracts/__init__.py
 recursive-include src/memoriesql/contracts/_catalogs *.json
 global-exclude *.py[cod]
 global-exclude .DS_Store
+include setup.py
+include contracts/migration-inventory.json
+include migrations/*.sql
+include src/memoriesql/infrastructure/__init__.py
+include src/memoriesql/infrastructure/postgres/__init__.py
+include src/memoriesql/infrastructure/postgres/migration_runner.py
+include src/memoriesql/infrastructure/postgres/schema_inspection.py

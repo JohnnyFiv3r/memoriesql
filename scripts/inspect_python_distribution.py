@@ -9,7 +9,25 @@ import zipfile
 from collections.abc import Sequence
 from pathlib import Path, PurePosixPath
 
-VERSION = "0.0.1a1"
+VERSION = "0.0.2a1"
+ROOT = Path(__file__).resolve().parents[1]
+MIGRATION_ROWS = json.loads((ROOT / "contracts/migration-inventory.json").read_text())[
+    "migrations"
+]
+MIGRATION_FILES = {row["filename"] for row in MIGRATION_ROWS}
+RUNTIME_FILES = {
+    "memoriesql/infrastructure/__init__.py",
+    "memoriesql/infrastructure/postgres/__init__.py",
+    "memoriesql/infrastructure/postgres/migration_runner.py",
+    "memoriesql/infrastructure/postgres/schema_inspection.py",
+}
+RESOURCE_FILES = {
+    "memoriesql/infrastructure/postgres/_migration_inventory.json",
+    *(
+        f"memoriesql/infrastructure/postgres/_migrations/{name}"
+        for name in MIGRATION_FILES
+    ),
+}
 CATALOG_FILES = {
     "cli.json",
     "connector.json",
@@ -26,6 +44,7 @@ EXPECTED_PACKAGE_FILES = {
     "memoriesql/contracts/__init__.py",
     *(f"memoriesql/contracts/_catalogs/{name}" for name in CATALOG_FILES),
 }
+EXPECTED_PACKAGE_FILES |= RUNTIME_FILES | RESOURCE_FILES
 EXPECTED_WHEEL_MEMBERS = EXPECTED_PACKAGE_FILES | {
     f"memoriesql-{VERSION}.dist-info/METADATA",
     f"memoriesql-{VERSION}.dist-info/RECORD",
@@ -54,8 +73,6 @@ FORBIDDEN_PARTS = {
     "apps",
     "artifacts",
     "docs",
-    "infrastructure",
-    "migrations",
     "tests",
 }
 
@@ -95,6 +112,14 @@ def _wheel_inventory(path: Path) -> list[str]:
                 f"missing={sorted(EXPECTED_WHEEL_MEMBERS - set(members))}; "
                 f"unexpected={sorted(set(members) - EXPECTED_WHEEL_MEMBERS)}"
             )
+        if len(members) != len(set(members)):
+            raise ValueError("duplicate wheel member")
+        for row in MIGRATION_ROWS:
+            data = archive.read(
+                "memoriesql/infrastructure/postgres/_migrations/" + row["filename"]
+            )
+            if hashlib.sha256(data).hexdigest() != row["sha256"]:
+                raise ValueError("wheel migration byte drift")
         package_members = {name for name in members if name.startswith("memoriesql/")}
         if package_members != EXPECTED_PACKAGE_FILES:
             missing = sorted(EXPECTED_PACKAGE_FILES - package_members)
@@ -110,12 +135,14 @@ def _wheel_inventory(path: Path) -> list[str]:
         for expected in (
             "Name: memoriesql",
             f"Version: {VERSION}",
-            "Requires-Python: <3.15,>=3.11",
+            "Requires-Python: <3.15,>=3.13",
         ):
             if expected not in metadata:
                 raise ValueError(f"wheel metadata missing: {expected}")
-        if "Requires-Dist:" in metadata:
-            raise ValueError("wheel unexpectedly declares a runtime dependency")
+        if [
+            line for line in metadata.splitlines() if line.startswith("Requires-Dist:")
+        ] != ["Requires-Dist: psycopg[binary]==3.3.3"]:
+            raise ValueError("unexpected runtime dependency closure")
         for expected in (
             "License-Expression: Apache-2.0",
             "License-File: LICENSE",
@@ -156,8 +183,27 @@ def _sdist_inventory(path: Path) -> list[str]:
             f"{root}src/memoriesql.egg-info/top_level.txt",
             f"{root}src/memoriesql/contracts",
             f"{root}src/memoriesql/contracts/_catalogs",
-            *(f"{root}src/{name}" for name in EXPECTED_PACKAGE_FILES),
+            *(f"{root}src/{name}" for name in EXPECTED_PACKAGE_FILES - RESOURCE_FILES),
         }
+        expected_members |= {
+            f"{root}setup.py",
+            f"{root}contracts",
+            f"{root}contracts/migration-inventory.json",
+            f"{root}migrations",
+            *(f"{root}migrations/{name}" for name in MIGRATION_FILES),
+            f"{root}src/memoriesql/infrastructure",
+            f"{root}src/memoriesql/infrastructure/postgres",
+            f"{root}src/memoriesql.egg-info/requires.txt",
+        }
+        if len(members) != len(set(members)):
+            raise ValueError("duplicate sdist member")
+        for row in MIGRATION_ROWS:
+            member = archive.extractfile(root + "migrations/" + row["filename"])
+            if (
+                member is None
+                or hashlib.sha256(member.read()).hexdigest() != row["sha256"]
+            ):
+                raise ValueError("sdist migration byte drift")
         for item in archive.getmembers():
             _safe_path(item.name)
             if item.issym() or item.islnk() or item.isdev():
@@ -175,8 +221,10 @@ def _sdist_inventory(path: Path) -> list[str]:
             and item.name.startswith(f"{root}src/memoriesql/")
             and not item.name.startswith(f"{root}src/memoriesql.egg-info/")
         }
-        if package_members != EXPECTED_PACKAGE_FILES:
-            missing = sorted(EXPECTED_PACKAGE_FILES - package_members)
+        if package_members != EXPECTED_PACKAGE_FILES - RESOURCE_FILES:
+            missing = sorted(
+                (EXPECTED_PACKAGE_FILES - RESOURCE_FILES) - package_members
+            )
             unexpected = sorted(package_members - EXPECTED_PACKAGE_FILES)
             raise ValueError(
                 f"sdist package allowlist mismatch; missing={missing}; "
@@ -189,12 +237,16 @@ def _sdist_inventory(path: Path) -> list[str]:
         for expected in (
             "Name: memoriesql",
             f"Version: {VERSION}",
-            "Requires-Python: <3.15,>=3.11",
+            "Requires-Python: <3.15,>=3.13",
         ):
             if expected not in metadata_text:
                 raise ValueError(f"sdist metadata missing: {expected}")
-        if "Requires-Dist:" in metadata_text:
-            raise ValueError("sdist unexpectedly declares a runtime dependency")
+        if [
+            line
+            for line in metadata_text.splitlines()
+            if line.startswith("Requires-Dist:")
+        ] != ["Requires-Dist: psycopg[binary]==3.3.3"]:
+            raise ValueError("unexpected runtime dependency closure")
         for expected in (
             "License-Expression: Apache-2.0",
             "License-File: LICENSE",

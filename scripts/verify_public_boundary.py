@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 IGNORED_PARTS = {".git", ".mypy_cache", ".ruff_cache", "__pycache__", "build", "dist"}
-DENIED_ROOTS = {"apps", "artifacts", "migrations"}
+DENIED_ROOTS = {"apps", "artifacts"}
 
 
 def repository_files() -> tuple[Path, ...]:
@@ -26,6 +27,23 @@ def verify() -> dict[str, object]:
     if denied_roots:
         raise ValueError(f"denied public repository roots: {denied_roots}")
 
+    inventory = json.loads((ROOT / "contracts/migration-inventory.json").read_text())
+    allowed_sql = {"migrations/" + row["filename"] for row in inventory["migrations"]}
+    actual_sql = {
+        str(path.relative_to(ROOT))
+        for path in files
+        if path.relative_to(ROOT).parts[0] == "migrations"
+    }
+    if actual_sql != allowed_sql:
+        raise ValueError("unregistered migration source")
+    for row in inventory["migrations"]:
+        if (
+            hashlib.sha256(
+                (ROOT / "migrations" / row["filename"]).read_bytes()
+            ).hexdigest()
+            != row["sha256"]
+        ):
+            raise ValueError("historical migration byte drift")
     text_failures: list[str] = []
     for path in files:
         if path.suffix.lower() in {".png", ".whl", ".gz"}:
@@ -34,13 +52,26 @@ def verify() -> dict[str, object]:
             text = path.read_text(encoding="utf-8")
         except UnicodeDecodeError:
             continue
+        provider_identifiers = re.findall(
+            r"memoriesql\.(?:[c]odex-passive|[c]laude-code)[^'\s\"]*", text
+        )
+        if provider_identifiers and str(path.relative_to(ROOT)) not in {
+            "migrations/0014_transcript_span_fold.sql",
+            "tests/fixtures/schema_snapshot.json",
+            "tests/migrations/test_historical_profiles.py",
+        }:
+            text_failures.append(
+                f"{path.relative_to(ROOT)}:historical identifier outside exception"
+            )
         if re.search(r"/(?:Users|home)/[^/\s]+/", text):
             text_failures.append(f"{path.relative_to(ROOT)}:absolute home path")
         for owner, repository in re.findall(
             r"https://github\.com/([\w-]+)/([\w.-]+)", text
         ):
             if (owner, repository) != ("JohnnyFiv3r", "memoriesql"):
-                text_failures.append(f"{path.relative_to(ROOT)}:non-public repository URL")
+                text_failures.append(
+                    f"{path.relative_to(ROOT)}:non-public repository URL"
+                )
     if text_failures:
         raise ValueError("private-boundary text leaked: " + ", ".join(text_failures))
 
