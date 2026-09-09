@@ -135,7 +135,7 @@ jobs:
       - name: Prove old catalog fallback is not a migration install
         run: |
           python -m pip download --no-deps --only-binary=:all: memoriesql==0.0.1a1 --dest candidates
-          python -m pip install --no-index --find-links candidates memoriesql
+          python -m pip install --pre --no-index --find-links candidates memoriesql
           python -I -c "import importlib.util; from importlib.metadata import version; assert version('memoriesql') == '0.0.1a1'; assert importlib.util.find_spec('memoriesql.infrastructure') is None"
           if python -m pip install --no-deps candidates/memoriesql-0.0.2-py3-none-any.whl; then
             echo 'Unsupported interpreter incorrectly accepted migration artifact'

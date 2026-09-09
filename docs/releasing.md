@@ -71,7 +71,11 @@ its own successful exact-main push run and retained artifacts with matching hash
 
 The runtime requires `>=3.13,<3.15`; Python 3.13 and 3.14 are qualified using installed
 wheels and independently rebuilt sdists, with checkout access denied. Python
-3.11/3.12 can resolve the older catalog-only `0.0.1a1`; that is not a runtime install.
+3.11/3.12 can install the older catalog-only `0.0.1a1` with an exact version pin;
+that is not a runtime install. An unpinned request may fail rather than fall back
+because pip excludes prereleases by default when a numeric release is present.
+The older-Python CI fallback test explicitly allows prereleases with `--pre` and
+separately proves that the `0.0.2` runtime is rejected.
 After authorized publication, pin `memoriesql==0.0.2` when requesting this runtime
 and verify the installed version. Preview payload IDs/versions, all 49 payloads,
 twelve preview APIs and fourteen SQL migration resources remain unchanged.

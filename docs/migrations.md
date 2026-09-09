@@ -6,8 +6,9 @@ The `0.0.2` development artifact adds the canonical migration substrate.
 No release or upload is authorized by this change.
 
 The published `0.0.1a1` remains an immutable catalog-only preview supporting
-Python 3.11–3.14. An unpinned installer on older Python may select that older
-catalog distribution; that does not install migration capabilities. Use the
+Python 3.11–3.14. On older Python, pin `memoriesql==0.0.1a1` for catalogs.
+An unpinned request may fail because pip excludes prereleases by default;
+`--pre` permits the historical fallback, which has no migration capabilities. Use the
 exact reviewed artifact and version, never an unbounded `pip install memoriesql`
 as a runtime setup instruction:
 

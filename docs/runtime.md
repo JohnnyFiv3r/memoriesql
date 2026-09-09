@@ -3,8 +3,9 @@
 The unreleased `0.0.2` adds the explicitly inventoried neutral runtime to the
 migration substrate. Python 3.13 is the support floor; 3.13 and 3.14 are the
 initial qualification matrix (`>=3.13,<3.15`). Install an exact reviewed runtime
-wheel. An older Python resolver may select the immutable catalog-only `0.0.1a1`;
-that is not a runtime installation. No release is authorized by this PR.
+wheel. Older Python requires an explicit `memoriesql==0.0.1a1` pin or `--pre`
+for the immutable catalog-only fallback; an unpinned request may fail.
+The historical catalog package is not a runtime installation. No release is authorized by this PR.
 
 The runtime includes authorization, historical canonical writes and receipts,
 neutral capture/range/fold ports, semantic task resolution, PostgreSQL queue and

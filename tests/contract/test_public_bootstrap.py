@@ -124,14 +124,31 @@ class PublicBootstrapTests(unittest.TestCase):
 
     def test_package_ci_checks_committed_release_hashes(self) -> None:
         workflow = (ROOT / ".github/workflows/python-package.yml").read_text()
-        self.assertIn("python scripts/verify_release.py artifacts build/dist-a", workflow)
+        self.assertIn(
+            "python scripts/verify_release.py artifacts build/dist-a", workflow
+        )
         self.assertLess(
-            workflow.index("python scripts/inspect_python_distribution.py build/dist-a"),
+            workflow.index(
+                "python scripts/inspect_python_distribution.py build/dist-a"
+            ),
             workflow.index("python scripts/verify_release.py artifacts build/dist-a"),
         )
         self.assertLess(
             workflow.index("python scripts/verify_release.py artifacts build/dist-a"),
             workflow.index("name: Retain exact artifacts and inventory"),
+        )
+
+    def test_older_python_fallback_keeps_historical_prerelease_eligible(self) -> None:
+        workflow = (ROOT / ".github/workflows/python-package.yml").read_text()
+        older_python = workflow.split("  older-python:")[1]
+        self.assertIn(
+            "pip install --pre --no-index --find-links candidates memoriesql",
+            older_python,
+        )
+        self.assertIn("memoriesql==0.0.1a1", older_python)
+        self.assertIn(
+            "pip install --no-deps candidates/memoriesql-0.0.2-py3-none-any.whl",
+            older_python,
         )
 
     def test_export_provenance_hashes_are_current(self) -> None:
