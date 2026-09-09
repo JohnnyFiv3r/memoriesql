@@ -82,7 +82,10 @@ class PublicBootstrapTests(unittest.TestCase):
 
     def test_publisher_has_narrow_owner_approved_controls(self) -> None:
         workflow = (ROOT / ".github/workflows/publish-pypi.yml").read_text()
-        self.assertIn('tags: ["v0.0.1a1"]', workflow)
+        self.assertIn('tags: ["v0.0.2a1"]', workflow)
+        self.assertEqual(workflow.count("refs/tags/v0.0.2a1"), 2)
+        self.assertNotIn("v0.0.1a1", workflow)
+        self.assertNotIn("v*", workflow)
         self.assertIn("github.repository == 'JohnnyFiv3r/memoriesql'", workflow)
         self.assertIn("github.repository_id == '1357510758'", workflow)
         self.assertIn("github.event.created == true", workflow)

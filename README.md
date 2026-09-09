@@ -25,6 +25,8 @@ cursor = get_contract("memoriesql.capture.connector-cursor")
 
 The runtime depends on `psycopg[binary]==3.3.3`, `pydantic==2.13.3` and `pydantic-ai-slim==2.27.0` without provider extras. Catalog reads use immutable package resources and do not import the database dependency. See [migration setup and recovery](docs/migrations.md).
 
+Worker integrations must handle `cleanup_pending`, keep owned cleanup and its event loop alive, and observe `wait_for_cleanup()` before treating the cycle as complete. Cancellation does not guarantee termination or transaction rollback. See [runtime integration requirements](docs/releasing.md#python-and-integration-requirements).
+
 ## Authority and compatibility
 
 [`contracts/public-registry.json`](contracts/public-registry.json) is the sole export and generation authority. It names every included record explicitly and denies every unlisted file by default. Generated package catalogs must match it byte-for-byte.
@@ -37,4 +39,4 @@ See [compatibility policy](docs/architecture/compatibility.md) and [repository b
 
 Source code and designated materials are licensed under [Apache License 2.0](LICENSE). The memoriesQL name and banner remain subject to [trademark guidance](TRADEMARKS.md). Contributions use the [Developer Certificate of Origin](CONTRIBUTING.md), not a contributor license agreement.
 
-The repository is public; package publication is a separate owner-approved step. The release workflow is restricted to the approved preview tag, exact-main-head CI artifacts, and the protected `pypi` environment. See [release controls](docs/releasing.md). The published `0.0.1a1` stays immutable. This change authorizes no new release.
+The repository is public; package publication is a separate owner-approved step. The release workflow is restricted to the approved runtime tag `v0.0.2a1`, exact-main-head CI artifacts, and the protected `pypi` environment. See [release controls](docs/releasing.md). The published `0.0.1a1` stays immutable. This change authorizes no new release.

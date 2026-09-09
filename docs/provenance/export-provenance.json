@@ -694,28 +694,28 @@
       "classification": "public_release_configuration",
       "license": "Apache-2.0",
       "public_path": ".github/workflows/publish-pypi.yml",
-      "public_sha256": "4913454dae8f2c9469e3be5313df3a20743a9499b53d8b2649cd22b688a92158",
+      "public_sha256": "ef2e55930e959a1028e9d7ba92850859b8a2dfdedc22d8bf38f4904a8b9661a6",
       "reason": "Owner-approved canonical publishing configuration; no tag or upload authorized by setup."
     },
     {
       "classification": "public_release_configuration",
       "license": "Apache-2.0",
       "public_path": "docs/releasing.md",
-      "public_sha256": "b6e76d7df7e2b78045ebec95305e385b0fe836bb951abc89abed66d83c991fa9",
+      "public_sha256": "ebf461886600eb0dca2e26e7bb08156f0cc0da651960250e5572f56314de1dfd",
       "reason": "Public-owned publisher identity, release controls, and separate owner authorization requirements."
     },
     {
       "classification": "public_release_configuration",
       "license": "Apache-2.0",
       "public_path": "scripts/verify_release.py",
-      "public_sha256": "035894ef552a806be041b3aac93907d1edf58b5a6e4b67c8d2b62876be386c2c",
+      "public_sha256": "1d3f19f7fd6553e01380586b07956999899b2c8738fd15335ad7df2b47fa194b",
       "reason": "Fail-closed exact-main-head CI and artifact verification for the approved preview."
     },
     {
       "classification": "public_release_configuration",
       "license": "Apache-2.0",
       "public_path": "tests/unit/test_release_controls.py",
-      "public_sha256": "50b24a922a15a361bce666ef8b7dc71736fcc77989a4769ddba7a18ba665f03c",
+      "public_sha256": "ef20caaa58985e3597edf63b9842d9ef759c356587c1123c6c26ec42d12f583a",
       "reason": "Synthetic focused regression tests for release identity, CI status, and artifact integrity."
     },
     {
@@ -771,7 +771,7 @@
       "classification": "public_bootstrap",
       "license": "Apache-2.0",
       "public_path": "README.md",
-      "public_sha256": "3e036f3b3763fe551d8f6a873be01a83ed6acefe55cab3b6b72993bedce78015",
+      "public_sha256": "99d0576b3941d417493339ff1b58409dded030d2c24024b731dfb0c85659f080",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {
@@ -876,7 +876,7 @@
       "classification": "public_bootstrap",
       "license": "Apache-2.0",
       "public_path": "tests/contract/test_public_bootstrap.py",
-      "public_sha256": "61e3eeed4a549dc00de141861d7fa8ab00c4544f7d6f3726fe77d3260a184117",
+      "public_sha256": "cdd3c1bd561bc1895ffe733b158150cd97bc0f8984a03e1c8b974faa39d1532b",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {
@@ -1032,6 +1032,13 @@
       "public_path": "tests/unit/test_runtime_forward_provenance.py",
       "public_sha256": "dcc24743552f796a53efad074222197787d1f01e9d6752f18852f448eca0561d",
       "reason": "Fictional public cancellation cleanup and forward-provenance verification."
+    },
+    {
+      "classification": "public-authored",
+      "license": "Apache-2.0",
+      "public_path": "docs/verification/runtime-package-artifact-inventory.json",
+      "public_sha256": "3e7687fa0b2b2e9ea934d9650ac513fea8b065612926bdf096add33ed7f58c47",
+      "reason": "Exact hosted runtime release artifact inventory; separate from immutable historical preview evidence."
     }
   ],
   "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
