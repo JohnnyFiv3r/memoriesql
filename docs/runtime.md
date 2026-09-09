@@ -45,3 +45,15 @@ Base prerequisite: public PR #3 merged the reviewed head
 `ad692e66ac064cec2e37cd1b1a3b4e93d548a663` as
 `ab99b42b1836deed1a1d8137e55b3b85205fa007`. The latter was exact public
 `origin/main` when this isolated N2 branch was created.
+
+## Inherited cancellation limitation
+
+A cancellation-resistant `FunctionModel` callback can outlive the worker's first
+cancellation grace interval. The existing worker cancels a second time and then
+waits without a second timeout while retaining its cleanup lease. Accordingly,
+N2 does not claim hard wall-clock termination for such callbacks. This behavior
+is inherited unchanged from the approved worker source (SHA-256
+`a6b990a6a74461f34e7e757a3e6f7426020f8cef8df4cdbaad2a95f2fcd10398`).
+Broad review identified it at PR #4. A separate repair must define safe
+abandonment, fencing and late-accounting settlement before changing this path;
+it is explicitly deferred to preserve this extraction's cancellation semantics.

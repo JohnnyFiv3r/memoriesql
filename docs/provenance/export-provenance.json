@@ -995,7 +995,7 @@
       "classification": "public-authored",
       "license": "Apache-2.0",
       "public_path": "tests/runtime/test_postgres_runtime.py",
-      "public_sha256": "8038d2ad01004add31e292bb73790a89de5d7d57e6aa282e7f5004364a8315a4",
+      "public_sha256": "0b854a4eeb516ba18e2099a87d7041023f5e446c8b862f262a95b85622f4251b",
       "reason": "Public N2 dependency inventory and fictional runtime acceptance."
     },
     {
@@ -1009,7 +1009,7 @@
       "classification": "public-authored",
       "license": "Apache-2.0",
       "public_path": "docs/runtime.md",
-      "public_sha256": "bb35ad60127603a1a2663512edaf42339873f263116ef818dbd6ccd30f89b2f4",
+      "public_sha256": "970b9238c10978b455f8a4c82276a8ab985ec0140bd610fc745d66cdf6c25838",
       "reason": "Public fictional N2 acceptance and runtime scope documentation."
     },
     {

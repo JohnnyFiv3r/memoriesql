@@ -329,6 +329,37 @@ class PostgresRuntime(unittest.TestCase):
                 "authorized",
             )
 
+    def test_scope_revocation_blocks_hydration_and_canonical_apply(self) -> None:
+        command = self.command()
+        accepted = self.accept(command)
+        self.pair_worker()
+        claimed = self.claim()
+        result = self.authored_result(accepted, command, claimed)
+        with self.db.transaction():
+            queue = self.worker_queue()
+            self.assertIsNotNone(
+                queue.hydrate_input(claimed.fence, hydrated_at=datetime.now(UTC))
+            )
+        with self.db.transaction():
+            self.db.execute(
+                "UPDATE memoriesql.access_scopes SET status='revoked' WHERE access_scope_id=%s",
+                (self.scope,),
+            )
+        with self.db.transaction():
+            queue = self.worker_queue()
+            self.assertIsNone(
+                queue.hydrate_input(claimed.fence, hydrated_at=datetime.now(UTC))
+            )
+        with self.assertRaises(psycopg.Error), self.db.transaction():
+            queue = self.worker_queue()
+            queue.record_canonical_result(
+                claimed.fence, result, recorded_at=datetime.now(UTC)
+            )
+        self.assertEqual(
+            self.db.execute("SELECT count(*) FROM memoriesql.bead_versions").fetchone(),
+            (0,),
+        )
+
     def test_cancelled_task_blocks_hydration_retains_settlement(self) -> None:
         from memoriesql.infrastructure.jobs.postgres_semantic_queue import (
             PostgresSemanticTaskQueue,
@@ -532,3 +563,77 @@ class PostgresRuntime(unittest.TestCase):
             self.assertIsNotNone(
                 queue.hydrate_input(reclaimed.fence, hydrated_at=datetime.now(UTC))
             )
+
+    def test_durable_range_replay_and_fold_window_preserve_bytes(self) -> None:
+        from memoriesql.application.capture.contracts import (
+            CaptureSurface,
+            KernelCaptureBinding,
+        )
+        from memoriesql.application.capture.host_protocol import FileIdentity
+        from memoriesql.application.capture.source_range import (
+            SourceRangePolicyReferences,
+            build_capture_source_range_command,
+        )
+        from memoriesql.application.capture.transcript_fold import (
+            DurableTranscriptReadRequest,
+        )
+        from memoriesql.infrastructure.postgres.source_range import (
+            PostgresAuthorizedSourceRangeSession,
+        )
+        from memoriesql.infrastructure.postgres.transcript_fold import (
+            PostgresAuthorizedTranscriptFoldSession,
+        )
+
+        content = b"fictional orchard retained bytes\n"
+        identity = FileIdentity(platform="fictional", device=1, inode=2)
+        command = build_capture_source_range_command(
+            payload=content,
+            binding=KernelCaptureBinding(
+                tenant_id=self.tenant,
+                workspace_id=self.workspace,
+                access_scope_id=self.scope,
+                source_object_id=self.source,
+                expected_source_object_schema_version=1,
+            ),
+            capability_id="orchard.bytes",
+            connector_id="orchard.synthetic",
+            observed_connector_version="1",
+            capture_surface=CaptureSurface.SYNTHETIC,
+            source_revision_key="orchard.range",
+            file_identity=identity,
+            observed_source_format_version="orchard.v1",
+            byte_start=0,
+            checkpoint_key="orchard.bytes",
+            expected_checkpoint_sequence=0,
+            policies=SourceRangePolicyReferences(
+                capture_policy_id="orchard.capture",
+                retention_policy_ref="orchard.retention",
+            ),
+            chunk_size=7,
+        )
+        session = PostgresAuthorizedSourceRangeSession(
+            self.db, credential_sha256=self.secret_hash, workspace_id=self.workspace
+        )
+        first = session.capture(command, recorded_at=self.now)
+        replay = session.capture(command, recorded_at=self.now)
+        self.assertEqual(first.source_range_receipt_id, replay.source_range_receipt_id)
+        self.assertTrue(replay.replayed)
+        fold = PostgresAuthorizedTranscriptFoldSession(
+            self.db, credential_sha256=self.secret_hash, workspace_id=self.workspace
+        )
+        read = fold.read(
+            DurableTranscriptReadRequest(
+                source_object_id=self.source,
+                source_revision_key="orchard.range",
+                file_identity_key=identity.stable_key,
+                byte_start=0,
+                max_bytes=len(content),
+            )
+        )
+        self.assertEqual(read.payload, content)
+        self.assertEqual(read.payload_sha256, hashlib.sha256(content).hexdigest())
+        self.assertEqual(read.byte_end_exclusive, len(content))
+        with self.db.transaction():
+            with self.assertRaisesRegex(RuntimeError, "transaction ownership"):
+                session.capture(command, recorded_at=self.now)
+        self.assertEqual(fold.list_inbox(source_object_id=self.source), ())
