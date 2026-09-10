@@ -28,3 +28,9 @@ receipt meanings remain unchanged. The generated catalog adds one new record
 (50 total); it does not revise a published ID/version. Consumers require a later
 reviewed release and an authorized forward migration before using this reader.
 See [evidence packages](../evidence-packages.md).
+
+Schema 17 adds one new logical-unit-materialization v1 record (51 total) and an
+explicitly unavailable complete-input task kind. SQL 0001–0016 and prior records
+remain byte-for-byte unchanged. Partial-event accounting applies only to the new
+marked path; v1/v2 input limits and meanings remain unchanged. See
+[logical-unit materialization](../logical-unit-materialization.md).

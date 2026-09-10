@@ -65,6 +65,10 @@
     {
       "filename": "0016_complete_input_evidence_packages.sql",
       "sha256": "f8b2cf71fa1b1a2b995f8a0f232ee4330b54bb419b71be0e31804de045253ad1"
+    },
+    {
+      "filename": "0017_logical_unit_materialization.sql",
+      "sha256": "5e0ba134b92ca726743aec971f36343d89cc331ed6a44f55bc7172d707fe1de8"
     }
   ]
 }

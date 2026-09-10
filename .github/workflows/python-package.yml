@@ -26,6 +26,7 @@ jobs:
       - name: Verify registry, catalogs, API, and boundary
         run: |
           python scripts/generate_evidence_package_contract.py --check
+          python scripts/generate_logical_unit_contract.py --check
           python scripts/generate_catalogs.py --check
           python scripts/verify_public_boundary.py
           python scripts/verify_migration_export.py
