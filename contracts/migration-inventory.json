@@ -57,6 +57,10 @@
     {
       "filename": "0014_transcript_span_fold.sql",
       "sha256": "eac7f576c990aa0a827dc400b36e6b18ffba29bdf400a12a0d81f2e6c6bb7c28"
+    },
+    {
+      "filename": "0015_immutable_observation_commands.sql",
+      "sha256": "e6f6d4dd1907917fd415ef0b8bede400e408381f347028ef33417421eb29c639"
     }
   ]
 }

@@ -8,7 +8,10 @@ from memoriesql.infrastructure.postgres.migration_runner import discover_migrati
 
 class HistoricalProfiles(unittest.TestCase):
     def test_exact_historical_allowlist_is_preserved(self) -> None:
-        sql = discover_migrations()[-1].sql
+        stream = discover_migrations()
+        historical = [migration for migration in stream if migration.version == 14]
+        self.assertEqual(len(historical), 1)
+        sql = historical[0].sql
         identifiers = re.findall(
             r"'((?:memoriesql\.)(?:codex-passive|claude-code)[^']*)'", sql
         )
@@ -23,3 +26,13 @@ class HistoricalProfiles(unittest.TestCase):
         self.assertIn(
             "RAISE EXCEPTION 'transcript fold exact turn is unqualified'", sql
         )
+
+        for migration in stream:
+            if migration.version > 14:
+                self.assertEqual(
+                    re.findall(
+                        r"'((?:memoriesql\.)(?:codex-passive|claude-code)[^']*)'",
+                        migration.sql,
+                    ),
+                    [],
+                )

@@ -26,7 +26,7 @@ class PublicBootstrapTests(unittest.TestCase):
         document = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
         project = document["project"]
         self.assertEqual(project["name"], "memoriesql")
-        self.assertEqual(project["version"], "0.0.3")
+        self.assertEqual(project["version"], "0.0.4")
         self.assertEqual(project["requires-python"], ">=3.13,<3.15")
         self.assertEqual(project["license"], "Apache-2.0")
         self.assertIn("Development Status :: 2 - Pre-Alpha", project["classifiers"])
@@ -43,7 +43,7 @@ class PublicBootstrapTests(unittest.TestCase):
     def test_source_version_fallback_matches_numeric_release(self) -> None:
         with patch("importlib.metadata.version", side_effect=PackageNotFoundError):
             namespace = runpy.run_path(str(ROOT / "src/memoriesql/__init__.py"))
-        self.assertEqual(namespace["__version__"], "0.0.3")
+        self.assertEqual(namespace["__version__"], "0.0.4")
 
     def test_registry_is_explicit_complete_and_default_deny(self) -> None:
         records = load_registry()
@@ -126,16 +126,16 @@ class PublicBootstrapTests(unittest.TestCase):
     def test_package_ci_checks_committed_release_hashes(self) -> None:
         workflow = (ROOT / ".github/workflows/python-package.yml").read_text()
         self.assertIn(
-            "python scripts/verify_release.py artifacts build/dist-a", workflow
+            "python scripts/verify_release.py candidate-artifacts build/dist-a", workflow
         )
         self.assertLess(
             workflow.index(
                 "python scripts/inspect_python_distribution.py build/dist-a"
             ),
-            workflow.index("python scripts/verify_release.py artifacts build/dist-a"),
+            workflow.index("python scripts/verify_release.py candidate-artifacts build/dist-a"),
         )
         self.assertLess(
-            workflow.index("python scripts/verify_release.py artifacts build/dist-a"),
+            workflow.index("python scripts/verify_release.py candidate-artifacts build/dist-a"),
             workflow.index("name: Retain exact artifacts and inventory"),
         )
 
@@ -148,7 +148,7 @@ class PublicBootstrapTests(unittest.TestCase):
         )
         self.assertIn("memoriesql==0.0.1a1", older_python)
         self.assertIn(
-            "pip install --no-deps candidates/memoriesql-0.0.3-py3-none-any.whl",
+            "pip install --no-deps candidates/memoriesql-0.0.4-py3-none-any.whl",
             older_python,
         )
 
