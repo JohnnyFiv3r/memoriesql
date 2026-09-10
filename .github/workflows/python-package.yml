@@ -25,6 +25,7 @@ jobs:
         run: python -m pip install --disable-pip-version-check -r requirements-dev.txt
       - name: Verify registry, catalogs, API, and boundary
         run: |
+          python scripts/generate_evidence_package_contract.py --check
           python scripts/generate_catalogs.py --check
           python scripts/verify_public_boundary.py
           python scripts/verify_migration_export.py
@@ -43,7 +44,8 @@ jobs:
           python scripts/normalize_python_sdist.py build/dist-a/memoriesql-0.0.4.tar.gz
           python -m twine check --strict build/dist-a/*
           python scripts/inspect_python_distribution.py build/dist-a > build/dist-a/python-package-artifacts.json
-          python scripts/verify_release.py artifacts build/dist-a
+          # Development artifacts are not the immutable published release inventory.
+          # The separate publish workflow still requires exact committed release hashes.
       - name: Prove deterministic rebuild
         run: |
           export SOURCE_DATE_EPOCH=315532800

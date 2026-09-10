@@ -24,7 +24,7 @@
     },
     {
       "disposition": "include",
-      "expected_record_count": 43,
+      "expected_record_count": 44,
       "filename": "json-schema.json",
       "kind": "json_schema",
       "note": "Provider-neutral capture, host, source-range, transcript-fold, and harness-lifecycle schemas."
@@ -176,6 +176,18 @@
       "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
       "reviewed_spike_record_sha256": "837d3887d806299275360dea6611fe27f30333372ed1978bd581eacef8eb231e",
       "reviewed_spike_source_sha256": "98e67ebaeae7d255b3fd9b65d972b265f1751fa67389f8d59e3b616e087f5861",
+      "version": "1"
+    },
+    {
+      "canonical_payload_sha256": "5c523cf19962efbddbe34009276902d2c8d65efb7f10dc98543912314486a487",
+      "catalog": "json_schema",
+      "classification": "proposed_open_core",
+      "id": "memoriesql.evidence-package.v1",
+      "origin": "public_authored",
+      "package_disposition": "include",
+      "path": "contracts/records/memoriesql-evidence-package-v1.json",
+      "public_sha256": "0a06215f6abd19b181a42cc8f8b6a082284562e6f2e4381689b5d1bed0d2d4a4",
+      "reason": "New neutral evidence inventory contract; no source export.",
       "version": "1"
     },
     {

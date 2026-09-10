@@ -21,3 +21,13 @@ inventoried version-2 observation commands, task definitions and adapter dispatc
 It is public development after extraction: no additional product material is
 exported. The original 14 migrations and 49 preview records remain unchanged.
 See [immutable observations](../immutable-observations.md).
+
+## Public-authored complete-input evidence
+
+The next authorized public slice adds migration 0016, the new explicit
+`memoriesql.evidence-package.v1` registry record and two inventoried runtime modules
+for neutral package contracts and authorized PostgreSQL operations. This is new
+public-owned code and fictional acceptance, not an expanded private extraction.
+Canonical normalized evidence storage, current authorization and receipt ownership
+remain here. Provider parsing, qualification and product composition remain outside
+this repository. See [the contract and bounds](../evidence-packages.md).

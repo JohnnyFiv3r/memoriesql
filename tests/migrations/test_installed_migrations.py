@@ -64,7 +64,7 @@ class InstalledMigrations(unittest.TestCase):
         }
         self.assertIn(Path(runner.__file__).resolve(), owned)
         stream = runner.discover_migrations()
-        self.assertEqual(len(stream), 15)
+        self.assertEqual(len(stream), 16)
         for migration in stream:
             self.assertIn(Path(str(migration.path)).resolve(), owned)
             self.assertEqual(
@@ -100,7 +100,7 @@ class InstalledMigrations(unittest.TestCase):
         self.assertEqual(output.getvalue().strip(), __version__)
         registry = json.loads(Path("public-registry.json").read_text())
         entries = {entry["id"]: entry for entry in iter_contracts()}
-        self.assertEqual(len(entries), 49)
+        self.assertEqual(len(entries), 50)
         for row in registry["records"]:
             payload = json.dumps(
                 entries[row["id"]],
@@ -109,7 +109,10 @@ class InstalledMigrations(unittest.TestCase):
                 ensure_ascii=True,
             ).encode()
             self.assertEqual(
-                hashlib.sha256(payload).hexdigest(), row["reviewed_spike_record_sha256"]
+                hashlib.sha256(payload).hexdigest(),
+                row.get(
+                    "canonical_payload_sha256", row.get("reviewed_spike_record_sha256")
+                ),
             )
 
     def test_clean_creation_schema_and_noop_receipts(self) -> None:
@@ -174,7 +177,7 @@ class InstalledMigrations(unittest.TestCase):
     def test_wrong_bound_downgrade_and_out_of_range_are_atomic(self) -> None:
         self.migrate(0, 14)
         before = self.history()
-        for start, end in ((13, 14), (14, 13), (14, 16), (14, -1)):
+        for start, end in ((13, 14), (14, 13), (14, 17), (14, -1)):
             with (
                 self.subTest(start=start, end=end),
                 self.assertRaises(runner.MigrationError),

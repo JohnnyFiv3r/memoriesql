@@ -1,4 +1,21 @@
-# Owner-controlled 0.0.4 release readiness
+# Release controls and unreleased development
+
+`0.0.4` was published from `b89dec8819a74aca6ae06f4116172f5c964731f7`.
+Its existing tag, artifacts, provenance and committed release inventories remain
+immutable. The readiness record below is historical; its pre-publication availability
+check and pending owner actions do not describe the current release state.
+
+The evidence-package/schema-16 development slice selects no future distribution
+version. Metadata and CI archive filenames still use `0.0.4`, but these development
+artifacts are not the published release. Ordinary branch/PR CI checks their new
+contents, deterministic rebuilds and installed behavior without comparing them to
+immutable published archive hashes. The separate publish workflow retains its exact
+tag, committed release-hash and protected-approval gates; none is weakened or advanced.
+A later separately reviewed release must select a new version and inventory. Never
+replace the existing published inventory to make a development build appear released.
+Product adoption remains gated on that later public release.
+
+# Historical owner-controlled 0.0.4 release readiness
 
 This lane promotes the reviewed `0.0.4` candidate into exact-version repository
 release controls. It does not authorize a merge, tag, upload, consumer deployment,

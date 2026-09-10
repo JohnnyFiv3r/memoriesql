@@ -93,3 +93,18 @@ version-1 receipts replay exactly; an unfinished initial version can complete.
 Legacy accepted-bead revisions fail explicitly after upgrade. Prepare consumers
 for the [version-2 commands](immutable-observations.md) before a separately
 authorized deployment. There is no automatic product upgrade in this package.
+
+## Unreleased schema 16 evidence storage
+
+The installed development inventory now contains 16 resources. Historical schema-15
+instructions above apply to published 0.0.4. This unreleased transition preserves SQL
+0001–0015 exactly and adds only `evidence_packages`, `evidence_package_parts`, their
+immutability/RLS guards and versioned authorized operations. The existing shared
+idempotency ledger supplies receipts. Package rows hold declaration/assembly/seal;
+part rows hold independently bounded normalized content and raw lineage. No raw,
+semantic-task or observation ledger is duplicated. See [the contract](evidence-packages.md).
+
+A future released consumer must explicitly request `migrate(connection,
+expected_current_version=15, target_version=16)` under deployment authority. Neither
+installing a package nor constructing a reader runs migration or selects product
+composition. No deployed migration or consumer upgrade is authorized here.
