@@ -8,7 +8,14 @@ Published `0.0.2` introduced canonical PostgreSQL migrations and the provider-ne
 
 Published `0.0.3` establishes cleanup retention independently of a blocked ordinary heartbeat while retaining ownership of unfinished work.
 
-The unreleased `0.0.4` candidate adds immutable accepted observations and explicit version-2 initial-authoring/correction commands. Corrections create distinct beads with pinned supersession; independent branches and multi-target reconciliation remain valid. Schema 15 preserves historical SQL, payloads and successful receipts, while rejecting legacy updates to accepted meaning. See the [contract and compatibility map](docs/immutable-observations.md). Product adoption requires a separately authorized public release.
+Published `0.0.4` adds immutable accepted observations and explicit version-2 initial-authoring/correction commands. Corrections create distinct beads with pinned supersession; independent branches and multi-target reconciliation remain valid. Schema 15 preserves historical SQL, payloads and successful receipts, while rejecting legacy updates to accepted meaning. See the [contract and compatibility map](docs/immutable-observations.md). Product adoption requires an explicitly pinned release and authorized migration.
+
+The current unreleased development adds one versioned evidence-package contract
+(50 catalog records total), immutable normalized evidence inventories and bounded,
+authorized lossless reads through schema 16. It creates no observations or semantic
+tasks and makes no model-inspection claim. See [evidence packages](docs/evidence-packages.md).
+No future distribution version is selected; development artifacts are not the
+published `0.0.4` release.
 
 ## Preview the catalogs
 
@@ -43,4 +50,4 @@ See [compatibility policy](docs/architecture/compatibility.md) and [repository b
 
 Source code and designated materials are licensed under [Apache License 2.0](LICENSE). The memoriesQL name and banner remain subject to [trademark guidance](TRADEMARKS.md). Contributions use the [Developer Certificate of Origin](CONTRIBUTING.md), not a contributor license agreement.
 
-The repository is public; package publication is a separate owner-approved step. The release workflow is restricted to the prepared runtime tag `v0.0.4`, exact-main-head CI artifacts, and the protected `pypi` environment. See [release controls](docs/releasing.md). Published `0.0.1a1`, `0.0.2` and `0.0.3` stay immutable. This change authorizes no new release.
+The repository is public; package publication is a separate owner-approved step. The release workflow is restricted to the prepared runtime tag `v0.0.4`, exact-main-head CI artifacts, and the protected `pypi` environment. See [release controls](docs/releasing.md). Published `0.0.1a1`, `0.0.2`, `0.0.3` and `0.0.4` stay immutable. This change authorizes no new release.

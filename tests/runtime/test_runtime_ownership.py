@@ -33,7 +33,7 @@ class RuntimeOwnership(unittest.TestCase):
             self.assertEqual(
                 hashlib.sha256(origin.read_bytes()).hexdigest(), row["sha256"]
             )
-        self.assertEqual(len(rows), 32)
+        self.assertEqual(len(rows), 34)
         self.assertEqual(
             distribution.requires,
             ["psycopg[binary]==3.3.3", "pydantic==2.13.3", "pydantic-ai-slim==2.27.0"],

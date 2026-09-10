@@ -146,10 +146,21 @@ late usage and settlement, checking quarantine and eventual complete drainage.
 Existing success, authorization, settlement-failure and late-accounting coverage
 remains part of installed acceptance.
 
-## Immutable observation commands in the unreleased 0.0.4 candidate
+## Immutable observation commands published in 0.0.4
 
 Schema 15 adds explicit initial authorship and distinct-bead corrections. The
 legacy registry remains unchanged; consumers opt into `load_observation_task_registry`
 and its two revision-2 tasks. The canonical sink dispatches typed results through
 the same worker, cancellation/quarantine, accounting and fenced settlement path.
 No executor or scheduler is replaced. See [commands, caller migration and acceptance](immutable-observations.md).
+
+## Unreleased evidence-package reader
+
+`memoriesql.application.evidence_packages` and
+`memoriesql.infrastructure.postgres.evidence_packages` add the explicitly inventoried
+version-1 storage/reader path. `PostgresEvidencePackages` owns short transactions;
+credential/workspace composition remains trusted caller input. Its create/append/seal
+commands and inspect/inventory/read operations reuse canonical raw evidence,
+authorization and receipts. They do not integrate the semantic executor. See
+[evidence packages](evidence-packages.md) for qualified-producer responsibilities,
+operation bounds, overflow behavior and the later trusted exposure/apply boundary.

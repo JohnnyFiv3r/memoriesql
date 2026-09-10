@@ -1,5 +1,4 @@
 {
-  "scope": "Canonical migration substrate only",
   "exports": [
     {
       "public_path": "migrations/0001_create_schema_history.sql",
@@ -103,10 +102,10 @@
       "public_path": "src/memoriesql/infrastructure/postgres/migration_runner.py",
       "source_sha256": "10841bd32cad98d969faf588c5eeff862a4b1dabefc12a4390f72341567c6b22",
       "disposition": "public-forward",
-      "reason": "Public forward support for the explicit 15-resource inventory; historical runner contract and SQL unchanged.",
-      "public_sha256": "29930b769cc005495d8247669c47b153ae9314f3bc5f3c5708117c00808c0184",
-      "base_public_commit": "d4e409d4daa4285ce6868274e6bb55593aa209f1",
-      "base_public_sha256": "941626a5b55a877bdafc97fbd35468a6013cc8b4b034f8f800b8ebd2c405fd5f"
+      "reason": "Public forward support for the explicit 16-resource inventory; historical runner contract and SQL unchanged.",
+      "public_sha256": "286d38721933a7d8684a22a860d7d21afc7a78749321d308740c5107b1c7e0d9",
+      "base_public_commit": "b89dec8819a74aca6ae06f4116172f5c964731f7",
+      "base_public_sha256": "29930b769cc005495d8247669c47b153ae9314f3bc5f3c5708117c00808c0184"
     },
     {
       "public_path": "src/memoriesql/infrastructure/postgres/schema_inspection.py",
@@ -120,15 +119,22 @@
       "disposition": "public",
       "reason": "Public-authored forward immutable semantics, occurrence identity, explicit correction lineage and versioned fenced commands. No further extraction.",
       "public_sha256": "e6f6d4dd1907917fd415ef0b8bede400e408381f347028ef33417421eb29c639"
+    },
+    {
+      "disposition": "public",
+      "public_path": "migrations/0016_complete_input_evidence_packages.sql",
+      "public_sha256": "f8b2cf71fa1b1a2b995f8a0f232ee4330b54bb419b71be0e31804de045253ad1",
+      "reason": "Public-authored forward evidence package storage and bounded authorized reader; historical SQL unchanged."
     }
   ],
+  "scope": "Canonical migration substrate only",
   "test_material": [
     {
-      "public_path": "tests/fixtures/schema_snapshot.json",
-      "source_sha256": "fda1967afc4655b42e0ae8687af48f0cd7d6ade39e1936dee4be8cee9d6ecce2",
-      "public_sha256": "fda1967afc4655b42e0ae8687af48f0cd7d6ade39e1936dee4be8cee9d6ecce2",
       "disposition": "copy",
-      "reason": "Approved schema-only parity fixture; not installed runtime data."
+      "public_path": "tests/fixtures/schema_snapshot.json",
+      "public_sha256": "fda1967afc4655b42e0ae8687af48f0cd7d6ade39e1936dee4be8cee9d6ecce2",
+      "reason": "Approved schema-only parity fixture; not installed runtime data.",
+      "source_sha256": "fda1967afc4655b42e0ae8687af48f0cd7d6ade39e1936dee4be8cee9d6ecce2"
     }
   ]
 }

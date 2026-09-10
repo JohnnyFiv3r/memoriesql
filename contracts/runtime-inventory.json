@@ -229,6 +229,18 @@
       "path": "src/memoriesql/application/observation_tasks.py",
       "reason": "Opt-in source-controlled initial/correction task definitions using unchanged executor mechanics and budgets.",
       "sha256": "64b07fba5dd3931e18930ee7bf441956556c9e5d0eefbdc268b3e2480de53f66"
+    },
+    {
+      "disposition": "public",
+      "path": "src/memoriesql/application/evidence_packages.py",
+      "reason": "Public-authored versioned evidence inventory and bounded reader contracts; no private source export.",
+      "sha256": "7d66cf239483e54ae833c9b894ba847b5abf670a17a6ef8046b78149daec1400"
+    },
+    {
+      "disposition": "public",
+      "path": "src/memoriesql/infrastructure/postgres/evidence_packages.py",
+      "reason": "Public-authored currently authorized short transactions for evidence package storage and reads; no semantic execution.",
+      "sha256": "382d507b0b7b5e495ff42a3f463d4344cc573ed505bf5e0436d29450199e362d"
     }
   ]
 }

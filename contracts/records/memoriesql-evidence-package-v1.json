@@ -1,0 +1,1892 @@
+{
+  "contract": {
+    "creates_observations_or_tasks": false,
+    "limits": {
+      "command_json_bytes": 524288,
+      "inventory_page_parts": 4,
+      "lineage_slices_per_part": 16,
+      "lock_timeout_ms": 500,
+      "metadata_json_bytes": 8192,
+      "operation_timeout_ms": 2000,
+      "package_utf8_bytes": 16777216,
+      "part_utf8_bytes": 65536,
+      "parts": 256,
+      "read_characters": 1024,
+      "response_json_bytes": 65536,
+      "source_bytes_per_append": 262144
+    },
+    "schemas": {
+      "AppendEvidencePart": {
+        "$defs": {
+          "EvidencePart": {
+            "additionalProperties": false,
+            "properties": {
+              "component_key": {
+                "maxLength": 256,
+                "minLength": 1,
+                "title": "Component Key",
+                "type": "string"
+              },
+              "component_offset": {
+                "default": 0,
+                "minimum": 0,
+                "title": "Component Offset",
+                "type": "integer"
+              },
+              "content": {
+                "maxLength": 65536,
+                "minLength": 1,
+                "title": "Content",
+                "type": "string"
+              },
+              "content_sha256": {
+                "pattern": "^[a-f0-9]{64}$",
+                "title": "Content Sha256",
+                "type": "string"
+              },
+              "derivation": {
+                "enum": [
+                  "identity_utf8",
+                  "producer_normalized"
+                ],
+                "title": "Derivation",
+                "type": "string"
+              },
+              "kind": {
+                "maxLength": 64,
+                "minLength": 1,
+                "title": "Kind",
+                "type": "string"
+              },
+              "lineage": {
+                "items": {
+                  "$ref": "#/$defs/RawEvidenceSlice"
+                },
+                "maxItems": 16,
+                "minItems": 1,
+                "title": "Lineage",
+                "type": "array"
+              },
+              "native": {
+                "$ref": "#/$defs/NativeFacts"
+              },
+              "ordinal": {
+                "exclusiveMaximum": 256,
+                "minimum": 0,
+                "title": "Ordinal",
+                "type": "integer"
+              },
+              "parent_component_key": {
+                "anyOf": [
+                  {
+                    "maxLength": 256,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Parent Component Key"
+              },
+              "part_id": {
+                "format": "uuid",
+                "title": "Part Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "part_id",
+              "ordinal",
+              "component_key",
+              "kind",
+              "native",
+              "derivation",
+              "lineage",
+              "content",
+              "content_sha256"
+            ],
+            "title": "EvidencePart",
+            "type": "object"
+          },
+          "NativeFacts": {
+            "additionalProperties": false,
+            "description": "Null means unknown, never a fabricated native identifier.",
+            "properties": {
+              "branch_native_id": {
+                "anyOf": [
+                  {
+                    "maxLength": 256,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Branch Native Id"
+              },
+              "native_id": {
+                "anyOf": [
+                  {
+                    "maxLength": 256,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Native Id"
+              },
+              "occurred_at": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Occurred At"
+              },
+              "occurred_at_raw": {
+                "anyOf": [
+                  {
+                    "maxLength": 256,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Occurred At Raw"
+              },
+              "parent_native_id": {
+                "anyOf": [
+                  {
+                    "maxLength": 256,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Parent Native Id"
+              },
+              "participant_native_id": {
+                "anyOf": [
+                  {
+                    "maxLength": 256,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Participant Native Id"
+              },
+              "role": {
+                "anyOf": [
+                  {
+                    "maxLength": 128,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Role"
+              },
+              "session_native_id": {
+                "anyOf": [
+                  {
+                    "maxLength": 256,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Session Native Id"
+              },
+              "source_order": {
+                "anyOf": [
+                  {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Source Order"
+              },
+              "time_precision": {
+                "anyOf": [
+                  {
+                    "maxLength": 64,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Time Precision"
+              }
+            },
+            "title": "NativeFacts",
+            "type": "object"
+          },
+          "RawEvidenceSlice": {
+            "additionalProperties": false,
+            "properties": {
+              "byte_end_exclusive": {
+                "exclusiveMinimum": 0,
+                "title": "Byte End Exclusive",
+                "type": "integer"
+              },
+              "byte_start": {
+                "minimum": 0,
+                "title": "Byte Start",
+                "type": "integer"
+              },
+              "fold_outcome_ordinal": {
+                "anyOf": [
+                  {
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Fold Outcome Ordinal"
+              },
+              "fold_receipt_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Fold Receipt Id"
+              },
+              "source_bytes_sha256": {
+                "pattern": "^[a-f0-9]{64}$",
+                "title": "Source Bytes Sha256",
+                "type": "string"
+              },
+              "source_range_receipt_id": {
+                "format": "uuid",
+                "title": "Source Range Receipt Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "source_range_receipt_id",
+              "byte_start",
+              "byte_end_exclusive",
+              "source_bytes_sha256"
+            ],
+            "title": "RawEvidenceSlice",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "contract_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Contract Version",
+            "type": "integer"
+          },
+          "idempotency_key": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Idempotency Key",
+            "type": "string"
+          },
+          "operation": {
+            "const": "append",
+            "default": "append",
+            "title": "Operation",
+            "type": "string"
+          },
+          "package_id": {
+            "format": "uuid",
+            "title": "Package Id",
+            "type": "string"
+          },
+          "part": {
+            "$ref": "#/$defs/EvidencePart"
+          }
+        },
+        "required": [
+          "idempotency_key",
+          "package_id",
+          "part"
+        ],
+        "title": "AppendEvidencePart",
+        "type": "object"
+      },
+      "CreateEvidencePackage": {
+        "$defs": {
+          "NativeFacts": {
+            "additionalProperties": false,
+            "description": "Null means unknown, never a fabricated native identifier.",
+            "properties": {
+              "branch_native_id": {
+                "anyOf": [
+                  {
+                    "maxLength": 256,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Branch Native Id"
+              },
+              "native_id": {
+                "anyOf": [
+                  {
+                    "maxLength": 256,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Native Id"
+              },
+              "occurred_at": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Occurred At"
+              },
+              "occurred_at_raw": {
+                "anyOf": [
+                  {
+                    "maxLength": 256,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Occurred At Raw"
+              },
+              "parent_native_id": {
+                "anyOf": [
+                  {
+                    "maxLength": 256,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Parent Native Id"
+              },
+              "participant_native_id": {
+                "anyOf": [
+                  {
+                    "maxLength": 256,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Participant Native Id"
+              },
+              "role": {
+                "anyOf": [
+                  {
+                    "maxLength": 128,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Role"
+              },
+              "session_native_id": {
+                "anyOf": [
+                  {
+                    "maxLength": 256,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Session Native Id"
+              },
+              "source_order": {
+                "anyOf": [
+                  {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Source Order"
+              },
+              "time_precision": {
+                "anyOf": [
+                  {
+                    "maxLength": 64,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Time Precision"
+              }
+            },
+            "title": "NativeFacts",
+            "type": "object"
+          },
+          "PackageDeclaration": {
+            "additionalProperties": false,
+            "properties": {
+              "expected_characters": {
+                "maximum": 16777216,
+                "minimum": 1,
+                "title": "Expected Characters",
+                "type": "integer"
+              },
+              "expected_inventory_sha256": {
+                "pattern": "^[a-f0-9]{64}$",
+                "title": "Expected Inventory Sha256",
+                "type": "string"
+              },
+              "expected_parts": {
+                "maximum": 256,
+                "minimum": 1,
+                "title": "Expected Parts",
+                "type": "integer"
+              },
+              "expected_utf8_bytes": {
+                "maximum": 16777216,
+                "minimum": 1,
+                "title": "Expected Utf8 Bytes",
+                "type": "integer"
+              },
+              "native": {
+                "$ref": "#/$defs/NativeFacts"
+              },
+              "normalization_policy_version": {
+                "maxLength": 128,
+                "minLength": 1,
+                "title": "Normalization Policy Version",
+                "type": "string"
+              },
+              "occurrence_identity_basis": {
+                "enum": [
+                  "native",
+                  "producer_assigned"
+                ],
+                "title": "Occurrence Identity Basis",
+                "type": "string"
+              },
+              "occurrence_key": {
+                "maxLength": 256,
+                "minLength": 1,
+                "title": "Occurrence Key",
+                "type": "string"
+              },
+              "package_revision": {
+                "default": 1,
+                "minimum": 1,
+                "title": "Package Revision",
+                "type": "integer"
+              },
+              "qualification": {
+                "$ref": "#/$defs/SourceQualification"
+              },
+              "source_object_id": {
+                "format": "uuid",
+                "title": "Source Object Id",
+                "type": "string"
+              },
+              "source_revision_key": {
+                "maxLength": 512,
+                "minLength": 1,
+                "title": "Source Revision Key",
+                "type": "string"
+              }
+            },
+            "required": [
+              "source_object_id",
+              "source_revision_key",
+              "occurrence_key",
+              "occurrence_identity_basis",
+              "normalization_policy_version",
+              "native",
+              "qualification",
+              "expected_parts",
+              "expected_characters",
+              "expected_utf8_bytes",
+              "expected_inventory_sha256"
+            ],
+            "title": "PackageDeclaration",
+            "type": "object"
+          },
+          "SourceQualification": {
+            "additionalProperties": false,
+            "description": "Producer assertions. Core does not qualify source formats or semantics.",
+            "properties": {
+              "boundary": {
+                "enum": [
+                  "qualified_native_unit",
+                  "unresolved"
+                ],
+                "title": "Boundary",
+                "type": "string"
+              },
+              "boundary_basis": {
+                "maxLength": 512,
+                "minLength": 1,
+                "title": "Boundary Basis",
+                "type": "string"
+              },
+              "exclusions": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 16,
+                "title": "Exclusions",
+                "type": "array"
+              },
+              "normalized_input": {
+                "enum": [
+                  "complete",
+                  "incomplete"
+                ],
+                "title": "Normalized Input",
+                "type": "string"
+              },
+              "physical_records": {
+                "enum": [
+                  "complete",
+                  "pending_tail"
+                ],
+                "title": "Physical Records",
+                "type": "string"
+              },
+              "qualification_ref": {
+                "maxLength": 256,
+                "minLength": 1,
+                "title": "Qualification Ref",
+                "type": "string"
+              },
+              "source_completeness": {
+                "enum": [
+                  "producer_attested",
+                  "unresolved"
+                ],
+                "title": "Source Completeness",
+                "type": "string"
+              },
+              "topology": {
+                "enum": [
+                  "known",
+                  "partially_known",
+                  "unknown"
+                ],
+                "title": "Topology",
+                "type": "string"
+              },
+              "unresolved_coverage": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 16,
+                "title": "Unresolved Coverage",
+                "type": "array"
+              }
+            },
+            "required": [
+              "qualification_ref",
+              "boundary",
+              "boundary_basis",
+              "physical_records",
+              "topology",
+              "normalized_input",
+              "source_completeness"
+            ],
+            "title": "SourceQualification",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "contract_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Contract Version",
+            "type": "integer"
+          },
+          "declaration": {
+            "$ref": "#/$defs/PackageDeclaration"
+          },
+          "idempotency_key": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Idempotency Key",
+            "type": "string"
+          },
+          "operation": {
+            "const": "create",
+            "default": "create",
+            "title": "Operation",
+            "type": "string"
+          }
+        },
+        "required": [
+          "idempotency_key",
+          "declaration"
+        ],
+        "title": "CreateEvidencePackage",
+        "type": "object"
+      },
+      "EvidencePartPage": {
+        "$defs": {
+          "EvidenceContinuation": {
+            "additionalProperties": false,
+            "properties": {
+              "inventory_sha256": {
+                "pattern": "^[a-f0-9]{64}$",
+                "title": "Inventory Sha256",
+                "type": "string"
+              },
+              "package_id": {
+                "format": "uuid",
+                "title": "Package Id",
+                "type": "string"
+              },
+              "part_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Part Id"
+              },
+              "position": {
+                "minimum": 0,
+                "title": "Position",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "package_id",
+              "inventory_sha256",
+              "position"
+            ],
+            "title": "EvidenceContinuation",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "character_end_exclusive": {
+            "title": "Character End Exclusive",
+            "type": "integer"
+          },
+          "character_start": {
+            "title": "Character Start",
+            "type": "integer"
+          },
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "content_sha256": {
+            "title": "Content Sha256",
+            "type": "string"
+          },
+          "continuation": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/EvidenceContinuation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "inventory_sha256": {
+            "title": "Inventory Sha256",
+            "type": "string"
+          },
+          "package_id": {
+            "format": "uuid",
+            "title": "Package Id",
+            "type": "string"
+          },
+          "part_id": {
+            "format": "uuid",
+            "title": "Part Id",
+            "type": "string"
+          },
+          "part_sha256": {
+            "title": "Part Sha256",
+            "type": "string"
+          },
+          "terminal": {
+            "title": "Terminal",
+            "type": "boolean"
+          },
+          "utf8_bytes": {
+            "title": "Utf8 Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "package_id",
+          "inventory_sha256",
+          "part_id",
+          "part_sha256",
+          "character_start",
+          "character_end_exclusive",
+          "content",
+          "content_sha256",
+          "utf8_bytes",
+          "continuation",
+          "terminal"
+        ],
+        "title": "EvidencePartPage",
+        "type": "object"
+      },
+      "InspectEvidencePackage": {
+        "additionalProperties": false,
+        "properties": {
+          "contract_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Contract Version",
+            "type": "integer"
+          },
+          "operation": {
+            "const": "inspect",
+            "default": "inspect",
+            "title": "Operation",
+            "type": "string"
+          },
+          "package_id": {
+            "format": "uuid",
+            "title": "Package Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "package_id"
+        ],
+        "title": "InspectEvidencePackage",
+        "type": "object"
+      },
+      "InventoryPage": {
+        "$defs": {
+          "EvidenceContinuation": {
+            "additionalProperties": false,
+            "properties": {
+              "inventory_sha256": {
+                "pattern": "^[a-f0-9]{64}$",
+                "title": "Inventory Sha256",
+                "type": "string"
+              },
+              "package_id": {
+                "format": "uuid",
+                "title": "Package Id",
+                "type": "string"
+              },
+              "part_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Part Id"
+              },
+              "position": {
+                "minimum": 0,
+                "title": "Position",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "package_id",
+              "inventory_sha256",
+              "position"
+            ],
+            "title": "EvidenceContinuation",
+            "type": "object"
+          },
+          "EvidenceInventoryEntry": {
+            "additionalProperties": false,
+            "properties": {
+              "characters": {
+                "maximum": 65536,
+                "minimum": 1,
+                "title": "Characters",
+                "type": "integer"
+              },
+              "component_key": {
+                "maxLength": 256,
+                "minLength": 1,
+                "title": "Component Key",
+                "type": "string"
+              },
+              "component_offset": {
+                "minimum": 0,
+                "title": "Component Offset",
+                "type": "integer"
+              },
+              "content_sha256": {
+                "pattern": "^[a-f0-9]{64}$",
+                "title": "Content Sha256",
+                "type": "string"
+              },
+              "derivation": {
+                "enum": [
+                  "identity_utf8",
+                  "producer_normalized"
+                ],
+                "title": "Derivation",
+                "type": "string"
+              },
+              "kind": {
+                "maxLength": 64,
+                "minLength": 1,
+                "title": "Kind",
+                "type": "string"
+              },
+              "lineage": {
+                "items": {
+                  "$ref": "#/$defs/RawEvidenceSlice"
+                },
+                "maxItems": 16,
+                "minItems": 1,
+                "title": "Lineage",
+                "type": "array"
+              },
+              "native": {
+                "$ref": "#/$defs/NativeFacts"
+              },
+              "ordinal": {
+                "exclusiveMaximum": 256,
+                "minimum": 0,
+                "title": "Ordinal",
+                "type": "integer"
+              },
+              "parent_component_key": {
+                "anyOf": [
+                  {
+                    "maxLength": 256,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Parent Component Key"
+              },
+              "part_id": {
+                "format": "uuid",
+                "title": "Part Id",
+                "type": "string"
+              },
+              "utf8_bytes": {
+                "maximum": 65536,
+                "minimum": 1,
+                "title": "Utf8 Bytes",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "part_id",
+              "ordinal",
+              "component_key",
+              "component_offset",
+              "parent_component_key",
+              "kind",
+              "native",
+              "derivation",
+              "lineage",
+              "content_sha256",
+              "characters",
+              "utf8_bytes"
+            ],
+            "title": "EvidenceInventoryEntry",
+            "type": "object"
+          },
+          "NativeFacts": {
+            "additionalProperties": false,
+            "description": "Null means unknown, never a fabricated native identifier.",
+            "properties": {
+              "branch_native_id": {
+                "anyOf": [
+                  {
+                    "maxLength": 256,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Branch Native Id"
+              },
+              "native_id": {
+                "anyOf": [
+                  {
+                    "maxLength": 256,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Native Id"
+              },
+              "occurred_at": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Occurred At"
+              },
+              "occurred_at_raw": {
+                "anyOf": [
+                  {
+                    "maxLength": 256,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Occurred At Raw"
+              },
+              "parent_native_id": {
+                "anyOf": [
+                  {
+                    "maxLength": 256,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Parent Native Id"
+              },
+              "participant_native_id": {
+                "anyOf": [
+                  {
+                    "maxLength": 256,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Participant Native Id"
+              },
+              "role": {
+                "anyOf": [
+                  {
+                    "maxLength": 128,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Role"
+              },
+              "session_native_id": {
+                "anyOf": [
+                  {
+                    "maxLength": 256,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Session Native Id"
+              },
+              "source_order": {
+                "anyOf": [
+                  {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Source Order"
+              },
+              "time_precision": {
+                "anyOf": [
+                  {
+                    "maxLength": 64,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Time Precision"
+              }
+            },
+            "title": "NativeFacts",
+            "type": "object"
+          },
+          "RawEvidenceSlice": {
+            "additionalProperties": false,
+            "properties": {
+              "byte_end_exclusive": {
+                "exclusiveMinimum": 0,
+                "title": "Byte End Exclusive",
+                "type": "integer"
+              },
+              "byte_start": {
+                "minimum": 0,
+                "title": "Byte Start",
+                "type": "integer"
+              },
+              "fold_outcome_ordinal": {
+                "anyOf": [
+                  {
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Fold Outcome Ordinal"
+              },
+              "fold_receipt_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Fold Receipt Id"
+              },
+              "source_bytes_sha256": {
+                "pattern": "^[a-f0-9]{64}$",
+                "title": "Source Bytes Sha256",
+                "type": "string"
+              },
+              "source_range_receipt_id": {
+                "format": "uuid",
+                "title": "Source Range Receipt Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "source_range_receipt_id",
+              "byte_start",
+              "byte_end_exclusive",
+              "source_bytes_sha256"
+            ],
+            "title": "RawEvidenceSlice",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "continuation": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/EvidenceContinuation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/$defs/EvidenceInventoryEntry"
+            },
+            "maxItems": 4,
+            "minItems": 1,
+            "title": "Entries",
+            "type": "array"
+          },
+          "inventory_sha256": {
+            "title": "Inventory Sha256",
+            "type": "string"
+          },
+          "package_id": {
+            "format": "uuid",
+            "title": "Package Id",
+            "type": "string"
+          },
+          "terminal": {
+            "title": "Terminal",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "package_id",
+          "inventory_sha256",
+          "entries",
+          "continuation",
+          "terminal"
+        ],
+        "title": "InventoryPage",
+        "type": "object"
+      },
+      "PackageReceipt": {
+        "additionalProperties": false,
+        "properties": {
+          "already_exists": {
+            "title": "Already Exists",
+            "type": "boolean"
+          },
+          "appended_parts": {
+            "title": "Appended Parts",
+            "type": "integer"
+          },
+          "contract_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Contract Version",
+            "type": "integer"
+          },
+          "idempotency_receipt_id": {
+            "format": "uuid",
+            "title": "Idempotency Receipt Id",
+            "type": "string"
+          },
+          "operation": {
+            "enum": [
+              "create",
+              "append",
+              "seal"
+            ],
+            "title": "Operation",
+            "type": "string"
+          },
+          "package_id": {
+            "format": "uuid",
+            "title": "Package Id",
+            "type": "string"
+          },
+          "replayed": {
+            "title": "Replayed",
+            "type": "boolean"
+          },
+          "sealed": {
+            "title": "Sealed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "package_id",
+          "idempotency_receipt_id",
+          "operation",
+          "replayed",
+          "already_exists",
+          "sealed",
+          "appended_parts"
+        ],
+        "title": "PackageReceipt",
+        "type": "object"
+      },
+      "PackageStatus": {
+        "$defs": {
+          "NativeFacts": {
+            "additionalProperties": false,
+            "description": "Null means unknown, never a fabricated native identifier.",
+            "properties": {
+              "branch_native_id": {
+                "anyOf": [
+                  {
+                    "maxLength": 256,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Branch Native Id"
+              },
+              "native_id": {
+                "anyOf": [
+                  {
+                    "maxLength": 256,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Native Id"
+              },
+              "occurred_at": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Occurred At"
+              },
+              "occurred_at_raw": {
+                "anyOf": [
+                  {
+                    "maxLength": 256,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Occurred At Raw"
+              },
+              "parent_native_id": {
+                "anyOf": [
+                  {
+                    "maxLength": 256,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Parent Native Id"
+              },
+              "participant_native_id": {
+                "anyOf": [
+                  {
+                    "maxLength": 256,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Participant Native Id"
+              },
+              "role": {
+                "anyOf": [
+                  {
+                    "maxLength": 128,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Role"
+              },
+              "session_native_id": {
+                "anyOf": [
+                  {
+                    "maxLength": 256,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Session Native Id"
+              },
+              "source_order": {
+                "anyOf": [
+                  {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Source Order"
+              },
+              "time_precision": {
+                "anyOf": [
+                  {
+                    "maxLength": 64,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Time Precision"
+              }
+            },
+            "title": "NativeFacts",
+            "type": "object"
+          },
+          "PackageDeclaration": {
+            "additionalProperties": false,
+            "properties": {
+              "expected_characters": {
+                "maximum": 16777216,
+                "minimum": 1,
+                "title": "Expected Characters",
+                "type": "integer"
+              },
+              "expected_inventory_sha256": {
+                "pattern": "^[a-f0-9]{64}$",
+                "title": "Expected Inventory Sha256",
+                "type": "string"
+              },
+              "expected_parts": {
+                "maximum": 256,
+                "minimum": 1,
+                "title": "Expected Parts",
+                "type": "integer"
+              },
+              "expected_utf8_bytes": {
+                "maximum": 16777216,
+                "minimum": 1,
+                "title": "Expected Utf8 Bytes",
+                "type": "integer"
+              },
+              "native": {
+                "$ref": "#/$defs/NativeFacts"
+              },
+              "normalization_policy_version": {
+                "maxLength": 128,
+                "minLength": 1,
+                "title": "Normalization Policy Version",
+                "type": "string"
+              },
+              "occurrence_identity_basis": {
+                "enum": [
+                  "native",
+                  "producer_assigned"
+                ],
+                "title": "Occurrence Identity Basis",
+                "type": "string"
+              },
+              "occurrence_key": {
+                "maxLength": 256,
+                "minLength": 1,
+                "title": "Occurrence Key",
+                "type": "string"
+              },
+              "package_revision": {
+                "default": 1,
+                "minimum": 1,
+                "title": "Package Revision",
+                "type": "integer"
+              },
+              "qualification": {
+                "$ref": "#/$defs/SourceQualification"
+              },
+              "source_object_id": {
+                "format": "uuid",
+                "title": "Source Object Id",
+                "type": "string"
+              },
+              "source_revision_key": {
+                "maxLength": 512,
+                "minLength": 1,
+                "title": "Source Revision Key",
+                "type": "string"
+              }
+            },
+            "required": [
+              "source_object_id",
+              "source_revision_key",
+              "occurrence_key",
+              "occurrence_identity_basis",
+              "normalization_policy_version",
+              "native",
+              "qualification",
+              "expected_parts",
+              "expected_characters",
+              "expected_utf8_bytes",
+              "expected_inventory_sha256"
+            ],
+            "title": "PackageDeclaration",
+            "type": "object"
+          },
+          "SourceQualification": {
+            "additionalProperties": false,
+            "description": "Producer assertions. Core does not qualify source formats or semantics.",
+            "properties": {
+              "boundary": {
+                "enum": [
+                  "qualified_native_unit",
+                  "unresolved"
+                ],
+                "title": "Boundary",
+                "type": "string"
+              },
+              "boundary_basis": {
+                "maxLength": 512,
+                "minLength": 1,
+                "title": "Boundary Basis",
+                "type": "string"
+              },
+              "exclusions": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 16,
+                "title": "Exclusions",
+                "type": "array"
+              },
+              "normalized_input": {
+                "enum": [
+                  "complete",
+                  "incomplete"
+                ],
+                "title": "Normalized Input",
+                "type": "string"
+              },
+              "physical_records": {
+                "enum": [
+                  "complete",
+                  "pending_tail"
+                ],
+                "title": "Physical Records",
+                "type": "string"
+              },
+              "qualification_ref": {
+                "maxLength": 256,
+                "minLength": 1,
+                "title": "Qualification Ref",
+                "type": "string"
+              },
+              "source_completeness": {
+                "enum": [
+                  "producer_attested",
+                  "unresolved"
+                ],
+                "title": "Source Completeness",
+                "type": "string"
+              },
+              "topology": {
+                "enum": [
+                  "known",
+                  "partially_known",
+                  "unknown"
+                ],
+                "title": "Topology",
+                "type": "string"
+              },
+              "unresolved_coverage": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 16,
+                "title": "Unresolved Coverage",
+                "type": "array"
+              }
+            },
+            "required": [
+              "qualification_ref",
+              "boundary",
+              "boundary_basis",
+              "physical_records",
+              "topology",
+              "normalized_input",
+              "source_completeness"
+            ],
+            "title": "SourceQualification",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "appended_characters": {
+            "title": "Appended Characters",
+            "type": "integer"
+          },
+          "appended_parts": {
+            "title": "Appended Parts",
+            "type": "integer"
+          },
+          "appended_utf8_bytes": {
+            "title": "Appended Utf8 Bytes",
+            "type": "integer"
+          },
+          "currently_authorized": {
+            "const": true,
+            "default": true,
+            "title": "Currently Authorized",
+            "type": "boolean"
+          },
+          "declaration": {
+            "$ref": "#/$defs/PackageDeclaration"
+          },
+          "independently_proven_source_complete": {
+            "const": false,
+            "default": false,
+            "title": "Independently Proven Source Complete",
+            "type": "boolean"
+          },
+          "inventory_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inventory Sha256"
+          },
+          "package_id": {
+            "format": "uuid",
+            "title": "Package Id",
+            "type": "string"
+          },
+          "producer_principal_id": {
+            "format": "uuid",
+            "title": "Producer Principal Id",
+            "type": "string"
+          },
+          "readiness": {
+            "enum": [
+              "assembling",
+              "pending_source_qualification",
+              "ready_producer_attested"
+            ],
+            "title": "Readiness",
+            "type": "string"
+          },
+          "sealed": {
+            "title": "Sealed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "package_id",
+          "declaration",
+          "producer_principal_id",
+          "appended_parts",
+          "appended_characters",
+          "appended_utf8_bytes",
+          "sealed",
+          "inventory_sha256",
+          "readiness"
+        ],
+        "title": "PackageStatus",
+        "type": "object"
+      },
+      "PageEvidenceInventory": {
+        "$defs": {
+          "EvidenceContinuation": {
+            "additionalProperties": false,
+            "properties": {
+              "inventory_sha256": {
+                "pattern": "^[a-f0-9]{64}$",
+                "title": "Inventory Sha256",
+                "type": "string"
+              },
+              "package_id": {
+                "format": "uuid",
+                "title": "Package Id",
+                "type": "string"
+              },
+              "part_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Part Id"
+              },
+              "position": {
+                "minimum": 0,
+                "title": "Position",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "package_id",
+              "inventory_sha256",
+              "position"
+            ],
+            "title": "EvidenceContinuation",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "continuation": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/EvidenceContinuation"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "contract_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Contract Version",
+            "type": "integer"
+          },
+          "limit": {
+            "default": 4,
+            "maximum": 4,
+            "minimum": 1,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "operation": {
+            "const": "inventory",
+            "default": "inventory",
+            "title": "Operation",
+            "type": "string"
+          },
+          "package_id": {
+            "format": "uuid",
+            "title": "Package Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "package_id"
+        ],
+        "title": "PageEvidenceInventory",
+        "type": "object"
+      },
+      "ReadEvidencePart": {
+        "$defs": {
+          "EvidenceContinuation": {
+            "additionalProperties": false,
+            "properties": {
+              "inventory_sha256": {
+                "pattern": "^[a-f0-9]{64}$",
+                "title": "Inventory Sha256",
+                "type": "string"
+              },
+              "package_id": {
+                "format": "uuid",
+                "title": "Package Id",
+                "type": "string"
+              },
+              "part_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Part Id"
+              },
+              "position": {
+                "minimum": 0,
+                "title": "Position",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "package_id",
+              "inventory_sha256",
+              "position"
+            ],
+            "title": "EvidenceContinuation",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "continuation": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/EvidenceContinuation"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "contract_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Contract Version",
+            "type": "integer"
+          },
+          "max_characters": {
+            "default": 1024,
+            "maximum": 1024,
+            "minimum": 1,
+            "title": "Max Characters",
+            "type": "integer"
+          },
+          "operation": {
+            "const": "read",
+            "default": "read",
+            "title": "Operation",
+            "type": "string"
+          },
+          "package_id": {
+            "format": "uuid",
+            "title": "Package Id",
+            "type": "string"
+          },
+          "part_id": {
+            "format": "uuid",
+            "title": "Part Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "package_id",
+          "part_id"
+        ],
+        "title": "ReadEvidencePart",
+        "type": "object"
+      },
+      "SealEvidencePackage": {
+        "additionalProperties": false,
+        "properties": {
+          "contract_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Contract Version",
+            "type": "integer"
+          },
+          "idempotency_key": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Idempotency Key",
+            "type": "string"
+          },
+          "operation": {
+            "const": "seal",
+            "default": "seal",
+            "title": "Operation",
+            "type": "string"
+          },
+          "package_id": {
+            "format": "uuid",
+            "title": "Package Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "idempotency_key",
+          "package_id"
+        ],
+        "title": "SealEvidencePackage",
+        "type": "object"
+      }
+    },
+    "server_reads_prove_author_exposure": false,
+    "source_completeness_independently_proven": false
+  },
+  "id": "memoriesql.evidence-package.v1",
+  "kind": "json_schema",
+  "status": "available",
+  "summary": "Immutable evidence inventories and bounded authorized reads; source completeness remains producer-attested, with no semantic execution.",
+  "version": "1"
+}

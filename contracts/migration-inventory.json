@@ -61,6 +61,10 @@
     {
       "filename": "0015_immutable_observation_commands.sql",
       "sha256": "e6f6d4dd1907917fd415ef0b8bede400e408381f347028ef33417421eb29c639"
+    },
+    {
+      "filename": "0016_complete_input_evidence_packages.sql",
+      "sha256": "f8b2cf71fa1b1a2b995f8a0f232ee4330b54bb419b71be0e31804de045253ad1"
     }
   ]
 }
