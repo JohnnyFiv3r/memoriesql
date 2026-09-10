@@ -202,6 +202,9 @@ DECLARE
     receipt_id uuid:=uuidv7(); eid uuid:=uuidv7(); uid uuid:=uuidv7(); bid uuid:=uuidv7(); tid uuid:=uuidv7(); enqueue_receipt uuid;
     parent_id uuid:=(request->>'parent_source_unit_id')::uuid; manifest_id text; existing boolean:=false;
 BEGIN
+    IF current_setting('transaction_isolation') IS DISTINCT FROM 'read committed' THEN
+        RAISE EXCEPTION 'materialization_requires_read_committed' USING ERRCODE='25000';
+    END IF;
     IF jsonb_typeof(request) IS DISTINCT FROM 'object' OR pg_column_size(request)>16384 OR octet_length(request::text)>16384 OR
        request-ARRAY['contract_version','expected_schema_version','idempotency_key','package_id','expected_inventory_sha256','producer_policy_id','expected_source_object_schema_version','event','parent_source_unit_id']<>'{}'::jsonb OR
        (SELECT count(*) FROM jsonb_object_keys(request))<>9 OR request->'contract_version' IS DISTINCT FROM '1'::jsonb OR request->'expected_schema_version' IS DISTINCT FROM '17'::jsonb OR
@@ -290,6 +293,9 @@ CREATE FUNCTION memoriesql.inspect_logical_event_v1(request jsonb) RETURNS jsonb
 LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,memoriesql SET lock_timeout='500ms' AS $$
 DECLARE c memoriesql.authorization_contexts%ROWTYPE; source_id uuid; result jsonb;
 BEGIN
+    IF current_setting('transaction_isolation') IS DISTINCT FROM 'read committed' THEN
+        RAISE EXCEPTION 'materialization_requires_read_committed' USING ERRCODE='25000';
+    END IF;
     IF jsonb_typeof(request) IS DISTINCT FROM 'object' OR octet_length(request::text)>1024 OR request-ARRAY['contract_version','event_id']<>'{}'::jsonb OR request->'contract_version' IS DISTINCT FROM '1'::jsonb THEN RAISE EXCEPTION 'invalid_materialization_contract' USING ERRCODE='22023'; END IF;
     SELECT * INTO c FROM memoriesql.current_authorization_context();
     SELECT source_object_id INTO source_id FROM memoriesql.source_events WHERE tenant_id=c.tenant_id AND workspace_id=c.workspace_id AND event_id=(request->>'event_id')::uuid AND materialization_version=1;

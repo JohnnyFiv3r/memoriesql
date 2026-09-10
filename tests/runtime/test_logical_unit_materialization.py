@@ -6,6 +6,8 @@ import unittest
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
+from threading import Event
+from time import monotonic, sleep
 from typing import TYPE_CHECKING, Any
 
 import psycopg
@@ -489,6 +491,83 @@ class LogicalUnitMaterialization(EvidencePackages):
         with self.assertRaisesRegex(psycopg.Error, "module is not accepting work"):
             self.materializer.materialize(self.materialization(package))
         self.assertEqual(self.counts(), (0, 0, 0, 0, 0, 0, 0))
+
+    def test_revocation_wait_uses_current_snapshot(self) -> None:
+        package = self.package()
+        command = self.materialization(package)
+        ready = Event()
+
+        def run() -> Any:
+            with psycopg.connect(
+                make_conninfo(
+                    self.admin,
+                    dbname=self.database,
+                    application_name="fictional-policy-wait",
+                ),
+                autocommit=True,
+            ) as connection:
+                connection.isolation_level = psycopg.IsolationLevel.REPEATABLE_READ
+                ready.set()
+                return PostgresLogicalUnitMaterialization(
+                    connection,
+                    credential_sha256=self.secret_hash,
+                    workspace_id=self.workspace,
+                ).materialize(command)
+
+        with psycopg.connect(
+            make_conninfo(self.admin, dbname=self.database), autocommit=True
+        ) as blocker:
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                with blocker.transaction():
+                    # Holds the shared authority fence exclusively until commit.
+                    blocker.execute(
+                        "UPDATE memoriesql.evidence_producer_policies SET status='revoked' WHERE producer_policy_id=%s",
+                        (self.policy,),
+                    )
+                    future = pool.submit(run)
+                    self.assertTrue(ready.wait(1))
+                    deadline = monotonic() + 0.3
+                    blocked = False
+                    while monotonic() < deadline:
+                        row = self.db.execute(
+                            "SELECT wait_event FROM pg_stat_activity WHERE datname=%s AND application_name='fictional-policy-wait'",
+                            (self.database,),
+                        ).fetchone()
+                        if row and row[0] == "advisory":
+                            blocked = True
+                            break
+                        sleep(0.005)
+                    self.assertTrue(blocked, "fixture must reach the authority fence")
+                with self.assertRaisesRegex(
+                    psycopg.Error, "trusted_producer_policy_unavailable"
+                ):
+                    future.result(timeout=3)
+        self.assertEqual(self.counts(), (0, 0, 0, 0, 0, 0, 0))
+
+    def test_sql_entry_points_reject_stale_snapshot_isolation(self) -> None:
+        command = self.materialization(self.package())
+        result = self.materializer.materialize(command)
+        for isolation in ("REPEATABLE READ", "SERIALIZABLE"):
+            for function, request in (
+                ("materialize_logical_unit_v1", command),
+                (
+                    "inspect_logical_event_v1",
+                    InspectLogicalEvent(event_id=result.event_id),
+                ),
+            ):
+                with (
+                    self.assertRaisesRegex(
+                        psycopg.Error, "materialization_requires_read_committed"
+                    ),
+                    self.db.transaction(),
+                ):
+                    self.db.execute("SET TRANSACTION ISOLATION LEVEL " + isolation)
+                    self.begin()
+                    self.db.execute(
+                        "SELECT memoriesql." + function + "(%s)",
+                        (Jsonb(request.model_dump(mode="json")),),
+                    )
+        self.assertEqual(self.counts(), (1, 1, 1, 1, 1, 0, 0))
 
 
 class LegacyAtSchema17(ImmutableObservations):

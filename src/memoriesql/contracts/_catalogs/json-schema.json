@@ -9497,7 +9497,8 @@
           }
         },
         "source_completeness_independently_proven": false,
-        "task_contract_hash": "8013803a5ad67b0fe530b05c1c5badd533ae118d5105de756588a282bf6d3d3c"
+        "task_contract_hash": "8013803a5ad67b0fe530b05c1c5badd533ae118d5105de756588a282bf6d3d3c",
+        "transaction_isolation": "read_committed"
       },
       "id": "memoriesql.logical-unit-materialization.v1",
       "kind": "json_schema",

@@ -34,6 +34,7 @@ def record() -> dict[str, object]:
             "command_json_bytes": lu.MATERIALIZATION_COMMAND_MAX_BYTES,
             "event_metadata_json_bytes": lu.MATERIALIZATION_METADATA_MAX_BYTES,
             "execution_available": False,
+            "transaction_isolation": "read_committed",
             "source_completeness_independently_proven": False,
             "producer_policy": "administrator_reviewed_scoped_trust_required",
         },

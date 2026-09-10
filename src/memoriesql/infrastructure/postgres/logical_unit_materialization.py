@@ -62,6 +62,9 @@ class PostgresLogicalUnitMaterialization:
         if self._connection.info.transaction_status != TransactionStatus.IDLE:
             raise RuntimeError("materialization requires transaction ownership")
         with self._connection.transaction():
+            # Authorization fences must observe revocations committed during waits.
+            # Do not inherit a caller-configured repeatable-read snapshot.
+            self._connection.execute("SET TRANSACTION ISOLATION LEVEL READ COMMITTED")
             self._connection.execute(
                 "SELECT set_config('statement_timeout', %s, true), set_config('lock_timeout', %s, true)",
                 (str(OPERATION_TIMEOUT_MS), str(LOCK_TIMEOUT_MS)),

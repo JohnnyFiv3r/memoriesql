@@ -252,7 +252,7 @@
       "disposition": "public",
       "path": "src/memoriesql/infrastructure/postgres/logical_unit_materialization.py",
       "reason": "Public-authored canonical logical-unit materialization and unavailable task binding.",
-      "sha256": "bcaf2dc557f5cd479a6527881a78ffba12a6d965590c33f7ac88dd75c951bbb1"
+      "sha256": "16562bb948d1a9ce37cbf33e1198ee4c83bed73eb0832aa9d19a5d7503f94f10"
     }
   ]
 }

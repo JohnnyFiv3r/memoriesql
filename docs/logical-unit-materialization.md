@@ -119,9 +119,15 @@ transition supplies complete-input execution. Standalone enqueue cannot commit
 without the exact canonical binding. A second guard rejects semantic versions
 for these source units, including attempts to route them through legacy authoring
 or correction. There is no placeholder semantic output and no second scheduler.
+Availability in immutable input and receipts is the binding-time snapshot; the
+queue guards enforce the current execution policy. A future transition must
+explicitly validate exposure before permitting execution of an existing pin.
 Cancellation and terminal failure remain operational options; neither authors
 meaning. Module admission, current authority and shared queue fences still apply.
 
+The adapter explicitly selects read-committed isolation in its owned transaction.
+Both SQL entry points reject stronger snapshot isolation, so a policy revocation
+committed while waiting cannot be hidden by an inherited repeatable-read snapshot.
 Materialization requires current authorization before work, after keyed waits and
 before return; it rechecks policy expiry. Historical receipt replay also requires
 current authorization and a currently valid submitted producer policy. Reads

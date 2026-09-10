@@ -638,7 +638,7 @@
       "classification": "proposed_open_core",
       "license": "Apache-2.0",
       "public_path": "src/memoriesql/contracts/_catalogs/json-schema.json",
-      "public_sha256": "dbf45b31945822f7ecf9cf1441727a0c09b2485669c2a5144aac9ab1d4f8ae80",
+      "public_sha256": "67e5879e4dc78ee32f3ca0fc8f5b96a5d2d8a273322c427332453f5c5074657a",
       "reason": "Approved record payloads regenerated with public-owned catalog metadata.",
       "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
       "reviewed_spike_source_sha256": "765f8dd3d4b5e594980ba38f6e1ac11f29d3198746299217361e1c56b360cf26"
@@ -792,7 +792,7 @@
       "classification": "public_bootstrap",
       "license": "Apache-2.0",
       "public_path": "contracts/public-registry.json",
-      "public_sha256": "a7fc56c9479c751e757c112cd5e62ce071840c4bec65d0c14647720c0b4eabbc",
+      "public_sha256": "94dfd05791db631997863f725c9959f5b999df0f03bc0d79b0d0ca1cb120f124",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {
@@ -890,14 +890,14 @@
       "classification": "approved_migration_substrate",
       "license": "Apache-2.0",
       "public_path": "contracts/migration-inventory.json",
-      "public_sha256": "d681780af886dc3e3c7bb52795d62b157a3a705c5d7cdd61d64e3c87b5fcbce1",
+      "public_sha256": "fa960163618783ca9229cbdc295c00139b2db4be4c27d4b32fb4233da9dc32dc",
       "reason": "Public-owned N1 inventory; audited copy/adapt details in migration-extraction.json where applicable."
     },
     {
       "classification": "approved_migration_substrate",
       "license": "Apache-2.0",
       "public_path": "docs/provenance/migration-extraction.json",
-      "public_sha256": "7fa7cb56ecd4ad4d604d870112e0f8a070485c240e044dd0e5330a0a5ae3cc22",
+      "public_sha256": "b40959d0adf14042df76c04b5037229f2ed2eb71bc93d9bc62fb5ea1a7dd61b2",
       "reason": "Public-owned N1 inventory; audited copy/adapt details in migration-extraction.json where applicable."
     },
     {
@@ -974,7 +974,7 @@
       "classification": "public-authored",
       "license": "Apache-2.0",
       "public_path": "contracts/runtime-inventory.json",
-      "public_sha256": "2b4ad2faf0feb78e4eabcae4ef4e6a76827c937c4acc051d813f73f10d1410ff",
+      "public_sha256": "d0024180b1e1ac113a619ce7119c582048fd8eda2417991e0ba7f1e1e354e5ef",
       "reason": "Public N2 dependency inventory and fictional runtime acceptance."
     },
     {
@@ -1184,42 +1184,42 @@
       "classification": "public",
       "license": "Apache-2.0",
       "public_path": "src/memoriesql/infrastructure/postgres/logical_unit_materialization.py",
-      "public_sha256": "bcaf2dc557f5cd479a6527881a78ffba12a6d965590c33f7ac88dd75c951bbb1",
+      "public_sha256": "16562bb948d1a9ce37cbf33e1198ee4c83bed73eb0832aa9d19a5d7503f94f10",
       "reason": "Public-authored canonical logical-unit materialization slice and focused fictional verification."
     },
     {
       "classification": "public",
       "license": "Apache-2.0",
       "public_path": "migrations/0017_logical_unit_materialization.sql",
-      "public_sha256": "5e0ba134b92ca726743aec971f36343d89cc331ed6a44f55bc7172d707fe1de8",
+      "public_sha256": "06598d80d8c14f2ff733542bd9074f594ec726450874bc70bc20af1590fe2414",
       "reason": "Public-authored canonical logical-unit materialization slice and focused fictional verification."
     },
     {
       "classification": "public",
       "license": "Apache-2.0",
       "public_path": "tests/runtime/test_logical_unit_materialization.py",
-      "public_sha256": "6ac011161befedb0b6fa48e636b79ef2605d31bf0ace61bc24dfe5b7ca5636da",
+      "public_sha256": "57b1196ca031eb7352dc18a3435235ba393a12c69d236706d894b13f53c4fd62",
       "reason": "Public-authored canonical logical-unit materialization slice and focused fictional verification."
     },
     {
       "classification": "public",
       "license": "Apache-2.0",
       "public_path": "docs/logical-unit-materialization.md",
-      "public_sha256": "ec06ef3b82993fd2a5a2062ec45db730b384232b27ddcba959ccb35817efd456",
+      "public_sha256": "557c3021cccc48a86bdd645561f61da406b120232583c2914b6c4e8231c8780f",
       "reason": "Public-authored canonical logical-unit materialization slice and focused fictional verification."
     },
     {
       "classification": "public",
       "license": "Apache-2.0",
       "public_path": "scripts/generate_logical_unit_contract.py",
-      "public_sha256": "fd3d8cfa15d62eef1783d369f17f6244db197d9db180390f501ec3f20d730660",
+      "public_sha256": "a2fd41dcc80104bf535f30bdcf4b2fa09168ecbdcadc768345d7955583ba3282",
       "reason": "Public-authored canonical logical-unit materialization slice and focused fictional verification."
     },
     {
       "classification": "public",
       "license": "Apache-2.0",
       "public_path": "contracts/records/memoriesql-logical-unit-materialization-v1.json",
-      "public_sha256": "87c3663614a6b101052fd287334be1f3c921c91b9a874dd3a6489de43361329a",
+      "public_sha256": "2d4ac51829c54bd3bc7f4a9294e25c9e089f0f128906181c0d97a17e968a66c8",
       "reason": "Public-authored canonical logical-unit materialization slice and focused fictional verification."
     }
   ],
