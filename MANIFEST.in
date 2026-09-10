@@ -46,3 +46,5 @@ include src/memoriesql/infrastructure/postgres/source_range.py
 include src/memoriesql/infrastructure/postgres/transcript_fold.py
 include src/memoriesql/application/builtin_semantic_tasks.py
 include src/memoriesql/application/capture/__init__.py
+include src/memoriesql/application/observation_commands.py
+include src/memoriesql/application/observation_tasks.py

@@ -13,7 +13,10 @@ from pydantic import BaseModel
 
 from memoriesql.application.canonical_transactions import (
     ApplySemanticAnnotationsCommand,
-    ApplySemanticAnnotationsPayload,
+)
+from memoriesql.application.observation_commands import (
+    AuthorInitialObservationsCommand,
+    CorrectObservationCommand,
 )
 from memoriesql.application.semantic_task_contracts import (
     EvidenceManifest,
@@ -403,10 +406,7 @@ class PostgresSemanticTaskQueue:
             + (
                 hydrated_at,
                 reference_ids,
-                [
-                    reference.declared_characters
-                    for reference in manifest.references
-                ],
+                [reference.declared_characters for reference in manifest.references],
                 character_limit,
                 character_limit,
                 fence.tenant_id,
@@ -546,9 +546,7 @@ class PostgresSemanticTaskQueue:
             self._fence_parameters(fence)
             + (
                 result.output_contract_hash,
-                Jsonb(
-                    result.typed_output.model_dump(mode="json", warnings="error")
-                ),
+                Jsonb(result.typed_output.model_dump(mode="json", warnings="error")),
                 result.output_hash,
                 list(result.used_evidence_refs),
                 list(result.model_run_refs),
@@ -584,36 +582,59 @@ class PostgresSemanticTaskQueue:
             raise ValueError("semantic result belongs to a different attempt fence")
         if result.typed_output is None or result.output_hash is None:
             raise ValueError("successful canonical result is incomplete")
-        payload = ApplySemanticAnnotationsPayload.model_validate(
-            result.typed_output.model_dump(mode="json", warnings="error")
-        )
-        command = ApplySemanticAnnotationsCommand(
-            idempotency_key=f"semantic-apply.{fence.attempt_id}",
-            tenant_id=fence.tenant_id,
-            workspace_id=fence.workspace_id,
-            access_scope_id=fence.access_scope_id,
-            task_id=fence.task_id,
-            attempt_id=fence.attempt_id,
-            lease_generation=fence.lease_generation,
-            task_kind=result.task_kind,
-            contract_revision=result.contract_revision,
-            output_contract_hash=result.output_contract_hash,
-            semantic_result_hash=result.output_hash,
-            semantic_payload_canonical_json=canonical_json_bytes(
-                payload.model_dump(mode="json", warnings="error")
-            ).decode("utf-8"),
-            used_evidence_refs=result.used_evidence_refs,
-            model_run_refs=result.model_run_refs,
-            payload=payload,
-        )
-        receipt = PostgresCanonicalTransactions(
-            self._connection
-        ).apply_semantic_annotations(
-            command,
-            worker_id=fence.worker_id,
-            worker_instance_id=fence.worker_instance_id,
-            recorded_at=recorded_at,
-        )
+        adapter = PostgresCanonicalTransactions(self._connection)
+        payload = result.typed_output.model_dump(mode="json", warnings="error")
+        command_data = {
+            "idempotency_key": f"semantic-apply.{fence.attempt_id}",
+            "tenant_id": fence.tenant_id,
+            "workspace_id": fence.workspace_id,
+            "access_scope_id": fence.access_scope_id,
+            "task_id": fence.task_id,
+            "attempt_id": fence.attempt_id,
+            "lease_generation": fence.lease_generation,
+            "task_kind": result.task_kind,
+            "contract_revision": result.contract_revision,
+            "output_contract_hash": result.output_contract_hash,
+            "semantic_result_hash": result.output_hash,
+            "semantic_payload_canonical_json": canonical_json_bytes(payload).decode(
+                "utf-8"
+            ),
+            "used_evidence_refs": result.used_evidence_refs,
+            "model_run_refs": result.model_run_refs,
+            "payload": payload,
+        }
+        if (result.task_kind, result.contract_revision) == (
+            "memory.semantic.author-observations",
+            1,
+        ):
+            receipt = adapter.apply_semantic_annotations(
+                ApplySemanticAnnotationsCommand.model_validate(command_data),
+                worker_id=fence.worker_id,
+                worker_instance_id=fence.worker_instance_id,
+                recorded_at=recorded_at,
+            )
+        elif (result.task_kind, result.contract_revision) == (
+            "memory.semantic.author-observations",
+            2,
+        ):
+            receipt = adapter.author_initial_observations(
+                AuthorInitialObservationsCommand.model_validate(command_data),
+                worker_id=fence.worker_id,
+                worker_instance_id=fence.worker_instance_id,
+                recorded_at=recorded_at,
+            )
+        elif (result.task_kind, result.contract_revision) == (
+            "memory.semantic.correct-observation",
+            2,
+        ):
+            receipt = adapter.correct_observation(
+                CorrectObservationCommand.model_validate(command_data),
+                worker_id=fence.worker_id,
+                worker_instance_id=fence.worker_instance_id,
+                recorded_at=recorded_at,
+            )
+        else:
+            raise ValueError("unregistered canonical observation contract")
         return receipt.task_status
 
     def record_result(

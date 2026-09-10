@@ -98,8 +98,9 @@ hash, name the public base commit and base hash, and carry a new current content
 hash. Unchanged copies still require byte equality; all inventories still deny
 unlisted members. No private source, history or provenance is added.
 
-Published `0.0.1a1` and `0.0.2` remain immutable. The next correction is prepared
-as `0.0.3`; this change grants no publication authority. See the
+Published `0.0.1a1`, `0.0.2` and `0.0.3` remain immutable. The following
+cleanup history describes the released repair; publication of any later version
+requires separate authority. See the
 [release controls](releasing.md).
 
 ## Historical N2 cancellation limitation
@@ -144,3 +145,11 @@ ordinary heartbeat through executor completion, repeated caller cancellation,
 late usage and settlement, checking quarantine and eventual complete drainage.
 Existing success, authorization, settlement-failure and late-accounting coverage
 remains part of installed acceptance.
+
+## Immutable observation commands in the unreleased 0.0.4 candidate
+
+Schema 15 adds explicit initial authorship and distinct-bead corrections. The
+legacy registry remains unchanged; consumers opt into `load_observation_task_registry`
+and its two revision-2 tasks. The canonical sink dispatches typed results through
+the same worker, cancellation/quarantine, accounting and fenced settlement path.
+No executor or scheduler is replaced. See [commands, caller migration and acceptance](immutable-observations.md).

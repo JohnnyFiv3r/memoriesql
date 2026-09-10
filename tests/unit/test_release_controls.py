@@ -31,9 +31,7 @@ def good_run() -> dict[str, Any]:
 
 
 def select(runs: list[dict[str, Any]]) -> int:
-    return select_ci_run(
-        runs, sha=SHA, main_sha=SHA, tag="v0.0.3", version="0.0.3"
-    )
+    return select_ci_run(runs, sha=SHA, main_sha=SHA, tag="v0.0.3", version="0.0.3")
 
 
 class ReleaseControlTests(unittest.TestCase):
@@ -91,7 +89,9 @@ class ReleaseControlTests(unittest.TestCase):
             with self.subTest(status=status), self.assertRaises(ValueError):
                 select([good_run(), newer])
 
-    def test_verifies_exact_files_and_ignores_non_authoritative_ci_receipt(self) -> None:
+    def test_verifies_exact_files_and_ignores_non_authoritative_ci_receipt(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
             inventory = self.make_artifacts(directory)
@@ -103,7 +103,15 @@ class ReleaseControlTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
             inventory = self.make_artifacts(directory)
-            for version in (None, "0.0.1a1", "0.0.2", "0.0.3a1", "0.0.3b1", "0.0.3rc1", "0.0.4"):
+            for version in (
+                None,
+                "0.0.1a1",
+                "0.0.2",
+                "0.0.3a1",
+                "0.0.3b1",
+                "0.0.3rc1",
+                "0.0.4",
+            ):
                 with self.subTest(version=version), self.assertRaises(ValueError):
                     verify_artifacts(directory, inventory | {"version": version})
 
@@ -136,6 +144,25 @@ class ReleaseControlTests(unittest.TestCase):
                 altered["artifacts"][0]["filename"] = name
                 with self.subTest(name=name), self.assertRaises(ValueError):
                     verify_artifacts(directory, altered)
+
+    def test_candidate_integrity_does_not_authorize_publication(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            inventory = self.make_artifacts(directory)
+            for row in inventory["artifacts"]:
+                original = directory / row["filename"]
+                row["filename"] = row["filename"].replace("0.0.3", "0.0.4")
+                original.rename(directory / row["filename"])
+            inventory["version"] = "0.0.4"
+            self.assertEqual(
+                len(verify_artifacts(directory, inventory, expected_version="0.0.4")), 2
+            )
+            with self.assertRaises(ValueError):
+                verify_artifacts(directory, inventory)
+            with self.assertRaises(ValueError):
+                select_ci_run(
+                    [good_run()], sha=SHA, main_sha=SHA, tag="v0.0.4", version="0.0.4"
+                )
 
     @staticmethod
     def make_artifacts(directory: Path) -> dict[str, Any]:

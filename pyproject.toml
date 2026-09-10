@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "memoriesql"
-version = "0.0.3"
+version = "0.0.4"
 description = "Experimental memoriesQL contract catalogs and provider-neutral runtime"
 readme = "PYPI_README.md"
 requires-python = ">=3.13,<3.15"

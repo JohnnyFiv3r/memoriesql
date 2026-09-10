@@ -64,14 +64,14 @@ class InstalledMigrations(unittest.TestCase):
         }
         self.assertIn(Path(runner.__file__).resolve(), owned)
         stream = runner.discover_migrations()
-        self.assertEqual(len(stream), 14)
+        self.assertEqual(len(stream), 15)
         for migration in stream:
             self.assertIn(Path(str(migration.path)).resolve(), owned)
             self.assertEqual(
                 hashlib.sha256(migration.path.read_bytes()).hexdigest(),
                 migration.sha256,
             )
-        self.assertEqual(distribution.version, "0.0.3")
+        self.assertEqual(distribution.version, "0.0.4")
         for name, module in tuple(sys.modules.items()):
             if name == "memoriesql" or name.startswith("memoriesql."):
                 assert module.__file__ is not None
@@ -90,7 +90,7 @@ class InstalledMigrations(unittest.TestCase):
         from memoriesql import __version__
         from memoriesql.contracts import iter_contracts
 
-        self.assertEqual(__version__, "0.0.3")
+        self.assertEqual(__version__, "0.0.4")
         from memoriesql.cli import main
 
         output = io.StringIO()
@@ -174,7 +174,7 @@ class InstalledMigrations(unittest.TestCase):
     def test_wrong_bound_downgrade_and_out_of_range_are_atomic(self) -> None:
         self.migrate(0, 14)
         before = self.history()
-        for start, end in ((13, 14), (14, 13), (14, 15), (14, -1)):
+        for start, end in ((13, 14), (14, 13), (14, 16), (14, -1)):
             with (
                 self.subTest(start=start, end=end),
                 self.assertRaises(runner.MigrationError),

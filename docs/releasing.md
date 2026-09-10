@@ -1,4 +1,14 @@
-# Owner-controlled runtime release readiness
+# Historical 0.0.3: Owner-controlled runtime release readiness
+
+**Current development state:** `0.0.3` is published and immutable. The unreleased
+`0.0.4` candidate is covered by `immutable-observations-candidate-artifacts.json`
+and the CI-only `candidate-artifacts` check. Publication controls still require
+`0.0.3`; exact-main selection rejects the candidate version. The publishing
+workflow and protected environment are unchanged. Do not reuse the historical
+owner actions below. A separate release authorization/review must establish the
+next exact version, artifacts, tag and publisher prerequisites.
+
+## Historical preparation and controls
 
 This lane prepares the cleanup-lease handoff repair as `0.0.3`. It does not
 authorize a merge, tag, upload, or external configuration change. Published

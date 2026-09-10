@@ -13,3 +13,11 @@ The eventual product repository may depend only on released, pinned public-core 
 `contracts/public-registry.json` is the only catalog-generation authority. The generator reads only its explicit entries, validates record hashes and dispositions, rejects unregistered record files, and never scans another repository. The prior classification-by-prefix spike is evidence, not authority.
 
 The approved migration substrate cut includes only SQL 0001–0014, migration runner, schema inspection, and minimal resource/initializer closure. `contracts/migration-inventory.json` and `docs/provenance/migration-extraction.json` enumerate that public-owned scope. The N2 runtime is limited to `contracts/runtime-inventory.json`: provider-neutral runtime and internal static mechanics with caller-owned composition. All other runtime candidates remain deferred. See [runtime scope](../runtime.md). See [migration guidance](../migrations.md).
+
+## Public-authored immutable observations
+
+The authorized forward transition appends migration 0015 and the explicitly
+inventoried version-2 observation commands, task definitions and adapter dispatch.
+It is public development after extraction: no additional product material is
+exported. The original 14 migrations and 49 preview records remain unchanged.
+See [immutable observations](../immutable-observations.md).

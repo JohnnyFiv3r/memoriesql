@@ -102,9 +102,11 @@
     {
       "public_path": "src/memoriesql/infrastructure/postgres/migration_runner.py",
       "source_sha256": "10841bd32cad98d969faf588c5eeff862a4b1dabefc12a4390f72341567c6b22",
-      "disposition": "adapt",
-      "reason": "Use verified installed resources; preserve runner contract 1.",
-      "public_sha256": "941626a5b55a877bdafc97fbd35468a6013cc8b4b034f8f800b8ebd2c405fd5f"
+      "disposition": "public-forward",
+      "reason": "Public forward support for the explicit 15-resource inventory; historical runner contract and SQL unchanged.",
+      "public_sha256": "29930b769cc005495d8247669c47b153ae9314f3bc5f3c5708117c00808c0184",
+      "base_public_commit": "d4e409d4daa4285ce6868274e6bb55593aa209f1",
+      "base_public_sha256": "941626a5b55a877bdafc97fbd35468a6013cc8b4b034f8f800b8ebd2c405fd5f"
     },
     {
       "public_path": "src/memoriesql/infrastructure/postgres/schema_inspection.py",
@@ -112,6 +114,12 @@
       "disposition": "copy",
       "reason": "Preserve schema inspection.",
       "public_sha256": "d99eecfb251d7a29ddbba66c7d9715ec751cc778c19482d1f10c08d54a2512c5"
+    },
+    {
+      "public_path": "migrations/0015_immutable_observation_commands.sql",
+      "disposition": "public",
+      "reason": "Public-authored forward immutable semantics, occurrence identity, explicit correction lineage and versioned fenced commands. No further extraction.",
+      "public_sha256": "e6f6d4dd1907917fd415ef0b8bede400e408381f347028ef33417421eb29c639"
     }
   ],
   "test_material": [

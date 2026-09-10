@@ -137,10 +137,12 @@
       "source_sha256": "a6b990a6a74461f34e7e757a3e6f7426020f8cef8df4cdbaad2a95f2fcd10398"
     },
     {
-      "disposition": "copy",
+      "base_public_commit": "d4e409d4daa4285ce6868274e6bb55593aa209f1",
+      "base_public_sha256": "5bbff727506cd237a9596adc9e59743519defe90f29c14af9e03fc55a445ce80",
+      "disposition": "public-forward",
       "path": "src/memoriesql/infrastructure/jobs/postgres_semantic_queue.py",
-      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
-      "sha256": "5bbff727506cd237a9596adc9e59743519defe90f29c14af9e03fc55a445ce80",
+      "reason": "Public schema-15 versioned observation command dispatch through the existing canonical adapter and worker fence; legacy payloads remain unchanged.",
+      "sha256": "8c9a3a3fc34e9c8a4b66a7ea06f2613e97bb67cd9cb81bdff62c1521ccc74c64",
       "source_sha256": "5bbff727506cd237a9596adc9e59743519defe90f29c14af9e03fc55a445ce80"
     },
     {
@@ -167,10 +169,12 @@
       "source_sha256": "b428e693e96d06ffdf992d59b43ba4f991059df99be189f56ea78b1abf890c2a"
     },
     {
-      "disposition": "copy",
+      "base_public_commit": "d4e409d4daa4285ce6868274e6bb55593aa209f1",
+      "base_public_sha256": "7d2c1ce2f2916f16915ff3b86b6ada6e2dec281ca3d1fc0300dafa47dbc30e0d",
+      "disposition": "public-forward",
       "path": "src/memoriesql/infrastructure/postgres/canonical_transactions.py",
-      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
-      "sha256": "7d2c1ce2f2916f16915ff3b86b6ada6e2dec281ca3d1fc0300dafa47dbc30e0d",
+      "reason": "Public schema-15 versioned observation command dispatch through the existing canonical adapter and worker fence; legacy payloads remain unchanged.",
+      "sha256": "3f04b9d40b0edf417ccf0853951968e2d39502e12ca862db8da4d2f0adb10605",
       "source_sha256": "7d2c1ce2f2916f16915ff3b86b6ada6e2dec281ca3d1fc0300dafa47dbc30e0d"
     },
     {
@@ -213,6 +217,18 @@
       "path": "src/memoriesql/application/capture/__init__.py",
       "reason": "Neutral initializer without eager acquisition or adoption imports.",
       "sha256": "8f473d7e50a204eb208fdfbfae8aa016785392741c6745a3ad9621fd05f87d50"
+    },
+    {
+      "disposition": "public",
+      "path": "src/memoriesql/application/observation_commands.py",
+      "reason": "Explicit version-2 initial authorship and distinct-bead correction models; published version-1 models untouched.",
+      "sha256": "3e99222f43742572489069725417a10bfb8783d7b6dc9b14548c6a88e45d5673"
+    },
+    {
+      "disposition": "public",
+      "path": "src/memoriesql/application/observation_tasks.py",
+      "reason": "Opt-in source-controlled initial/correction task definitions using unchanged executor mechanics and budgets.",
+      "sha256": "64b07fba5dd3931e18930ee7bf441956556c9e5d0eefbdc268b3e2480de53f66"
     }
   ]
 }

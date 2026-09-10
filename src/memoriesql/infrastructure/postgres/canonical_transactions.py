@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any, Literal, cast
 from uuid import UUID
 
-from psycopg import Connection
+from psycopg import Connection, sql
 from psycopg.types.json import Jsonb
 
 from memoriesql.application.canonical_transactions import (
@@ -12,6 +12,12 @@ from memoriesql.application.canonical_transactions import (
     AcceptSourceEventReceipt,
     ApplySemanticAnnotationsCommand,
     ApplySemanticAnnotationsReceipt,
+)
+from memoriesql.application.observation_commands import (
+    AcceptSourceEventV2Command,
+    AuthorInitialObservationsCommand,
+    CorrectObservationCommand,
+    ObservationReceiptV2,
 )
 
 
@@ -24,6 +30,22 @@ class PostgresCanonicalTransactions:
     def accept_source_event(
         self,
         command: AcceptSourceEventCommand,
+        *,
+        recorded_at: datetime,
+    ) -> AcceptSourceEventReceipt:
+        return self._accept_source_event(command, recorded_at=recorded_at)
+
+    def accept_source_event_v2(
+        self,
+        command: AcceptSourceEventV2Command,
+        *,
+        recorded_at: datetime,
+    ) -> AcceptSourceEventReceipt:
+        return self._accept_source_event(command, recorded_at=recorded_at)
+
+    def _accept_source_event(
+        self,
+        command: AcceptSourceEventCommand | AcceptSourceEventV2Command,
         *,
         recorded_at: datetime,
     ) -> AcceptSourceEventReceipt:
@@ -81,3 +103,59 @@ class PostgresCanonicalTransactions:
             task_status=cast(Literal["succeeded"], str(row[5])),
             replayed=bool(row[6]),
         )
+
+    def author_initial_observations(
+        self,
+        command: AuthorInitialObservationsCommand,
+        *,
+        worker_id: str,
+        worker_instance_id: str,
+        recorded_at: datetime,
+    ) -> ObservationReceiptV2:
+        return self._apply_observations_v2(
+            "author_initial_observations_v2",
+            command,
+            worker_id=worker_id,
+            worker_instance_id=worker_instance_id,
+            recorded_at=recorded_at,
+        )
+
+    def correct_observation(
+        self,
+        command: CorrectObservationCommand,
+        *,
+        worker_id: str,
+        worker_instance_id: str,
+        recorded_at: datetime,
+    ) -> ObservationReceiptV2:
+        return self._apply_observations_v2(
+            "correct_observation_v2",
+            command,
+            worker_id=worker_id,
+            worker_instance_id=worker_instance_id,
+            recorded_at=recorded_at,
+        )
+
+    def _apply_observations_v2(
+        self,
+        function: str,
+        command: AuthorInitialObservationsCommand | CorrectObservationCommand,
+        *,
+        worker_id: str,
+        worker_instance_id: str,
+        recorded_at: datetime,
+    ) -> ObservationReceiptV2:
+        row = self._connection.execute(
+            sql.SQL("SELECT memoriesql.{}(%s, %s, %s, %s)").format(
+                sql.Identifier(function)
+            ),
+            (
+                Jsonb(command.model_dump(mode="json", warnings="error")),
+                worker_id,
+                worker_instance_id,
+                recorded_at,
+            ),
+        ).fetchone()
+        if row is None:
+            raise RuntimeError("Postgres did not return an observation receipt")
+        return ObservationReceiptV2.model_validate(row[0])
