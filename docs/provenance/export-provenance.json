@@ -1198,7 +1198,7 @@
       "classification": "public",
       "license": "Apache-2.0",
       "public_path": "tests/runtime/test_logical_unit_materialization.py",
-      "public_sha256": "57b1196ca031eb7352dc18a3435235ba393a12c69d236706d894b13f53c4fd62",
+      "public_sha256": "2504c8b1573dc2ce82a38ded4738cec3784fae473a98a066de2fd0057f956f0b",
       "reason": "Public-authored canonical logical-unit materialization slice and focused fictional verification."
     },
     {

@@ -469,7 +469,7 @@ class LogicalUnitMaterialization(EvidencePackages):
         ):
             self.begin()
             self.db.execute(
-                "SELECT memoriesql.enqueue_semantic_task(%s,'fictional-direct','memoriesql.kernel','memory.semantic.author-complete-unit',1,%s,%s,%s,0,%s,%s,%s,clock_timestamp(),NULL,clock_timestamp())",
+                "SELECT memoriesql.enqueue_semantic_task(%s,'fictional-direct','memoriesql.kernel','memory.semantic.author-complete-unit',1,%s,%s,%s,0,%s,%s,%s,statement_timestamp(),NULL,statement_timestamp())",
                 (
                     tid,
                     COMPLETE_UNIT_TASK_CONTRACT_HASH,
