@@ -51,7 +51,7 @@ SQL files byte-for-byte, and catalog checks preserve 49 payloads and twelve APIs
 
 Genuine `0.0.3` wheel/sdist metadata and two deterministic local builds were
 verified. Candidate hashes are committed in
-[the active inventory](runtime-package-artifact-inventory.json). Final hosted
+[the preserved 0.0.3 inventory](runtime-0.0.3-package-artifact-inventory.json). Final hosted
 exact-head artifacts must independently match it. The unchanged published
 `0.0.2` inventory is preserved in
 [the historical inventory](runtime-0.0.2-package-artifact-inventory.json).

@@ -1,33 +1,26 @@
-# Historical 0.0.3: Owner-controlled runtime release readiness
+# Owner-controlled 0.0.4 release readiness
 
-**Current development state:** `0.0.3` is published and immutable. The unreleased
-`0.0.4` candidate is covered by `immutable-observations-candidate-artifacts.json`
-and the CI-only `candidate-artifacts` check. Publication controls still require
-`0.0.3`; exact-main selection rejects the candidate version. The publishing
-workflow and protected environment are unchanged. Do not reuse the historical
-owner actions below. A separate release authorization/review must establish the
-next exact version, artifacts, tag and publisher prerequisites.
+This lane promotes the reviewed `0.0.4` candidate into exact-version repository
+release controls. It does not authorize a merge, tag, upload, consumer deployment,
+or external configuration change. The runtime, SQL, contracts and dependencies are unchanged from reviewed PR #9 head
+`64b89c35794e6aa9352159e2ed8c1aba2e0b9637`, merged as
+`683724c9ac1bbdd9ea237395ad62a3aa08fc6276` with an identical tree. Updating the packaged repository README refreshes the
+source archive only; the wheel remains identical.
 
-## Historical preparation and controls
+Published `0.0.1a1`, `0.0.2` and `0.0.3` remain immutable. Their inventories are
+retained as `package-artifact-inventory.json`,
+`runtime-0.0.2-package-artifact-inventory.json` and
+`runtime-0.0.3-package-artifact-inventory.json` under `docs/verification/`.
+The last is a byte-for-byte snapshot of the published 0.0.3 inventory.
+The reviewed 0.0.4 candidate inventory is also retained unchanged. The authoritative
+`runtime-package-artifact-inventory.json` retains its wheel and records the refreshed
+sdist whose only changed member is README.md release guidance.
 
-This lane prepares the cleanup-lease handoff repair as `0.0.3`. It does not
-authorize a merge, tag, upload, or external configuration change. Published
-`0.0.1a1` and `0.0.2` and their artifacts remain immutable. Their inventories
-are retained in `docs/verification/package-artifact-inventory.json` and
-`docs/verification/runtime-0.0.2-package-artifact-inventory.json`.
-
-The public base is `5c51863669493117a511abf6d65a63dc6e731f49`. A read-only check of
-[PyPI project JSON](https://pypi.org/pypi/memoriesql/json) on 2026-09-09 found
-`0.0.1a1` and `0.0.2`, and no `0.0.3`. Availability must be checked again before
-release; this check is not a reservation.
-
-Distribution versions follow the owner-approved plain numeric `X.Y.Z` convention,
-with matching `vX.Y.Z` tags. Do not add alpha/beta/rc suffixes unless separately
-requested. Numeric naming does not imply production readiness: the `0.x` line
-remains experimental under the [compatibility policy](architecture/compatibility.md).
-The previously prepared prerelease candidate was never published and must not be
-released as an intermediate version. Build genuine `0.0.3` archives; do not rename
-archives with different embedded metadata.
+A read-only check of [the PyPI version endpoint](https://pypi.org/pypi/memoriesql/0.0.4/json)
+on 2026-09-10 returned HTTP 404. This is not a reservation. Recheck immediately
+before release. Versions follow plain numeric `X.Y.Z` with `vX.Y.Z` tags; no
+alpha/beta/rc version or renamed archive is an intermediate release. The `0.x`
+line remains experimental under the [compatibility policy](architecture/compatibility.md).
 
 ## Exact release identity
 
@@ -37,96 +30,107 @@ archives with different embedded metadata.
 | GitHub repository | `JohnnyFiv3r/memoriesql` (ID `1357510758`) |
 | Workflow | `.github/workflows/publish-pypi.yml` |
 | Environment | `pypi` |
-| Only accepted new tag | `v0.0.3` |
-| Package version | `0.0.3` |
+| Only accepted new tag | `v0.0.4` |
+| Package version | `0.0.4` |
 | Committed release inventory | `docs/verification/runtime-package-artifact-inventory.json` |
 
-The existing Trusted Publisher identity uses the same repository, workflow filename,
-and environment. This lane requires no change to that identity and does not inspect
-or modify PyPI account settings. The owner must verify that identity before release;
-there is no token fallback and no new publisher registration in this PR.
+The existing Trusted Publisher must retain this repository, workflow filename and
+environment. Public [0.0.3 wheel provenance](https://pypi.org/integrity/memoriesql/0.0.3/memoriesql-0.0.3-py3-none-any.whl/provenance)
+identifies that publisher historically. It does not verify the current authenticated
+PyPI account configuration. The owner must check that configuration before release;
+there is no token fallback or new publisher registration in this preparation.
 
 ## Artifact and approval controls
 
-- Only creation of `v0.0.3` can trigger the publishing workflow. Historical tags,
-  wildcard tags, manual dispatch, pull requests and branch pushes cannot trigger it.
-- The tag commit must equal current main, the package version must equal `0.0.3`,
+- Only creation of `v0.0.4` can trigger publishing. Historical tags, wildcard tags,
+  manual dispatch, pull requests and branch pushes cannot trigger it.
+- The tag commit must equal current main, the package version must equal `0.0.4`,
   and the latest exact-head `python-package.yml` **main push** run must have completed
-  successfully. A PR check proves readiness, not eligibility to publish a merge.
-- Download only `memoriesql-python-<exact SHA>` from that selected run ID. Verify the
-  two filenames, version, sizes and SHA-256 hashes against the committed release
-  inventory. A downloaded inventory cannot override the committed hashes. Extra,
-  missing, altered or symlinked distribution files fail closed.
-- The verify job stages only those two archives. The publish job downloads those
-  staged bytes, uses pinned actions and OIDC, and executes no repository code.
-  Only the protected publish job has `id-token: write`. There is no publish-time
-  rebuild, dependency resolution, compatibility rerun, or `skip-existing` fallback.
-- The `pypi` environment must retain required owner approval and disabled
-  administrator bypass. Automation must not approve its own upload. The existing
-  self-review allowance lets the sole owner approve a release they initiated.
+  successfully. A PR check does not establish eligibility to publish its merge.
+- Download only `memoriesql-python-<exact SHA>` from that selected run ID. Verify
+  both filenames, version, sizes and SHA-256 hashes against the committed inventory.
+  The downloaded inventory cannot override committed hashes. Extra, missing,
+  altered or symlinked distribution files fail closed.
+- The verify job stages only those two archives. The protected publish job downloads
+  those bytes, uses pinned actions and OIDC, and executes no repository code. Only
+  that job has `id-token: write`. There is no publication-time rebuild, dependency
+  resolution, compatibility rerun, or `skip-existing` fallback.
+- The `pypi` environment must retain owner approval and disabled administrator
+  bypass. Automation must not approve its own upload. The existing self-review
+  allowance permits the sole owner to approve a release they initiated.
 
-Release preparation may use the existing deterministic build to prepare candidate
-hashes and record the inventory. Fresh hosted CI artifacts from the final exact
-head must independently match that committed inventory before readiness is claimed.
-Release documentation under `docs/` and verification inventories are excluded
-from the distributions,
-so recording these hashes does not introduce a self-referential build. If packaged
-bytes change during review, obtain new hosted artifacts and requalify the final
-head; never substitute old local build output. The later owner merge still needs
-its own successful exact-main push run and retained artifacts with matching hashes.
+Final exact-head hosted artifacts must independently match the committed inventory.
+Documentation under `docs/`, workflow controls and their tests are excluded from
+the distributions, but setuptools includes the repository README in the sdist.
+Its release-tag guidance changes here, requiring a genuine source-archive refresh.
+The wheel and all runtime inputs are unchanged, so existing installed-package
+acceptance is reused without a local full convergence rerun. Hosted CI verifies
+the final PR head and independently rebuilt sdist wheel. If packaged bytes change
+further, refresh artifacts and their evidence. The later
+owner merge needs its own successful exact-main push CI and retained matching bytes.
 
-## Python and integration requirements
+## Schema 15 upgrade and consumer opt-in
 
-The runtime requires `>=3.13,<3.15`; Python 3.13 and 3.14 are qualified using installed
-wheels and independently rebuilt sdists, with checkout access denied. Python
-3.11/3.12 can install the older catalog-only `0.0.1a1` with an exact version pin;
-that is not a runtime install. An unpinned request may fail rather than fall back
-because pip excludes prereleases by default when a numeric release is present.
-The older-Python CI fallback test explicitly allows prereleases with `--pre` and
-separately proves that the `0.0.3` runtime is rejected.
-After authorized publication, pin `memoriesql==0.0.3` when requesting this runtime
-and verify the installed version. Preview payload IDs/versions, all 49 payloads,
-twelve preview APIs and fourteen SQL migration resources remain unchanged.
+The runtime requires Python `>=3.13,<3.15`. Python 3.13 and 3.14 have installed-wheel
+and independently rebuilt-sdist coverage with checkout access denied. Python
+3.11/3.12 can use the catalog-only `0.0.1a1` with an exact pin; it is not a runtime
+fallback. Older-Python CI separately rejects `0.0.4`. After separately authorized
+publication, consumers requesting this version must pin `memoriesql==0.0.4`.
 
-Integrators must handle the experimental `cleanup_pending` worker receipt. The
-foreground cancellation wait defaults to five seconds on a responsive event loop;
-it does not guarantee callback, database-thread or process termination. Retain the
-worker and its event loop, do not start replacement work to bypass its quarantine,
-and observe `await worker.wait_for_cleanup()` for the eventual receipt or error.
-Cancelling that observer does not abandon owned cleanup. Cleanup retention spans
-normal settlement as well as cancellation drains and started run-event writes.
-A callback can keep cleanup pending indefinitely; ordinary event-loop shutdown
-is not a durable cleanup handoff. There is no second scheduler or service bootstrap.
+Schema 15 is a forward-only upgrade. Migrations 0001–0014 and all 49 published
+preview payloads remain byte-for-byte unchanged; migration 0015 adds accepted-bead
+seals and explicit correction lineage. Before an authorized deployment, the
+consumer must deliberately plan its database upgrade and writer composition:
 
-Late output has no semantic write authority, but late usage remains accountable
-against its original intent. A cancellation receipt is not proof of reconciled
-usage; a failed late ledger write remains observable. Caller cancellation during
-a started normal outcome write is not proof of transaction rollback. Failed or
-indeterminate settlement must not be presented as settled; the existing PostgreSQL
-lease/reaper and authorization/fencing rules remain authoritative. See
-[the full owned-cleanup contract](runtime.md#cancellation-cleanup-ownership).
+1. Historical bead versions, IDs, statements, reads and successful receipts survive.
+   Existing receipt replay retains its original meaning under current authorization.
+   Initial source-occurrence replay still returns the initial bead after corrections.
+2. Accepted meaning, type and summary/render are immutable after upgrade. Legacy
+   commands attempting another accepted semantic version fail explicitly with
+   `accepted_bead_immutable`; they are never translated into corrections. Unaccepted
+   initial work can still finish using the legacy registry.
+3. Version-2 initial authorship and correction require explicit opt-in:
+   `AcceptSourceEventV2Command` / `accept_source_event_v2()`,
+   `load_observation_task_registry()`, and the version-2 initial/correction commands.
+   Installing the package does not select that composition. Corrections create
+   distinct beads with pinned supersession; independent branches and multi-target
+   reconciliation remain valid, without selecting a global winner.
+4. Use the guarded forward migration from schema 14 to 15 only after consumer
+   readiness and deployment authorization. There is no historical reauthoring or
+   down migration. Current authorization, evidence and attempt fences remain in force.
+
+See [migration operations](migrations.md) and the complete
+[contract/caller map](immutable-observations.md). This preparation does not execute
+an upgrade, change consumer code, or authorize desktop adoption.
+
+The 0.0.3 cleanup ownership contract also remains in force. A bounded cancellation
+receipt is not proof of termination, rollback or reconciled usage. Retain a worker
+reporting `cleanup_pending`, its event loop and quarantine, and observe
+`await worker.wait_for_cleanup()` for eventual settlement/error. Late usage remains
+accountable; failed or indeterminate settlement must remain visible. See the
+[owned-cleanup contract](runtime.md#cancellation-cleanup-ownership).
 
 ## Separate owner actions
 
-1. Review and merge this release-readiness PR only after final exact-head CI and
-   review closure. This task leaves it open and unmerged.
-2. **External environment change:** the read-only 2026-09-09 check found that `pypi`
-   permits only the tag `v0.0.2`. Replace that exact tag allowance with `v0.0.3`;
-   do not allow branches or wildcards. Preserve the required owner reviewer,
-   disabled administrator bypass, and existing self-review policy. This change
-   has not been performed. Existing immutable historical tags must not be modified.
-3. Recheck PyPI availability, existing Trusted Publisher identity, environment
-   protection, current main, its latest successful main-push CI and artifact
-   retention. Compare both artifacts with the committed runtime inventory. If
-   `0.0.3` has been published, stop and prepare a separately reviewed new version.
-4. Separately authorize release, then create `v0.0.3` once at that exact main
-   commit. Do not move, delete, recreate or retarget published tags.
-5. Inspect the selected run, SHA and both artifact hashes before approving the
-   waiting `pypi` job. That approval permits the upload; this PR does not.
-6. After upload, verify PyPI filenames/hashes and fresh exact-version installation
-   on Python 3.13/3.14. Passing preparation checks is not proof of publication.
+1. Review and merge this readiness PR after final exact-head CI and review closure.
+   This task leaves it open and unmerged. Its base SHA is not the eventual release SHA.
+2. **External environment action, separately authorized:** authenticated GitHub API
+   reads on 2026-09-10 found only the exact tag `v0.0.3` allowed in `pypi`, required
+   reviewer `JohnnyFiv3r`, administrator bypass disabled, and self-review allowed.
+   Replace only that tag allowance with `v0.0.4`; retain those protection rules and
+   reject branches/wildcards. This preparation has not changed the environment.
+3. Recheck PyPI version availability, the authenticated Trusted Publisher identity,
+   protection rules, current main, its latest successful main-push CI, and retained
+   artifacts. Independently compare both archives with the committed inventory.
+   If 0.0.4 already exists, stop for a separately reviewed version; never overwrite it.
+4. Separately authorize publication, then create `v0.0.4` once at that verified main
+   SHA. Never move, delete, recreate or retarget an existing published tag.
+5. Inspect the selected CI run, SHA and both hashes before approving the waiting
+   `pypi` job. That owner approval permits upload; this PR does not.
+6. After upload, verify PyPI filenames/hashes, provenance and fresh exact-version
+   installations on Python 3.13/3.14. Preparation CI is not proof of publication.
 
-If main advances, CI is missing/pending/failed, artifacts expire, hashes differ,
-or external protection is not correct, stop. Do not fall back to an earlier head,
-rebuild inside publication, or weaken the gate. Private product adoption/N3,
-providers, owner data and CP execution remain outside this release-preparation lane.
+If main advances, CI is missing/pending/failed, artifacts expire, hashes differ or
+protection is incorrect, stop. Do not fall back to an earlier head, rebuild during
+publication, or weaken the gate. Product adoption, providers, owner data and
+checkpoint execution require separate authorization.

@@ -43,4 +43,4 @@ See [compatibility policy](docs/architecture/compatibility.md) and [repository b
 
 Source code and designated materials are licensed under [Apache License 2.0](LICENSE). The memoriesQL name and banner remain subject to [trademark guidance](TRADEMARKS.md). Contributions use the [Developer Certificate of Origin](CONTRIBUTING.md), not a contributor license agreement.
 
-The repository is public; package publication is a separate owner-approved step. The release workflow is restricted to the approved runtime tag `v0.0.3`, exact-main-head CI artifacts, and the protected `pypi` environment. See [release controls](docs/releasing.md). Published `0.0.1a1`, `0.0.2` and `0.0.3` stay immutable. This change authorizes no new release.
+The repository is public; package publication is a separate owner-approved step. The release workflow is restricted to the prepared runtime tag `v0.0.4`, exact-main-head CI artifacts, and the protected `pypi` environment. See [release controls](docs/releasing.md). Published `0.0.1a1`, `0.0.2` and `0.0.3` stay immutable. This change authorizes no new release.
