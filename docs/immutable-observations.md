@@ -107,11 +107,15 @@ application nor worker roles receive direct mutation grants.
 
 ## Candidate and release boundary
 
-`0.0.4` was absent from the public version endpoint during this lane's read-only
-availability check. This is an unreleased candidate, not a reserved or published
-version. The candidate inventory is separate from the unchanged published
-`0.0.3` inventory. CI checks its deterministic bytes using `candidate-artifacts`;
-the publisher still rejects versions other than the previously approved `0.0.3`.
-A separate release authorization must refresh availability and exact-main
-artifacts and authorize any publisher/tag changes. Product adoption follows that
-release; this PR performs neither publication nor adoption.
+The reviewed `0.0.4` candidate is now promoted into the exact-version repository
+release controls. CI and the publisher verifier use the authoritative
+`runtime-package-artifact-inventory.json`. The retained candidate inventory
+`immutable-observations-candidate-artifacts.json` has the same wheel; only packaged
+README release guidance changes the prepared sdist. Published `0.0.3` evidence is
+preserved in `runtime-0.0.3-package-artifact-inventory.json`.
+
+This preparation does not publish the version or authorize external settings,
+tags or consumer adoption. The owner must complete the availability, exact-main
+CI, artifact, Trusted Publisher and protected-approval checks in
+[the release guide](releasing.md). Consumer deployment and explicit version-2
+composition remain separate authorized actions after public release.

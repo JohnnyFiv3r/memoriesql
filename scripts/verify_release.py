@@ -14,9 +14,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY = "JohnnyFiv3r/memoriesql"
 REPOSITORY_ID = 1357510758
-APPROVED_VERSION = "0.0.3"
-# Integrity checking this unreleased candidate does not authorize publishing it.
-CANDIDATE_VERSION = "0.0.4"
+APPROVED_VERSION = "0.0.4"
 
 
 def select_ci_run(
@@ -50,15 +48,13 @@ def select_ci_run(
 def verify_artifacts(
     directory: Path,
     inventory: dict[str, Any],
-    *,
-    expected_version: str = APPROVED_VERSION,
 ) -> tuple[Path, ...]:
-    if inventory.get("version") != expected_version:
+    if inventory.get("version") != APPROVED_VERSION:
         raise ValueError("inventory must match the approved runtime version")
     rows = inventory["artifacts"]
     expected = {
-        f"memoriesql-{expected_version}-py3-none-any.whl",
-        f"memoriesql-{expected_version}.tar.gz",
+        f"memoriesql-{APPROVED_VERSION}-py3-none-any.whl",
+        f"memoriesql-{APPROVED_VERSION}.tar.gz",
     }
     if len(rows) != 2 or {row["filename"] for row in rows} != expected:
         raise ValueError("inventory must contain only the approved wheel and sdist")
@@ -90,8 +86,6 @@ def main() -> None:
     artifacts = commands.add_parser("artifacts")
     artifacts.add_argument("directory", type=Path)
     artifacts.add_argument("--output", type=Path)
-    candidate = commands.add_parser("candidate-artifacts")
-    candidate.add_argument("directory", type=Path)
     args = parser.parse_args()
     if args.command == "ci":
         project = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]
@@ -103,19 +97,6 @@ def main() -> None:
             version=project["version"],
         )
         print(f"run_id={run_id}")
-    elif args.command == "candidate-artifacts":
-        inventory = json.loads(
-            (
-                ROOT
-                / "docs/verification/immutable-observations-candidate-artifacts.json"
-            ).read_text()
-        )
-        paths = verify_artifacts(
-            args.directory, inventory, expected_version=CANDIDATE_VERSION
-        )
-        print(
-            json.dumps({"verified_candidate_artifacts": [path.name for path in paths]})
-        )
     else:
         inventory = json.loads(
             (

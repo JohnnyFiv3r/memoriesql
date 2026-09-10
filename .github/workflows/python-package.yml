@@ -43,7 +43,7 @@ jobs:
           python scripts/normalize_python_sdist.py build/dist-a/memoriesql-0.0.4.tar.gz
           python -m twine check --strict build/dist-a/*
           python scripts/inspect_python_distribution.py build/dist-a > build/dist-a/python-package-artifacts.json
-          python scripts/verify_release.py candidate-artifacts build/dist-a
+          python scripts/verify_release.py artifacts build/dist-a
       - name: Prove deterministic rebuild
         run: |
           export SOURCE_DATE_EPOCH=315532800

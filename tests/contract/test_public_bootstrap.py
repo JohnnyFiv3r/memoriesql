@@ -91,11 +91,12 @@ class PublicBootstrapTests(unittest.TestCase):
 
     def test_publisher_has_narrow_owner_approved_controls(self) -> None:
         workflow = (ROOT / ".github/workflows/publish-pypi.yml").read_text()
-        self.assertIn('tags: ["v0.0.3"]', workflow)
-        self.assertEqual(workflow.count("refs/tags/v0.0.3"), 2)
+        self.assertIn('tags: ["v0.0.4"]', workflow)
+        self.assertEqual(workflow.count("refs/tags/v0.0.4"), 2)
         self.assertNotIn("v0.0.1a1", workflow)
         self.assertNotIn("v0.0.2", workflow)
-        self.assertNotIn("v0.0.3a1", workflow)
+        self.assertNotIn("v0.0.3", workflow)
+        self.assertNotIn("v0.0.4a1", workflow)
         self.assertNotIn("v*", workflow)
         self.assertIn("github.repository == 'JohnnyFiv3r/memoriesql'", workflow)
         self.assertIn("github.repository_id == '1357510758'", workflow)
@@ -126,16 +127,16 @@ class PublicBootstrapTests(unittest.TestCase):
     def test_package_ci_checks_committed_release_hashes(self) -> None:
         workflow = (ROOT / ".github/workflows/python-package.yml").read_text()
         self.assertIn(
-            "python scripts/verify_release.py candidate-artifacts build/dist-a", workflow
+            "python scripts/verify_release.py artifacts build/dist-a", workflow
         )
         self.assertLess(
             workflow.index(
                 "python scripts/inspect_python_distribution.py build/dist-a"
             ),
-            workflow.index("python scripts/verify_release.py candidate-artifacts build/dist-a"),
+            workflow.index("python scripts/verify_release.py artifacts build/dist-a"),
         )
         self.assertLess(
-            workflow.index("python scripts/verify_release.py candidate-artifacts build/dist-a"),
+            workflow.index("python scripts/verify_release.py artifacts build/dist-a"),
             workflow.index("name: Retain exact artifacts and inventory"),
         )
 
