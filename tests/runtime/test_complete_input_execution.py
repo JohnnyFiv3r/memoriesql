@@ -690,6 +690,18 @@ class CompleteInputExecution(LogicalUnitMaterialization):
             inventory_sha256=self.bound.bound_package.inventory_sha256,
             next_ordinal=0,
         )
+
+        def bounded_read(queue: Any, _: Any) -> Any:
+            page = queue.read_complete_evidence(claimed.fence, request)
+            settings = queue._connection.execute(
+                "SELECT current_setting('statement_timeout'), current_setting('lock_timeout')"
+            ).fetchone()
+            self.assertEqual(settings, ("2s", "500ms"))
+            return page
+
+        self.assertEqual(
+            self.worker()._transaction(bounded_read).package_id, request.package_id
+        )
         started = Event()
 
         def hydrate() -> Any:

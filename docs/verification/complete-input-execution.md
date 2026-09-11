@@ -70,7 +70,11 @@ external-network isolation guard in 42.713 seconds. The initial run exposed a
 missing test-only runtime import and an obsolete out-of-range assertion for schema
 18; both were corrected. No runtime change was required by that run. Repository
 checks cover 37 tests, with only the three changed inventory expectations rerun
-after correction. Ruff and mypy (81 files) passed; changed-test mypy also passed.
+after correction. Ruff and mypy (81 files) passed; changed-test mypy also passed. A later targeted inspection found that the worker
+reader route omitted the standalone reader's server timeout settings. The route
+now applies the same two-second statement and 500-ms lock bounds. The two affected
+installed authorization-wait/complete-apply checks pass in 2.755 seconds; no
+unchanged local suite was rerun. Artifacts below include this correction.
 
 The wheel installs in a fresh environment. An independently extracted sdist builds
 a byte-identical wheel, which also installs in another fresh environment and exposes
@@ -82,8 +86,8 @@ release inventories, version metadata and publication workflow bytes are unchang
 
 Development artifact SHA-256 values (not a published release inventory):
 
-- Wheel: `c2bcade89c817e83d3d5583289467176f664d5094662b7b5883c0b917b73dd12`
-- Sdist: `f279e576072d32402375c6f073063cc2dab4fb5c511dd267192303617c84c456`
+- Wheel: `ed364d98afe3c8e1b1a796636c9651865538c9872715151c75399fe80fa15830`
+- Sdist: `76fbdd3378a3c7b153b3a8380962d3938dc04de24c77f5b4a35a83380fac8a7d`
 
 Exact-head hosted CI and review state are recorded on the PR. No release version
 is selected.

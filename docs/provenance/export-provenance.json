@@ -974,7 +974,7 @@
       "classification": "public-authored",
       "license": "Apache-2.0",
       "public_path": "contracts/runtime-inventory.json",
-      "public_sha256": "31b013b76c7600a4e585d66af9fca369bc0c5e7a4725ff1ee0328d52ba88c8d6",
+      "public_sha256": "4157cec84697f811250e8ee60b4ec2563d6a250452e50bad9364ffb9523f000e",
       "reason": "Public N2 dependency inventory and fictional runtime acceptance."
     },
     {
@@ -1254,7 +1254,7 @@
       "classification": "public",
       "license": "Apache-2.0",
       "public_path": "tests/runtime/test_complete_input_execution.py",
-      "public_sha256": "109fc366e8eac7d54b1a8d8f6e84565881e7ed3346c2eea35ed0cac7191f5d64",
+      "public_sha256": "af06d49b4467aacb75c2f0dec77155c0d7f0ff918c64b5941a76a70a378190e3",
       "reason": "Public-authored complete-input execution slice and fictional verification."
     },
     {
@@ -1296,7 +1296,7 @@
       "classification": "public",
       "license": "Apache-2.0",
       "public_path": "docs/verification/complete-input-execution.md",
-      "public_sha256": "ef1659d8b2379c710741f0ca3398bcc1d169f89604c56598b4c6e5fe43cd9ad9",
+      "public_sha256": "d30c0e6491db5d013c8eb6504d6754c03a5f2ac3b5ef39334f98788621e6bb3c",
       "reason": "Public-authored complete-input execution slice and fictional verification."
     }
   ],
@@ -1583,7 +1583,7 @@
       "classification": "copy",
       "license": "Apache-2.0",
       "public_path": "src/memoriesql/infrastructure/jobs/postgres_semantic_queue.py",
-      "public_sha256": "8d3f07c65cd12d209649345160dab299f9079a15670bfb0b494923d0128c9dbb",
+      "public_sha256": "92851a14792582a573bb0ece0a06749a53d1cbd24af5402d118cad20e701ee12",
       "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
       "source_sha256": "5bbff727506cd237a9596adc9e59743519defe90f29c14af9e03fc55a445ce80"
     },

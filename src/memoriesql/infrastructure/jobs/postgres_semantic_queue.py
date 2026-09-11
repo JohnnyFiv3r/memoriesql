@@ -466,6 +466,11 @@ class PostgresSemanticTaskQueue:
     def read_complete_evidence(
         self, fence: SemanticTaskFence, request: ReadCompleteEvidence
     ) -> CompleteEvidenceBatch:
+        # Match the standalone reader's bounded server operations. This route
+        # runs inside the worker's owned transaction, never a provider wait.
+        self._connection.execute("SET LOCAL statement_timeout='2s'")
+        self._connection.execute("SET LOCAL lock_timeout='500ms'")
+
         def authorize() -> None:
             if (
                 self.reauthorize(fence, phase="hydrate", checked_at=datetime.now(UTC))
