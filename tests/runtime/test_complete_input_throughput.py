@@ -43,7 +43,7 @@ class CountingConnection(psycopg.Connection[Any]):
 
 
 class CompleteInputThroughput(CompleteInputExecution):
-    def qualify(self, texts: list[str]) -> None:
+    def qualify(self, texts: list[str]) -> dict[str, Any]:
         parts = tuple(self.part(text, i) for i, text in enumerate(texts))
         package = self.create(parts)
         for part in parts:
@@ -139,11 +139,14 @@ class CompleteInputThroughput(CompleteInputExecution):
         )
         interactions = 0
         max_prompt_bytes = 0
+        supplied_hash = hashlib.sha256()
 
         def respond(messages: Any, info: Any) -> Any:
             nonlocal interactions, max_prompt_bytes
             response = self.response(messages, info)
             frame = self.received.pop()
+            for item in frame["complete_input_window"]["slices"]:
+                supplied_hash.update(item["content"].encode())
             interactions += 1
             max_prompt_bytes = max(
                 max_prompt_bytes,
@@ -156,6 +159,7 @@ class CompleteInputThroughput(CompleteInputExecution):
         start = time.perf_counter()
         result = asyncio.run(self.worker(respond).run_once())
         self.assertEqual(result.task_status, "succeeded", result)
+        self.assertEqual(supplied_hash.hexdigest(), expected)
         measurements["execution"] = {
             "fake_model_interactions": interactions,
             "elapsed_ms": round((time.perf_counter() - start) * 1000, 3),
@@ -179,12 +183,18 @@ class CompleteInputThroughput(CompleteInputExecution):
         assert plan is not None
         measurements["bounded_query_plan"] = plan[0]
         print("COMPLETE_INPUT_THROUGHPUT " + json.dumps(measurements, sort_keys=True))
+        return measurements
 
     def test_large_unicode_reader_throughput(self) -> None:
         self.qualify(["🌳e\u0301雪" * 4096 for _ in range(8)])
 
     def test_many_part_reader_throughput(self) -> None:
         self.qualify(["tree🌳" * 10 for _ in range(256)])
+
+    def test_astral_part_boundaries_fit_eight_requests(self) -> None:
+        measured = self.qualify(["🚀" * 16384 for _ in range(5)])
+        self.assertEqual(measured["reader_v2"]["authorized_operations"], 1)
+        self.assertEqual(measured["execution"]["fake_model_interactions"], 8)
 
 
 def load_tests(

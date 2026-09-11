@@ -113,10 +113,11 @@ class CompleteInputEvidenceAccess:
                         )
                         return len(canonical_json_bytes(data)) <= WINDOW_JSON_BYTES
 
-                    if item is not None and not slices and not fits(item):
+                    if item is not None and not fits(item):
                         # JSON escaping can use twelve bytes per astral code
                         # point. Find the largest exact prefix that fits the
-                        # byte ceiling without changing source-unit identity.
+                        # remaining byte capacity, including earlier slices,
+                        # without changing source-unit identity.
                         low, high = 1, count - 1
                         item = None
                         while low <= high:

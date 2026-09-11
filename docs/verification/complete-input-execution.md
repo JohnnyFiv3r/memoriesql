@@ -27,23 +27,27 @@ SQL functions. Each authorized operation owns one transaction.
 | --- | --- | ---: | ---: | ---: | ---: |
 | 131,072 Unicode code points / 327,680 UTF-8 bytes / 8 parts | v1 | 130 | 520 | 1,163.355 ms | 50,257 B |
 | Same complete inventory | v2 | 1 | 6 | 11.412 ms | 2,194,168 B |
-| 12,800 code points / 20,480 UTF-8 bytes / 256 parts | v1 | 320 | 1,280 | 1,746.874 ms | 48,324 B |
-| Same complete inventory | v2 | 32 | 192 | 132.456 ms | 101,358 B |
+| 12,800 code points / 20,480 UTF-8 bytes / 256 parts | v1 | 320 | 1,280 | 1,578.403 ms | 48,324 B |
+| Same complete inventory | v2 | 32 | 192 | 190.743 ms | 101,358 B |
+| 81,920 astral code points / 327,680 UTF-8 bytes / 5 parts | v1 | 82 | 328 | 651.730 ms | 61,835 B |
+| Same complete inventory | v2 | 1 | 6 | 7.125 ms | 2,315,422 B |
 
 Every reader run reconstructed and hashed the complete exact text. Reader
 operations made **zero** model interactions. Execution separately used eight
 fictional model interactions for the Unicode unit (2,404.262 ms, maximum prompt
-JSON 107,022 bytes), and two for 256 parts (3,835.778 ms, maximum prompt JSON
+JSON 107,022 bytes), and two for 256 parts (4,077.013 ms, maximum prompt JSON
 134,012 bytes). Each execution produced one accepted bead. Provider request intents
 and usage use the existing accounting ledger. These synthetic timings do not
 predict real provider latency, billing or comprehension.
 
-The 256-part follow-up measured a concrete optimization: exposure validation now
+An earlier 256-part follow-up measured a concrete optimization: exposure validation now
 checks the immediately preceding part through its indexed ordinal instead of
 rescanning every preceding part. Contiguous ordered recording makes that check
 sufficient by induction. The earlier workload took 4,098.896 ms for execution;
 the focused follow-up took 3,668.224 ms. This is a single diagnostic comparison,
-not a statistically established speedup.
+not a statistically established speedup. The table uses the later final packing
+verification for 256 parts; its execution took 4,077.013 ms. Timing variation is
+reported rather than presented as a stable performance guarantee.
 
 `EXPLAIN (ANALYZE, BUFFERS)` for the bounded reader's selection used
 `evidence_package_parts_pkey`, one index search and eight returned rows. The
@@ -81,7 +85,16 @@ packing now finds the largest exact prefix fitting the unchanged byte/character
 ceilings. The new regression and mixed-Unicode case pass from the installed wheel
 in 3.799 seconds: the full part is exposed in two windows and produces one accepted
 bead. This adds one case (120 total); no unchanged convergence suite was rerun.
-Artifacts below include both corrections.
+The single focused rereview found that the prefix search also needed to fill
+partially occupied windows. Five full astral parts reproduced unnecessary budget
+exhaustion before that correction. The final packing now exposes all 81,920 code
+points in eight interactions (2,287.552 ms, maximum prompt JSON 134,360 bytes),
+from one reader operation. This regression and the affected 256-part throughput
+case pass in 12.958 seconds, verifying exact supplied-text hashes and one bead per
+unit. This adds another case (121 total). Both review findings are answered and
+resolved; no third review is requested. Final-head hosted CI covers the final fix,
+which necessarily follows the focused review that identified it. Artifacts below
+include all corrections.
 
 The wheel installs in a fresh environment. An independently extracted sdist builds
 a byte-identical wheel, which also installs in another fresh environment and exposes
@@ -93,8 +106,8 @@ release inventories, version metadata and publication workflow bytes are unchang
 
 Development artifact SHA-256 values (not a published release inventory):
 
-- Wheel: `f0b26216c27e5a37f776054f75313345c3c30d38df004a77de239345b6117f1d`
-- Sdist: `f8d9fcb16a34c3ce918a80b6efd46912e0c2eef192a619728f1f4560150f5266`
+- Wheel: `56c64c6f5795110a8c27ecd3f4b49411ca4d4608512b469a7b067a86312e7a43`
+- Sdist: `d348ab2c4bd4fd1fe1d094653b89eb24559426d492ca7fa12321e3a86c1b8252`
 
 Exact-head hosted CI and review state are recorded on the PR. No release version
 is selected.

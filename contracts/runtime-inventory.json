@@ -266,7 +266,7 @@
       "disposition": "public",
       "path": "src/memoriesql/infrastructure/jobs/complete_input_access.py",
       "reason": "Public-authored complete-input execution and bounded authorized evidence transport.",
-      "sha256": "64ac6d406e8321e0d2bfe1e0db3df11719656b016945d868fc88c899f99076d9"
+      "sha256": "cd5e4f713d5049a707326fa9714d7357d140dbac6017444cc650fe2d750004bb"
     },
     {
       "disposition": "public",

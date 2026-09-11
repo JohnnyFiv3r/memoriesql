@@ -974,7 +974,7 @@
       "classification": "public-authored",
       "license": "Apache-2.0",
       "public_path": "contracts/runtime-inventory.json",
-      "public_sha256": "199d1a1d13211fbc7a98ea3ff9aae885a8a1fee546825e352f58474963de6f8d",
+      "public_sha256": "930cb5b0d6a309d7d7181331c30fa977de832b0d76d675e5c3701497af7a371c",
       "reason": "Public N2 dependency inventory and fictional runtime acceptance."
     },
     {
@@ -1233,7 +1233,7 @@
       "classification": "public",
       "license": "Apache-2.0",
       "public_path": "src/memoriesql/infrastructure/jobs/complete_input_access.py",
-      "public_sha256": "64ac6d406e8321e0d2bfe1e0db3df11719656b016945d868fc88c899f99076d9",
+      "public_sha256": "cd5e4f713d5049a707326fa9714d7357d140dbac6017444cc650fe2d750004bb",
       "reason": "Public-authored complete-input execution slice and fictional verification."
     },
     {
@@ -1261,7 +1261,7 @@
       "classification": "public",
       "license": "Apache-2.0",
       "public_path": "tests/runtime/test_complete_input_throughput.py",
-      "public_sha256": "c867381e52b53e8392bc14a9c0bd0bf3e9b056c789b66e6560854d2347dba5de",
+      "public_sha256": "db10fc9635b157d8811d1a84f8846b70e1ed798f7ffb3a3b8d19dd53ba110d8c",
       "reason": "Public-authored complete-input execution slice and fictional verification."
     },
     {
@@ -1296,7 +1296,7 @@
       "classification": "public",
       "license": "Apache-2.0",
       "public_path": "docs/verification/complete-input-execution.md",
-      "public_sha256": "814a119350ec18ec639d92d0393d505c51e5488a985062cf496e567467c7888d",
+      "public_sha256": "d118e86ed1018921d0199bef172336ae62af62a048622dc8ab9e257cdb4a45c4",
       "reason": "Public-authored complete-input execution slice and fictional verification."
     }
   ],
