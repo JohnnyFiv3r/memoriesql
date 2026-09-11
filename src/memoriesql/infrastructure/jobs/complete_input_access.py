@@ -113,13 +113,30 @@ class CompleteInputEvidenceAccess:
                         )
                         return len(canonical_json_bytes(data)) <= WINDOW_JSON_BYTES
 
+                    if item is not None and not slices and not fits(item):
+                        # JSON escaping can use twelve bytes per astral code
+                        # point. Find the largest exact prefix that fits the
+                        # byte ceiling without changing source-unit identity.
+                        low, high = 1, count - 1
+                        item = None
+                        while low <= high:
+                            size = (low + high) // 2
+                            candidate = EvidenceExposureSlice(
+                                inventory=entry,
+                                start_character=offset,
+                                content=part.content[offset : offset + size],
+                            )
+                            if fits(candidate):
+                                item = candidate
+                                low = size + 1
+                            else:
+                                high = size - 1
+                        count = len(item.content) if item is not None else 0
                     if item is None or not fits(item):
                         if slices:
                             yield self._window(slices, final=False)
                             slices, window_characters = [], 0
                             continue
-                        # Worst-case Unicode escaping still fits a single 16K
-                        # character fragment plus its bounded inventory metadata.
                         raise ValueError(
                             "complete input window cannot represent fragment"
                         )

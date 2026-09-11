@@ -93,7 +93,7 @@ jobs. The source-controlled execution ceiling permits eight interactions, 131,07
 source characters, 300 seconds, 524,288 aggregate input tokens and 32,768 output
 tokens. This covers eight bounded inspection windows with bounded working notes;
 it is a new execution ceiling, not an increase to a published payload meaning or
-approval of a production model/cost. Metadata can require additional windows and
+approval of a production model/cost. JSON escaping and metadata can require additional windows and
 therefore exhaust the request budget earlier. Caller runtime ceilings may be
 narrower. The existing accounting and model-profile limits continue to apply.
 The neutral standard-effort profile requires explicit caller composition; no

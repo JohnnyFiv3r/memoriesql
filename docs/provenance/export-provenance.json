@@ -974,7 +974,7 @@
       "classification": "public-authored",
       "license": "Apache-2.0",
       "public_path": "contracts/runtime-inventory.json",
-      "public_sha256": "4157cec84697f811250e8ee60b4ec2563d6a250452e50bad9364ffb9523f000e",
+      "public_sha256": "199d1a1d13211fbc7a98ea3ff9aae885a8a1fee546825e352f58474963de6f8d",
       "reason": "Public N2 dependency inventory and fictional runtime acceptance."
     },
     {
@@ -1233,7 +1233,7 @@
       "classification": "public",
       "license": "Apache-2.0",
       "public_path": "src/memoriesql/infrastructure/jobs/complete_input_access.py",
-      "public_sha256": "185e08f64e08a38853d77d210f4e58141226bfa0b2f37bcbc91498bf08696c9f",
+      "public_sha256": "64ac6d406e8321e0d2bfe1e0db3df11719656b016945d868fc88c899f99076d9",
       "reason": "Public-authored complete-input execution slice and fictional verification."
     },
     {
@@ -1254,7 +1254,7 @@
       "classification": "public",
       "license": "Apache-2.0",
       "public_path": "tests/runtime/test_complete_input_execution.py",
-      "public_sha256": "af06d49b4467aacb75c2f0dec77155c0d7f0ff918c64b5941a76a70a378190e3",
+      "public_sha256": "d3ef3fc2ae22ae8b6e077466e671516226fc293e408fa91417c111ff1a88864d",
       "reason": "Public-authored complete-input execution slice and fictional verification."
     },
     {
@@ -1289,14 +1289,14 @@
       "classification": "public",
       "license": "Apache-2.0",
       "public_path": "docs/complete-input-execution.md",
-      "public_sha256": "01a915131d159c4a0f47e85af6604ebceb6be9886e374df6e4224b0fef09ebd4",
+      "public_sha256": "f6f0a7e0bff54ad6898293fd6f2848806e34430043c74cd02758bd76bc0744f0",
       "reason": "Public-authored complete-input execution slice and fictional verification."
     },
     {
       "classification": "public",
       "license": "Apache-2.0",
       "public_path": "docs/verification/complete-input-execution.md",
-      "public_sha256": "d30c0e6491db5d013c8eb6504d6754c03a5f2ac3b5ef39334f98788621e6bb3c",
+      "public_sha256": "814a119350ec18ec639d92d0393d505c51e5488a985062cf496e567467c7888d",
       "reason": "Public-authored complete-input execution slice and fictional verification."
     }
   ],

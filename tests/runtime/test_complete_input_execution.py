@@ -548,6 +548,36 @@ class CompleteInputExecution(LogicalUnitMaterialization):
         )
         self.assert_no_meaning()
 
+    def test_full_astral_part_uses_lossless_byte_bounded_windows(self) -> None:
+        from memoriesql.application.complete_input_execution import WINDOW_JSON_BYTES
+        from memoriesql.application.semantic_task_contracts import canonical_json_bytes
+
+        text = "🚀" * 16384
+        self.assertEqual(len(text.encode("utf-8")), 65536)
+        self.setup_execution(text)
+        result = asyncio.run(self.worker().run_once())
+        self.assertEqual(result.task_status, "succeeded", result)
+        self.assertEqual(len(self.received), 2)
+        frames = [item["complete_input_window"] for item in self.received]
+        self.assertEqual(
+            "".join(s["content"] for frame in frames for s in frame["slices"]), text
+        )
+        self.assertTrue(
+            all(
+                len(canonical_json_bytes(frame)) <= WINDOW_JSON_BYTES
+                for frame in frames
+            )
+        )
+        self.assertEqual(
+            self.row(
+                "SELECT count(*),max(end_character) FROM memoriesql.complete_input_exposures"
+            ),
+            (2, 16384),
+        )
+        self.assertEqual(
+            self.row("SELECT count(*) FROM memoriesql.accepted_bead_semantics"), (1,)
+        )
+
     def test_restart_requires_new_attempt_exposure(self) -> None:
         self.setup_execution()
         worker = self.worker()

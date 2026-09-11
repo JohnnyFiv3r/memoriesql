@@ -74,7 +74,14 @@ after correction. Ruff and mypy (81 files) passed; changed-test mypy also passed
 reader route omitted the standalone reader's server timeout settings. The route
 now applies the same two-second statement and 500-ms lock bounds. The two affected
 installed authorization-wait/complete-apply checks pass in 2.755 seconds; no
-unchanged local suite was rerun. Artifacts below include this correction.
+unchanged local suite was rerun. The broad review identified one additional defect: astral Unicode can require
+12 escaped JSON bytes per character, so a valid 64-KiB part exceeded a window's
+byte bound. A fictional all-emoji part reproduced the terminal failure. Window
+packing now finds the largest exact prefix fitting the unchanged byte/character
+ceilings. The new regression and mixed-Unicode case pass from the installed wheel
+in 3.799 seconds: the full part is exposed in two windows and produces one accepted
+bead. This adds one case (120 total); no unchanged convergence suite was rerun.
+Artifacts below include both corrections.
 
 The wheel installs in a fresh environment. An independently extracted sdist builds
 a byte-identical wheel, which also installs in another fresh environment and exposes
@@ -86,8 +93,8 @@ release inventories, version metadata and publication workflow bytes are unchang
 
 Development artifact SHA-256 values (not a published release inventory):
 
-- Wheel: `ed364d98afe3c8e1b1a796636c9651865538c9872715151c75399fe80fa15830`
-- Sdist: `76fbdd3378a3c7b153b3a8380962d3938dc04de24c77f5b4a35a83380fac8a7d`
+- Wheel: `f0b26216c27e5a37f776054f75313345c3c30d38df004a77de239345b6117f1d`
+- Sdist: `f8d9fcb16a34c3ce918a80b6efd46912e0c2eef192a619728f1f4560150f5266`
 
 Exact-head hosted CI and review state are recorded on the PR. No release version
 is selected.
