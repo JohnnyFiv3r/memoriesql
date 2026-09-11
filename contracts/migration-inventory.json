@@ -69,6 +69,10 @@
     {
       "filename": "0017_logical_unit_materialization.sql",
       "sha256": "06598d80d8c14f2ff733542bd9074f594ec726450874bc70bc20af1590fe2414"
+    },
+    {
+      "filename": "0018_complete_input_execution.sql",
+      "sha256": "3bafec2bf0894d9be1a5c67826af4f84b28131aa67923cc7c613e7dc0c81b640"
     }
   ]
 }

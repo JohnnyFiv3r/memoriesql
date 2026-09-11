@@ -108,3 +108,12 @@ A future released consumer must explicitly request `migrate(connection,
 expected_current_version=15, target_version=16)` under deployment authority. Neither
 installing a package nor constructing a reader runs migration or selects product
 composition. No deployed migration or consumer upgrade is authorized here.
+
+## Unreleased schema 18 complete-input execution
+
+The installed inventory contains 18 resources. Migrations 0001–0017 remain
+byte-for-byte unchanged. Migration 0018 adds explicit binding transfer, reader v2,
+trusted dispatch exposure and fenced initial semantic application through the
+existing queue and canonical sink. It seeds no producer/dispatch trust or worker
+claim policy. Upgrade and caller composition require separate deployment authority;
+this implementation does not deploy. See [the execution contract](complete-input-execution.md).

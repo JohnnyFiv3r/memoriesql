@@ -79,10 +79,12 @@
       "source_sha256": "57b3379e6c00813a2020cc55a436865486dd7624fe9324205f7f40bb3a4a4994"
     },
     {
-      "disposition": "copy",
+      "base_public_commit": "bb459ddef14e5627777b21c1366a896b75f24ca8",
+      "base_public_sha256": "fb3705d479663d1f0703b5c1a87839a5ec42997ad0ddfe86739adb6f587c1fbe",
+      "disposition": "public-forward",
       "path": "src/memoriesql/application/semantic_task_contracts.py",
-      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
-      "sha256": "fb3705d479663d1f0703b5c1a87839a5ec42997ad0ddfe86739adb6f587c1fbe",
+      "reason": "Public forward complete-input execution through the existing worker, executor and canonical sink; legacy contracts retained.",
+      "sha256": "867ce2b134a3088ca92fddd23cebbb2baa087e970b5b54c77fe80862f9ef86df",
       "source_sha256": "fb3705d479663d1f0703b5c1a87839a5ec42997ad0ddfe86739adb6f587c1fbe"
     },
     {
@@ -128,21 +130,21 @@
       "source_sha256": "fedb9b376d56b5865774f5a410ce49d16fd4000700b98ca67e32e45d66eaefa5"
     },
     {
-      "base_public_commit": "5c51863669493117a511abf6d65a63dc6e731f49",
-      "base_public_sha256": "e7902a299c8c411f155ea23d071206d6f304e14ae50afd4a9fc4d1715da05b5c",
+      "base_public_commit": "bb459ddef14e5627777b21c1366a896b75f24ca8",
+      "base_public_sha256": "21b68eaa447d18fcf04b91de6ecf83ef74d9e9f3f7f0d15a7c2d4937d0cfb23c",
       "disposition": "public-forward",
       "path": "src/memoriesql/infrastructure/jobs/integrated_semantic_worker.py",
-      "reason": "Public cleanup-lease handoff correction: independently retain before draining the cancelled heartbeat; existing SQL and owned teardown remain authoritative.",
-      "sha256": "21b68eaa447d18fcf04b91de6ecf83ef74d9e9f3f7f0d15a7c2d4937d0cfb23c",
+      "reason": "Public forward complete-input execution through the existing worker, executor and canonical sink; legacy contracts retained.",
+      "sha256": "0de08aaaf575908c7bc856dadd6bbbb1b75c63018bacf7be45f82d1548eb565e",
       "source_sha256": "a6b990a6a74461f34e7e757a3e6f7426020f8cef8df4cdbaad2a95f2fcd10398"
     },
     {
-      "base_public_commit": "d4e409d4daa4285ce6868274e6bb55593aa209f1",
-      "base_public_sha256": "5bbff727506cd237a9596adc9e59743519defe90f29c14af9e03fc55a445ce80",
+      "base_public_commit": "bb459ddef14e5627777b21c1366a896b75f24ca8",
+      "base_public_sha256": "8c9a3a3fc34e9c8a4b66a7ea06f2613e97bb67cd9cb81bdff62c1521ccc74c64",
       "disposition": "public-forward",
       "path": "src/memoriesql/infrastructure/jobs/postgres_semantic_queue.py",
-      "reason": "Public schema-15 versioned observation command dispatch through the existing canonical adapter and worker fence; legacy payloads remain unchanged.",
-      "sha256": "8c9a3a3fc34e9c8a4b66a7ea06f2613e97bb67cd9cb81bdff62c1521ccc74c64",
+      "reason": "Public forward complete-input execution through the existing worker, executor and canonical sink; legacy contracts retained.",
+      "sha256": "8d3f07c65cd12d209649345160dab299f9079a15670bfb0b494923d0128c9dbb",
       "source_sha256": "5bbff727506cd237a9596adc9e59743519defe90f29c14af9e03fc55a445ce80"
     },
     {
@@ -153,12 +155,12 @@
       "source_sha256": "c15f60eace446302ce7dddfc69010c173a714791a92e3765edef87777da4ccc4"
     },
     {
-      "base_public_commit": "700d0957f13ec91eb2ab32494a77d681b1222993",
-      "base_public_sha256": "07d4c861ce40062c227352f6fd240b7445500776ba6216fdd739027020da3b1c",
+      "base_public_commit": "bb459ddef14e5627777b21c1366a896b75f24ca8",
+      "base_public_sha256": "a87f24cfc8e8d652ff90c8acf92f46c0aa47cf4c2f1ef823eda4737aab24eb34",
       "disposition": "public-forward",
       "path": "src/memoriesql/infrastructure/models/pydanticai_executor.py",
-      "reason": "Public-authored cancellation cleanup ownership and post-intent dispatch gate; original N2 extraction hash retained as historical provenance.",
-      "sha256": "a87f24cfc8e8d652ff90c8acf92f46c0aa47cf4c2f1ef823eda4737aab24eb34",
+      "reason": "Public forward complete-input execution through the existing worker, executor and canonical sink; legacy contracts retained.",
+      "sha256": "3d9016f932fd89ebf7404516433d3e9e9e603ef60ef0319b176bb476dd9a3dc3",
       "source_sha256": "07d4c861ce40062c227352f6fd240b7445500776ba6216fdd739027020da3b1c"
     },
     {
@@ -253,6 +255,24 @@
       "path": "src/memoriesql/infrastructure/postgres/logical_unit_materialization.py",
       "reason": "Public-authored canonical logical-unit materialization and unavailable task binding.",
       "sha256": "16562bb948d1a9ce37cbf33e1198ee4c83bed73eb0832aa9d19a5d7503f94f10"
+    },
+    {
+      "disposition": "public",
+      "path": "src/memoriesql/application/complete_input_execution.py",
+      "reason": "Public-authored complete-input execution and bounded authorized evidence transport.",
+      "sha256": "961a9e0aaa56235f90f6bbe8cf792f0077eb808c36786d5463b2ed8222d98eca"
+    },
+    {
+      "disposition": "public",
+      "path": "src/memoriesql/infrastructure/jobs/complete_input_access.py",
+      "reason": "Public-authored complete-input execution and bounded authorized evidence transport.",
+      "sha256": "185e08f64e08a38853d77d210f4e58141226bfa0b2f37bcbc91498bf08696c9f"
+    },
+    {
+      "disposition": "public",
+      "path": "src/memoriesql/infrastructure/postgres/complete_input_execution.py",
+      "reason": "Public-authored complete-input execution and bounded authorized evidence transport.",
+      "sha256": "be6e6443d097b92335dc6572ed7da2ad3ee39db08aa271add2acaf29f167b535"
     }
   ]
 }

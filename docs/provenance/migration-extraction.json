@@ -102,10 +102,10 @@
       "public_path": "src/memoriesql/infrastructure/postgres/migration_runner.py",
       "source_sha256": "10841bd32cad98d969faf588c5eeff862a4b1dabefc12a4390f72341567c6b22",
       "disposition": "public-forward",
-      "reason": "Public forward support for the explicit 17-resource inventory; historical runner contract and SQL unchanged.",
-      "public_sha256": "a0d6d613689b3cea6ce9cce2eeaa79a1415c8463a3faaf857e702b0c9fcc113e",
-      "base_public_commit": "98cec94f5952af55513a9a8f683d2fdfd2fc125e",
-      "base_public_sha256": "286d38721933a7d8684a22a860d7d21afc7a78749321d308740c5107b1c7e0d9"
+      "reason": "Public forward support for the explicit 18-resource inventory; historical runner contract and SQL unchanged.",
+      "public_sha256": "9a03ff065f4bdbb69fbb7b47912f6f6cb8e43b857e16882ccac03e3894ea8644",
+      "base_public_commit": "bb459ddef14e5627777b21c1366a896b75f24ca8",
+      "base_public_sha256": "a0d6d613689b3cea6ce9cce2eeaa79a1415c8463a3faaf857e702b0c9fcc113e"
     },
     {
       "public_path": "src/memoriesql/infrastructure/postgres/schema_inspection.py",
@@ -131,6 +131,12 @@
       "public_path": "migrations/0017_logical_unit_materialization.sql",
       "public_sha256": "06598d80d8c14f2ff733542bd9074f594ec726450874bc70bc20af1590fe2414",
       "reason": "Public-authored forward canonical materialization and fail-closed durable task binding."
+    },
+    {
+      "public_path": "migrations/0018_complete_input_execution.sql",
+      "disposition": "public",
+      "reason": "Public forward execution, trusted exposure, authorized reader and fenced canonical apply.",
+      "public_sha256": "3bafec2bf0894d9be1a5c67826af4f84b28131aa67923cc7c613e7dc0c81b640"
     }
   ],
   "scope": "Canonical migration substrate only",

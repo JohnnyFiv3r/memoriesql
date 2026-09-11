@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 from uuid import UUID
@@ -13,6 +13,11 @@ from pydantic import BaseModel
 
 from memoriesql.application.canonical_transactions import (
     ApplySemanticAnnotationsCommand,
+)
+from memoriesql.application.complete_input_execution import (
+    ApplyCompleteInput,
+    CompleteEvidenceBatch,
+    ReadCompleteEvidence,
 )
 from memoriesql.application.observation_commands import (
     AuthorInitialObservationsCommand,
@@ -451,6 +456,33 @@ class PostgresSemanticTaskQueue:
             content[reference.reference_id] = text
         return content
 
+    def complete_exposure_valid(self, fence: SemanticTaskFence) -> bool:
+        row = self._connection.execute(
+            "SELECT memoriesql.validate_complete_input_acceptance(%s,%s,%s,%s,%s,%s)",
+            self._fence_parameters(fence),
+        ).fetchone()
+        return bool(row and row[0])
+
+    def read_complete_evidence(
+        self, fence: SemanticTaskFence, request: ReadCompleteEvidence
+    ) -> CompleteEvidenceBatch:
+        def authorize() -> None:
+            if (
+                self.reauthorize(fence, phase="hydrate", checked_at=datetime.now(UTC))
+                is not ReauthorizationResult.AUTHORIZED
+            ):
+                raise PermissionError("complete input authorization unavailable")
+
+        authorize()
+        row = self._connection.execute(
+            "SELECT memoriesql.read_complete_evidence_v2(%s)",
+            (Jsonb(request.model_dump(mode="json")),),
+        ).fetchone()
+        authorize()
+        if row is None:
+            raise PermissionError("complete evidence unavailable")
+        return CompleteEvidenceBatch.model_validate(row[0])
+
     def authorization_snapshot(
         self,
         fence: SemanticTaskFence,
@@ -633,6 +665,23 @@ class PostgresSemanticTaskQueue:
                 worker_instance_id=fence.worker_instance_id,
                 recorded_at=recorded_at,
             )
+        elif (result.task_kind, result.contract_revision) == (
+            "memory.semantic.author-complete-unit",
+            2,
+        ):
+            command = ApplyCompleteInput.model_validate(command_data)
+            row = self._connection.execute(
+                "SELECT * FROM memoriesql.apply_semantic_annotations(%s,%s,%s,%s)",
+                (
+                    Jsonb(command.model_dump(mode="json")),
+                    fence.worker_id,
+                    fence.worker_instance_id,
+                    recorded_at,
+                ),
+            ).fetchone()
+            if row is None:
+                raise RuntimeError("complete input application returned no receipt")
+            return str(row[5])
         else:
             raise ValueError("unregistered canonical observation contract")
         return receipt.task_status
