@@ -31,3 +31,10 @@ public-owned code and fictional acceptance, not an expanded private extraction.
 Canonical normalized evidence storage, current authorization and receipt ownership
 remain here. Provider parsing, qualification and product composition remain outside
 this repository. See [the contract and bounds](../evidence-packages.md).
+
+Schema 17 is a public-authored forward transition for canonical logical-unit
+materialization and exact sealed-package task binding. New tasks remain unavailable
+for execution. Trusted producer policies require explicit administrator qualification;
+no production policy is seeded. Provider interpretation and product composition
+remain product-owned, and consumption requires a released core change. See
+[the contract and deferrals](../logical-unit-materialization.md).

@@ -64,7 +64,7 @@ class InstalledMigrations(unittest.TestCase):
         }
         self.assertIn(Path(runner.__file__).resolve(), owned)
         stream = runner.discover_migrations()
-        self.assertEqual(len(stream), 16)
+        self.assertEqual(len(stream), 17)
         for migration in stream:
             self.assertIn(Path(str(migration.path)).resolve(), owned)
             self.assertEqual(
@@ -100,7 +100,7 @@ class InstalledMigrations(unittest.TestCase):
         self.assertEqual(output.getvalue().strip(), __version__)
         registry = json.loads(Path("public-registry.json").read_text())
         entries = {entry["id"]: entry for entry in iter_contracts()}
-        self.assertEqual(len(entries), 50)
+        self.assertEqual(len(entries), 51)
         for row in registry["records"]:
             payload = json.dumps(
                 entries[row["id"]],
@@ -177,7 +177,7 @@ class InstalledMigrations(unittest.TestCase):
     def test_wrong_bound_downgrade_and_out_of_range_are_atomic(self) -> None:
         self.migrate(0, 14)
         before = self.history()
-        for start, end in ((13, 14), (14, 13), (14, 17), (14, -1)):
+        for start, end in ((13, 14), (14, 13), (14, 18), (14, -1)):
             with (
                 self.subTest(start=start, end=end),
                 self.assertRaises(runner.MigrationError),

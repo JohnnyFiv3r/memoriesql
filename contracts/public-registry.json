@@ -24,7 +24,7 @@
     },
     {
       "disposition": "include",
-      "expected_record_count": 44,
+      "expected_record_count": 45,
       "filename": "json-schema.json",
       "kind": "json_schema",
       "note": "Provider-neutral capture, host, source-range, transcript-fold, and harness-lifecycle schemas."
@@ -383,6 +383,17 @@
       "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
       "reviewed_spike_record_sha256": "44c90789470e410174bfdad84f81d6c96ab63030319b766e45334d95762eed8a",
       "reviewed_spike_source_sha256": "765f8dd3d4b5e594980ba38f6e1ac11f29d3198746299217361e1c56b360cf26",
+      "version": "1"
+    },
+    {
+      "canonical_payload_sha256": "d8ff1aed2dd98a17e7ffe555328695d9b6c16f1f5c936ba743eb0d177fe69ad5",
+      "catalog": "json_schema",
+      "classification": "proposed_open_core",
+      "id": "memoriesql.logical-unit-materialization.v1",
+      "package_disposition": "include",
+      "path": "contracts/records/memoriesql-logical-unit-materialization-v1.json",
+      "public_sha256": "2d4ac51829c54bd3bc7f4a9294e25c9e089f0f128906181c0d97a17e968a66c8",
+      "reason": "Public-authored canonical materialization and unavailable complete-input task binding.",
       "version": "1"
     },
     {

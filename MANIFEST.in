@@ -50,3 +50,5 @@ include src/memoriesql/application/observation_commands.py
 include src/memoriesql/application/observation_tasks.py
 include src/memoriesql/application/evidence_packages.py
 include src/memoriesql/infrastructure/postgres/evidence_packages.py
+include src/memoriesql/application/logical_unit_materialization.py
+include src/memoriesql/infrastructure/postgres/logical_unit_materialization.py

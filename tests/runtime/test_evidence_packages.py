@@ -852,7 +852,7 @@ class EvidencePackages(PostgresRuntime):
             "SELECT version,sha256 FROM memoriesql.schema_migrations ORDER BY version"
         ).fetchall()
         self.assertEqual(
-            history, [(m.version, m.sha256) for m in discover_migrations()]
+            history, [(m.version, m.sha256) for m in discover_migrations() if m.version <= 16]
         )
         self.assertEqual(len(history), 16)
         self.assertEqual(

@@ -47,8 +47,8 @@ class PublicBootstrapTests(unittest.TestCase):
 
     def test_registry_is_explicit_complete_and_default_deny(self) -> None:
         records = load_registry()
-        self.assertEqual(len(records), 50)
-        self.assertEqual(len({record["id"] for record in records}), 50)
+        self.assertEqual(len(records), 51)
+        self.assertEqual(len({record["id"] for record in records}), 51)
         catalogs = load_catalog_definitions()
         self.assertEqual(tuple(item.kind for item in catalogs), CATALOG_KINDS)
         counts = {item.kind: 0 for item in catalogs}
@@ -56,10 +56,10 @@ class PublicBootstrapTests(unittest.TestCase):
             counts[str(record["catalog"])] += 1
             self.assertEqual(record["classification"], "proposed_open_core")
             self.assertEqual(record["package_disposition"], "include")
-        self.assertEqual(counts["json_schema"], 44)
+        self.assertEqual(counts["json_schema"], 45)
         self.assertEqual(counts["python"], 5)
         self.assertEqual(counts["connector"], 1)
-        self.assertEqual(sum(counts.values()), 50)
+        self.assertEqual(sum(counts.values()), 51)
 
     def test_generated_catalogs_have_no_drift(self) -> None:
         for path, expected in expected_outputs().items():
@@ -67,7 +67,7 @@ class PublicBootstrapTests(unittest.TestCase):
 
     def test_boundary_scan_is_clean(self) -> None:
         result = verify()
-        self.assertEqual(result["record_count"], 50)
+        self.assertEqual(result["record_count"], 51)
         self.assertEqual(result["default_policy"], "deny")
         self.assertEqual(result["private_boundary_leaks"], [])
 
@@ -163,7 +163,10 @@ class PublicBootstrapTests(unittest.TestCase):
             )["records"]
         }
         new_record = "contracts/records/memoriesql-evidence-package-v1.json"
-        self.assertEqual(record_paths - paths, {new_record})
+        self.assertEqual(
+            record_paths - paths,
+            {new_record, "contracts/records/memoriesql-logical-unit-materialization-v1.json"},
+        )
         owned = next(
             row for row in manifest["public_only"] if row["public_path"] == new_record
         )

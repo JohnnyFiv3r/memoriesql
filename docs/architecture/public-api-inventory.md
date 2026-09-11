@@ -17,4 +17,4 @@ All 12 interfaces in the initial contract preview are classified as **proposed o
 | `memoriesql contracts` | CLI | proposed open-core |
 | `memoriesql contract` | CLI | proposed open-core |
 
-Each of the 49 packaged contract records is separately and explicitly classified `proposed_open_core` in `contracts/public-registry.json`. No packaged record or API is classified as proprietary product material or owner-decision-required.
+Each of the 51 packaged contract records is separately and explicitly classified `proposed_open_core` in `contracts/public-registry.json`. No packaged record or API is classified as proprietary product material or owner-decision-required.

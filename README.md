@@ -10,10 +10,12 @@ Published `0.0.3` establishes cleanup retention independently of a blocked ordin
 
 Published `0.0.4` adds immutable accepted observations and explicit version-2 initial-authoring/correction commands. Corrections create distinct beads with pinned supersession; independent branches and multi-target reconciliation remain valid. Schema 15 preserves historical SQL, payloads and successful receipts, while rejecting legacy updates to accepted meaning. See the [contract and compatibility map](docs/immutable-observations.md). Product adoption requires an explicitly pinned release and authorized migration.
 
-The current unreleased development adds one versioned evidence-package contract
-(50 catalog records total), immutable normalized evidence inventories and bounded,
-authorized lossless reads through schema 16. It creates no observations or semantic
-tasks and makes no model-inspection claim. See [evidence packages](docs/evidence-packages.md).
+Current unreleased development adds evidence-package storage and bounded authorized
+reads through schema 16, then qualified canonical unit materialization and exact
+sealed-package task binding through schema 17 (51 catalog records total). These
+tasks remain explicitly unavailable for execution; no meaning or model-inspection
+claim is produced. See [evidence packages](docs/evidence-packages.md) and
+[logical-unit materialization](docs/logical-unit-materialization.md).
 No future distribution version is selected; development artifacts are not the
 published `0.0.4` release.
 

@@ -241,6 +241,18 @@
       "path": "src/memoriesql/infrastructure/postgres/evidence_packages.py",
       "reason": "Public-authored currently authorized short transactions for evidence package storage and reads; no semantic execution.",
       "sha256": "382d507b0b7b5e495ff42a3f463d4344cc573ed505bf5e0436d29450199e362d"
+    },
+    {
+      "disposition": "public",
+      "path": "src/memoriesql/application/logical_unit_materialization.py",
+      "reason": "Public-authored canonical logical-unit materialization and unavailable task binding.",
+      "sha256": "53a2e23c3567adfdfd9f4ae691a2d7ef33a7fac9d26d69de6abab84f2626ade9"
+    },
+    {
+      "disposition": "public",
+      "path": "src/memoriesql/infrastructure/postgres/logical_unit_materialization.py",
+      "reason": "Public-authored canonical logical-unit materialization and unavailable task binding.",
+      "sha256": "16562bb948d1a9ce37cbf33e1198ee4c83bed73eb0832aa9d19a5d7503f94f10"
     }
   ]
 }

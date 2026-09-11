@@ -1,0 +1,1047 @@
+{
+  "contract": {
+    "binding_spec": {
+      "contract_revision": 1,
+      "execution_available": false,
+      "input_schema": {
+        "$defs": {
+          "CompleteUnitPayload": {
+            "additionalProperties": false,
+            "properties": {
+              "bead_id": {
+                "format": "uuid",
+                "title": "Bead Id",
+                "type": "string"
+              },
+              "event_id": {
+                "format": "uuid",
+                "title": "Event Id",
+                "type": "string"
+              },
+              "execution_availability": {
+                "const": "unavailable",
+                "default": "unavailable",
+                "title": "Execution Availability",
+                "type": "string"
+              },
+              "materialization_receipt_id": {
+                "format": "uuid",
+                "title": "Materialization Receipt Id",
+                "type": "string"
+              },
+              "package": {
+                "$ref": "#/$defs/SealedPackagePin"
+              },
+              "producer_policy_id": {
+                "format": "uuid",
+                "title": "Producer Policy Id",
+                "type": "string"
+              },
+              "required_execution": {
+                "const": "trusted_complete_input_exposure_validation",
+                "default": "trusted_complete_input_exposure_validation",
+                "title": "Required Execution",
+                "type": "string"
+              },
+              "source_object_id": {
+                "format": "uuid",
+                "title": "Source Object Id",
+                "type": "string"
+              },
+              "source_unit_id": {
+                "format": "uuid",
+                "title": "Source Unit Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "source_object_id",
+              "event_id",
+              "source_unit_id",
+              "bead_id",
+              "materialization_receipt_id",
+              "producer_policy_id",
+              "package"
+            ],
+            "title": "CompleteUnitPayload",
+            "type": "object"
+          },
+          "EvidenceManifest": {
+            "additionalProperties": false,
+            "properties": {
+              "manifest_id": {
+                "minLength": 1,
+                "title": "Manifest Id",
+                "type": "string"
+              },
+              "references": {
+                "items": {
+                  "$ref": "#/$defs/EvidenceReference"
+                },
+                "title": "References",
+                "type": "array"
+              },
+              "revision": {
+                "minimum": 1,
+                "title": "Revision",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "manifest_id",
+              "revision",
+              "references"
+            ],
+            "title": "EvidenceManifest",
+            "type": "object"
+          },
+          "EvidenceReference": {
+            "additionalProperties": false,
+            "properties": {
+              "content_hash": {
+                "pattern": "^[a-f0-9]{64}$",
+                "title": "Content Hash",
+                "type": "string"
+              },
+              "declared_characters": {
+                "minimum": 0,
+                "title": "Declared Characters",
+                "type": "integer"
+              },
+              "reference_id": {
+                "minLength": 1,
+                "title": "Reference Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "reference_id",
+              "content_hash",
+              "declared_characters"
+            ],
+            "title": "EvidenceReference",
+            "type": "object"
+          },
+          "SealedPackagePin": {
+            "additionalProperties": false,
+            "properties": {
+              "coverage": {
+                "const": "entire_sealed_inventory",
+                "default": "entire_sealed_inventory",
+                "title": "Coverage",
+                "type": "string"
+              },
+              "inventory_sha256": {
+                "pattern": "^[a-f0-9]{64}$",
+                "title": "Inventory Sha256",
+                "type": "string"
+              },
+              "package_id": {
+                "format": "uuid",
+                "title": "Package Id",
+                "type": "string"
+              },
+              "required_characters": {
+                "maximum": 16777216,
+                "minimum": 1,
+                "title": "Required Characters",
+                "type": "integer"
+              },
+              "required_parts": {
+                "maximum": 256,
+                "minimum": 1,
+                "title": "Required Parts",
+                "type": "integer"
+              },
+              "required_utf8_bytes": {
+                "maximum": 16777216,
+                "minimum": 1,
+                "title": "Required Utf8 Bytes",
+                "type": "integer"
+              },
+              "sealed_receipt_id": {
+                "format": "uuid",
+                "title": "Sealed Receipt Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "package_id",
+              "sealed_receipt_id",
+              "inventory_sha256",
+              "required_parts",
+              "required_characters",
+              "required_utf8_bytes"
+            ],
+            "title": "SealedPackagePin",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "contract_revision": {
+            "const": 1,
+            "default": 1,
+            "title": "Contract Revision",
+            "type": "integer"
+          },
+          "evidence_manifest": {
+            "$ref": "#/$defs/EvidenceManifest"
+          },
+          "expected_target_revision": {
+            "const": 0,
+            "default": 0,
+            "title": "Expected Target Revision",
+            "type": "integer"
+          },
+          "payload": {
+            "$ref": "#/$defs/CompleteUnitPayload"
+          },
+          "requested_budget": {
+            "default": null,
+            "title": "Requested Budget",
+            "type": "null"
+          },
+          "requested_effort_key": {
+            "default": null,
+            "title": "Requested Effort Key",
+            "type": "null"
+          },
+          "target_reference": {
+            "minLength": 1,
+            "title": "Target Reference",
+            "type": "string"
+          },
+          "task_id": {
+            "minLength": 1,
+            "title": "Task Id",
+            "type": "string"
+          },
+          "task_kind": {
+            "const": "memory.semantic.author-complete-unit",
+            "default": "memory.semantic.author-complete-unit",
+            "title": "Task Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "target_reference",
+          "evidence_manifest",
+          "payload"
+        ],
+        "title": "CompleteUnitTaskInput",
+        "type": "object"
+      },
+      "required_execution": "trusted_complete_input_exposure_validation",
+      "task_kind": "memory.semantic.author-complete-unit"
+    },
+    "command_json_bytes": 16384,
+    "event_metadata_json_bytes": 8192,
+    "execution_available": false,
+    "producer_policy": "administrator_reviewed_scoped_trust_required",
+    "registry_hash": "complete-unit-bindings-v1:8013803a5ad67b0fe530b05c1c5badd533ae118d5105de756588a282bf6d3d3c",
+    "schemas": {
+      "CompleteUnitTaskInput": {
+        "$defs": {
+          "CompleteUnitPayload": {
+            "additionalProperties": false,
+            "properties": {
+              "bead_id": {
+                "format": "uuid",
+                "title": "Bead Id",
+                "type": "string"
+              },
+              "event_id": {
+                "format": "uuid",
+                "title": "Event Id",
+                "type": "string"
+              },
+              "execution_availability": {
+                "const": "unavailable",
+                "default": "unavailable",
+                "title": "Execution Availability",
+                "type": "string"
+              },
+              "materialization_receipt_id": {
+                "format": "uuid",
+                "title": "Materialization Receipt Id",
+                "type": "string"
+              },
+              "package": {
+                "$ref": "#/$defs/SealedPackagePin"
+              },
+              "producer_policy_id": {
+                "format": "uuid",
+                "title": "Producer Policy Id",
+                "type": "string"
+              },
+              "required_execution": {
+                "const": "trusted_complete_input_exposure_validation",
+                "default": "trusted_complete_input_exposure_validation",
+                "title": "Required Execution",
+                "type": "string"
+              },
+              "source_object_id": {
+                "format": "uuid",
+                "title": "Source Object Id",
+                "type": "string"
+              },
+              "source_unit_id": {
+                "format": "uuid",
+                "title": "Source Unit Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "source_object_id",
+              "event_id",
+              "source_unit_id",
+              "bead_id",
+              "materialization_receipt_id",
+              "producer_policy_id",
+              "package"
+            ],
+            "title": "CompleteUnitPayload",
+            "type": "object"
+          },
+          "EvidenceManifest": {
+            "additionalProperties": false,
+            "properties": {
+              "manifest_id": {
+                "minLength": 1,
+                "title": "Manifest Id",
+                "type": "string"
+              },
+              "references": {
+                "items": {
+                  "$ref": "#/$defs/EvidenceReference"
+                },
+                "title": "References",
+                "type": "array"
+              },
+              "revision": {
+                "minimum": 1,
+                "title": "Revision",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "manifest_id",
+              "revision",
+              "references"
+            ],
+            "title": "EvidenceManifest",
+            "type": "object"
+          },
+          "EvidenceReference": {
+            "additionalProperties": false,
+            "properties": {
+              "content_hash": {
+                "pattern": "^[a-f0-9]{64}$",
+                "title": "Content Hash",
+                "type": "string"
+              },
+              "declared_characters": {
+                "minimum": 0,
+                "title": "Declared Characters",
+                "type": "integer"
+              },
+              "reference_id": {
+                "minLength": 1,
+                "title": "Reference Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "reference_id",
+              "content_hash",
+              "declared_characters"
+            ],
+            "title": "EvidenceReference",
+            "type": "object"
+          },
+          "SealedPackagePin": {
+            "additionalProperties": false,
+            "properties": {
+              "coverage": {
+                "const": "entire_sealed_inventory",
+                "default": "entire_sealed_inventory",
+                "title": "Coverage",
+                "type": "string"
+              },
+              "inventory_sha256": {
+                "pattern": "^[a-f0-9]{64}$",
+                "title": "Inventory Sha256",
+                "type": "string"
+              },
+              "package_id": {
+                "format": "uuid",
+                "title": "Package Id",
+                "type": "string"
+              },
+              "required_characters": {
+                "maximum": 16777216,
+                "minimum": 1,
+                "title": "Required Characters",
+                "type": "integer"
+              },
+              "required_parts": {
+                "maximum": 256,
+                "minimum": 1,
+                "title": "Required Parts",
+                "type": "integer"
+              },
+              "required_utf8_bytes": {
+                "maximum": 16777216,
+                "minimum": 1,
+                "title": "Required Utf8 Bytes",
+                "type": "integer"
+              },
+              "sealed_receipt_id": {
+                "format": "uuid",
+                "title": "Sealed Receipt Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "package_id",
+              "sealed_receipt_id",
+              "inventory_sha256",
+              "required_parts",
+              "required_characters",
+              "required_utf8_bytes"
+            ],
+            "title": "SealedPackagePin",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "contract_revision": {
+            "const": 1,
+            "default": 1,
+            "title": "Contract Revision",
+            "type": "integer"
+          },
+          "evidence_manifest": {
+            "$ref": "#/$defs/EvidenceManifest"
+          },
+          "expected_target_revision": {
+            "const": 0,
+            "default": 0,
+            "title": "Expected Target Revision",
+            "type": "integer"
+          },
+          "payload": {
+            "$ref": "#/$defs/CompleteUnitPayload"
+          },
+          "requested_budget": {
+            "default": null,
+            "title": "Requested Budget",
+            "type": "null"
+          },
+          "requested_effort_key": {
+            "default": null,
+            "title": "Requested Effort Key",
+            "type": "null"
+          },
+          "target_reference": {
+            "minLength": 1,
+            "title": "Target Reference",
+            "type": "string"
+          },
+          "task_id": {
+            "minLength": 1,
+            "title": "Task Id",
+            "type": "string"
+          },
+          "task_kind": {
+            "const": "memory.semantic.author-complete-unit",
+            "default": "memory.semantic.author-complete-unit",
+            "title": "Task Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "target_reference",
+          "evidence_manifest",
+          "payload"
+        ],
+        "title": "CompleteUnitTaskInput",
+        "type": "object"
+      },
+      "InspectLogicalEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "contract_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Contract Version",
+            "type": "integer"
+          },
+          "event_id": {
+            "format": "uuid",
+            "title": "Event Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id"
+        ],
+        "title": "InspectLogicalEvent",
+        "type": "object"
+      },
+      "LogicalEventProgress": {
+        "additionalProperties": false,
+        "properties": {
+          "declared_units": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Declared Units"
+          },
+          "event_id": {
+            "format": "uuid",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "independently_proven_source_complete": {
+            "const": false,
+            "default": false,
+            "title": "Independently Proven Source Complete",
+            "type": "boolean"
+          },
+          "inventory_state": {
+            "enum": [
+              "partial",
+              "declared_inventory_materialized",
+              "total_unknown"
+            ],
+            "title": "Inventory State",
+            "type": "string"
+          },
+          "materialized_units": {
+            "title": "Materialized Units",
+            "type": "integer"
+          },
+          "remaining_declared_units": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remaining Declared Units"
+          }
+        },
+        "required": [
+          "event_id",
+          "declared_units",
+          "materialized_units",
+          "remaining_declared_units",
+          "inventory_state"
+        ],
+        "title": "LogicalEventProgress",
+        "type": "object"
+      },
+      "LogicalUnitMaterializationReceipt": {
+        "$defs": {
+          "LogicalEventProgress": {
+            "additionalProperties": false,
+            "properties": {
+              "declared_units": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Declared Units"
+              },
+              "event_id": {
+                "format": "uuid",
+                "title": "Event Id",
+                "type": "string"
+              },
+              "independently_proven_source_complete": {
+                "const": false,
+                "default": false,
+                "title": "Independently Proven Source Complete",
+                "type": "boolean"
+              },
+              "inventory_state": {
+                "enum": [
+                  "partial",
+                  "declared_inventory_materialized",
+                  "total_unknown"
+                ],
+                "title": "Inventory State",
+                "type": "string"
+              },
+              "materialized_units": {
+                "title": "Materialized Units",
+                "type": "integer"
+              },
+              "remaining_declared_units": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Remaining Declared Units"
+              }
+            },
+            "required": [
+              "event_id",
+              "declared_units",
+              "materialized_units",
+              "remaining_declared_units",
+              "inventory_state"
+            ],
+            "title": "LogicalEventProgress",
+            "type": "object"
+          },
+          "SealedPackagePin": {
+            "additionalProperties": false,
+            "properties": {
+              "coverage": {
+                "const": "entire_sealed_inventory",
+                "default": "entire_sealed_inventory",
+                "title": "Coverage",
+                "type": "string"
+              },
+              "inventory_sha256": {
+                "pattern": "^[a-f0-9]{64}$",
+                "title": "Inventory Sha256",
+                "type": "string"
+              },
+              "package_id": {
+                "format": "uuid",
+                "title": "Package Id",
+                "type": "string"
+              },
+              "required_characters": {
+                "maximum": 16777216,
+                "minimum": 1,
+                "title": "Required Characters",
+                "type": "integer"
+              },
+              "required_parts": {
+                "maximum": 256,
+                "minimum": 1,
+                "title": "Required Parts",
+                "type": "integer"
+              },
+              "required_utf8_bytes": {
+                "maximum": 16777216,
+                "minimum": 1,
+                "title": "Required Utf8 Bytes",
+                "type": "integer"
+              },
+              "sealed_receipt_id": {
+                "format": "uuid",
+                "title": "Sealed Receipt Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "package_id",
+              "sealed_receipt_id",
+              "inventory_sha256",
+              "required_parts",
+              "required_characters",
+              "required_utf8_bytes"
+            ],
+            "title": "SealedPackagePin",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "bead_id": {
+            "format": "uuid",
+            "title": "Bead Id",
+            "type": "string"
+          },
+          "bound_package": {
+            "$ref": "#/$defs/SealedPackagePin"
+          },
+          "contract_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Contract Version",
+            "type": "integer"
+          },
+          "event_id": {
+            "format": "uuid",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "event_progress_at_commit": {
+            "$ref": "#/$defs/LogicalEventProgress"
+          },
+          "execution_availability": {
+            "const": "unavailable",
+            "default": "unavailable",
+            "title": "Execution Availability",
+            "type": "string"
+          },
+          "execution_reason": {
+            "const": "complete_input_executor_unavailable",
+            "default": "complete_input_executor_unavailable",
+            "title": "Execution Reason",
+            "type": "string"
+          },
+          "idempotency_receipt_id": {
+            "format": "uuid",
+            "title": "Idempotency Receipt Id",
+            "type": "string"
+          },
+          "initial_materialization_receipt_id": {
+            "format": "uuid",
+            "title": "Initial Materialization Receipt Id",
+            "type": "string"
+          },
+          "replayed": {
+            "title": "Replayed",
+            "type": "boolean"
+          },
+          "source_unit_id": {
+            "format": "uuid",
+            "title": "Source Unit Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "materialized",
+              "already_exists"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "submitted_package_id": {
+            "format": "uuid",
+            "title": "Submitted Package Id",
+            "type": "string"
+          },
+          "task_enqueue_receipt_id": {
+            "format": "uuid",
+            "title": "Task Enqueue Receipt Id",
+            "type": "string"
+          },
+          "task_id": {
+            "format": "uuid",
+            "title": "Task Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "idempotency_receipt_id",
+          "initial_materialization_receipt_id",
+          "task_enqueue_receipt_id",
+          "submitted_package_id",
+          "bound_package",
+          "event_id",
+          "source_unit_id",
+          "bead_id",
+          "task_id",
+          "status",
+          "replayed",
+          "event_progress_at_commit"
+        ],
+        "title": "LogicalUnitMaterializationReceipt",
+        "type": "object"
+      },
+      "MaterializeLogicalUnit": {
+        "$defs": {
+          "LogicalEventDeclaration": {
+            "additionalProperties": false,
+            "description": "Producer-asserted genuine event identity, not a batching window.",
+            "properties": {
+              "event_key": {
+                "maxLength": 256,
+                "minLength": 1,
+                "title": "Event Key",
+                "type": "string"
+              },
+              "expected_units": {
+                "anyOf": [
+                  {
+                    "maximum": 2147483647,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Expected Units"
+              },
+              "identity_basis": {
+                "enum": [
+                  "native",
+                  "producer_assigned"
+                ],
+                "title": "Identity Basis",
+                "type": "string"
+              },
+              "native": {
+                "$ref": "#/$defs/NativeFacts"
+              },
+              "source_type": {
+                "$ref": "#/$defs/SourceType"
+              }
+            },
+            "required": [
+              "event_key",
+              "identity_basis",
+              "source_type",
+              "native"
+            ],
+            "title": "LogicalEventDeclaration",
+            "type": "object"
+          },
+          "NativeFacts": {
+            "additionalProperties": false,
+            "description": "Null means unknown, never a fabricated native identifier.",
+            "properties": {
+              "branch_native_id": {
+                "anyOf": [
+                  {
+                    "maxLength": 256,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Branch Native Id"
+              },
+              "native_id": {
+                "anyOf": [
+                  {
+                    "maxLength": 256,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Native Id"
+              },
+              "occurred_at": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Occurred At"
+              },
+              "occurred_at_raw": {
+                "anyOf": [
+                  {
+                    "maxLength": 256,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Occurred At Raw"
+              },
+              "parent_native_id": {
+                "anyOf": [
+                  {
+                    "maxLength": 256,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Parent Native Id"
+              },
+              "participant_native_id": {
+                "anyOf": [
+                  {
+                    "maxLength": 256,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Participant Native Id"
+              },
+              "role": {
+                "anyOf": [
+                  {
+                    "maxLength": 128,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Role"
+              },
+              "session_native_id": {
+                "anyOf": [
+                  {
+                    "maxLength": 256,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Session Native Id"
+              },
+              "source_order": {
+                "anyOf": [
+                  {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Source Order"
+              },
+              "time_precision": {
+                "anyOf": [
+                  {
+                    "maxLength": 64,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Time Precision"
+              }
+            },
+            "title": "NativeFacts",
+            "type": "object"
+          },
+          "SourceType": {
+            "enum": [
+              "transcript",
+              "document",
+              "media",
+              "relational",
+              "operational"
+            ],
+            "title": "SourceType",
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "contract_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Contract Version",
+            "type": "integer"
+          },
+          "event": {
+            "$ref": "#/$defs/LogicalEventDeclaration"
+          },
+          "expected_inventory_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Expected Inventory Sha256",
+            "type": "string"
+          },
+          "expected_schema_version": {
+            "const": 17,
+            "default": 17,
+            "title": "Expected Schema Version",
+            "type": "integer"
+          },
+          "expected_source_object_schema_version": {
+            "minimum": 1,
+            "title": "Expected Source Object Schema Version",
+            "type": "integer"
+          },
+          "idempotency_key": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Idempotency Key",
+            "type": "string"
+          },
+          "package_id": {
+            "format": "uuid",
+            "title": "Package Id",
+            "type": "string"
+          },
+          "parent_source_unit_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Parent Source Unit Id"
+          },
+          "producer_policy_id": {
+            "format": "uuid",
+            "title": "Producer Policy Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "idempotency_key",
+          "package_id",
+          "expected_inventory_sha256",
+          "producer_policy_id",
+          "expected_source_object_schema_version",
+          "event"
+        ],
+        "title": "MaterializeLogicalUnit",
+        "type": "object"
+      }
+    },
+    "source_completeness_independently_proven": false,
+    "task_contract_hash": "8013803a5ad67b0fe530b05c1c5badd533ae118d5105de756588a282bf6d3d3c",
+    "transaction_isolation": "read_committed"
+  },
+  "id": "memoriesql.logical-unit-materialization.v1",
+  "kind": "json_schema",
+  "status": "available",
+  "summary": "Atomic qualified occurrence materialization and exact sealed-package task binding; complete-input execution is unavailable.",
+  "version": "1"
+}
