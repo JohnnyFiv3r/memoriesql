@@ -285,14 +285,16 @@ class CompleteInputExecution(LogicalUnitMaterialization):
         self.assertTrue(replay.replayed)
         self.assertEqual(replay.execution_task_id, self.activation.execution_task_id)
 
-    def assert_no_meaning(self) -> None:
+    def assert_no_meaning(self, expected_beads: int = 1) -> None:
         self.assertEqual(
             self.row("SELECT count(*) FROM memoriesql.bead_versions"), (0,)
         )
         self.assertEqual(
             self.row("SELECT count(*) FROM memoriesql.accepted_bead_semantics"), (0,)
         )
-        self.assertEqual(self.row("SELECT count(*) FROM memoriesql.beads"), (1,))
+        self.assertEqual(
+            self.row("SELECT count(*) FROM memoriesql.beads"), (expected_beads,)
+        )
 
     def test_missing_trusted_dispatch_is_explicitly_unavailable(self) -> None:
         self.setup_execution()
@@ -424,6 +426,341 @@ class CompleteInputExecution(LogicalUnitMaterialization):
         )
         self.assert_no_meaning()
 
+    def activation_command_for(self, name: str, key: str) -> ActivateCompleteInput:
+        from memoriesql.application.evidence_packages import NativeFacts
+
+        package = self.package(occurrence_key=name, native=NativeFacts(native_id=name))
+        bound = self.materializer.materialize(self.materialization(package))
+        return ActivateCompleteInput(
+            idempotency_key=key,
+            binding_task_id=bound.task_id,
+            dispatch_policy_id=self.dispatch_policy,
+        )
+
+    def activation_effects(self) -> tuple[int, ...]:
+        return self.counts() + tuple(
+            self.row("SELECT count(*) FROM memoriesql." + table)[0]
+            for table in (
+                "complete_input_executions",
+                "outbox_events",
+                "semantic_task_events",
+                "semantic_task_attempts",
+                "model_provider_request_intents",
+                "model_usage_events",
+                "complete_input_exposures",
+            )
+        )
+
+    def assert_activation_waiting(self, connection: Any) -> None:
+        from time import monotonic, sleep
+
+        deadline = monotonic() + 0.4
+        while monotonic() < deadline:
+            if self.row(
+                "SELECT EXISTS(SELECT 1 FROM pg_locks WHERE pid=%s AND NOT granted)",
+                (connection.info.backend_pid,),
+            )[0]:
+                return
+            sleep(0.005)
+        self.fail("activation did not actually wait on the held lock")
+
+    def cancel_original(self, task: uuid.UUID) -> None:
+        with self.db.transaction():
+            self.begin()
+            self.assertEqual(
+                self.row(
+                    "SELECT memoriesql.cancel_semantic_task(%s,%s,'owner.cancel',clock_timestamp())",
+                    (self.tenant, task),
+                ),
+                ("cancelled",),
+            )
+
+    def test_activation_owner_cancellation_wins_keyed_waits(self) -> None:
+        from concurrent.futures import ThreadPoolExecutor
+
+        for expected_beads, lock_kind in enumerate(("binding", "operation"), start=1):
+            with self.subTest(lock_kind=lock_kind):
+                command = self.activation_command_for(lock_kind, lock_kind)
+                original_input = self.row(
+                    "SELECT input_payload FROM memoriesql.semantic_tasks WHERE task_id=%s",
+                    (command.binding_task_id,),
+                )
+                lock = (
+                    f"{self.tenant}:complete-input-binding:{command.binding_task_id}"
+                    if lock_kind == "binding"
+                    else f"{self.tenant}:complete-input-activate:{command.idempotency_key}"
+                )
+                with (
+                    self.connection() as blocker,
+                    self.connection() as caller,
+                    ThreadPoolExecutor(max_workers=1) as pool,
+                ):
+                    with blocker.transaction():
+                        blocker.execute(
+                            "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
+                            (lock,),
+                        )
+                        port = PostgresCompleteInput(
+                            caller,
+                            credential_sha256=self.secret_hash,
+                            workspace_id=self.workspace,
+                        )
+                        pending = pool.submit(port.activate, command)
+                        self.assert_activation_waiting(caller)
+                        self.cancel_original(command.binding_task_id)
+                        after_cancel = self.activation_effects()
+                        receipt_count = self.row(
+                            "SELECT count(*) FROM memoriesql.idempotency_receipts"
+                        )
+                    with self.assertRaisesRegex(
+                        psycopg.Error, "binding_not_transferable"
+                    ):
+                        pending.result(timeout=3)
+                self.assertEqual(self.activation_effects(), after_cancel)
+                self.assertEqual(
+                    self.row("SELECT count(*) FROM memoriesql.idempotency_receipts"),
+                    receipt_count,
+                )
+                self.assertEqual(
+                    self.row(
+                        "SELECT status,cancel_reason FROM memoriesql.semantic_tasks WHERE task_id=%s",
+                        (command.binding_task_id,),
+                    ),
+                    ("cancelled", "owner.cancel"),
+                )
+                self.assertEqual(
+                    self.row(
+                        "SELECT input_payload FROM memoriesql.semantic_tasks WHERE task_id=%s",
+                        (command.binding_task_id,),
+                    ),
+                    original_input,
+                )
+                self.assert_no_meaning(expected_beads)
+
+    def test_activation_cancellation_first_is_not_transfer(self) -> None:
+        command = self.activation_command_for("cancel-first", "cancel-first")
+        self.cancel_original(command.binding_task_id)
+        before = self.activation_effects()
+        receipts = self.row("SELECT count(*) FROM memoriesql.idempotency_receipts")
+        with self.assertRaisesRegex(psycopg.Error, "binding_not_transferable"):
+            self.complete.activate(command)
+        self.assertEqual(self.activation_effects(), before)
+        self.assertEqual(
+            self.row("SELECT count(*) FROM memoriesql.idempotency_receipts"), receipts
+        )
+        self.assert_no_meaning()
+
+    def test_activation_owner_cancellation_wins_task_row_wait(self) -> None:
+        from concurrent.futures import ThreadPoolExecutor
+
+        command = self.activation_command_for("row-wait", "row-wait")
+        with self.connection() as caller, ThreadPoolExecutor(max_workers=1) as pool:
+            with self.db.transaction():
+                self.cancel_original(command.binding_task_id)
+                # Restore the fictional admin observer within the held transaction.
+                self.db.execute("RESET ROLE")
+                pending = pool.submit(
+                    PostgresCompleteInput(
+                        caller,
+                        credential_sha256=self.secret_hash,
+                        workspace_id=self.workspace,
+                    ).activate,
+                    command,
+                )
+                self.assert_activation_waiting(caller)
+                after_cancel = self.activation_effects()
+            with self.assertRaisesRegex(psycopg.Error, "binding_not_transferable"):
+                pending.result(timeout=3)
+        self.assertEqual(self.activation_effects(), after_cancel)
+        self.assert_no_meaning()
+
+    def test_activation_natural_duplicate_records_each_key_and_replays(self) -> None:
+        command = self.activation_command_for("duplicate", "K1")
+        first = self.complete.activate(command)
+        original_receipt = self.row(
+            "SELECT to_jsonb(r) FROM memoriesql.idempotency_receipts r WHERE idempotency_receipt_id=%s",
+            (first.idempotency_receipt_id,),
+        )
+        original_binding = self.row(
+            "SELECT to_jsonb(b) FROM memoriesql.logical_unit_materializations b WHERE task_id=%s",
+            (command.binding_task_id,),
+        )
+        original_input = self.row(
+            "SELECT input_payload FROM memoriesql.semantic_tasks WHERE task_id=%s",
+            (command.binding_task_id,),
+        )
+        before = self.activation_effects()
+        duplicate = command.model_copy(update={"idempotency_key": "K2"})
+        second = self.complete.activate(duplicate)
+        self.assertEqual(
+            self.row(
+                "SELECT count(*) FROM memoriesql.idempotency_receipts WHERE operation_kind='complete_input.activate.v1' AND idempotency_key='K2'"
+            ),
+            (1,),
+        )
+        self.assertNotEqual(second.idempotency_receipt_id, first.idempotency_receipt_id)
+        self.assertTrue(second.replayed)
+        self.assertEqual(second.execution_task_id, first.execution_task_id)
+        self.assertEqual(second.enqueue_receipt_id, first.enqueue_receipt_id)
+        self.assertEqual(second.package, first.package)
+        self.assertEqual(self.complete.activate(duplicate), second)
+        self.assertEqual(
+            self.complete.activate(command), first.model_copy(update={"replayed": True})
+        )
+        self.assertEqual(self.activation_effects(), before)
+        self.assertEqual(
+            self.row(
+                "SELECT to_jsonb(r) FROM memoriesql.idempotency_receipts r WHERE idempotency_receipt_id=%s",
+                (first.idempotency_receipt_id,),
+            ),
+            original_receipt,
+        )
+        self.assertEqual(
+            self.row(
+                "SELECT to_jsonb(b) FROM memoriesql.logical_unit_materializations b WHERE task_id=%s",
+                (command.binding_task_id,),
+            ),
+            original_binding,
+        )
+        self.assertEqual(
+            self.row(
+                "SELECT input_payload FROM memoriesql.semantic_tasks WHERE task_id=%s",
+                (command.binding_task_id,),
+            ),
+            original_input,
+        )
+        self.assertEqual(
+            self.row(
+                "SELECT activation_receipt_id FROM memoriesql.complete_input_executions WHERE binding_task_id=%s",
+                (command.binding_task_id,),
+            ),
+            (first.idempotency_receipt_id,),
+        )
+        self.assert_no_meaning()
+
+    def test_activation_acknowledged_duplicate_key_cannot_change_request(self) -> None:
+        a = self.activation_command_for("unit-a", "K1")
+        b = self.activation_command_for("unit-b", "K2")
+        self.complete.activate(a)
+        self.complete.activate(a.model_copy(update={"idempotency_key": "K2"}))
+        before = self.activation_effects()
+        receipts = self.row("SELECT count(*) FROM memoriesql.idempotency_receipts")
+        for key in ("K1", "K2"):
+            with (
+                self.subTest(key=key),
+                self.assertRaisesRegex(psycopg.Error, "idempotency_conflict"),
+            ):
+                self.complete.activate(b.model_copy(update={"idempotency_key": key}))
+        self.assertEqual(self.activation_effects(), before)
+        self.assertEqual(
+            self.row("SELECT count(*) FROM memoriesql.idempotency_receipts"), receipts
+        )
+        self.assert_no_meaning(2)
+
+    def test_activation_concurrent_keys_share_one_successor(self) -> None:
+        from concurrent.futures import ThreadPoolExecutor
+
+        for expected_beads, same_key in enumerate((True, False), start=1):
+            with self.subTest(same_key=same_key):
+                a = self.activation_command_for(
+                    f"concurrent-{same_key}", f"concurrent-{same_key}-1"
+                )
+                b = (
+                    a
+                    if same_key
+                    else a.model_copy(
+                        update={"idempotency_key": f"concurrent-{same_key}-2"}
+                    )
+                )
+                outboxes = self.row("SELECT count(*) FROM memoriesql.outbox_events")[0]
+                with (
+                    self.connection() as blocker,
+                    self.connection() as left,
+                    self.connection() as right,
+                    ThreadPoolExecutor(max_workers=2) as pool,
+                ):
+                    with blocker.transaction():
+                        blocker.execute(
+                            "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
+                            (
+                                f"{self.tenant}:complete-input-binding:{a.binding_task_id}",
+                            ),
+                        )
+                        futures = [
+                            pool.submit(
+                                PostgresCompleteInput(
+                                    connection,
+                                    credential_sha256=self.secret_hash,
+                                    workspace_id=self.workspace,
+                                ).activate,
+                                command,
+                            )
+                            for connection, command in ((left, a), (right, b))
+                        ]
+                        self.assert_activation_waiting(left)
+                        self.assert_activation_waiting(right)
+                    receipts = [future.result(timeout=3) for future in futures]
+                self.assertEqual(
+                    receipts[0].execution_task_id, receipts[1].execution_task_id
+                )
+                self.assertEqual(receipts[0].package, receipts[1].package)
+                self.assertEqual(sorted(r.replayed for r in receipts), [False, True])
+                self.assertEqual(
+                    self.row(
+                        "SELECT count(*) FROM memoriesql.semantic_tasks WHERE rerun_of_task_id=%s",
+                        (a.binding_task_id,),
+                    ),
+                    (1,),
+                )
+                self.assertEqual(
+                    self.row(
+                        "SELECT count(*) FROM memoriesql.idempotency_receipts WHERE operation_kind='complete_input.activate.v1' AND resource_id=%s",
+                        (a.binding_task_id,),
+                    ),
+                    (1 if same_key else 2,),
+                )
+                self.assertEqual(
+                    self.row("SELECT count(*) FROM memoriesql.outbox_events"),
+                    (outboxes + 1,),
+                )
+                # Later cancellation of the successor does not erase completed activation.
+                self.cancel_original(receipts[0].execution_task_id)
+                before = self.activation_effects()
+                for command, receipt in zip((a, b), receipts, strict=True):
+                    self.assertEqual(
+                        self.complete.activate(command),
+                        receipt.model_copy(update={"replayed": True}),
+                    )
+                self.assertEqual(self.activation_effects(), before)
+                self.assert_no_meaning(expected_beads)
+
+    def test_activation_duplicate_acknowledgement_rolls_back_atomically(self) -> None:
+        command = self.activation_command_for("rollback-duplicate", "K1")
+        first = self.complete.activate(command)
+        duplicate = command.model_copy(update={"idempotency_key": "K2"})
+        self.db.execute(
+            "CREATE FUNCTION public.fictional_abort_ack() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.operation_kind='complete_input.activate.v1' AND NEW.idempotency_key='K2' AND NEW.status='succeeded' THEN RAISE EXCEPTION 'fictional_ack_crash'; END IF; RETURN NEW; END $$"
+        )
+        self.db.execute(
+            "CREATE TRIGGER fictional_abort_ack BEFORE UPDATE ON memoriesql.idempotency_receipts FOR EACH ROW EXECUTE FUNCTION public.fictional_abort_ack()"
+        )
+        before = self.activation_effects()
+        receipts = self.row("SELECT count(*) FROM memoriesql.idempotency_receipts")
+        with self.assertRaisesRegex(psycopg.Error, "fictional_ack_crash"):
+            self.complete.activate(duplicate)
+        self.assertEqual(self.activation_effects(), before)
+        self.assertEqual(
+            self.row("SELECT count(*) FROM memoriesql.idempotency_receipts"), receipts
+        )
+        self.db.execute(
+            "DROP TRIGGER fictional_abort_ack ON memoriesql.idempotency_receipts"
+        )
+        second = self.complete.activate(duplicate)
+        self.assertEqual(second.execution_task_id, first.execution_task_id)
+        self.assertEqual(self.complete.activate(duplicate), second)
+        self.assertEqual(self.activation_effects(), before)
+        self.assert_no_meaning()
+
     def test_activation_failure_rolls_back_transfer(self) -> None:
         package = self.package()
         self.bound = self.materializer.materialize(self.materialization(package))
@@ -433,6 +770,12 @@ class CompleteInputExecution(LogicalUnitMaterialization):
         self.db.execute(
             "CREATE TRIGGER fictional_abort BEFORE INSERT ON memoriesql.semantic_tasks FOR EACH ROW EXECUTE FUNCTION public.fictional_abort_execution()"
         )
+        before = self.activation_effects()
+        receipts = self.row("SELECT count(*) FROM memoriesql.idempotency_receipts")
+        original = self.row("SELECT to_jsonb(t) FROM memoriesql.semantic_tasks t")
+        binding = self.row(
+            "SELECT to_jsonb(b) FROM memoriesql.logical_unit_materializations b"
+        )
         with self.assertRaisesRegex(psycopg.Error, "fictional_crash"):
             self.complete.activate(
                 ActivateCompleteInput(
@@ -441,6 +784,19 @@ class CompleteInputExecution(LogicalUnitMaterialization):
                     dispatch_policy_id=self.dispatch_policy,
                 )
             )
+        self.assertEqual(self.activation_effects(), before)
+        self.assertEqual(
+            self.row("SELECT count(*) FROM memoriesql.idempotency_receipts"), receipts
+        )
+        self.assertEqual(
+            self.row("SELECT to_jsonb(t) FROM memoriesql.semantic_tasks t"), original
+        )
+        self.assertEqual(
+            self.row(
+                "SELECT to_jsonb(b) FROM memoriesql.logical_unit_materializations b"
+            ),
+            binding,
+        )
         self.assertEqual(
             self.row("SELECT status FROM memoriesql.semantic_tasks"), ("policy_paused",)
         )

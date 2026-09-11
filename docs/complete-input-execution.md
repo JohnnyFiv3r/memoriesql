@@ -20,9 +20,24 @@ unavailable task with `complete_input.execution_transferred`, and enqueues one
 successor in the existing queue with `rerun_of_task_id` naming that original task.
 The original input, unavailable binding-time snapshot, package pin, materialization
 receipt and enqueue receipt remain byte-for-byte intact. The unique original-task
-link prevents duplicate activation. The shared idempotency ledger supplies the
-activation receipt; reply-loss replay returns the same task. A conflicting policy
-or operation key fails. There is no second scheduler or semantic authority.
+link prevents duplicate activation. Every successful submitted operation key is
+durably bound to its exact request in the existing shared idempotency ledger,
+including natural duplicates. A fresh key for an existing activation receives its
+own receipt ID and `replayed: true`, retaining the original successor, enqueue
+receipt and package pin. Equal-key/equal-request replay is stable; a changed request
+under an acknowledged key conflicts. The original activation receipt and execution
+link are never rewritten. A conflicting policy also fails. There is no second
+scheduler or semantic authority.
+
+Activation takes the existing authority fence, operation-key lock, binding-key
+lock, then the original task's row lock in that order. It reloads current task
+state under that row lock and rechecks authority after the waits. An owner
+cancellation that wins prevents a new transfer, with no successor, receipt or
+outbox effects from the rejected activation. A prior unrelated cancellation is
+not an execution transfer. Once activation has completed, its valid receipt and
+natural replays remain available even if the successor is later cancelled,
+subject to current authorization. Receipt acknowledgement and successor creation
+retain the same transaction and rollback boundary.
 
 The new task carries the same seal, entire inventory, producer policy and canonical
 IDs, plus the exact source declaration, event declaration, native facts, parent
@@ -98,6 +113,11 @@ therefore exhaust the request budget earlier. Caller runtime ceilings may be
 narrower. The existing accounting and model-profile limits continue to apply.
 The neutral standard-effort profile requires explicit caller composition; no
 frontier model or production provider is inherited or selected here.
+
+Rolling-note quality and these execution ceilings remain experimental. This
+activation repair makes no authoring-strategy change; real-provider qualification
+must assess semantic retention and practical budgets separately from mechanical
+exposure.
 
 A unit larger than the execution budget remains retained with its thin bead and
 an explicit `budget_exhausted` attempt. The 16-MiB storage ceiling is not a promise

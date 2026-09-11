@@ -134,6 +134,9 @@ BEGIN
         RAISE EXCEPTION 'complete_input_activation_denied' USING ERRCODE='42501'; END IF;
     PERFORM pg_advisory_xact_lock(hashtextextended(c.tenant_id::text||':complete-input-activate:'||(request->>'idempotency_key'),0));
     PERFORM pg_advisory_xact_lock(hashtextextended(c.tenant_id::text||':complete-input-binding:'||b.task_id::text,0));
+    -- Lock order: authority fence, operation key, binding key, original task.
+    -- Cancellation may win any preceding wait; never transfer from stale state.
+    SELECT * INTO original FROM memoriesql.semantic_tasks WHERE tenant_id=c.tenant_id AND task_id=b.task_id FOR UPDATE;
     b:=memoriesql.complete_input_authorize(c.tenant_id,b.task_id,(request->>'dispatch_policy_id')::uuid);
     request_hash:=encode(sha256(convert_to(request::text,'UTF8')),'hex');
     SELECT * INTO old FROM memoriesql.idempotency_receipts WHERE tenant_id=c.tenant_id AND operation_kind='complete_input.activate.v1' AND idempotency_key=request->>'idempotency_key';
@@ -141,17 +144,21 @@ BEGIN
         IF old.request_hash<>request_hash THEN RAISE EXCEPTION 'idempotency_conflict' USING ERRCODE='23505'; END IF;
         RETURN old.response_receipt||'{"replayed":true}'::jsonb;
     END IF;
+    -- Every acknowledged key owns a shared-ledger receipt, including natural replay.
+    INSERT INTO memoriesql.idempotency_receipts(tenant_id,workspace_id,access_scope_id,idempotency_receipt_id,operation_kind,idempotency_key,request_hash,status,resource_kind,resource_id,attempt_count,created_at,updated_at)
+    VALUES(c.tenant_id,c.workspace_id,b.access_scope_id,rid,'complete_input.activate.v1',request->>'idempotency_key',request_hash,'in_progress','semantic_task',b.task_id,1,started,started);
     SELECT * INTO e FROM memoriesql.complete_input_executions WHERE tenant_id=c.tenant_id AND binding_task_id=b.task_id;
     IF FOUND THEN
         IF e.dispatch_policy_id<>(request->>'dispatch_policy_id')::uuid THEN RAISE EXCEPTION 'complete_input_activation_conflict' USING ERRCODE='23505'; END IF;
         SELECT response_receipt INTO result FROM memoriesql.idempotency_receipts WHERE tenant_id=c.tenant_id AND idempotency_receipt_id=e.activation_receipt_id;
-        RETURN result||'{"replayed":true}'::jsonb;
+        result:=result||jsonb_build_object('idempotency_receipt_id',rid,'replayed',true);
+        PERFORM memoriesql.complete_input_authorize(c.tenant_id,b.task_id,(request->>'dispatch_policy_id')::uuid);
+        UPDATE memoriesql.idempotency_receipts SET status='succeeded',response_receipt=result,completed_at=clock_timestamp(),updated_at=clock_timestamp() WHERE tenant_id=c.tenant_id AND idempotency_receipt_id=rid;
+        RETURN result;
     END IF;
-    IF original.status<>'policy_paused' OR original.pause_reason_code<>'complete_input_executor_unavailable' OR original.attempt_count<>0 THEN
+    IF original.status<>'policy_paused' OR original.pause_reason_code<>'complete_input_executor_unavailable' OR original.attempt_count<>0 OR original.cancel_requested_at IS NOT NULL THEN
         RAISE EXCEPTION 'complete_input_binding_not_transferable' USING ERRCODE='55000'; END IF;
     SELECT * INTO p FROM memoriesql.evidence_packages WHERE tenant_id=c.tenant_id AND package_id=b.package_id;
-    INSERT INTO memoriesql.idempotency_receipts(tenant_id,workspace_id,access_scope_id,idempotency_receipt_id,operation_kind,idempotency_key,request_hash,status,resource_kind,resource_id,attempt_count,created_at,updated_at)
-    VALUES(c.tenant_id,c.workspace_id,b.access_scope_id,rid,'complete_input.activate.v1',request->>'idempotency_key',request_hash,'in_progress','semantic_task',b.task_id,1,started,started);
     INSERT INTO memoriesql.complete_input_executions VALUES(c.tenant_id,b.task_id,tid,(request->>'dispatch_policy_id')::uuid,(SELECT schema_version FROM memoriesql.source_objects WHERE tenant_id=c.tenant_id AND source_object_id=p.source_object_id),rid);
     IF memoriesql.cancel_semantic_task(c.tenant_id,b.task_id,'complete_input.execution_transferred',clock_timestamp())<>'cancelled' THEN
         RAISE EXCEPTION 'complete_input_transfer_failed' USING ERRCODE='55000'; END IF;

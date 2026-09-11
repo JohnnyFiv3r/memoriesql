@@ -136,7 +136,7 @@
       "public_path": "migrations/0018_complete_input_execution.sql",
       "disposition": "public",
       "reason": "Public forward execution, trusted exposure, authorized reader and fenced canonical apply.",
-      "public_sha256": "3bafec2bf0894d9be1a5c67826af4f84b28131aa67923cc7c613e7dc0c81b640"
+      "public_sha256": "7e652e01075fc55ef432d9e0fe173ed55944512d393dec5b7c8760c25501efb9"
     }
   ],
   "scope": "Canonical migration substrate only",

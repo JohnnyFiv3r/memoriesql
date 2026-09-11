@@ -890,14 +890,14 @@
       "classification": "approved_migration_substrate",
       "license": "Apache-2.0",
       "public_path": "contracts/migration-inventory.json",
-      "public_sha256": "c36a94d18a275e1912d7d4185aefc8e52606167ee8e93fded19794c67adda9c5",
+      "public_sha256": "d133ce3677c2b391afd70599c8f9b7775240de8a1a160a3a6a2777345c8748ff",
       "reason": "Public-owned N1 inventory; audited copy/adapt details in migration-extraction.json where applicable."
     },
     {
       "classification": "approved_migration_substrate",
       "license": "Apache-2.0",
       "public_path": "docs/provenance/migration-extraction.json",
-      "public_sha256": "b6ef25a716d8ac7a0e6999941b5d731befc098558357d4c7bb2ba76baa89b1fb",
+      "public_sha256": "2e15a0b8d9db15ba015d63fbc8240fb685f9e589977a4d5cdbe025b55b5e9838",
       "reason": "Public-owned N1 inventory; audited copy/adapt details in migration-extraction.json where applicable."
     },
     {
@@ -1247,14 +1247,14 @@
       "classification": "public",
       "license": "Apache-2.0",
       "public_path": "migrations/0018_complete_input_execution.sql",
-      "public_sha256": "3bafec2bf0894d9be1a5c67826af4f84b28131aa67923cc7c613e7dc0c81b640",
+      "public_sha256": "7e652e01075fc55ef432d9e0fe173ed55944512d393dec5b7c8760c25501efb9",
       "reason": "Public-authored complete-input execution slice and fictional verification."
     },
     {
       "classification": "public",
       "license": "Apache-2.0",
       "public_path": "tests/runtime/test_complete_input_execution.py",
-      "public_sha256": "d3ef3fc2ae22ae8b6e077466e671516226fc293e408fa91417c111ff1a88864d",
+      "public_sha256": "db541f6542f119706387153ef729c9a31822afd069f64e8b832033bc8b6465ed",
       "reason": "Public-authored complete-input execution slice and fictional verification."
     },
     {
@@ -1289,14 +1289,14 @@
       "classification": "public",
       "license": "Apache-2.0",
       "public_path": "docs/complete-input-execution.md",
-      "public_sha256": "f6f0a7e0bff54ad6898293fd6f2848806e34430043c74cd02758bd76bc0744f0",
+      "public_sha256": "40c4956f9f8936560302bd78f4d6438fb68656e0115f43c7ef55dcd419508b26",
       "reason": "Public-authored complete-input execution slice and fictional verification."
     },
     {
       "classification": "public",
       "license": "Apache-2.0",
       "public_path": "docs/verification/complete-input-execution.md",
-      "public_sha256": "d118e86ed1018921d0199bef172336ae62af62a048622dc8ab9e257cdb4a45c4",
+      "public_sha256": "7cac82ee9012b0dcca5e354648cb821b1d180c17d968a418c5ed2703c8ed8936",
       "reason": "Public-authored complete-input execution slice and fictional verification."
     }
   ],
