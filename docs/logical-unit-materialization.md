@@ -4,7 +4,9 @@ Schema 17 adds `memoriesql.logical-unit-materialization.v1`. A qualified, sealed
 [evidence package](evidence-packages.md) can create or replay one genuine
 source-native unit, its initial thin bead, an exact-package authoring task,
 outbox effects and shared receipts in one transaction. It authors no meaning.
-This is the next public PR-02O slice. The complete-input executor is deferred.
+This schema-17 path is included in the 0.0.5 candidate. Schema 18 adds a separate
+[explicit successor activation](complete-input-execution.md); it never reinterprets
+these original unavailable bindings. PR-02O and CP-2 remain incomplete.
 
 ## Trust and qualification
 
@@ -110,18 +112,20 @@ no text preview, summary, provider budget or selected-page evidence substitute.
 The binding hash is admission metadata, **not** an executable task definition or
 agent registry. Published author-observations v1/v2 inputs and hashes remain intact.
 
-## Execution remains unavailable
+## Original bindings remain unavailable
 
 The existing queue stores these tasks as `policy_paused` with
 `complete_input_executor_unavailable` and zero attempts. Database guards reject
-resume, claim-state changes, attempts and success until a future explicit forward
-transition supplies complete-input execution. Standalone enqueue cannot commit
+resume, claim-state changes, attempts and success for these original tasks.
+Schema 18 supplies complete-input execution through an explicit successor, not
+by removing these guards or changing the original task input. Standalone enqueue cannot commit
 without the exact canonical binding. A second guard rejects semantic versions
 for these source units, including attempts to route them through legacy authoring
 or correction. There is no placeholder semantic output and no second scheduler.
 Availability in immutable input and receipts is the binding-time snapshot; the
-queue guards enforce the current execution policy. A future transition must
-explicitly validate exposure before permitting execution of an existing pin.
+queue guards enforce the original execution policy. The schema-18 successor
+requires complete trusted exposure before accepting a semantic result from the
+same sealed pin; installation/upgrading does not activate it.
 Cancellation and terminal failure remain operational options; neither authors
 meaning. Module admission, current authority and shared queue fences still apply.
 
@@ -133,10 +137,10 @@ before return; it rechecks policy expiry. Historical receipt replay also require
 current authorization and a currently valid submitted producer policy. Reads
 continue through the schema-16 bounded authorized evidence reader. That reader
 rechecks current source authority on each operation; it does not prove model
-exposure. The future executor must recheck source/producer authorization during
-hydration and canonical apply and prove trusted exposure to all required evidence
-before any successful semantic result can commit. Removing the unavailable guards
-without that replacement would violate this contract.
+exposure. The schema-18 executor rechecks source/producer authorization during hydration
+and canonical apply, with trusted exposure to all required input mandatory before
+semantic acceptance. Mechanical exposure does not prove comprehension or independent
+source completeness. Complete-input correction/reauthoring remains deferred.
 
 ## Bounds, compatibility and later acceptance
 
