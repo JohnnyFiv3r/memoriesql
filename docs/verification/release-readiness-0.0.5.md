@@ -79,13 +79,23 @@ historical/future-version fallback is introduced.
 ## Verification and bounded review
 
 The 20 focused metadata/control tests passed in 0.056 seconds. Ruff and strict mypy
-passed for all five changed Python files; generators, boundary, migration/runtime
+passed for all six changed Python files; generators, boundary, migration/runtime
 export and provenance checks passed. Fresh direct-wheel and independently rebuilt
 sdist-wheel checks passed on Python 3.13.5 and 3.14.0 (four installations, each with
 five catalog tests). They verified: exact installed version,
 unchanged direct dependencies, all 73 package-file ownership hashes, 18 installed
 migration resources, revision-2 complete-input task import and catalog behavior.
 Checkout access and external network access are denied during those checks.
+
+The initial broad review and hosted CI identified two stale `0.0.4` expectations
+in installed-migration metadata tests. Both supported-Python wheel runs passed
+126 of 128 cases and failed only those two version assertions. The expectations
+now match genuine 0.0.5. Only those two metadata/resource methods were rerun locally
+in each of the four existing isolated installs, without their unused database
+setup; all passed. No runtime behavior or artifact byte changed. A compatibility
+anchor also preserves the historical 0.0.4 evidence link to owner actions. The
+review's missing-DCO report was disproved by the hosted commit API: the original
+commit already includes the contributor's `Signed-off-by` trailer.
 
 One broad review and at most one focused rereview are allowed for this readiness
 PR. Findings must be answered/resolved and final-head CI obtained. Independently

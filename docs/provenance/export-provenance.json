@@ -701,7 +701,7 @@
       "classification": "public_release_configuration",
       "license": "Apache-2.0",
       "public_path": "docs/releasing.md",
-      "public_sha256": "6edad2ad53d1917ae60478dca9884f8cda482fd7349e74de8d95ec2f662ca870",
+      "public_sha256": "dab5d5781554fb21461373412d11e6e7335da9c63932eec5a739669c7ef94b6d",
       "reason": "Public-owned publisher identity, release controls, and separate owner authorization requirements."
     },
     {
@@ -939,7 +939,7 @@
       "classification": "approved_migration_substrate",
       "license": "Apache-2.0",
       "public_path": "tests/migrations/test_installed_migrations.py",
-      "public_sha256": "7e3651a3a623a6f152b76064430af119c1c06a1f54082b0dcf4aa0a036b6c7a8",
+      "public_sha256": "a82c5f220a5ab4236faeb318ae122b726cda4734159a928689e3bb6baa53ee1c",
       "reason": "Public-owned N1 inventory; audited copy/adapt details in migration-extraction.json where applicable."
     },
     {
@@ -1310,7 +1310,7 @@
       "classification": "public",
       "license": "Apache-2.0",
       "public_path": "docs/verification/release-readiness-0.0.5.md",
-      "public_sha256": "c1d5256dfc50c11883f09a22b787b0c5f0fb3cb267c9f1c5d122636c3eb98cdb",
+      "public_sha256": "aa7dd054d5d38aeade0f921bd4b74e9306513d3f64aa40b8dcc624942580b5ab",
       "reason": "Public-authored 0.0.5 release-readiness evidence; no runtime behavior or publication authority added."
     }
   ],

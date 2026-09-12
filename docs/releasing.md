@@ -128,6 +128,8 @@ the original successor/pin. The completed activation review is not reopened here
 See [execution](complete-input-execution.md), [compatibility](architecture/compatibility.md),
 [migration operations](migrations.md) and [cleanup ownership](runtime.md#cancellation-cleanup-ownership).
 
+<a id="separate-owner-actions"></a>
+
 ## Remaining separately authorized release actions
 
 1. Review and merge this readiness PR after final-head CI, artifact comparison and
