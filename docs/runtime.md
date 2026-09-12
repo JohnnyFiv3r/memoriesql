@@ -1,5 +1,12 @@
 # Experimental provider-neutral runtime
 
+The 0.0.5 candidate includes schemas 16–18 and the complete-input path described
+below. Release preparation changes no runtime behavior or dependencies. Installing
+or upgrading does not provision production trust, activate tasks or configure a
+provider. See [explicit caller composition](releasing.md#caller-composition-and-explicit-opt-in).
+
+## Historical N2 extraction scope
+
 Published `0.0.2` introduced the explicitly inventoried neutral runtime to the
 migration substrate. Python 3.13 is the support floor; 3.13 and 3.14 are the
 initial qualification matrix (`>=3.13,<3.15`). Install an exact reviewed runtime
@@ -154,7 +161,7 @@ and its two revision-2 tasks. The canonical sink dispatches typed results throug
 the same worker, cancellation/quarantine, accounting and fenced settlement path.
 No executor or scheduler is replaced. See [commands, caller migration and acceptance](immutable-observations.md).
 
-## Unreleased evidence-package reader
+## Evidence-package reader included in 0.0.5
 
 `memoriesql.application.evidence_packages` and
 `memoriesql.infrastructure.postgres.evidence_packages` add the explicitly inventoried
@@ -165,7 +172,7 @@ authorization and receipts. They do not integrate the semantic executor. See
 [evidence packages](evidence-packages.md) for qualified-producer responsibilities,
 operation bounds, overflow behavior and the later trusted exposure/apply boundary.
 
-## Unreleased complete-input execution
+## Complete-input execution included in 0.0.5
 
 Schema 18 explicitly transfers unavailable schema-17 bindings into revision-2
 complete-input tasks through the existing queue. Its reader, trusted exposure,

@@ -1,6 +1,6 @@
 # Complete-input evidence packages, version 1
 
-This unreleased public-core path stores and reads the complete normalized evidence
+This public-core path, included in the 0.0.5 candidate, stores and reads the complete normalized evidence
 inventory declared for one source-native logical unit. It creates no source event,
 source unit, observation, bead, semantic task, authoring run or accepted memory.
 It neither invokes providers nor proves that an author received or understood input.
@@ -9,7 +9,9 @@ The new `memoriesql.evidence-package.v1` catalog record describes the typed comm
 reader and responses in `application.evidence_packages`. The PostgreSQL adapter is
 `PostgresEvidencePackages`. Migration 0016 adds the canonical operations and two
 explicitly inventoried tables. A released core dependency must precede product use;
-no future distribution version is selected here.
+0.0.5 release readiness is documented in [the release guide](releasing.md).
+Installation does not provision producer qualification or opt into later
+materialization/execution; those are separate commands and caller composition.
 
 ## Identity, inventory and qualification
 

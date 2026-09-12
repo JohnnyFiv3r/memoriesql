@@ -167,7 +167,8 @@ proof of rollback or reconciled usage.
 
 Migrations 0001–0017 and all prior contract record bytes are preserved. Legacy
 v1/v2 authoring payloads, registry identities, receipts and accepted meaning are
-unchanged. Schema 18 and its contracts must merge and be released in public core
-before Desktop consumes them. No future release version or publication control is
-selected. Product composition, real-provider interpretation, production trust
+unchanged. This implementation merged in PR #13 and is included unchanged in
+the 0.0.5 release-readiness candidate. Public release must precede Desktop
+consumption; installing/upgrading does not provision trust, activate tasks or
+configure a provider. See [release controls and caller opt-in](releasing.md). Product composition, real-provider interpretation, production trust
 qualification, owner-data runs, UI, CP execution and PR-02P/Q remain deferred.
