@@ -7,12 +7,18 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Any, Never, Protocol
+from typing import Any, Never, Protocol, cast
 from uuid import UUID
 
 from psycopg import Connection
 from pydantic import BaseModel, ValidationError
 
+from memoriesql.application.complete_input_execution import (
+    CompleteEvidenceBatch,
+    CompleteExecutionInput,
+    EvidenceExposureRecorder,
+    ReadCompleteEvidence,
+)
 from memoriesql.application.model_accounting import (
     AccountingPersistenceError,
     ModelUsageEvent,
@@ -42,6 +48,9 @@ from memoriesql.application.semantic_task_contracts import (
 from memoriesql.application.semantic_task_registry import (
     SemanticTaskRegistry,
     SemanticTaskResolutionError,
+)
+from memoriesql.infrastructure.jobs.complete_input_access import (
+    CompleteInputEvidenceAccess,
 )
 from memoriesql.infrastructure.jobs.postgres_semantic_queue import (
     ClaimedSemanticTask,
@@ -364,6 +373,7 @@ class IntegratedSemanticWorker:
         readiness_provider: Callable[[], ProviderExecutionReadiness],
         outcome_sinks: RegisteredSemanticOutcomeSinks = SYNTHETIC_OUTCOME_SINKS,
         config: SemanticWorkerConfig = SemanticWorkerConfig(),
+        exposure_recorder: EvidenceExposureRecorder | None = None,
     ) -> None:
         self._connection_factory = connection_factory
         self._identity = identity
@@ -373,6 +383,7 @@ class IntegratedSemanticWorker:
         self._readiness_provider = readiness_provider
         self._outcome_sinks = outcome_sinks
         self._config = config
+        self._exposure_recorder = exposure_recorder
         self._cycle_task: asyncio.Task[SemanticWorkerCycleReceipt] | None = None
         self._foreground_active = False
         self._cleanup_started = asyncio.Event()
@@ -739,6 +750,12 @@ class IntegratedSemanticWorker:
             event_sink=event_sink,
             model_accounting=self._cycle_accounting,
             monotonic_deadline_ns=monotonic_deadline_ns,
+            complete_input=(
+                self._complete_input_access(claimed, task_input)
+                if isinstance(task_input, CompleteExecutionInput)
+                else None
+            ),
+            exposure_recorder=self._exposure_recorder,
         )
         try:
             resolved = self._semantic_registry.resolve(
@@ -991,6 +1008,18 @@ class IntegratedSemanticWorker:
         assert persist_outcome.value is not None
         persisted = persist_outcome.value
         outcome_status, authorization_available = persisted
+        reported_result_status = SemanticResultStatus(result.status)
+        if (
+            claimed.task_kind == "memory.semantic.author-complete-unit"
+            and claimed.contract_revision == 2
+            and result.status == SemanticResultStatus.SUCCEEDED
+            and outcome_status != "succeeded"
+        ):
+            reported_result_status = {
+                "failed_terminal": SemanticResultStatus.INVALID_OUTPUT,
+                "policy_paused": SemanticResultStatus.POLICY_PAUSED,
+                "cancelled": SemanticResultStatus.CANCELLED,
+            }.get(outcome_status, SemanticResultStatus.UNAVAILABLE)
         if not authorization_available:
             return SemanticWorkerCycleReceipt(
                 cycle_status=WorkerCycleStatus.AUTHORIZATION_UNAVAILABLE,
@@ -998,7 +1027,7 @@ class IntegratedSemanticWorker:
                 provider_reason_code=readiness.reason_code,
                 task_id=claimed.fence.task_id,
                 attempt_id=claimed.fence.attempt_id,
-                result_status=SemanticResultStatus(result.status),
+                result_status=reported_result_status,
             )
         if (
             late_output_discarded
@@ -1015,7 +1044,7 @@ class IntegratedSemanticWorker:
                 task_id=claimed.fence.task_id,
                 attempt_id=claimed.fence.attempt_id,
                 task_status=outcome_status,
-                result_status=SemanticResultStatus(result.status),
+                result_status=reported_result_status,
             )
         return SemanticWorkerCycleReceipt(
             cycle_status=WorkerCycleStatus.SETTLED,
@@ -1024,7 +1053,7 @@ class IntegratedSemanticWorker:
             task_id=claimed.fence.task_id,
             attempt_id=claimed.fence.attempt_id,
             task_status=outcome_status,
-            result_status=SemanticResultStatus(result.status),
+            result_status=reported_result_status,
             outcome_authority_class=(
                 sink.authority_class
                 if result.status == SemanticResultStatus.SUCCEEDED
@@ -1377,9 +1406,7 @@ class IntegratedSemanticWorker:
             effective_budget = definition.run_budget
             if (
                 task_input.requested_budget is not None
-                and task_input.requested_budget.is_not_wider_than(
-                    definition.run_budget
-                )
+                and task_input.requested_budget.is_not_wider_than(definition.run_budget)
             ):
                 effective_budget = task_input.requested_budget
             if (
@@ -1404,6 +1431,13 @@ class IntegratedSemanticWorker:
                     SemanticResultStatus.POLICY_PAUSED,
                     "authorization.snapshot_unavailable",
                 )
+            if isinstance(task_input, CompleteExecutionInput):
+                if self._exposure_recorder is None:
+                    return _PreparationFailure(
+                        SemanticResultStatus.UNAVAILABLE,
+                        "complete_input.trusted_dispatch_unavailable",
+                    )
+                return cast(SemanticTaskInput[BaseModel], task_input), authorization, {}
             evidence_content = queue.hydrate_evidence(
                 claimed.fence,
                 task_input.evidence_manifest,
@@ -1428,6 +1462,35 @@ class IntegratedSemanticWorker:
             return task_input, authorization, evidence_content
 
         return self._transaction(operation)
+
+    def _complete_input_access(
+        self, claimed: ClaimedSemanticTask, task_input: CompleteExecutionInput
+    ) -> CompleteInputEvidenceAccess:
+        async def read(request: ReadCompleteEvidence) -> CompleteEvidenceBatch:
+            return await self._await_database_call(
+                lambda: self._transaction(
+                    lambda queue, _context: queue.read_complete_evidence(
+                        claimed.fence, request
+                    )
+                )
+            )
+
+        async def authorize() -> None:
+            result = await self._await_database_call(
+                lambda: self._attempt_reauthorization(claimed.fence)
+            )
+            if result is not ReauthorizationResult.AUTHORIZED:
+                raise PermissionError(
+                    "complete input dispatch authorization unavailable"
+                )
+
+        return CompleteInputEvidenceAccess(
+            task_id=claimed.fence.task_id,
+            attempt_id=claimed.fence.attempt_id,
+            package=task_input.payload.package,
+            read=read,
+            authorize=authorize,
+        )
 
     def _persist_result(
         self,
@@ -1455,8 +1518,7 @@ class IntegratedSemanticWorker:
                     late_retained_settlement = (
                         settlement_result.status
                         == SemanticResultStatus.BUDGET_EXHAUSTED
-                        and settlement_result.error_code
-                        == "runtime.wall_clock_limit"
+                        and settlement_result.error_code == "runtime.wall_clock_limit"
                     ) or (
                         settlement_result.status == SemanticResultStatus.CANCELLED
                         and settlement_result.error_code == "worker.cancelled"
@@ -1468,6 +1530,25 @@ class IntegratedSemanticWorker:
                         settlement_result,
                         reauthorization,
                     )
+            if (
+                settlement_result.status == SemanticResultStatus.SUCCEEDED
+                and claimed.task_kind == "memory.semantic.author-complete-unit"
+                and claimed.contract_revision == 2
+                and not queue.complete_exposure_valid(claimed.fence)
+            ):
+                settlement_result = SemanticTaskResult[BaseModel](
+                    status=SemanticResultStatus.INVALID_OUTPUT,
+                    task_id=result.task_id,
+                    attempt_id=result.attempt_id,
+                    task_kind=result.task_kind,
+                    contract_revision=result.contract_revision,
+                    output_contract_hash=result.output_contract_hash,
+                    usage=result.usage,
+                    error_code="complete_input.exposure_incomplete",
+                    retry_class=retry_class_for_status(
+                        SemanticResultStatus.INVALID_OUTPUT
+                    ),
+                )
             if settlement_result.status == SemanticResultStatus.SUCCEEDED:
                 return sink.persist(
                     queue,
@@ -1569,6 +1650,7 @@ class IntegratedSemanticWorker:
     ) -> T:
         with self._connection_factory() as connection:
             with connection.transaction():
+                connection.execute("SET TRANSACTION ISOLATION LEVEL READ COMMITTED")
                 connection.execute("SET LOCAL ROLE memoriesql_worker")
                 context = PostgresAuthorizationPort(connection).begin_context(
                     credential_sha256=self._identity.credential_sha256,

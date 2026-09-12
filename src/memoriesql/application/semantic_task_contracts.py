@@ -9,6 +9,7 @@ from decimal import Decimal
 from enum import StrEnum
 from types import MappingProxyType, UnionType
 from typing import (
+    TYPE_CHECKING,
     Any,
     Literal,
     Protocol,
@@ -28,6 +29,13 @@ from pydantic import (
 )
 
 from memoriesql.domain.module_manifest import IDENTIFIER_PATTERN
+
+if TYPE_CHECKING:
+    from memoriesql.application.complete_input_execution import (
+        CompleteInputAccess,
+        EvidenceExposureRecorder,
+    )
+
 
 CONTRACT_SNAPSHOT_VERSION = 1
 SHA256_PATTERN = r"^[a-f0-9]{64}$"
@@ -560,6 +568,8 @@ class SemanticRunDeps:
     event_sink: SemanticRunEventSink
     model_accounting: ModelRequestAccounting
     monotonic_deadline_ns: int
+    complete_input: CompleteInputAccess | None = None
+    exposure_recorder: EvidenceExposureRecorder | None = None
 
 
 @dataclass(frozen=True)

@@ -27,6 +27,7 @@ jobs:
         run: |
           python scripts/generate_evidence_package_contract.py --check
           python scripts/generate_logical_unit_contract.py --check
+          python scripts/generate_complete_input_contracts.py --check
           python scripts/generate_catalogs.py --check
           python scripts/verify_public_boundary.py
           python scripts/verify_migration_export.py

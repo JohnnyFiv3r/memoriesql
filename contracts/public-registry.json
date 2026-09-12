@@ -24,7 +24,7 @@
     },
     {
       "disposition": "include",
-      "expected_record_count": 45,
+      "expected_record_count": 47,
       "filename": "json-schema.json",
       "kind": "json_schema",
       "note": "Provider-neutral capture, host, source-range, transcript-fold, and harness-lifecycle schemas."
@@ -177,6 +177,28 @@
       "reviewed_spike_record_sha256": "837d3887d806299275360dea6611fe27f30333372ed1978bd581eacef8eb231e",
       "reviewed_spike_source_sha256": "98e67ebaeae7d255b3fd9b65d972b265f1751fa67389f8d59e3b616e087f5861",
       "version": "1"
+    },
+    {
+      "canonical_payload_sha256": "7361b840df9d5e9eb0d250dc638c7828e7195dcbace166bd5d85cabe20547fa2",
+      "catalog": "json_schema",
+      "classification": "proposed_open_core",
+      "id": "memoriesql.complete-input-execution.v1",
+      "package_disposition": "include",
+      "path": "contracts/records/memoriesql-complete-input-execution-v1.json",
+      "public_sha256": "34a7d0d91a6c4ea5d78435fd1f9dab2a677df02320376914692dd0202ffdf899",
+      "reason": "Public-authored forward complete-input execution and bounded reader contracts.",
+      "version": "1"
+    },
+    {
+      "canonical_payload_sha256": "6b680a60dedbc70733362aad7715a6b383c5e0510422ce6e47cd6c06b5e12f92",
+      "catalog": "json_schema",
+      "classification": "proposed_open_core",
+      "id": "memoriesql.evidence-package-reader.v2",
+      "package_disposition": "include",
+      "path": "contracts/records/memoriesql-evidence-package-reader-v2.json",
+      "public_sha256": "4c4ee3c59d3c0bbfc386edc91bea9832aa41c861b7d6a9a333efca1f29bee9fb",
+      "reason": "Public-authored forward complete-input execution and bounded reader contracts.",
+      "version": "2"
     },
     {
       "canonical_payload_sha256": "5c523cf19962efbddbe34009276902d2c8d65efb7f10dc98543912314486a487",

@@ -164,3 +164,11 @@ commands and inspect/inventory/read operations reuse canonical raw evidence,
 authorization and receipts. They do not integrate the semantic executor. See
 [evidence packages](evidence-packages.md) for qualified-producer responsibilities,
 operation bounds, overflow behavior and the later trusted exposure/apply boundary.
+
+## Unreleased complete-input execution
+
+Schema 18 explicitly transfers unavailable schema-17 bindings into revision-2
+complete-input tasks through the existing queue. Its reader, trusted exposure,
+canonical apply and cleanup boundaries are described in
+[the forward execution contract](complete-input-execution.md). This does not
+activate a provider or provision production trust, and PR-02O/CP-2 remain open.
