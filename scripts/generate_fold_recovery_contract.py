@@ -40,7 +40,7 @@ def record() -> dict[str, object]:
                 operation_timeout_ms=fr.OPERATION_TIMEOUT_MS,
                 lock_timeout_ms=fr.LOCK_TIMEOUT_MS,
             ),
-            authorization="Current source.raw.read resource, capability, role and delegation checks before and after the existing authority fence; service access requires explicit policy and grant.",
+            authorization="Current source.raw.read resource, capability, role and delegation checks before and after the existing authority fence, with return-time expiry checks and a shared role-capability row lock through transaction completion; service access requires explicit policy and grant.",
             continuation="Source-scoped immutable receipt watermark and last outcome key; continue within the watermark, then fresh discovery after resume_after to include later committed receipts. Positions are recovery order, not source chronology.",
             evidence="Hex encodes exact byte pages, including Unicode boundaries. Exact envelopes are normalized stored facts; raw lineage is distinct. Neither implies source completeness, qualification or author exposure.",
             creates_semantic_artifacts=False,

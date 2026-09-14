@@ -74,7 +74,14 @@ role, begins a current authorization context, and calls the new function. The
 function reuses `evidence_package_authorize(source, false)`: current
 `source.raw.read`, source resource/scope policy, role/capability and delegation
 intersection, existing authorization audit, and the existing shared authority
-mutation fence. It rechecks after the fence wait and before return. The fence
+mutation fence. It rechecks after the fence wait and before return. A shared lock on the exact
+role-capability row (after the tenant authority fence) serializes role-policy
+UPDATE/DELETE through transaction completion. An additional return-time
+`clock_timestamp()` expiry check covers the context/credential/pairing deadline
+and currently applicable explicit-scope access grants; the published helpers
+retain their statement-clock behavior. Multiple valid grants remain alternatives,
+including non-expiring access grants. A scope/principal index supports the
+existing access-grant lookup. The fence
 orders relevant revocation against delivery; revocation after a completed read
 cannot retract bytes already received. Continuations confer no authority.
 
@@ -93,7 +100,7 @@ the metadata inbox retain their original distinct policies and behavior.
 | Raw validation | One original receipt, at most 256 existing chunks and 256 KiB accumulated bytes per read, plus the selected slice; no history hydration |
 | Envelope validation | At most the existing 1 MiB stored envelope per read, bounded independently of history; hash and slice without semantic reinterpretation |
 | Request 8 KiB; response 128 KiB | Explicit rejection rather than silent truncation |
-| Lock 500 ms; operation 2 s | Adapter statement timeout, SQL lock timeout and final elapsed-time check; standalone SQL callers must also set a statement timeout for interruption rather than only deadline rejection |
+| Lock 500 ms; operation 2 s | Adapter per-statement timeout, SQL lock timeout and final recovery-body elapsed-time check; standalone SQL callers must also set a statement timeout for interruption rather than only deadline rejection |
 
 Each adapter operation executes six SQL statements plus transaction control:
 isolation, two timeouts, application role, context, recovery. Those are database

@@ -279,16 +279,16 @@ class FoldRecovery(PostgresRuntime):
         with self.assertRaises((psycopg.Error, PermissionError)):
             self.api.inspect(InspectFoldOutcome(key=key))
 
-    def wait_for_lock(self, pid: int) -> None:
+    def wait_for_lock(self, pid: int, event: str = "advisory") -> None:
         deadline = time.monotonic() + 1
         while time.monotonic() < deadline:
             row = self.db.execute(
                 "SELECT wait_event FROM pg_stat_activity WHERE pid=%s", (pid,)
             ).fetchone()
-            if row and row[0] == "advisory":
+            if row and row[0] == event:
                 return
             time.sleep(0.005)
-        self.fail("operation never demonstrably waited on advisory lock")
+        self.fail("operation never demonstrably waited on the expected lock")
 
     def test_revocation_wins_during_authority_wait(self) -> None:
         key = seed(self)[0]
@@ -703,3 +703,145 @@ class FoldRecovery(PostgresRuntime):
             )
         with self.assertRaises(psycopg.errors.InsufficientPrivilege):
             self.api.inspect(InspectFoldOutcome(key=key))
+
+    def expiry_during_wait(self, kind: str, *, alternative: bool = False) -> None:
+        key = seed(self)[0]
+        database: Any = self.db
+        principal = database.execute(
+            "SELECT principal_id FROM memoriesql.authentication_credentials WHERE secret_sha256=%s",
+            (self.secret,),
+        ).fetchone()[0]
+        # Configure explicit-scope policy before starting the short expiry clock.
+        if kind == "access_grant":
+            policy = uuid.uuid4()
+            with database.transaction():
+                database.execute(
+                    "INSERT INTO memoriesql.access_policy_revisions SELECT tenant_id,workspace_id,access_scope_id,%s,2,'explicit',owner_user_id,'Fictional expiry proof',actor_principal_id,clock_timestamp() FROM memoriesql.access_policy_revisions WHERE access_scope_id=%s AND revision=1",
+                    (policy, self.scope),
+                )
+                database.execute(
+                    "UPDATE memoriesql.access_scopes SET mode='explicit',current_policy_revision_id=%s WHERE access_scope_id=%s",
+                    (policy, self.scope),
+                )
+        expires = datetime.now(UTC) + timedelta(milliseconds=250)
+        if kind == "credential":
+            database.execute(
+                "UPDATE memoriesql.authentication_credentials SET expires_at=%s WHERE secret_sha256=%s",
+                (expires, self.secret),
+            )
+        else:
+            with database.transaction():
+                self.begin()
+                if kind == "pairing":
+                    database.execute(
+                        "SELECT memoriesql.revise_pairing_grant(%s,1,%s,%s,'active',%s,%s,%s)",
+                        (
+                            self.grant,
+                            ["source.raw.read"],
+                            [self.scope],
+                            self.now,
+                            expires,
+                            datetime.now(UTC),
+                        ),
+                    )
+                else:
+                    database.execute(
+                        "SELECT memoriesql.create_access_grant(%s,%s,%s,%s,%s,%s)",
+                        (
+                            uuid.uuid4(),
+                            principal,
+                            self.scope,
+                            ["read"],
+                            self.now,
+                            expires,
+                        ),
+                    )
+        if alternative:
+            with database.transaction():
+                self.begin()
+                database.execute(
+                    "SELECT memoriesql.create_access_grant(%s,%s,%s,%s,%s,%s)",
+                    (uuid.uuid4(), principal, self.scope, ["read"], self.now, None),
+                )
+        with (
+            self.connect() as blocker,
+            self.connect() as reader,
+            ThreadPoolExecutor(1) as pool,
+        ):
+            with blocker.transaction():
+                blocker.execute(
+                    "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
+                    (str(self.tenant) + ":semantic_outcome_authority:",),
+                )
+                future = pool.submit(
+                    self.reader(reader).inspect, InspectFoldOutcome(key=key)
+                )
+                self.wait_for_lock(reader.info.backend_pid)
+                time.sleep(
+                    max(0, (expires - datetime.now(UTC)).total_seconds()) + 0.015
+                )
+            if alternative:
+                self.assertEqual(future.result(timeout=3).key, key)
+            else:
+                with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+                    future.result(timeout=3)
+
+    def test_credential_expiry_during_wait_denies_delivery(self) -> None:
+        self.expiry_during_wait("credential")
+
+    def test_pairing_expiry_during_wait_denies_delivery(self) -> None:
+        self.expiry_during_wait("pairing")
+
+    def test_access_grant_expiry_during_wait_denies_delivery(self) -> None:
+        self.expiry_during_wait("access_grant")
+
+    def test_role_policy_deletion_waits_through_delivery_transaction(self) -> None:
+        from memoriesql.infrastructure.postgres.authorization import (
+            PostgresAuthorizationPort,
+        )
+
+        key = seed(self)[0]
+        with (
+            self.connect() as reader,
+            self.connect() as mutation,
+            ThreadPoolExecutor(1) as pool,
+        ):
+            with reader.transaction():
+                reader.execute("SET LOCAL ROLE memoriesql_application")
+                PostgresAuthorizationPort(reader).begin_context(
+                    credential_sha256=self.secret, requested_workspace_id=self.workspace
+                )
+                reader.execute(
+                    "SELECT memoriesql.recover_transcript_fold_v1(%s)",
+                    (Jsonb(InspectFoldOutcome(key=key).model_dump(mode="json")),),
+                ).fetchone()
+                future = pool.submit(
+                    mutation.execute,
+                    "DELETE FROM memoriesql.role_capabilities WHERE role_key='background_service' AND capability_key='source.raw.read'",
+                )
+                self.wait_for_lock(mutation.info.backend_pid, event="transactionid")
+                self.assertFalse(future.done())
+            future.result(timeout=3)
+        with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+            self.api.inspect(InspectFoldOutcome(key=key))
+
+    def test_role_policy_deletion_that_wins_denies_after_wait(self) -> None:
+        key = seed(self)[0]
+        with (
+            self.connect() as mutation,
+            self.connect() as reader,
+            ThreadPoolExecutor(1) as pool,
+        ):
+            with mutation.transaction():
+                mutation.execute(
+                    "DELETE FROM memoriesql.role_capabilities WHERE role_key='background_service' AND capability_key='source.raw.read'"
+                )
+                future = pool.submit(
+                    self.reader(reader).inspect, InspectFoldOutcome(key=key)
+                )
+                self.wait_for_lock(reader.info.backend_pid, event="transactionid")
+            with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+                future.result(timeout=3)
+
+    def test_unexpired_alternative_access_grant_still_permits_delivery(self) -> None:
+        self.expiry_during_wait("access_grant", alternative=True)

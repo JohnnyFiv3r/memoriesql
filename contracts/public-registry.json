@@ -705,13 +705,13 @@
       "version": "1"
     },
     {
-      "canonical_payload_sha256": "cd6b50f0ced8124c3ed824d49bfc3eac59eec9b282c54b75e7d5c742508087ae",
+      "canonical_payload_sha256": "f60bb552f7a6378f45730eb11a473005296e40eb4b953fe17a4fa9507c2e64f0",
       "catalog": "json_schema",
       "classification": "proposed_open_core",
       "id": "memoriesql.transcript-fold.recovery.v1",
       "package_disposition": "include",
       "path": "contracts/records/memoriesql-transcript-fold-recovery-v1.json",
-      "public_sha256": "a365c4d8c571efe10697e3720a42cdfa28d9fce75bf81814ec25d4504b338b21",
+      "public_sha256": "258c72edaac6c954ff6a61a2220f864afd928a03e2d5b56ebd30f672890cf613",
       "reason": "Public-authored bounded recovery contract; no private export.",
       "version": "1"
     },

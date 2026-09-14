@@ -22,6 +22,10 @@ ALTER TABLE memoriesql.transcript_fold_receipts
 CREATE UNIQUE INDEX transcript_fold_recovery_order_idx
 ON memoriesql.transcript_fold_receipts(tenant_id, source_object_id, recovery_position);
 
+-- Scope/principal seek for the final expiry-only check of existing access grants.
+CREATE INDEX fold_recovery_grant_target_idx ON memoriesql.access_grants
+(tenant_id,workspace_id,access_scope_id,target_principal_id,grant_id);
+
 CREATE FUNCTION memoriesql.assign_fold_recovery_position() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,memoriesql AS $$
 BEGIN
@@ -64,6 +68,8 @@ LANGUAGE plpgsql VOLATILE SECURITY DEFINER
 SET search_path=pg_catalog,memoriesql SET lock_timeout='500ms' AS $$
 DECLARE
     s memoriesql.source_objects%ROWTYPE;
+    c memoriesql.authorization_contexts%ROWTYPE;
+    authority_until timestamptz; grant_until timestamptz;
     r memoriesql.transcript_fold_receipts%ROWTYPE;
     o memoriesql.transcript_fold_outcomes%ROWTYPE;
     l memoriesql.transcript_fold_outcome_ranges%ROWTYPE;
@@ -118,6 +124,16 @@ BEGIN
     -- Existing capability/resource/delegation checks and authority mutation fence.
     -- No principal-kind exception and no automatic grant.
     s:=memoriesql.evidence_package_authorize(source_id,false);
+    SELECT * INTO c FROM memoriesql.current_authorization_context();
+    -- Existing tenant authority fence first, then this exact global role row.
+    -- Role policy has no tenant mutation trigger. A shared row lock serializes
+    -- UPDATE/DELETE through transaction end without changing legacy policies.
+    PERFORM cap.role_key FROM memoriesql.role_capabilities cap
+    JOIN memoriesql.workspace_memberships membership ON membership.role_key=cap.role_key
+    WHERE membership.tenant_id=c.tenant_id AND membership.workspace_id=c.workspace_id
+      AND membership.principal_id=c.principal_id AND cap.capability_key='source.raw.read'
+    FOR SHARE OF cap;
+    IF NOT FOUND THEN RAISE EXCEPTION 'evidence_unavailable' USING ERRCODE='42501'; END IF;
 
     IF op='discover' THEN
         n:=COALESCE((request->>'limit')::integer,32);
@@ -309,8 +325,35 @@ BEGIN
         END IF;
     END IF;
     PERFORM memoriesql.evidence_package_authorize(source_id,false);
-    IF clock_timestamp()-started>interval '2 seconds' THEN RAISE EXCEPTION 'fold_recovery_work_timeout' USING ERRCODE='57014'; END IF;
     IF octet_length(result::text)>131072 THEN RAISE EXCEPTION 'fold_recovery_response_bound' USING ERRCODE='54000'; END IF;
+    -- The published authorization helpers use the outer statement's timestamp.
+    -- Supplement, never replace, that policy decision with a return-time expiry
+    -- fence. Context expiry pins the credential/pairing deadline at context
+    -- creation; also read current credential expiry after authority waits.
+    SELECT LEAST(c.expires_at,credential.expires_at) INTO authority_until
+    FROM memoriesql.authentication_credentials credential
+    WHERE credential.tenant_id=c.tenant_id AND credential.credential_id=c.credential_id
+      AND credential.principal_id=c.principal_id AND credential.status='active';
+    IF EXISTS(SELECT 1 FROM memoriesql.access_scopes scope WHERE scope.tenant_id=c.tenant_id
+      AND scope.access_scope_id=s.access_scope_id AND scope.mode='explicit') THEN
+        -- Several grants may independently permit the read: the latest revision
+        -- of any currently valid grant suffices, including a non-expiring grant.
+        SELECT max(COALESCE(revision.expires_at,'infinity'::timestamptz)) INTO grant_until
+        FROM memoriesql.access_grants root
+        JOIN LATERAL (SELECT * FROM memoriesql.access_grant_revisions revision
+          WHERE revision.tenant_id=root.tenant_id AND revision.grant_id=root.grant_id
+          ORDER BY revision.revision DESC LIMIT 1) revision ON true
+        WHERE root.tenant_id=c.tenant_id AND root.workspace_id=c.workspace_id
+          AND root.access_scope_id=s.access_scope_id AND root.target_principal_id=c.principal_id
+          AND revision.status='active' AND revision.valid_from<=clock_timestamp()
+          AND 'read'=ANY(revision.permission_keys);
+        IF grant_until IS NULL THEN RAISE EXCEPTION 'evidence_unavailable' USING ERRCODE='42501'; END IF;
+        authority_until:=LEAST(authority_until,grant_until);
+    END IF;
+    IF clock_timestamp()-started>interval '2 seconds' THEN RAISE EXCEPTION 'fold_recovery_work_timeout' USING ERRCODE='57014'; END IF;
+    IF authority_until IS NULL OR authority_until<=clock_timestamp() THEN
+        RAISE EXCEPTION 'evidence_unavailable' USING ERRCODE='42501';
+    END IF;
     RETURN result;
 END; $$;
 REVOKE ALL ON FUNCTION memoriesql.recover_transcript_fold_v1(jsonb) FROM PUBLIC;

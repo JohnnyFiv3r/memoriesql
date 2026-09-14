@@ -115,3 +115,32 @@ evidence and no graph rebuild was performed. Existing checkpoint closure stays
 closed. The six historical unexplained product queue failures remain unresolved.
 PR-02O/CP-2 require later public dependencies, release, product composition and
 owner proof. Next dependent public slice: author-controlled source revisiting.
+
+## Broad-review authorization correction
+
+The broad review of `ef1f040609d53d9c38266f5041b1900cdb4bc319` found
+statement-start expiry and unfenced role-capability deletion in recovery. Five
+permanent fictional regressions reproduced both findings against the installed,
+hash-matched reviewed artifact: credential, pairing and access-grant expiry
+during a confirmed advisory wait still returned evidence; role deletion neither
+waited through delivery nor forced recovery to wait behind a winning deletion.
+
+Schema 19 now supplements existing authorization with a return-time deadline
+check and holds the exact role-capability row FOR SHARE until transaction end.
+The original helpers and legacy policies are unchanged. The five regressions
+pass; a non-expiring alternative-access-grant case preserves valid authorization.
+Only recovery-focused checks and artifact-sensitive verification are rerun; the
+unchanged 160-test lane is retained as evidence and final hosted CI runs the
+expanded matrix. A DCO finding was a false positive: the reviewed commit already
+contained the Signed-off-by trailer and GitHub matched both identities.
+
+The corrected candidate passed **21 focused installed checks** under the checkout
+access-denial guard. Its restarted service recovered six outcomes / 840,668 bytes
+in 59 operations with zero provider calls (0.314 s; 336,223 peak Python bytes).
+The first-head hosted run `34881394186` passed every job, including both installed
+artifacts on Python 3.13/3.14; final-head CI and the single focused rereview are
+reported on the PR after the repair. Both corrected archive rebuilds and the
+sdist-derived wheel match exactly.
+The corrected 64-part benchmark measured 0.286 s / 291,362 peak Python bytes;
+counts stayed 68 operations / 408 SQL execute calls / zero provider calls. The
+deep discovery seek still used nine shared-hit buffers (0.027 ms execution).
