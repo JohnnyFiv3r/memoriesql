@@ -4,7 +4,7 @@
       "classification": "proposed_open_core",
       "license": "Apache-2.0",
       "public_path": ".github/workflows/python-package.yml",
-      "public_sha256": "85b3ba039f6720c02d47ee8c5b4963c0234d3bb803b2f16862103422d42c1761",
+      "public_sha256": "f7fa4204cdd6311d8bc952f026cf572d6bd79bff639af705f49ff80758cd795e",
       "reason": "Reviewed packaging-spike input ported or adapted for the public bootstrap.",
       "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
       "reviewed_spike_source_sha256": "e1aea0a0ef2e13647d18eacdfb3753b8ee5ea93956724a23d1617496db722b1b"
@@ -13,7 +13,7 @@
       "classification": "proposed_open_core",
       "license": "Apache-2.0",
       "public_path": "MANIFEST.in",
-      "public_sha256": "c827cafcf8588e31e11ffa31f06d9cef631bc1fd2055e26ad09c9489cdc1b826",
+      "public_sha256": "a6041f831fffa4a79fe55cbc74ab2bbfbc44158d29fc3dd46f6da89dcb6acedf",
       "reason": "Reviewed packaging-spike input ported or adapted for the public bootstrap.",
       "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
       "reviewed_spike_source_sha256": "3a487bdf2210c634a958942e90a793e33931cce80d01845dd07646805d979181"
@@ -22,7 +22,7 @@
       "classification": "proposed_open_core",
       "license": "Apache-2.0",
       "public_path": "PYPI_README.md",
-      "public_sha256": "9e48e5478760b5ace14c73680aafd120f57c40fa456e8d1a9e213a5c0d8737b4",
+      "public_sha256": "80a047092786bd655ab4fef6ff58462ef64ac68e0d88ae55521e195b78b9b6fd",
       "reason": "Reviewed packaging-spike input ported or adapted for the public bootstrap.",
       "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
       "reviewed_spike_source_sha256": "df43020f9b9e24e3f9a3a2e5325bef1888cb69139cf5021406777a2418e0953e"
@@ -638,7 +638,7 @@
       "classification": "proposed_open_core",
       "license": "Apache-2.0",
       "public_path": "src/memoriesql/contracts/_catalogs/json-schema.json",
-      "public_sha256": "7de5d81d91f523dc6ad3fdfd0807e2906ede6c61f86c52ae325e5d676c6b71f4",
+      "public_sha256": "3a1cd40bd8e8fbed896e7c39e18af8a4789e9757cedf86eee97a4741238a1566",
       "reason": "Approved record payloads regenerated with public-owned catalog metadata.",
       "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
       "reviewed_spike_source_sha256": "765f8dd3d4b5e594980ba38f6e1ac11f29d3198746299217361e1c56b360cf26"
@@ -683,7 +683,7 @@
       "classification": "proposed_open_core",
       "license": "Apache-2.0",
       "public_path": "tests/unit/test_contract_catalog_preview.py",
-      "public_sha256": "518e59493ae683bbfd3fc12e7238cd5c6ca71459bc4e0f838921ee065649ed95",
+      "public_sha256": "a756b2fab3ba196dca0d93c2e22b784da9eee0524e254fcce8f16244de18ba8e",
       "reason": "Reviewed packaging-spike input ported or adapted for the public bootstrap.",
       "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
       "reviewed_spike_source_sha256": "a9d5f267ab2313fa87a37191f0c0c6aba36469ebe1dbe8bc3942b88e03d5e989"
@@ -701,7 +701,7 @@
       "classification": "public_release_configuration",
       "license": "Apache-2.0",
       "public_path": "docs/releasing.md",
-      "public_sha256": "dab5d5781554fb21461373412d11e6e7335da9c63932eec5a739669c7ef94b6d",
+      "public_sha256": "18c370fb1899415668df59be7b72f3d7cf0edf6371c7be7a52360dabda823a38",
       "reason": "Public-owned publisher identity, release controls, and separate owner authorization requirements."
     },
     {
@@ -743,7 +743,7 @@
       "classification": "public_bootstrap",
       "license": "Apache-2.0",
       "public_path": "AGENTS.md",
-      "public_sha256": "850e83bff5a33fc30b6fd1211e385a8176dba0f238ec41f3a06e8ce03b729977",
+      "public_sha256": "7cd9feb1a54d271a3c609f47966653afd91f1d27f596693415e4d6b5defd69b9",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {
@@ -771,7 +771,7 @@
       "classification": "public_bootstrap",
       "license": "Apache-2.0",
       "public_path": "README.md",
-      "public_sha256": "8f985fc2bdeabcf8073082450a4b36fde67c69829ebd1b2b64b23f62cfd53f1c",
+      "public_sha256": "325fee66e861241b4a25dcdc8f54eb0883d503c77009d9fe29a57613f9504a8d",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {
@@ -792,14 +792,14 @@
       "classification": "public_bootstrap",
       "license": "Apache-2.0",
       "public_path": "contracts/public-registry.json",
-      "public_sha256": "ddedf4686cb018434382ec0f845cad7ac129daf0dfbce87ee553158d4a935c5f",
+      "public_sha256": "1650587900bf533b4d2bdac197f0afb3de8360fd867b96fade80100964b4796e",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {
       "classification": "public_bootstrap",
       "license": "Apache-2.0",
       "public_path": "docs/architecture/compatibility.md",
-      "public_sha256": "2ade10553ceb79ff7749e3e3335c6250b97ba5a5229d93bc50c860b480dbaafc",
+      "public_sha256": "7a3d3b61d930d8b5e5f6ffa5752ce0990d397348437536f191c6e0bfa04c3108",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {
@@ -834,7 +834,7 @@
       "classification": "public_bootstrap",
       "license": "Apache-2.0",
       "public_path": "scripts/generate_catalogs.py",
-      "public_sha256": "04e314572cd79a782087736f0b8032b34f5c02cb0ee537fb76baab2d6d57863d",
+      "public_sha256": "19212367c3aa2c7ac530adccf29cc37285c476f9c860891f71954d0becbf0e3d",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {
@@ -876,7 +876,7 @@
       "classification": "public_bootstrap",
       "license": "Apache-2.0",
       "public_path": "tests/contract/test_public_bootstrap.py",
-      "public_sha256": "68b2914f1e76f82315e896f02937eedbc61d62dc108f5d53c5804f61b51a35e2",
+      "public_sha256": "f69fccb20a068ffb0a51eccce69568ec82c10b447563718922da4bcedb89bf63",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {
@@ -890,28 +890,28 @@
       "classification": "approved_migration_substrate",
       "license": "Apache-2.0",
       "public_path": "contracts/migration-inventory.json",
-      "public_sha256": "d133ce3677c2b391afd70599c8f9b7775240de8a1a160a3a6a2777345c8748ff",
+      "public_sha256": "ce24ed00cc147b007e3f435496df12442711fd30fa961813bb136408e15acd74",
       "reason": "Public-owned N1 inventory; audited copy/adapt details in migration-extraction.json where applicable."
     },
     {
       "classification": "approved_migration_substrate",
       "license": "Apache-2.0",
       "public_path": "docs/provenance/migration-extraction.json",
-      "public_sha256": "2e15a0b8d9db15ba015d63fbc8240fb685f9e589977a4d5cdbe025b55b5e9838",
+      "public_sha256": "e2a9652a38a1cb1fce5088f0d573ace502d22a10777a15641a593beb83d1f683",
       "reason": "Public-owned N1 inventory; audited copy/adapt details in migration-extraction.json where applicable."
     },
     {
       "classification": "approved_migration_substrate",
       "license": "Apache-2.0",
       "public_path": "docs/migrations.md",
-      "public_sha256": "f96dc7771dc7838e85f5ea24c0c5e53de981da1475c60beafabc548d90ae07ca",
+      "public_sha256": "ad6bd4e47c8a695cb357393a3e634bc21ebb13535bbff963c4ce71cafb77e821",
       "reason": "Public-owned N1 inventory; audited copy/adapt details in migration-extraction.json where applicable."
     },
     {
       "classification": "approved_migration_substrate",
       "license": "Apache-2.0",
       "public_path": "setup.py",
-      "public_sha256": "777771b7806f58ac699debd8589bdee99f111212d8eef925194adb83ee52a0fa",
+      "public_sha256": "994ad181496144e4b4ab51e04edd9d555b4557f2e74a91a425a2bc6d2a7607e9",
       "reason": "Public-owned N1 inventory; audited copy/adapt details in migration-extraction.json where applicable."
     },
     {
@@ -925,7 +925,7 @@
       "classification": "approved_migration_substrate",
       "license": "Apache-2.0",
       "public_path": "scripts/verify_migration_export.py",
-      "public_sha256": "a65d9fefd8c7b8f3fcbcc1f57b20a5458317085613e3531114b546adfae6e538",
+      "public_sha256": "051b7a0a3aee3deff2ecb99e5323f838248bd55b986039556ee353a02ea56cd3",
       "reason": "Public-owned N1 inventory; audited copy/adapt details in migration-extraction.json where applicable."
     },
     {
@@ -939,7 +939,7 @@
       "classification": "approved_migration_substrate",
       "license": "Apache-2.0",
       "public_path": "tests/migrations/test_installed_migrations.py",
-      "public_sha256": "a82c5f220a5ab4236faeb318ae122b726cda4734159a928689e3bb6baa53ee1c",
+      "public_sha256": "d1d286997dcb8bf4fa30984af500a44914a7c7e5dd3b2337d1146fc6c976ff9e",
       "reason": "Public-owned N1 inventory; audited copy/adapt details in migration-extraction.json where applicable."
     },
     {
@@ -974,7 +974,7 @@
       "classification": "public-authored",
       "license": "Apache-2.0",
       "public_path": "contracts/runtime-inventory.json",
-      "public_sha256": "930cb5b0d6a309d7d7181331c30fa977de832b0d76d675e5c3701497af7a371c",
+      "public_sha256": "5583228ad323b1a119604c4a8029e9f24a70aab92fa25232630a9f9a3e270214",
       "reason": "Public N2 dependency inventory and fictional runtime acceptance."
     },
     {
@@ -1009,14 +1009,14 @@
       "classification": "public-authored",
       "license": "Apache-2.0",
       "public_path": "docs/runtime.md",
-      "public_sha256": "e8ee45438a347ba6b161584aef2106e1d7bf8206b1a74d437ea5b6524f86e629",
+      "public_sha256": "1b0b8ab3c044ee7d172d5a2ea806eeb7b7f080c128fcd9d9de8dceb5c89a1700",
       "reason": "Public fictional N2 acceptance and runtime scope documentation."
     },
     {
       "classification": "public-authored",
       "license": "Apache-2.0",
       "public_path": "tests/runtime/test_runtime_ownership.py",
-      "public_sha256": "9ded2c2d9cb279b63a4ecc1eeecfe81d967089bdfb889b64a35904a90cd66eb9",
+      "public_sha256": "b1d1040c70d9603f5111ef3cf662524a7b53f6aec935e17de812d646d9d0f028",
       "reason": "Installed runtime origin and frozen contract parity checks."
     },
     {
@@ -1312,6 +1312,90 @@
       "public_path": "docs/verification/release-readiness-0.0.5.md",
       "public_sha256": "aa7dd054d5d38aeade0f921bd4b74e9306513d3f64aa40b8dcc624942580b5ab",
       "reason": "Public-authored 0.0.5 release-readiness evidence; no runtime behavior or publication authority added."
+    },
+    {
+      "classification": "public_authored",
+      "license": "Apache-2.0",
+      "public_path": "contracts/records/memoriesql-transcript-fold-recovery-v1.json",
+      "public_sha256": "258c72edaac6c954ff6a61a2220f864afd928a03e2d5b56ebd30f672890cf613",
+      "reason": "Public-authored bounded fold recovery contract, implementation, fictional verification or explicit candidate inventory. No private export."
+    },
+    {
+      "classification": "public_authored",
+      "license": "Apache-2.0",
+      "public_path": "docs/transcript-fold-recovery.md",
+      "public_sha256": "92cc8e823f7674f0ddbd8072453b9b93dc5e4ed1ae3c7dd7cb446ee1c4049ff4",
+      "reason": "Public-authored bounded fold recovery contract, implementation, fictional verification or explicit candidate inventory. No private export."
+    },
+    {
+      "classification": "public_authored",
+      "license": "Apache-2.0",
+      "public_path": "docs/verification/fold-recovery-candidate-artifacts.json",
+      "public_sha256": "77618b5d0c7ca57c4c14e7b70dfb3c9ae84f00023285c16556906c1d95119f9f",
+      "reason": "Public-authored bounded fold recovery contract, implementation, fictional verification or explicit candidate inventory. No private export."
+    },
+    {
+      "classification": "public_authored",
+      "license": "Apache-2.0",
+      "public_path": "docs/verification/transcript-fold-recovery.md",
+      "public_sha256": "a4e699bb71bb17c5f43a7bfe6fb6b4c60c400fb228988d3995062665f77b5d92",
+      "reason": "Public-authored bounded fold recovery contract, implementation, fictional verification or explicit candidate inventory. No private export."
+    },
+    {
+      "classification": "public_authored",
+      "license": "Apache-2.0",
+      "public_path": "migrations/0019_transcript_fold_recovery.sql",
+      "public_sha256": "f48189ccae702d5442a7af9e895fc82ffaafc2259da063071cb8a613a6f55d44",
+      "reason": "Public-authored bounded fold recovery contract, implementation, fictional verification or explicit candidate inventory. No private export."
+    },
+    {
+      "classification": "public_authored",
+      "license": "Apache-2.0",
+      "public_path": "scripts/generate_fold_recovery_contract.py",
+      "public_sha256": "6fff36573c512893b03d9de48fd4ca1f0f67922dd17a0243f505fe4d3c0e988e",
+      "reason": "Public-authored bounded fold recovery contract, implementation, fictional verification or explicit candidate inventory. No private export."
+    },
+    {
+      "classification": "public_authored",
+      "license": "Apache-2.0",
+      "public_path": "scripts/prove_fold_recovery_restart.py",
+      "public_sha256": "a14e1767883db4436ab01ac8328a4b6b20e8a0c3c11ed90d32e7cbdc43d3e2cd",
+      "reason": "Public-authored bounded fold recovery contract, implementation, fictional verification or explicit candidate inventory. No private export."
+    },
+    {
+      "classification": "public_authored",
+      "license": "Apache-2.0",
+      "public_path": "scripts/verify_fold_recovery_candidate.py",
+      "public_sha256": "225823d998b1e86d11acc3e9b852e30f7af64883aac20e60dab57e0273529f96",
+      "reason": "Public-authored bounded fold recovery contract, implementation, fictional verification or explicit candidate inventory. No private export."
+    },
+    {
+      "classification": "public_authored",
+      "license": "Apache-2.0",
+      "public_path": "src/memoriesql/application/fold_recovery.py",
+      "public_sha256": "b7381974093e561d16be8c527f336c97629b999a817ea62525338dd0f0f6a5ae",
+      "reason": "Public-authored bounded fold recovery contract, implementation, fictional verification or explicit candidate inventory. No private export."
+    },
+    {
+      "classification": "public_authored",
+      "license": "Apache-2.0",
+      "public_path": "src/memoriesql/infrastructure/postgres/fold_recovery.py",
+      "public_sha256": "aaa1beb9f4603bc7a08931cab36effb6ac396809356bdb178e9dd42d9527bbd2",
+      "reason": "Public-authored bounded fold recovery contract, implementation, fictional verification or explicit candidate inventory. No private export."
+    },
+    {
+      "classification": "public_authored",
+      "license": "Apache-2.0",
+      "public_path": "tests/runtime/fold_recovery_fixture.py",
+      "public_sha256": "6a4d623dfafac488a4712caca7e82901dcb669da35a7e2b7b468fd3ee0949a00",
+      "reason": "Public-authored bounded fold recovery contract, implementation, fictional verification or explicit candidate inventory. No private export."
+    },
+    {
+      "classification": "public_authored",
+      "license": "Apache-2.0",
+      "public_path": "tests/runtime/test_fold_recovery.py",
+      "public_sha256": "58d2c79e312e0157803a159552994b208012225ba49093dca522ea2015b5f29a",
+      "reason": "Public-authored bounded fold recovery contract, implementation, fictional verification or explicit candidate inventory. No private export."
     }
   ],
   "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
@@ -1429,7 +1513,7 @@
       "classification": "public-forward",
       "license": "Apache-2.0",
       "public_path": "src/memoriesql/infrastructure/postgres/migration_runner.py",
-      "public_sha256": "9a03ff065f4bdbb69fbb7b47912f6f6cb8e43b857e16882ccac03e3894ea8644",
+      "public_sha256": "128ed9d1f283b82f82ab9bddc706286d10783a43a467f235c180998e4e398c0e",
       "reason": "Explicit 17-resource forward inventory support; historical SQL and runner contract retained."
     },
     {

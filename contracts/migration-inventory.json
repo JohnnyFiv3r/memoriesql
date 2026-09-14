@@ -73,6 +73,10 @@
     {
       "filename": "0018_complete_input_execution.sql",
       "sha256": "7e652e01075fc55ef432d9e0fe173ed55944512d393dec5b7c8760c25501efb9"
+    },
+    {
+      "filename": "0019_transcript_fold_recovery.sql",
+      "sha256": "f48189ccae702d5442a7af9e895fc82ffaafc2259da063071cb8a613a6f55d44"
     }
   ]
 }

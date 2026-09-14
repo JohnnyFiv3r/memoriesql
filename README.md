@@ -3,7 +3,7 @@
 # memoriesQL catalogs and provider-neutral runtime
 
 This public repository preserves the original 49 provider-neutral contract records
-and provides 53 records through eight generated catalogs and 12 experimental
+and provides 54 records through eight generated catalogs and 12 experimental
 catalog Python/CLI APIs. Public `memoriesql` owns the canonical PostgreSQL schema,
 authorization, capture/range/fold mechanics, queue, worker, executor and accounting.
 It is not the memoriesQL desktop product, a running background service, a recall
@@ -104,3 +104,12 @@ Source and designated materials use [Apache License 2.0](LICENSE). The memoriesQ
 name and banner remain subject to [trademark guidance](TRADEMARKS.md). Contributions
 use the [Developer Certificate of Origin](CONTRIBUTING.md), not a contributor
 license agreement.
+
+## Unreleased recovery substrate
+
+Schema 19 adds explicitly authorized service recovery of acknowledged fold
+outcomes, stored facts and exact raw derivation through bounded discovery,
+point, lineage and byte operations. It does not qualify producers or create
+semantic work. Published 0.0.5 does not include this unreleased addition; no new
+release version is selected. Installing the candidate does not migrate a database
+or provision service access. See [the recovery contract](https://github.com/JohnnyFiv3r/memoriesql/blob/main/docs/transcript-fold-recovery.md).
