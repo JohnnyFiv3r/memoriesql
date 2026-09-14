@@ -523,13 +523,13 @@
       "version": "1"
     },
     {
-      "canonical_payload_sha256": "9c7deddddb90e8fc26d98ade775a2bac20ba73e86daa2e2a3fe8662bc7713076",
+      "canonical_payload_sha256": "2dd2eedf68ff4346562d10b10085cd63344d7022402e90a0d4b99e1d23116571",
       "catalog": "json_schema",
       "classification": "proposed_open_core",
       "id": "memoriesql.source-revisiting.v1",
       "package_disposition": "include",
       "path": "contracts/records/memoriesql-source-revisiting-v1.json",
-      "public_sha256": "c75ad566c4eb24367781a9bdcf1747bea8010f51b81be3e058bb48687c210ada",
+      "public_sha256": "dd1ed3c6b660c0f0b18489f9ba5eaa029c9b2470504c76d90f43e2b87bf015ba",
       "reason": "Public-authored explicit source revisiting, trusted delivery and unique target coverage.",
       "version": "1"
     },

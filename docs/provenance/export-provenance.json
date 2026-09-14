@@ -638,7 +638,7 @@
       "classification": "proposed_open_core",
       "license": "Apache-2.0",
       "public_path": "src/memoriesql/contracts/_catalogs/json-schema.json",
-      "public_sha256": "95c8105e50b05b6394b228af9b6b7ac4a4ce80c9d42f1e379a8ebf4a8491e268",
+      "public_sha256": "3aebfe1d5d4c7ad225646e70f5550a8bec2d6118f0fcce43f8d85ff2dbfacaf9",
       "reason": "Approved record payloads regenerated with public-owned catalog metadata.",
       "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
       "reviewed_spike_source_sha256": "765f8dd3d4b5e594980ba38f6e1ac11f29d3198746299217361e1c56b360cf26"
@@ -792,7 +792,7 @@
       "classification": "public_bootstrap",
       "license": "Apache-2.0",
       "public_path": "contracts/public-registry.json",
-      "public_sha256": "56ced00fed79586ffb89c28b3bd47654a1c4d9b1f10c87835119e22445253453",
+      "public_sha256": "072ebcd56c97b1ae874539f7eaced187784ca12390cb6b9cb01048d43becd477",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {
@@ -890,14 +890,14 @@
       "classification": "approved_migration_substrate",
       "license": "Apache-2.0",
       "public_path": "contracts/migration-inventory.json",
-      "public_sha256": "1525e1d2c9306b507202e2d6e0c8e1bc4006d2450559e39161e2190ecbb9c109",
+      "public_sha256": "3f22e4fd408d8d02bf89cec74a7802891acaacd44882f009baee6a0f147fdd42",
       "reason": "Public-owned N1 inventory; audited copy/adapt details in migration-extraction.json where applicable."
     },
     {
       "classification": "approved_migration_substrate",
       "license": "Apache-2.0",
       "public_path": "docs/provenance/migration-extraction.json",
-      "public_sha256": "51401dc53c05becc12de331e21ead58aa42f9943245a8c9ccc940709abc36c52",
+      "public_sha256": "171c73447c426cdb0e90291697e10379484d813a103edf5b6df5041a8b909a48",
       "reason": "Public-owned N1 inventory; audited copy/adapt details in migration-extraction.json where applicable."
     },
     {
@@ -974,7 +974,7 @@
       "classification": "public-authored",
       "license": "Apache-2.0",
       "public_path": "contracts/runtime-inventory.json",
-      "public_sha256": "c22da229be0588babb25be73f6808ab5cc77c17da75d9050ddf4058f01ee7f64",
+      "public_sha256": "74d7bd29baf929c8dce49de95b0368cfd189bd4b33f71e040f3e5f95fb79a6ca",
       "reason": "Public N2 dependency inventory and fictional runtime acceptance."
     },
     {
@@ -1401,42 +1401,42 @@
       "classification": "public_authored",
       "license": "Apache-2.0",
       "public_path": "contracts/records/memoriesql-source-revisiting-v1.json",
-      "public_sha256": "c75ad566c4eb24367781a9bdcf1747bea8010f51b81be3e058bb48687c210ada",
+      "public_sha256": "dd1ed3c6b660c0f0b18489f9ba5eaa029c9b2470504c76d90f43e2b87bf015ba",
       "reason": "Public-authored source-revisiting contract, implementation or fictional qualification; no private export."
     },
     {
       "classification": "public_authored",
       "license": "Apache-2.0",
       "public_path": "docs/source-revisiting.md",
-      "public_sha256": "7bdd9ccb6621139890862596dfd867c1f9a2dad38413befff5bf40c23b4f71db",
+      "public_sha256": "9dc20f5181c5048b95de0219cf05f43dd0561c7be27d0b3f609a856523ced312",
       "reason": "Public-authored source-revisiting contract, implementation or fictional qualification; no private export."
     },
     {
       "classification": "public_authored",
       "license": "Apache-2.0",
       "public_path": "docs/verification/source-revisiting.md",
-      "public_sha256": "1a35412d2f398194b1e6b46777572392ed87fcedf6d83cc1cee2aeb35b21afe7",
+      "public_sha256": "8d043d3866b45c2f37c6e335ef3fea83efcbb34323dd0f0d8a62b1b471b13bbc",
       "reason": "Public-authored source-revisiting contract, implementation or fictional qualification; no private export."
     },
     {
       "classification": "public_authored",
       "license": "Apache-2.0",
       "public_path": "docs/verification/source-revisiting-candidate-artifacts.json",
-      "public_sha256": "9397f6eff5dcc811d853342a78912d958904db1efbecb548e89601283c20c903",
+      "public_sha256": "8d3270d63f35f76e0adfa754f7634a34e10bc4efaad9bea2d4ea91c7b3b0901e",
       "reason": "Public-authored source-revisiting contract, implementation or fictional qualification; no private export."
     },
     {
       "classification": "public_authored",
       "license": "Apache-2.0",
       "public_path": "migrations/0020_author_controlled_source_revisiting.sql",
-      "public_sha256": "b4bfa0c4bea8ecad0a38b5f8a2b7ab231bb00f8f4eee560b7d75142b84ca86fe",
+      "public_sha256": "32cbc8dfd12cf41b39ec56c8e3e297e0ab4f180a2335e61560b271964884d540",
       "reason": "Public-authored source-revisiting contract, implementation or fictional qualification; no private export."
     },
     {
       "classification": "public_authored",
       "license": "Apache-2.0",
       "public_path": "scripts/generate_source_revisiting_contract.py",
-      "public_sha256": "4bb976ee42f915b379e5795950190bfa51e6b5ffdd5592c09dfdf3e5a32276e7",
+      "public_sha256": "4e87faa21cecadc39c9516d6ad1e13483aaf344451119dd26246e992d1aea007",
       "reason": "Public-authored source-revisiting contract, implementation or fictional qualification; no private export."
     },
     {
@@ -1450,7 +1450,7 @@
       "classification": "public_authored",
       "license": "Apache-2.0",
       "public_path": "src/memoriesql/application/source_revisiting.py",
-      "public_sha256": "267667b8694915531629908cc9c8c8b04c48d44ac8f669cbe3a52733ef3d552f",
+      "public_sha256": "ae49a5f3c40d396c41189de7ca90e489108999a3975b8bf6cb0ca91ba994a00c",
       "reason": "Public-authored source-revisiting contract, implementation or fictional qualification; no private export."
     },
     {
@@ -1464,7 +1464,7 @@
       "classification": "public_authored",
       "license": "Apache-2.0",
       "public_path": "tests/runtime/test_source_revisiting.py",
-      "public_sha256": "9180f4dce16b5dbef46ad30543a1d1df22882f36b7397a22dd88f7a511e277d2",
+      "public_sha256": "b101dab5f212897a7e9522718cd1d642e44c010cd47659937830eaf71f473e1e",
       "reason": "Public-authored source-revisiting contract, implementation or fictional qualification; no private export."
     }
   ],

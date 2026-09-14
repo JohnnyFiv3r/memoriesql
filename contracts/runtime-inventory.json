@@ -290,7 +290,7 @@
       "disposition": "public",
       "path": "src/memoriesql/application/source_revisiting.py",
       "reason": "Public-authored task-scoped source revisiting within existing execution ownership.",
-      "sha256": "267667b8694915531629908cc9c8c8b04c48d44ac8f669cbe3a52733ef3d552f"
+      "sha256": "ae49a5f3c40d396c41189de7ca90e489108999a3975b8bf6cb0ca91ba994a00c"
     },
     {
       "disposition": "public",

@@ -11,6 +11,7 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, cast
 
 import psycopg
+from pydantic import ValidationError
 from pydantic_ai.messages import (
     ModelRequest,
     ModelResponse,
@@ -32,6 +33,7 @@ from memoriesql.application.source_revisiting import (
     SOURCE_REVISITING_TASK,
     ActivateSourceRevisiting,
     ReadSourceEvidence,
+    RevisitingExecutionInput,
     load_source_revisiting_task_registry,
 )
 from memoriesql.infrastructure.jobs.integrated_semantic_worker import (
@@ -80,7 +82,11 @@ class SourceRevisiting(CompleteInputExecution):
         self.steps: list[dict[str, Any]] = []
 
     def setup_revisiting(
-        self, text: str = "Four fictional trees.", contexts: tuple[Any, ...] = ()
+        self,
+        text: str = "Four fictional trees.",
+        contexts: tuple[Any, ...] = (),
+        *,
+        activate: bool = True,
     ) -> None:
         parts = tuple(
             self.part(text[offset : offset + 16384], ordinal).model_copy(
@@ -99,7 +105,8 @@ class SourceRevisiting(CompleteInputExecution):
             dispatch_policy_id=self.dispatch_policy,
             authorized_context=contexts,
         )
-        self.activation = self.complete.activate_revisiting(self.revisiting_command)
+        if activate:
+            self.activation = self.complete.activate_revisiting(self.revisiting_command)
 
     def step(
         self, messages: Any, info: Any, action: str | None = None, read: Any = None
@@ -230,6 +237,70 @@ class SourceRevisiting(CompleteInputExecution):
             ),
             config=SemanticWorkerConfig(heartbeat_interval_seconds=10),
             exposure_recorder=exposure,
+        )
+
+    def test_oversized_target_activation_is_atomic_and_keeps_retained_evidence(
+        self,
+    ) -> None:
+        self.setup_revisiting("x" * 131073, activate=False)
+        before = self.activation_effects()
+        original = self.row(
+            "SELECT input_payload,status,pause_reason_code FROM memoriesql.semantic_tasks WHERE task_id=%s",
+            (self.bound.task_id,),
+        )
+        try:
+            self.activation = self.complete.activate_revisiting(self.revisiting_command)
+        except psycopg.errors.ProgramLimitExceeded as error:
+            self.assertIn("source_revisiting_target_budget", str(error))
+        else:
+            result = asyncio.run(self.worker().run_once())
+            self.fail(
+                f"oversized activation admitted 131073 characters: {result}"
+            )
+        self.assertEqual(self.activation_effects(), before)
+        self.assertEqual(
+            self.row(
+                "SELECT input_payload,status,pause_reason_code FROM memoriesql.semantic_tasks WHERE task_id=%s",
+                (self.bound.task_id,),
+            ),
+            original,
+        )
+        self.assertEqual(
+            original[1:], ("policy_paused", "complete_input_executor_unavailable")
+        )
+        self.assertEqual(
+            self.row(
+                "SELECT sum(char_length(content)) FROM memoriesql.evidence_package_parts"
+            ),
+            (131073,),
+        )
+        self.assertEqual(
+            self.row("SELECT count(*) FROM memoriesql.model_provider_request_intents"),
+            (0,),
+        )
+        self.assert_no_meaning()
+
+    def test_typed_input_rejects_target_beyond_ceiling(self) -> None:
+        self.setup_revisiting()
+        payload = self.row(
+            "SELECT input_payload FROM memoriesql.semantic_tasks WHERE task_id=%s",
+            (self.activation.execution_task_id,),
+        )[0]
+        payload["payload"]["package"]["required_characters"] = 131073
+        payload["evidence_manifest"]["references"][0]["declared_characters"] = 131073
+        with self.assertRaisesRegex(ValidationError, "source_revisiting_target_budget"):
+            RevisitingExecutionInput.model_validate(payload)
+
+    def test_exact_target_ceiling_can_finish(self) -> None:
+        self.setup_revisiting("x" * 131072)
+        result = asyncio.run(self.worker().run_once())
+        self.assertEqual(result.task_status, "succeeded", result)
+        self.assertEqual(len(self.steps), 2)
+        self.assertEqual(
+            self.row(
+                "SELECT sum(end_character-start_character) FROM memoriesql.complete_input_exposures"
+            ),
+            (131072,),
         )
 
     def test_complete_context_applies_with_unique_exposure(self) -> None:

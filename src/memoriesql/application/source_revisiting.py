@@ -38,6 +38,7 @@ from memoriesql.application.semantic_task_contracts import (
 )
 from memoriesql.application.semantic_task_registry import SemanticTaskRegistry
 
+TARGET_CHARACTERS = 131072
 DELIVERY_UNITS = 262144
 DISPATCH_JSON_BYTES = 262144
 
@@ -78,6 +79,8 @@ class RevisitingExecutionInput(SemanticTaskInput[RevisitingPayload]):
 
     @model_validator(mode="after")
     def exact_pin(self) -> RevisitingExecutionInput:
+        if self.payload.package.required_characters > TARGET_CHARACTERS:
+            raise ValueError("source_revisiting_target_budget")
         refs = self.evidence_manifest.references
         if (
             len(refs) != 1

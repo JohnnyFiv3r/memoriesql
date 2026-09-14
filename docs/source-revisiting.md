@@ -114,7 +114,11 @@ remain external, separately authorized responsibilities.
 
 ## Operational limits and truthful failures
 
-The existing target ceiling remains 131,072 normalized characters, with 300
+The existing target ceiling remains 131,072 normalized characters. Activation
+rejects a larger sealed target before transfer or new receipt/outbox effects,
+preserving its original unavailable task, raw evidence and thin bead. The typed
+input and current hydration/dispatch/apply authorizer enforce the same ceiling.
+The remaining limits are 300
 seconds, 524,288 aggregate input tokens and 32,768 output tokens. Revision 3
 allows 12 interactions: the former eight-window qualification envelope plus
 four bounded author-selected follow-through steps. The separate delivery ceiling

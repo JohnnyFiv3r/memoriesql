@@ -43,6 +43,7 @@ def record() -> dict[str, object]:
             task_definition=sr.SOURCE_REVISITING_TASK.canonical_payload(),
             task_contract_hash=sr.SOURCE_REVISITING_TASK.contract_hash,
             registry_hash=registry.registry_hash,
+            target_characters=sr.TARGET_CHARACTERS,
             delivery_units=sr.DELIVERY_UNITS,
             delivery_json_bytes=sr.DISPATCH_JSON_BYTES + 2048,
             trust_boundary="Separately qualified revision-3 dispatch attestor validates actual request delivery after accounted successful return; no production trust or provider admission.",

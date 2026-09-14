@@ -58,6 +58,8 @@ BEGIN
  SELECT * INTO c FROM memoriesql.current_authorization_context();
  SELECT * INTO e FROM memoriesql.complete_input_executions WHERE tenant_id=t AND execution_task_id=task;
  b:=memoriesql.complete_input_authorize(t,e.binding_task_id,e.dispatch_policy_id);
+ IF (b.package_pin->>'required_characters')::bigint>131072 THEN
+  RAISE EXCEPTION 'source_revisiting_target_budget' USING ERRCODE='54000'; END IF;
  IF e.execution_contract_revision IS DISTINCT FROM 3 OR NOT EXISTS(SELECT 1 FROM memoriesql.complete_input_dispatch_policies d
   WHERE d.tenant_id=t AND d.dispatch_policy_id=e.dispatch_policy_id AND d.execution_contract_revision=3) THEN
   RAISE EXCEPTION 'source_revisiting_qualification_required' USING ERRCODE='42501'; END IF;
@@ -225,6 +227,8 @@ BEGIN
     -- Cancellation may win any preceding wait; never transfer from stale state.
     SELECT * INTO original FROM memoriesql.semantic_tasks WHERE tenant_id=c.tenant_id AND task_id=b.task_id FOR UPDATE;
     b:=memoriesql.complete_input_authorize(c.tenant_id,b.task_id,(request->>'dispatch_policy_id')::uuid);
+    IF (b.package_pin->>'required_characters')::bigint>131072 THEN
+        RAISE EXCEPTION 'source_revisiting_target_budget' USING ERRCODE='54000'; END IF;
 
     PERFORM memoriesql.revisiting_source_authorize((SELECT source_object_id FROM memoriesql.evidence_packages WHERE tenant_id=c.tenant_id AND package_id=b.package_id));
     IF NOT memoriesql.revisiting_context_valid(c.tenant_id,b.workspace_id,b.access_scope_id,b.package_id,request->'authorized_context')

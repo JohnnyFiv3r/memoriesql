@@ -59,6 +59,20 @@ correctly blocking a corruption fixture). These were corrected before convergenc
 Administrative corruption is confined to disposable fictional databases; guards
 are restored before the read-under-test. No production repair is implied.
 
+## Broad-review correction
+
+The broad review identified an unenforced target ceiling. Permanent installed
+regressions reproduced that a 131,073-character target could activate and its
+typed input was accepted. The existing worker rejected that test run later;
+with `budget_exhausted`; this is not evidence of a successful oversized
+canonical application. Schema 20 now rejects oversized
+targets before activation effects and during current revisiting authorization;
+the typed input also rejects them. The exact 131,072-character boundary remains
+supported. The focused correction verifies retained evidence, unchanged original
+task/receipts/outbox state and zero semantic/provider work after rejection.
+All three new installed regressions and the regenerated installed contract-hash
+check pass. No unchanged full local suite was rerun.
+
 ## Compatibility and artifact procedure
 
 Migrations 0001–0019, all 54 prior record payloads and historical release/candidate

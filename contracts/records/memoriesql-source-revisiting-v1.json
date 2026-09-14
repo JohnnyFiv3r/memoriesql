@@ -2854,6 +2854,7 @@
     },
     "semantic_policy": "Existing caller-supplied registered instructions; navigation contract adds no semantic selection policy.",
     "source_completeness_independently_proven": false,
+    "target_characters": 131072,
     "task_contract_hash": "c8c172146c570bde75077745d7f00afa116b5db8f1b78bca4aebada561066e2d",
     "task_definition": {
       "allowed_delegate_keys": [],
