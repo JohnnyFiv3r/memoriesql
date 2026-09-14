@@ -28,6 +28,7 @@ jobs:
           python scripts/generate_evidence_package_contract.py --check
           python scripts/generate_logical_unit_contract.py --check
           python scripts/generate_complete_input_contracts.py --check
+          python scripts/generate_fold_recovery_contract.py --check
           python scripts/generate_catalogs.py --check
           python scripts/verify_public_boundary.py
           python scripts/verify_migration_export.py
@@ -47,7 +48,7 @@ jobs:
           python -m twine check --strict build/dist-a/*
           python scripts/inspect_python_distribution.py build/dist-a > build/dist-a/python-package-artifacts.json
           # Match this candidate without rewriting any published release inventory.
-          python scripts/verify_release.py artifacts build/dist-a
+          python scripts/verify_fold_recovery_candidate.py build/dist-a
       - name: Prove deterministic rebuild
         run: |
           export SOURCE_DATE_EPOCH=315532800
@@ -110,10 +111,10 @@ jobs:
             test_root="$(mktemp -d)"
             python -m venv "$test_root/venv"
             "$test_root/venv/bin/python" -m pip install --no-index --find-links build/dependencies "$artifact"
-            cp scripts/run_installed_acceptance.py scripts/prove_package_isolation.py "$test_root/"
+            cp scripts/run_installed_acceptance.py scripts/prove_package_isolation.py scripts/prove_fold_recovery_restart.py "$test_root/"
             cp contracts/runtime-inventory.json contracts/public-registry.json "$test_root/"
             cp tests/migrations/*.py tests/runtime/*.py tests/unit/test_contract_catalog_preview.py tests/fixtures/*.json "$test_root/"
-            (cd "$test_root" && venv/bin/python -I prove_package_isolation.py && venv/bin/python -I run_installed_acceptance.py)
+            (cd "$test_root" && venv/bin/python -I prove_package_isolation.py && venv/bin/python -I run_installed_acceptance.py && venv/bin/python -I prove_fold_recovery_restart.py prepare && venv/bin/python -I prove_fold_recovery_restart.py recover && venv/bin/python -I prove_fold_recovery_restart.py cleanup)
           done
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:

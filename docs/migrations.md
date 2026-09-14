@@ -135,3 +135,11 @@ configure a provider or select worker composition. Use the explicit
 exposure is not comprehension or independent source completeness. Rolling-note
 quality and execution ceilings remain experimental; complete-input corrections
 and reauthoring are not delivered.
+
+## Unreleased schema 19
+
+`0019_transcript_fold_recovery.sql` adds committed per-source recovery ordering
+to existing fold receipts and a bounded authorized read operation. It backfills
+only new ordering metadata and preserves original receipt fields. Plan the normal
+exclusive migration window; no real database upgrade is authorized by the PR.
+See [ordering and compatibility](transcript-fold-recovery.md#discovery-semantics-and-migration).

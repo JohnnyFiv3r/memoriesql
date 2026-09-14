@@ -179,3 +179,10 @@ complete-input tasks through the existing queue. Its reader, trusted exposure,
 canonical apply and cleanup boundaries are described in
 [the forward execution contract](complete-input-execution.md). This does not
 activate a provider or provision production trust, and PR-02O/CP-2 remain open.
+
+## Unreleased schema-19 recovery
+
+[Transcript-fold recovery](transcript-fold-recovery.md) adds caller-composed,
+service-authorized mechanical evidence recovery. Existing executors, authoring
+contracts and authorization policies remain unchanged. This candidate is not a
+release or production trust-policy configuration.

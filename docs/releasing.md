@@ -157,3 +157,13 @@ owner data, production provisioning, deployment and checkpoint execution remain
 outside this preparation. PR-02O/CP-2 remain incomplete. Preserve the six historical
 Desktop queue failures as unresolved evidence; no new tracker or rerun is warranted
 by these metadata/control changes.
+
+## Unreleased fold-recovery candidate
+
+Current development CI verifies its schema-19 artifacts against
+`docs/verification/fold-recovery-candidate-artifacts.json` using
+`verify_fold_recovery_candidate.py`. Those archives retain 0.0.5 metadata without
+selecting a new release version and are not the published 0.0.5 files. The
+publication workflow and `verify_release.py` remain pinned to the separately
+approved 0.0.5 controls and published inventory; they reject changed candidate
+bytes. A future release needs its own separately authorized readiness decision.

@@ -24,7 +24,7 @@
     },
     {
       "disposition": "include",
-      "expected_record_count": 47,
+      "expected_record_count": 48,
       "filename": "json-schema.json",
       "kind": "json_schema",
       "note": "Provider-neutral capture, host, source-range, transcript-fold, and harness-lifecycle schemas."
@@ -702,6 +702,17 @@
       "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
       "reviewed_spike_record_sha256": "7273fad1915adf3ed9d1341dca2c381cd1c723f3051e6f08a25a1ece672607b8",
       "reviewed_spike_source_sha256": "765f8dd3d4b5e594980ba38f6e1ac11f29d3198746299217361e1c56b360cf26",
+      "version": "1"
+    },
+    {
+      "canonical_payload_sha256": "cd6b50f0ced8124c3ed824d49bfc3eac59eec9b282c54b75e7d5c742508087ae",
+      "catalog": "json_schema",
+      "classification": "proposed_open_core",
+      "id": "memoriesql.transcript-fold.recovery.v1",
+      "package_disposition": "include",
+      "path": "contracts/records/memoriesql-transcript-fold-recovery-v1.json",
+      "public_sha256": "a365c4d8c571efe10697e3720a42cdfa28d9fce75bf81814ec25d4504b338b21",
+      "reason": "Public-authored bounded recovery contract; no private export.",
       "version": "1"
     },
     {

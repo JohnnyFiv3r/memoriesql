@@ -2,7 +2,7 @@
 
 `memoriesql` 0.0.5 is an experimental, pre-alpha distribution of governed contract
 catalogs and provider-neutral runtime mechanics. It preserves the original 49
-provider-neutral records and contains 53 records: 47 JSON Schema records, five
+provider-neutral records and contains 54 records: 48 JSON Schema records, five
 Python-surface records and one synthetic reference connector. Five other catalog
 kinds remain explicit empty `not_implemented` documents. Twelve experimental catalog
 Python/CLI APIs provide listing and exact lookup.
@@ -93,3 +93,12 @@ incomplete; the six historical Desktop queue failures remain unresolved evidence
 See the [public release and caller guide](https://github.com/JohnnyFiv3r/memoriesql/blob/main/docs/releasing.md).
 
 Source uses Apache-2.0; that license does not grant rights to memoriesQL trademarks.
+
+## Unreleased recovery substrate
+
+Schema 19 adds explicitly authorized service recovery of acknowledged fold
+outcomes, stored facts and exact raw derivation through bounded discovery,
+point, lineage and byte operations. It does not qualify producers or create
+semantic work. Published 0.0.5 does not include this unreleased addition; no new
+release version is selected. Installing the candidate does not migrate a database
+or provision service access. See [the recovery contract](https://github.com/JohnnyFiv3r/memoriesql/blob/main/docs/transcript-fold-recovery.md).

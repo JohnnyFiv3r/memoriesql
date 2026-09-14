@@ -102,8 +102,8 @@
       "public_path": "src/memoriesql/infrastructure/postgres/migration_runner.py",
       "source_sha256": "10841bd32cad98d969faf588c5eeff862a4b1dabefc12a4390f72341567c6b22",
       "disposition": "public-forward",
-      "reason": "Public forward support for the explicit 18-resource inventory; historical runner contract and SQL unchanged.",
-      "public_sha256": "9a03ff065f4bdbb69fbb7b47912f6f6cb8e43b857e16882ccac03e3894ea8644",
+      "reason": "Public forward support for the explicit 19-resource inventory; historical runner contract and SQL unchanged.",
+      "public_sha256": "128ed9d1f283b82f82ab9bddc706286d10783a43a467f235c180998e4e398c0e",
       "base_public_commit": "bb459ddef14e5627777b21c1366a896b75f24ca8",
       "base_public_sha256": "a0d6d613689b3cea6ce9cce2eeaa79a1415c8463a3faaf857e702b0c9fcc113e"
     },
@@ -137,6 +137,12 @@
       "disposition": "public",
       "reason": "Public forward execution, trusted exposure, authorized reader and fenced canonical apply.",
       "public_sha256": "7e652e01075fc55ef432d9e0fe173ed55944512d393dec5b7c8760c25501efb9"
+    },
+    {
+      "disposition": "public",
+      "public_path": "migrations/0019_transcript_fold_recovery.sql",
+      "public_sha256": "39f8d6a0a6f263e00304ec142b7995af2a57969f84efcaf259c27ac38b59c3ae",
+      "reason": "Public-authored schema-19 recovery index and authorized bounded operations."
     }
   ],
   "scope": "Canonical migration substrate only",

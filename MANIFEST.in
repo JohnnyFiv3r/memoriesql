@@ -56,3 +56,6 @@ include src/memoriesql/infrastructure/postgres/logical_unit_materialization.py
 include src/memoriesql/application/complete_input_execution.py
 include src/memoriesql/infrastructure/jobs/complete_input_access.py
 include src/memoriesql/infrastructure/postgres/complete_input_execution.py
+
+include src/memoriesql/application/fold_recovery.py
+include src/memoriesql/infrastructure/postgres/fold_recovery.py

@@ -58,3 +58,12 @@ and [execution](../complete-input-execution.md). Public release must precede Des
 consumption. PR-02O/CP-2 remain incomplete; the six historical Desktop queue failures
 remain unresolved. Provider qualification, production trust, owner data, deployment
 and checkpoints are separate work.
+
+## Unreleased recovery candidate
+
+Schema 19 is additive recovery substrate and is not in published 0.0.5. This
+checkout retains 0.0.5 metadata without selecting a future release version. The
+new candidate inventory is separate; published inventories and release gates
+remain immutable. The new recovery record increases the current catalog to 54.
+Original schema-18 bindings, task inputs, package pins, receipts and executor
+behavior are preserved. See [recovery](../transcript-fold-recovery.md).
