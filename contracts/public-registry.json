@@ -523,7 +523,7 @@
       "version": "1"
     },
     {
-      "canonical_payload_sha256": "f60bb552f7a6378f45730eb11a473005296e40eb4b953fe17a4fa9507c2e64f0",
+      "canonical_payload_sha256": "9c7deddddb90e8fc26d98ade775a2bac20ba73e86daa2e2a3fe8662bc7713076",
       "catalog": "json_schema",
       "classification": "proposed_open_core",
       "id": "memoriesql.source-revisiting.v1",

@@ -792,7 +792,7 @@
       "classification": "public_bootstrap",
       "license": "Apache-2.0",
       "public_path": "contracts/public-registry.json",
-      "public_sha256": "f82a4a948b0ce887d71f152f642447eead4efe01180a9a15863bb88faadc343d",
+      "public_sha256": "56ced00fed79586ffb89c28b3bd47654a1c4d9b1f10c87835119e22445253453",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {
@@ -897,7 +897,7 @@
       "classification": "approved_migration_substrate",
       "license": "Apache-2.0",
       "public_path": "docs/provenance/migration-extraction.json",
-      "public_sha256": "1f1281913f60c2d8af5fbd3f5b7428bdb2ac879be375432a36e9125091baaf65",
+      "public_sha256": "51401dc53c05becc12de331e21ead58aa42f9943245a8c9ccc940709abc36c52",
       "reason": "Public-owned N1 inventory; audited copy/adapt details in migration-extraction.json where applicable."
     },
     {
@@ -1415,7 +1415,7 @@
       "classification": "public_authored",
       "license": "Apache-2.0",
       "public_path": "docs/verification/source-revisiting.md",
-      "public_sha256": "a38e237b144108755eb914c4a1d01acc58e6897e6a9684335a081e415e89ecdd",
+      "public_sha256": "1a35412d2f398194b1e6b46777572392ed87fcedf6d83cc1cee2aeb35b21afe7",
       "reason": "Public-authored source-revisiting contract, implementation or fictional qualification; no private export."
     },
     {

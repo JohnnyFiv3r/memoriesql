@@ -68,7 +68,15 @@ no next version is selected; schema-20 archives are unreleased and are not the
 published 0.0.5 distribution. They have their own
 [candidate inventory](source-revisiting-candidate-artifacts.json).
 
-The PR records the one installed local convergence lane, final-head hosted
+The single installed local Python 3.13 convergence ran 188 tests: all 187 runtime
+and other cases passed; the new registry entry had a stale canonical-payload hash.
+That metadata was corrected, then the failed installed hash check was rerun alone.
+All 22 revisiting/schema-20 compatibility cases passed in that lane. Its Unicode
+measurement was 4.202 seconds and 2,281,136 peak Python bytes. Earlier source-level
+checks likewise caught two old candidate-verifier/record-list expectations; their
+focused reruns passed after updating those expectations. No published payload changed.
+
+The PR records final-head hosted
 Python 3.13/3.14 wheel/sdist checks, deterministic rebuilds and independent download
 comparison against the committed inventory. This document does not manufacture a
 future commit SHA or claim CI before it completes. Publication controls and the
