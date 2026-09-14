@@ -67,3 +67,9 @@ new candidate inventory is separate; published inventories and release gates
 remain immutable. The new recovery record increases the current catalog to 54.
 Original schema-18 bindings, task inputs, package pins, receipts and executor
 behavior are preserved. See [recovery](../transcript-fold-recovery.md).
+
+Unreleased schema 20 adds an explicit revision-3 complete-unit task with typed
+source rereads and unique mandatory exposure through the existing execution path.
+Historical task revisions and SQL 0001–0019 remain unchanged. See the
+[source-revisiting contract](../source-revisiting.md). No production trust/provider composition
+or implicit migration of existing execution bindings is supplied.

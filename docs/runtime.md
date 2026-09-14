@@ -186,3 +186,9 @@ activate a provider or provision production trust, and PR-02O/CP-2 remain open.
 service-authorized mechanical evidence recovery. Existing executors, authoring
 contracts and authorization policies remain unchanged. This candidate is not a
 release or production trust-policy configuration.
+
+Unreleased schema 20 adds an explicit revision-3 complete-unit task with typed
+source rereads and unique mandatory exposure through the existing execution path.
+Historical task revisions and SQL 0001–0019 remain unchanged. See the
+[source-revisiting contract](source-revisiting.md). No production trust/provider composition
+or implicit migration of existing execution bindings is supplied.

@@ -34,6 +34,11 @@ from memoriesql.application.semantic_task_contracts import (
     canonical_json_bytes,
     retry_class_for_status,
 )
+from memoriesql.application.source_revisiting import (
+    ApplySourceRevisiting,
+    ReadSourceEvidence,
+    SourceEvidenceRead,
+)
 from memoriesql.infrastructure.postgres.canonical_transactions import (
     PostgresCanonicalTransactions,
 )
@@ -463,6 +468,29 @@ class PostgresSemanticTaskQueue:
         ).fetchone()
         return bool(row and row[0])
 
+    def authorize_source_delivery(
+        self, fence: SemanticTaskFence, package_id: UUID
+    ) -> None:
+        self._connection.execute("SET LOCAL statement_timeout='2s'")
+        self._connection.execute("SET LOCAL lock_timeout='500ms'")
+        self._connection.execute(
+            "SELECT memoriesql.authorize_source_delivery_v1(%s,%s,%s,%s,%s,%s,%s)",
+            self._fence_parameters(fence) + (package_id,),
+        ).fetchone()
+
+    def read_source_evidence(
+        self, fence: SemanticTaskFence, request: ReadSourceEvidence
+    ) -> SourceEvidenceRead:
+        self._connection.execute("SET LOCAL statement_timeout='2s'")
+        self._connection.execute("SET LOCAL lock_timeout='500ms'")
+        row = self._connection.execute(
+            "SELECT memoriesql.read_source_evidence_v1(%s,%s,%s,%s,%s,%s,%s)",
+            self._fence_parameters(fence) + (Jsonb(request.model_dump(mode="json")),),
+        ).fetchone()
+        if row is None:
+            raise PermissionError("source evidence unavailable")
+        return SourceEvidenceRead.model_validate(row[0])
+
     def read_complete_evidence(
         self, fence: SemanticTaskFence, request: ReadCompleteEvidence
     ) -> CompleteEvidenceBatch:
@@ -650,6 +678,23 @@ class PostgresSemanticTaskQueue:
                 worker_instance_id=fence.worker_instance_id,
                 recorded_at=recorded_at,
             )
+        elif (
+            result.task_kind == "memory.semantic.author-complete-unit"
+            and result.contract_revision == 3
+        ):
+            revisiting_command = ApplySourceRevisiting.model_validate(command_data)
+            row = self._connection.execute(
+                "SELECT * FROM memoriesql.apply_semantic_annotations(%s,%s,%s,%s)",
+                (
+                    Jsonb(revisiting_command.model_dump(mode="json")),
+                    fence.worker_id,
+                    fence.worker_instance_id,
+                    recorded_at,
+                ),
+            ).fetchone()
+            if row is None:
+                raise RuntimeError("source revisiting application returned no receipt")
+            return str(row[5])
         elif (result.task_kind, result.contract_revision) == (
             "memory.semantic.author-observations",
             2,

@@ -103,7 +103,7 @@
       "source_sha256": "10841bd32cad98d969faf588c5eeff862a4b1dabefc12a4390f72341567c6b22",
       "disposition": "public-forward",
       "reason": "Public forward support for the explicit 19-resource inventory; historical runner contract and SQL unchanged.",
-      "public_sha256": "128ed9d1f283b82f82ab9bddc706286d10783a43a467f235c180998e4e398c0e",
+      "public_sha256": "986ec49250e8d0f4ea397a953968005620da900226d8c2256242b7afb28a4e36",
       "base_public_commit": "bb459ddef14e5627777b21c1366a896b75f24ca8",
       "base_public_sha256": "a0d6d613689b3cea6ce9cce2eeaa79a1415c8463a3faaf857e702b0c9fcc113e"
     },
@@ -143,6 +143,12 @@
       "public_path": "migrations/0019_transcript_fold_recovery.sql",
       "public_sha256": "f48189ccae702d5442a7af9e895fc82ffaafc2259da063071cb8a613a6f55d44",
       "reason": "Public-authored schema-19 recovery index and authorized bounded operations."
+    },
+    {
+      "disposition": "public",
+      "public_path": "migrations/0020_author_controlled_source_revisiting.sql",
+      "public_sha256": "b4bfa0c4bea8ecad0a38b5f8a2b7ab231bb00f8f4eee560b7d75142b84ca86fe",
+      "reason": "Public-authored schema-20 task-scoped revisiting transition."
     }
   ],
   "scope": "Canonical migration substrate only",

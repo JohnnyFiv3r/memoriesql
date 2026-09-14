@@ -24,7 +24,7 @@
     },
     {
       "disposition": "include",
-      "expected_record_count": 48,
+      "expected_record_count": 49,
       "filename": "json-schema.json",
       "kind": "json_schema",
       "note": "Provider-neutral capture, host, source-range, transcript-fold, and harness-lifecycle schemas."
@@ -520,6 +520,17 @@
       "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
       "reviewed_spike_record_sha256": "65f1ae0b7c60fbf863014c23423209403d68611d14c248e08cd4ab6ca0908e31",
       "reviewed_spike_source_sha256": "765f8dd3d4b5e594980ba38f6e1ac11f29d3198746299217361e1c56b360cf26",
+      "version": "1"
+    },
+    {
+      "canonical_payload_sha256": "f60bb552f7a6378f45730eb11a473005296e40eb4b953fe17a4fa9507c2e64f0",
+      "catalog": "json_schema",
+      "classification": "proposed_open_core",
+      "id": "memoriesql.source-revisiting.v1",
+      "package_disposition": "include",
+      "path": "contracts/records/memoriesql-source-revisiting-v1.json",
+      "public_sha256": "c75ad566c4eb24367781a9bdcf1747bea8010f51b81be3e058bb48687c210ada",
+      "reason": "Public-authored explicit source revisiting, trusted delivery and unique target coverage.",
       "version": "1"
     },
     {

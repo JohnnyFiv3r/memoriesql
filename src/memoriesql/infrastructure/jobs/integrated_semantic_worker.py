@@ -49,6 +49,13 @@ from memoriesql.application.semantic_task_registry import (
     SemanticTaskRegistry,
     SemanticTaskResolutionError,
 )
+from memoriesql.application.source_revisiting import (
+    ReadSourceEvidence,
+    RevisitingExecutionInput,
+    SourceDelivery,
+    SourceDeliveryRecorder,
+    SourceEvidenceRead,
+)
 from memoriesql.infrastructure.jobs.complete_input_access import (
     CompleteInputEvidenceAccess,
 )
@@ -59,6 +66,9 @@ from memoriesql.infrastructure.jobs.postgres_semantic_queue import (
     ReauthorizationResult,
     SemanticAuthorizationSnapshot,
     SemanticTaskFence,
+)
+from memoriesql.infrastructure.jobs.source_revisiting_access import (
+    SourceRevisitingEvidenceAccess,
 )
 from memoriesql.infrastructure.postgres.authorization import (
     PostgresAuthorizationPort,
@@ -756,6 +766,16 @@ class IntegratedSemanticWorker:
                 else None
             ),
             exposure_recorder=self._exposure_recorder,
+            source_revisiting=(
+                self._source_revisiting_access(claimed, task_input)
+                if isinstance(task_input, RevisitingExecutionInput)
+                else None
+            ),
+            source_delivery_recorder=(
+                self._exposure_recorder
+                if isinstance(self._exposure_recorder, SourceDeliveryRecorder)
+                else None
+            ),
         )
         try:
             resolved = self._semantic_registry.resolve(
@@ -1335,10 +1355,7 @@ class IntegratedSemanticWorker:
         )
 
     def _attempt_is_live(self, fence: SemanticTaskFence) -> bool:
-        return (
-            self._attempt_reauthorization(fence)
-            is ReauthorizationResult.AUTHORIZED
-        )
+        return self._attempt_reauthorization(fence) is ReauthorizationResult.AUTHORIZED
 
     def _record_run_event(
         self,
@@ -1431,8 +1448,13 @@ class IntegratedSemanticWorker:
                     SemanticResultStatus.POLICY_PAUSED,
                     "authorization.snapshot_unavailable",
                 )
-            if isinstance(task_input, CompleteExecutionInput):
-                if self._exposure_recorder is None:
+            if isinstance(
+                task_input, CompleteExecutionInput | RevisitingExecutionInput
+            ):
+                if self._exposure_recorder is None or (
+                    isinstance(task_input, RevisitingExecutionInput)
+                    and not isinstance(self._exposure_recorder, SourceDeliveryRecorder)
+                ):
                     return _PreparationFailure(
                         SemanticResultStatus.UNAVAILABLE,
                         "complete_input.trusted_dispatch_unavailable",
@@ -1492,6 +1514,58 @@ class IntegratedSemanticWorker:
             authorize=authorize,
         )
 
+    def _source_revisiting_access(
+        self, claimed: ClaimedSemanticTask, task_input: RevisitingExecutionInput
+    ) -> SourceRevisitingEvidenceAccess:
+        async def read(request: ReadCompleteEvidence) -> CompleteEvidenceBatch:
+            return await self._await_database_call(
+                lambda: self._transaction(
+                    lambda queue, _context: queue.read_complete_evidence(
+                        claimed.fence, request
+                    )
+                )
+            )
+
+        async def authorize() -> None:
+            result = await self._await_database_call(
+                lambda: self._attempt_reauthorization(claimed.fence)
+            )
+            if result is not ReauthorizationResult.AUTHORIZED:
+                raise PermissionError("source revisiting authorization unavailable")
+
+        async def revisit(request: ReadSourceEvidence) -> SourceEvidenceRead:
+            return await self._await_database_call(
+                lambda: self._transaction(
+                    lambda queue, _context: queue.read_source_evidence(
+                        claimed.fence, request
+                    )
+                )
+            )
+
+        async def delivery_authorize(delivery: SourceDelivery) -> None:
+            selected = (
+                delivery.read.request.package_id
+                if delivery.read
+                else delivery.package.package_id
+            )
+            await self._await_database_call(
+                lambda: self._transaction(
+                    lambda queue, _context: queue.authorize_source_delivery(
+                        claimed.fence, selected
+                    )
+                )
+            )
+
+        access = SourceRevisitingEvidenceAccess(
+            task_id=claimed.fence.task_id,
+            attempt_id=claimed.fence.attempt_id,
+            package=task_input.payload.package,
+            read=read,
+            authorize=authorize,
+        )
+        access.configure_revisiting(task_input, revisit, delivery_authorize)
+        return access
+
     def _persist_result(
         self,
         claimed: ClaimedSemanticTask,
@@ -1533,7 +1607,7 @@ class IntegratedSemanticWorker:
             if (
                 settlement_result.status == SemanticResultStatus.SUCCEEDED
                 and claimed.task_kind == "memory.semantic.author-complete-unit"
-                and claimed.contract_revision == 2
+                and claimed.contract_revision in (2, 3)
                 and not queue.complete_exposure_valid(claimed.fence)
             ):
                 settlement_result = SemanticTaskResult[BaseModel](
