@@ -103,7 +103,7 @@
       "source_sha256": "10841bd32cad98d969faf588c5eeff862a4b1dabefc12a4390f72341567c6b22",
       "disposition": "public-forward",
       "reason": "Public forward support for the explicit 20-resource inventory; historical SQL unchanged.",
-      "public_sha256": "986ec49250e8d0f4ea397a953968005620da900226d8c2256242b7afb28a4e36",
+      "public_sha256": "3dc6e0df0e5f313011ec0a8dda2a007d82e9700e7f75adbca31a38d3354e606f",
       "base_public_commit": "2ff951385405a45a1018a105f8a6641758ece78a",
       "base_public_sha256": "128ed9d1f283b82f82ab9bddc706286d10783a43a467f235c180998e4e398c0e"
     },
@@ -149,6 +149,12 @@
       "public_path": "migrations/0020_author_controlled_source_revisiting.sql",
       "public_sha256": "32cbc8dfd12cf41b39ec56c8e3e297e0ab4f180a2335e61560b271964884d540",
       "reason": "Public-authored schema-20 task-scoped revisiting transition."
+    },
+    {
+      "disposition": "public",
+      "public_path": "migrations/0021_source_stable_occurrence_identity.sql",
+      "public_sha256": "193d309adc53054d7b3c2f6bf4ac34dac7ef511ab5494362c9535e6c642d582b",
+      "reason": "Public-authored explicit source-stable materialization and source-mode compatibility fence."
     }
   ],
   "scope": "Canonical migration substrate only",

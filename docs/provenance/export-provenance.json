@@ -4,7 +4,7 @@
       "classification": "proposed_open_core",
       "license": "Apache-2.0",
       "public_path": ".github/workflows/python-package.yml",
-      "public_sha256": "f876a38452ef012930027f4c391b0c60eb9f43638b46f61c26185c9e5563a5c4",
+      "public_sha256": "72a517b17596dd0b7a7595ab4b0893952be6763327017dad155396ce4e79d4bd",
       "reason": "Reviewed packaging-spike input ported or adapted for the public bootstrap.",
       "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
       "reviewed_spike_source_sha256": "e1aea0a0ef2e13647d18eacdfb3753b8ee5ea93956724a23d1617496db722b1b"
@@ -13,7 +13,7 @@
       "classification": "proposed_open_core",
       "license": "Apache-2.0",
       "public_path": "MANIFEST.in",
-      "public_sha256": "910f2f051afe51b223b0bc809c1dccd183597cb2acf6d8a134ee4af98a39532a",
+      "public_sha256": "ac826024dfc206f7009152c1b1930cdac21b6ed72f62a390261c77c6df7b0065",
       "reason": "Reviewed packaging-spike input ported or adapted for the public bootstrap.",
       "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
       "reviewed_spike_source_sha256": "3a487bdf2210c634a958942e90a793e33931cce80d01845dd07646805d979181"
@@ -638,7 +638,7 @@
       "classification": "proposed_open_core",
       "license": "Apache-2.0",
       "public_path": "src/memoriesql/contracts/_catalogs/json-schema.json",
-      "public_sha256": "3aebfe1d5d4c7ad225646e70f5550a8bec2d6118f0fcce43f8d85ff2dbfacaf9",
+      "public_sha256": "9d31fd90e855a887ec2ed4afe0f9375f3714635bc4d1d5668bc1e2060e297a35",
       "reason": "Approved record payloads regenerated with public-owned catalog metadata.",
       "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
       "reviewed_spike_source_sha256": "765f8dd3d4b5e594980ba38f6e1ac11f29d3198746299217361e1c56b360cf26"
@@ -683,7 +683,7 @@
       "classification": "proposed_open_core",
       "license": "Apache-2.0",
       "public_path": "tests/unit/test_contract_catalog_preview.py",
-      "public_sha256": "0007219a8ce9ac9c3c030cd3e360c91ee55eb6aeb3ca6b0786e09e6486709f89",
+      "public_sha256": "eaf2e0d6ae3cb7aafdd1dbc9bdcf1599502162a6d6204fd1c5aa4a4950f32caa",
       "reason": "Reviewed packaging-spike input ported or adapted for the public bootstrap.",
       "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
       "reviewed_spike_source_sha256": "a9d5f267ab2313fa87a37191f0c0c6aba36469ebe1dbe8bc3942b88e03d5e989"
@@ -715,7 +715,7 @@
       "classification": "public_release_configuration",
       "license": "Apache-2.0",
       "public_path": "tests/unit/test_release_controls.py",
-      "public_sha256": "b19855e84cf84d52f49317dd8f3daff5a3173440f6a934d5ba308cf9da8a27b3",
+      "public_sha256": "fc21263c818ffc2a24a371a42fbdb839705b559a9ec1d2f1f3a63acb0e06e038",
       "reason": "Synthetic focused regression tests for release identity, CI status, and artifact integrity."
     },
     {
@@ -743,7 +743,7 @@
       "classification": "public_bootstrap",
       "license": "Apache-2.0",
       "public_path": "AGENTS.md",
-      "public_sha256": "118a513b1de6ba817b2337f452ea9bae798cb4dcbf726096470439d8b2176e5c",
+      "public_sha256": "4fd5f05982b97b048f1044276c4c288a3b5c030223774ad2d8ba92088098cf82",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {
@@ -792,14 +792,14 @@
       "classification": "public_bootstrap",
       "license": "Apache-2.0",
       "public_path": "contracts/public-registry.json",
-      "public_sha256": "072ebcd56c97b1ae874539f7eaced187784ca12390cb6b9cb01048d43becd477",
+      "public_sha256": "6f7e7e5246ae0cd38d6c148d1914bdc79f4acd6276ec71fbbf1b7c81e1b7fd9c",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {
       "classification": "public_bootstrap",
       "license": "Apache-2.0",
       "public_path": "docs/architecture/compatibility.md",
-      "public_sha256": "5c7b2b097946a0a3b6b183957574fbeb987d7580b1d4bc28f61e604a9b4a51fb",
+      "public_sha256": "69a821c4578e45b1601edda08f18902711b73e6249a1eb8340d7245a8b4dd841",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {
@@ -834,7 +834,7 @@
       "classification": "public_bootstrap",
       "license": "Apache-2.0",
       "public_path": "scripts/generate_catalogs.py",
-      "public_sha256": "d17af19fbf46f634e2ed605c17be91d35ba2b681c08e96b466348bc9c9f22735",
+      "public_sha256": "cbcb19d3c8356fb5fe7d57e9783da521e9b020a232114ce310a306d116012d67",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {
@@ -876,7 +876,7 @@
       "classification": "public_bootstrap",
       "license": "Apache-2.0",
       "public_path": "tests/contract/test_public_bootstrap.py",
-      "public_sha256": "f40c90b9952f70d3e852b3613460835a4b1e30ed8ed2ee1c00f093efbca10a65",
+      "public_sha256": "ae01dc3bad5394d3ac37f407a88f148bfc21acb24d248229bbf15a5c879bbff1",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {
@@ -890,14 +890,14 @@
       "classification": "approved_migration_substrate",
       "license": "Apache-2.0",
       "public_path": "contracts/migration-inventory.json",
-      "public_sha256": "3f22e4fd408d8d02bf89cec74a7802891acaacd44882f009baee6a0f147fdd42",
+      "public_sha256": "6b1bd9abd7605adf6e2a5872dde8c8e67ab0c33ad08eaac685c29044cb940da9",
       "reason": "Public-owned N1 inventory; audited copy/adapt details in migration-extraction.json where applicable."
     },
     {
       "classification": "approved_migration_substrate",
       "license": "Apache-2.0",
       "public_path": "docs/provenance/migration-extraction.json",
-      "public_sha256": "171c73447c426cdb0e90291697e10379484d813a103edf5b6df5041a8b909a48",
+      "public_sha256": "5c2843218d5504f2623263816ec00c55c062fd55b2ead263f380848980b53879",
       "reason": "Public-owned N1 inventory; audited copy/adapt details in migration-extraction.json where applicable."
     },
     {
@@ -911,7 +911,7 @@
       "classification": "approved_migration_substrate",
       "license": "Apache-2.0",
       "public_path": "setup.py",
-      "public_sha256": "bad7c367f83c2175307e1454f80e2affff58f6fbeb6f3f2bca582332d99f3b00",
+      "public_sha256": "51349ad4c20dde0419acfbb0dedb398d785686de9a1fd96e47ed28195d5bda56",
       "reason": "Public-owned N1 inventory; audited copy/adapt details in migration-extraction.json where applicable."
     },
     {
@@ -925,7 +925,7 @@
       "classification": "approved_migration_substrate",
       "license": "Apache-2.0",
       "public_path": "scripts/verify_migration_export.py",
-      "public_sha256": "c055a872d5d420485c69049eb0956ea2ad067c266fd770a0d8bb116918445de3",
+      "public_sha256": "699f6eb40a3db96fb8f57fa3a32c64f9a3a4df144cc7aaf8b710ca40f4b7cd05",
       "reason": "Public-owned N1 inventory; audited copy/adapt details in migration-extraction.json where applicable."
     },
     {
@@ -939,7 +939,7 @@
       "classification": "approved_migration_substrate",
       "license": "Apache-2.0",
       "public_path": "tests/migrations/test_installed_migrations.py",
-      "public_sha256": "b9061cfd078c935f692344857e73ceaa3ecd2ac68d075e09ebe0656648e6640a",
+      "public_sha256": "c6df34a11a4a60ac15c28e3c5ed8f14dd622f6610150dd726c1c89b2748f9224",
       "reason": "Public-owned N1 inventory; audited copy/adapt details in migration-extraction.json where applicable."
     },
     {
@@ -974,7 +974,7 @@
       "classification": "public-authored",
       "license": "Apache-2.0",
       "public_path": "contracts/runtime-inventory.json",
-      "public_sha256": "74d7bd29baf929c8dce49de95b0368cfd189bd4b33f71e040f3e5f95fb79a6ca",
+      "public_sha256": "c61acc6297cac2d30eba9154fab1418f40020bc27d933503f6bbc1909ff97036",
       "reason": "Public N2 dependency inventory and fictional runtime acceptance."
     },
     {
@@ -1016,7 +1016,7 @@
       "classification": "public-authored",
       "license": "Apache-2.0",
       "public_path": "tests/runtime/test_runtime_ownership.py",
-      "public_sha256": "12dbaf7d431d82560b8b02fbf137b61e8c0e325abc7fd90f6f9743870a90775b",
+      "public_sha256": "a8ea76510358c43d0bcba7925fd37f6432f03fe40c7ca1099738d7397ec0d3e2",
       "reason": "Installed runtime origin and frozen contract parity checks."
     },
     {
@@ -1163,7 +1163,7 @@
       "classification": "proposed_open_core",
       "license": "Apache-2.0",
       "public_path": "docs/evidence-packages.md",
-      "public_sha256": "1c01e1fbbcea3de390a99d1ff3e6647e1d50e870705943354982aa4c1a50cae6",
+      "public_sha256": "ca541a0f16b017ff934ebb4fbf4d1dd87d2e5834e3be45808f282b45c2c16861",
       "reason": "Public governing contract, qualification boundary, operational bounds and acceptance scope."
     },
     {
@@ -1184,7 +1184,7 @@
       "classification": "public",
       "license": "Apache-2.0",
       "public_path": "src/memoriesql/infrastructure/postgres/logical_unit_materialization.py",
-      "public_sha256": "16562bb948d1a9ce37cbf33e1198ee4c83bed73eb0832aa9d19a5d7503f94f10",
+      "public_sha256": "ceee40bf0b787c4dc3cdc4a101fc545f7b8abf0dd77f2c7ed14cea95a6c72bf2",
       "reason": "Public-authored canonical logical-unit materialization slice and focused fictional verification."
     },
     {
@@ -1205,7 +1205,7 @@
       "classification": "public",
       "license": "Apache-2.0",
       "public_path": "docs/logical-unit-materialization.md",
-      "public_sha256": "f115bb5821168bd404e3d5ee0f4f4d8a02c6745aff9651eb070694ee1bfe3f65",
+      "public_sha256": "83f4100a1a6b132c4c38f5f3db50cf9e661d066c0d2e095bb740bede11d8ae66",
       "reason": "Public-authored canonical logical-unit materialization slice and focused fictional verification."
     },
     {
@@ -1473,6 +1473,69 @@
       "public_path": "docs/verification/runtime-0.0.6-package-artifact-inventory.json",
       "public_sha256": "aff0e87586233cd50dd1bc08a2512ac85160923034f100c42d6544dae64d1db0",
       "reason": "Fresh genuine 0.0.6 release-readiness archives; historical inventories preserved."
+    },
+    {
+      "classification": "public_authored",
+      "license": "Apache-2.0",
+      "public_path": "contracts/records/memoriesql-source-stable-identity-v1.json",
+      "public_sha256": "c795b9a2f4855d11bdd9a206353608cd2b5685e98363adb457da40bf21297e62",
+      "reason": "Public-authored source-stable identity contract, implementation, or fictional verification; no private export."
+    },
+    {
+      "classification": "public_authored",
+      "license": "Apache-2.0",
+      "public_path": "migrations/0021_source_stable_occurrence_identity.sql",
+      "public_sha256": "193d309adc53054d7b3c2f6bf4ac34dac7ef511ab5494362c9535e6c642d582b",
+      "reason": "Public-authored source-stable identity contract, implementation, or fictional verification; no private export."
+    },
+    {
+      "classification": "public_authored",
+      "license": "Apache-2.0",
+      "public_path": "scripts/generate_source_stable_identity_contract.py",
+      "public_sha256": "e0625ecd278264fff1bf313a040366a84717d54adb138c3773f9a4af58a7bab4",
+      "reason": "Public-authored source-stable identity contract, implementation, or fictional verification; no private export."
+    },
+    {
+      "classification": "public_authored",
+      "license": "Apache-2.0",
+      "public_path": "src/memoriesql/application/source_stable_identity.py",
+      "public_sha256": "d36df5db0ebb6ffdf50b1ab94428dff5aac45e7c0e8e274b69b284e3f72b99fd",
+      "reason": "Public-authored source-stable identity contract, implementation, or fictional verification; no private export."
+    },
+    {
+      "classification": "public_authored",
+      "license": "Apache-2.0",
+      "public_path": "tests/runtime/test_source_stable_identity.py",
+      "public_sha256": "43d995531edeba2d8cd71ab97c84407694aa5abd48f932a52a0112d9bb01e470",
+      "reason": "Public-authored source-stable identity contract, implementation, or fictional verification; no private export."
+    },
+    {
+      "classification": "public_authored",
+      "license": "Apache-2.0",
+      "public_path": "scripts/verify_source_stable_candidate.py",
+      "public_sha256": "65dfbf8129928f30e89d2e998bf9ad7c172652d1fb99c1e498dc2b4ca0642906",
+      "reason": "Public-authored source-stable identity contract, implementation, or fictional verification; no private export."
+    },
+    {
+      "classification": "public_authored",
+      "license": "Apache-2.0",
+      "public_path": "tests/fixtures/published-0.0.6-integrity.json",
+      "public_sha256": "b3096c25233fb893415daee133a0d5ce0b40504b566e793e30b727962cfd40cf",
+      "reason": "Public-authored source-stable identity contract, implementation, or fictional verification; no private export."
+    },
+    {
+      "classification": "public_authored",
+      "license": "Apache-2.0",
+      "public_path": "docs/verification/source-stable-identity-candidate-artifacts.json",
+      "public_sha256": "587cb500c5562caa09ad61e8eaa2124afe6e7cbf85e1c572448aa46366bf91ab",
+      "reason": "Public-authored source-stable identity contract, implementation, or fictional verification; no private export."
+    },
+    {
+      "classification": "public_authored",
+      "license": "Apache-2.0",
+      "public_path": "docs/verification/source-stable-identity.md",
+      "public_sha256": "e95887470102a2580c0a0fa040c089384c7dba7d9c573fa4d1a43cdd282402ad",
+      "reason": "Public-authored source-stable identity contract, implementation, or fictional verification; no private export."
     }
   ],
   "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
@@ -1590,7 +1653,7 @@
       "classification": "public-forward",
       "license": "Apache-2.0",
       "public_path": "src/memoriesql/infrastructure/postgres/migration_runner.py",
-      "public_sha256": "986ec49250e8d0f4ea397a953968005620da900226d8c2256242b7afb28a4e36",
+      "public_sha256": "3dc6e0df0e5f313011ec0a8dda2a007d82e9700e7f75adbca31a38d3354e606f",
       "reason": "Explicit 17-resource forward inventory support; historical SQL and runner contract retained."
     },
     {

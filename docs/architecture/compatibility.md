@@ -77,3 +77,23 @@ See [recovery](../transcript-fold-recovery.md) and [revisiting](../source-revisi
 All published inventories and both development candidate inventories remain unchanged.
 Only the new 0.0.6 inventory is used by the prepared release gate. Production grants,
 providers, implicit migration or task activation are not supplied by installation.
+
+## Unreleased schema 21 source-stable opt-in
+
+The separate `memoriesql.source-stable-identity.v1` record supplies materialization
+command/receipt v2. Package v1 continues to bind actual retained revisions. The
+new source-stable binding retains the first package occurrence hash, task inputs,
+receipt and pin, so existing activation, reader, exposure and apply contracts do
+not change. Repackaging never selects newer evidence for an existing task.
+
+An immutable, explicitly approved producer namespace scopes event/occurrence keys
+inside one source and tenant. Unknown native identity cannot opt in. The new path
+rejects changed event/native facts, parent or ordered normalized components/text;
+parts and raw/fold revision lineage may differ. It adds no correction behavior.
+Only an unpopulated source can enter this identity mode; existing canonical events
+cause an explicit unsupported transition. The source-mode fence also prevents
+legacy capture/materialization from creating a second interpretation afterward.
+Unopted sources, published records, receipts and SQL 0001–0020 remain unchanged.
+No historical equivalence, migration of bindings or duplicate repair is inferred.
+Production identity-policy approval and a separately authorized release precede
+consumer adoption. PR-02O/CP-2 and the historical queue evidence remain incomplete.

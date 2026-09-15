@@ -24,7 +24,7 @@
     },
     {
       "disposition": "include",
-      "expected_record_count": 49,
+      "expected_record_count": 50,
       "filename": "json-schema.json",
       "kind": "json_schema",
       "note": "Provider-neutral capture, host, source-range, transcript-fold, and harness-lifecycle schemas."
@@ -531,6 +531,17 @@
       "path": "contracts/records/memoriesql-source-revisiting-v1.json",
       "public_sha256": "dd1ed3c6b660c0f0b18489f9ba5eaa029c9b2470504c76d90f43e2b87bf015ba",
       "reason": "Public-authored explicit source revisiting, trusted delivery and unique target coverage.",
+      "version": "1"
+    },
+    {
+      "canonical_payload_sha256": "52ad23072e31ac834189fdfcecbf321b1683c9b676673a10bd7375d453fd78df",
+      "catalog": "json_schema",
+      "classification": "proposed_open_core",
+      "id": "memoriesql.source-stable-identity.v1",
+      "package_disposition": "include",
+      "path": "contracts/records/memoriesql-source-stable-identity-v1.json",
+      "public_sha256": "c795b9a2f4855d11bdd9a206353608cd2b5685e98363adb457da40bf21297e62",
+      "reason": "Public-authored explicit source-stable canonical identity.",
       "version": "1"
     },
     {
