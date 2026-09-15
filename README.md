@@ -3,7 +3,7 @@
 # memoriesQL catalogs and provider-neutral runtime
 
 This public repository preserves the original 49 provider-neutral contract records
-and provides 55 records through eight generated catalogs and 12 experimental
+and provides 56 records through eight generated catalogs and 12 experimental
 catalog Python/CLI APIs. Public `memoriesql` owns the canonical PostgreSQL schema,
 authorization, capture/range/fold mechanics, queue, worker, executor and accounting.
 It is not the memoriesQL desktop product, a running background service, a recall
@@ -15,10 +15,10 @@ adds schema 15: immutable accepted observations and explicit version-2
 initial-authoring/correction commands. Corrections create distinct beads with pinned
 supersession. Those releases, tags and inventories remain immutable.
 
-## Prepared 0.0.6 scope
+## Prepared 0.0.7 scope
 
-Published 0.0.5 includes schemas 16–18. The 0.0.6 release-readiness candidate
-adds the already merged schemas 19–20 and preserves the earlier paths:
+Published 0.0.6 includes schemas 16–20. The 0.0.7 release candidate includes
+the already merged schema 21 and preserves the earlier paths:
 
 - **Schema 16:** immutable evidence packages retain exact inventory and raw/fold
   lineage for one source-native unit. Bounded authorized reads do not create meaning.
@@ -54,12 +54,12 @@ Python `>=3.13,<3.15` is required; 3.13 and 3.14 are qualified by fictional inst
 acceptance. Use a reviewed local candidate until publication is separately verified:
 
 ```console
-python3.13 -m pip install ./memoriesql-0.0.6-py3-none-any.whl
+python3.13 -m pip install ./memoriesql-0.0.7-py3-none-any.whl
 memoriesql contracts --json
 memoriesql contract memoriesql.capture.connector-cursor --json
 ```
 
-After separately authorized and verified publication, pin `memoriesql==0.0.6`.
+After separately authorized and verified publication, pin `memoriesql==0.0.7`.
 Older Python can explicitly pin the immutable catalog-only `0.0.1a1`; it is not a
 runtime fallback. The dependencies remain `psycopg[binary]==3.3.3`,
 `pydantic==2.13.3` and `pydantic-ai-slim==2.27.0`, without provider extras.
@@ -96,10 +96,11 @@ and version payload is immutable. Breaking payload changes require a new contrac
 version; correcting an uploaded distribution requires a new distribution version.
 See [compatibility](docs/architecture/compatibility.md) and [repository ownership](docs/architecture/repository-boundary.md).
 
-This PR prepares exact `v0.0.6` repository controls and candidate hashes. It does not
-publish, tag, approve upload or change external publisher/environment settings.
-The PR head is not the eventual release SHA: later current-main push CI and owner
-authorization must establish that SHA. See [release controls](docs/releasing.md).
+This release preparation records exact `v0.0.7` controls and candidate hashes.
+The owner-authorized workflow merges preparation only after verification and
+creates the tag only at verified current main. Protected upload approval remains
+owner-only. The PR head is not automatically the release SHA; successful exact-main
+push CI and independent archive comparison must establish that identity. See [release controls](docs/releasing.md).
 PR-02O and CP-2 remain incomplete. The six historical Desktop queue-test failures
 remain unresolved evidence; this preparation does not rerun or label them fixed.
 
@@ -110,7 +111,7 @@ name and banner remain subject to [trademark guidance](TRADEMARKS.md). Contribut
 use the [Developer Certificate of Origin](CONTRIBUTING.md), not a contributor
 license agreement.
 
-## Recovery and revisiting included in the 0.0.6 candidate
+## Recovery and revisiting retained from 0.0.6
 
 Schema 19 supplies explicitly authorized retained-fold recovery through bounded
 window discovery, outcome, lineage and exact-byte operations. It recovers stored
@@ -137,3 +138,32 @@ or source completeness. Complete-input correction/reauthoring is not delivered.
 
 See [retained-fold recovery](https://github.com/JohnnyFiv3r/memoriesql/blob/main/docs/transcript-fold-recovery.md)
 and [source revisiting](https://github.com/JohnnyFiv3r/memoriesql/blob/main/docs/source-revisiting.md).
+
+## Schema 21: explicit qualified source-stable identity
+
+`MaterializeSourceStableUnit` and
+`PostgresLogicalUnitMaterialization.materialize_source_stable` provide an explicit
+version-2 materialization path under an administrator-approved immutable producer
+identity namespace. Qualified event/occurrence keys are scoped to tenant, source
+and namespace; native IDs are not assumed globally unique, and equal content is
+not identity proof. Unknown or unapproved identity cannot opt in.
+
+The same qualified occurrence across retained revisions and package representations
+retains one initial event/unit/bead/task binding, its original inputs, exact evidence
+pin and first receipts. Successful fresh operation keys use the shared receipt
+ledger. Each package's raw/fold lineage still names its actual retained revisions;
+repackaging never switches an existing task to newer evidence. Contradictory native
+facts, event declarations, parent identity or ordered content fail explicitly.
+Adjacent storage fragments may vary; component interleaving remains significant.
+
+Existing canonical events prohibit source opt-in, returning an explicit unsupported
+transition. Raw/fold evidence alone does not prohibit opt-in. After opt-in, legacy
+capture/materialization cannot establish a second identity mode on that source.
+Revision-sensitive v1 behavior remains available elsewhere. No existing binding is
+adopted, no equivalence is inferred, and no historical duplicate repair or
+complete-input correction/reauthoring is added.
+
+Installation does not migrate a database, provision trust, activate tasks or configure
+a provider. Producer qualification and identity-policy approval are separate from
+mechanical consistency checks. Existing explicit activation, authorized readers,
+trusted exposure and canonical-apply fences continue to use the original exact pin.

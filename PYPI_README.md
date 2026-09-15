@@ -1,8 +1,8 @@
 # memoriesQL catalogs and provider-neutral runtime
 
-`memoriesql` 0.0.6 is an experimental, pre-alpha distribution of governed contract
+`memoriesql` 0.0.7 is an experimental, pre-alpha distribution of governed contract
 catalogs and provider-neutral runtime mechanics. It preserves the original 49
-provider-neutral records and contains 55 records: 49 JSON Schema records, five
+provider-neutral records and contains 56 records: 50 JSON Schema records, five
 Python-surface records and one synthetic reference connector. Five other catalog
 kinds remain explicit empty `not_implemented` documents. Twelve experimental catalog
 Python/CLI APIs provide listing and exact lookup.
@@ -69,8 +69,8 @@ callbacks rather than real providers.
 The package requires Python `>=3.13,<3.15`; Python 3.13/3.14 have installed wheel and
 sdist coverage. Dependencies remain exactly `psycopg[binary]==3.3.3`,
 `pydantic==2.13.3` and `pydantic-ai-slim==2.27.0`, without provider extras. Once
-publication is independently verified, install with the exact `memoriesql==0.0.6`
-pin. Before publication, use a reviewed local 0.0.6 artifact. The immutable
+publication is independently verified, install with the exact `memoriesql==0.0.7`
+pin. Before publication, use a reviewed local 0.0.7 artifact. The immutable
 `0.0.1a1` remains catalog-only on its original Python versions: explicitly pin it
 for older Python. An unpinned older-Python request may fail; `--pre` only makes that
 historical catalog fallback eligible, never the incompatible runtime.
@@ -78,7 +78,7 @@ historical catalog fallback eligible, never the incompatible runtime.
 Published 0.0.4/schema-15 immutable accepted meaning and explicit version-2
 corrections remain supported on their existing path. Corrections create distinct
 beads with pinned supersession, not edits to accepted meaning. All migrations
-0001–0020 and existing contract records are unchanged by 0.0.6 release preparation.
+0001–0021 and all 56 existing contract records are unchanged by 0.0.7 release preparation.
 Historical receipts remain subject to current authorization.
 
 Retain a worker reporting `cleanup_pending`, its event loop and owned cleanup;
@@ -94,7 +94,7 @@ See the [public release and caller guide](https://github.com/JohnnyFiv3r/memorie
 
 Source uses Apache-2.0; that license does not grant rights to memoriesQL trademarks.
 
-## Recovery and revisiting included in the 0.0.6 candidate
+## Recovery and revisiting retained from 0.0.6
 
 Schema 19 supplies explicitly authorized retained-fold recovery through bounded
 window discovery, outcome, lineage and exact-byte operations. It recovers stored
@@ -121,3 +121,32 @@ or source completeness. Complete-input correction/reauthoring is not delivered.
 
 See [retained-fold recovery](https://github.com/JohnnyFiv3r/memoriesql/blob/main/docs/transcript-fold-recovery.md)
 and [source revisiting](https://github.com/JohnnyFiv3r/memoriesql/blob/main/docs/source-revisiting.md).
+
+## Schema 21: explicit qualified source-stable identity
+
+`MaterializeSourceStableUnit` and
+`PostgresLogicalUnitMaterialization.materialize_source_stable` provide an explicit
+version-2 materialization path under an administrator-approved immutable producer
+identity namespace. Qualified event/occurrence keys are scoped to tenant, source
+and namespace; native IDs are not assumed globally unique, and equal content is
+not identity proof. Unknown or unapproved identity cannot opt in.
+
+The same qualified occurrence across retained revisions and package representations
+retains one initial event/unit/bead/task binding, its original inputs, exact evidence
+pin and first receipts. Successful fresh operation keys use the shared receipt
+ledger. Each package's raw/fold lineage still names its actual retained revisions;
+repackaging never switches an existing task to newer evidence. Contradictory native
+facts, event declarations, parent identity or ordered content fail explicitly.
+Adjacent storage fragments may vary; component interleaving remains significant.
+
+Existing canonical events prohibit source opt-in, returning an explicit unsupported
+transition. Raw/fold evidence alone does not prohibit opt-in. After opt-in, legacy
+capture/materialization cannot establish a second identity mode on that source.
+Revision-sensitive v1 behavior remains available elsewhere. No existing binding is
+adopted, no equivalence is inferred, and no historical duplicate repair or
+complete-input correction/reauthoring is added.
+
+Installation does not migrate a database, provision trust, activate tasks or configure
+a provider. Producer qualification and identity-policy approval are separate from
+mechanical consistency checks. Existing explicit activation, authorized readers,
+trusted exposure and canonical-apply fences continue to use the original exact pin.

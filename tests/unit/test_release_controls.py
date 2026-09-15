@@ -35,7 +35,7 @@ def good_run() -> dict[str, Any]:
 
 
 def select(runs: list[dict[str, Any]]) -> int:
-    return select_ci_run(runs, sha=SHA, main_sha=SHA, tag="v0.0.6", version="0.0.6")
+    return select_ci_run(runs, sha=SHA, main_sha=SHA, tag="v0.0.7", version="0.0.7")
 
 
 class ReleaseControlTests(unittest.TestCase):
@@ -46,8 +46,8 @@ class ReleaseControlTests(unittest.TestCase):
         arguments = {
             "sha": SHA,
             "main_sha": SHA,
-            "tag": "v0.0.6",
-            "version": "0.0.6",
+            "tag": "v0.0.7",
+            "version": "0.0.7",
         }
         for field, wrong in (
             ("sha", "malformed"),
@@ -58,19 +58,21 @@ class ReleaseControlTests(unittest.TestCase):
             ("version", "0.0.3"),
             ("version", "0.0.4"),
             ("version", "0.0.5"),
+            ("version", "0.0.6"),
+            ("tag", "v0.0.6"),
             ("tag", "v0.0.5"),
             ("tag", "v0.0.4"),
             ("tag", "v0.0.3"),
             ("tag", "v0.0.2"),
-            ("version", "0.0.7"),
-            ("version", "0.0.6a1"),
-            ("version", "0.0.6b1"),
-            ("version", "0.0.6rc1"),
-            ("tag", "v0.0.6a1"),
-            ("tag", "v0.0.6b1"),
-            ("tag", "v0.0.6rc1"),
+            ("version", "0.0.8"),
+            ("version", "0.0.7a1"),
+            ("version", "0.0.7b1"),
+            ("version", "0.0.7rc1"),
+            ("tag", "v0.0.7a1"),
+            ("tag", "v0.0.7b1"),
+            ("tag", "v0.0.7rc1"),
             ("tag", "v0.0.1a1"),
-            ("tag", "v0.0.7"),
+            ("tag", "v0.0.8"),
         ):
             with self.subTest(field=field), self.assertRaises(ValueError):
                 select_ci_run([good_run()], **(arguments | {field: wrong}))
@@ -120,10 +122,11 @@ class ReleaseControlTests(unittest.TestCase):
                 "0.0.3",
                 "0.0.4",
                 "0.0.5",
-                "0.0.6a1",
-                "0.0.6b1",
-                "0.0.6rc1",
-                "0.0.7",
+                "0.0.6",
+                "0.0.7a1",
+                "0.0.7b1",
+                "0.0.7rc1",
+                "0.0.8",
             ):
                 with self.subTest(version=version), self.assertRaises(ValueError):
                     verify_artifacts(directory, inventory | {"version": version})
@@ -152,14 +155,14 @@ class ReleaseControlTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
             inventory = self.make_artifacts(directory)
-            for name in ("../outside.whl", "memoriesql-0.0.6.tar.gz"):
+            for name in ("../outside.whl", "memoriesql-0.0.7.tar.gz"):
                 altered = deepcopy(inventory)
                 altered["artifacts"][0]["filename"] = name
                 with self.subTest(name=name), self.assertRaises(ValueError):
                     verify_artifacts(directory, altered)
 
     def test_only_current_version_is_eligible_even_with_matching_tag(self) -> None:
-        for version in ("0.0.3", "0.0.4", "0.0.5", "0.0.6rc1", "0.0.7"):
+        for version in ("0.0.3", "0.0.4", "0.0.5", "0.0.6", "0.0.7rc1", "0.0.8"):
             with self.subTest(version=version), self.assertRaises(ValueError):
                 select_ci_run(
                     [good_run()],
@@ -174,19 +177,21 @@ class ReleaseControlTests(unittest.TestCase):
         verification = root / "docs/verification"
         self.assertEqual(
             RELEASE_INVENTORY,
-            verification / "runtime-0.0.6-package-artifact-inventory.json",
+            verification / "runtime-0.0.7-package-artifact-inventory.json",
         )
         candidate = json.loads(RELEASE_INVENTORY.read_bytes())
         self.assertEqual(candidate["version"], APPROVED_VERSION)
-        self.assertEqual(candidate["records"]["count"], 55)
+        self.assertEqual(candidate["records"]["count"], 56)
         self.assertEqual(
             {r["filename"] for r in candidate["artifacts"]},
-            {"memoriesql-0.0.6-py3-none-any.whl", "memoriesql-0.0.6.tar.gz"},
+            {"memoriesql-0.0.7-py3-none-any.whl", "memoriesql-0.0.7.tar.gz"},
         )
         project = tomllib.loads((root / "pyproject.toml").read_text())["project"]
         self.assertEqual(project["version"], APPROVED_VERSION)
         # These entire published/historical inventory files are immutable.
         historical = {
+            "source-stable-identity-candidate-artifacts.json": "89386eb2813fdb3e2c7b7c7a75a7f1b0e8006630d822d24cb8a75e8bdf0a54cd",
+            "runtime-0.0.6-package-artifact-inventory.json": "aff0e87586233cd50dd1bc08a2512ac85160923034f100c42d6544dae64d1db0",
             "runtime-0.0.5-package-artifact-inventory.json": "3b065ca784c82b47cfaf6e06ed99c180da856d8d31ed31f61026c5b76afa6d2e",
             "fold-recovery-candidate-artifacts.json": "77618b5d0c7ca57c4c14e7b70dfb3c9ae84f00023285c16556906c1d95119f9f",
             "source-revisiting-candidate-artifacts.json": "8d3270d63f35f76e0adfa754f7634a34e10bc4efaad9bea2d4ea91c7b3b0901e",
@@ -203,28 +208,34 @@ class ReleaseControlTests(unittest.TestCase):
                     expected,
                 )
 
-    def test_forward_slice_preserves_published_bytes_and_release_controls(self) -> None:
+    def test_release_preserves_runtime_and_historical_bytes(self) -> None:
         root = Path(__file__).resolve().parents[2]
-        # Current inventories legitimately gain forward entries. Verify every
-        # prior record/migration byte and the release gate itself instead.
         frozen = json.loads(
-            (root / "tests/fixtures/published-0.0.6-integrity.json").read_text()
+            (root / "tests/fixtures/release-0.0.7-baseline-integrity.json").read_text()
         )
         self.assertEqual(
-            frozen["base_public_commit"], "6045605f98744a378168b08894ee192378fe12e7"
+            frozen["base_public_commit"], "d82f5baf3eff92ac68cdbcda922415a33f2cb0c1"
         )
         for name, expected in frozen["files"].items():
             with self.subTest(path=name):
                 self.assertEqual(
                     hashlib.sha256((root / name).read_bytes()).hexdigest(), expected
                 )
+        for name, expected in frozen["metadata"].items():
+            with self.subTest(metadata=name):
+                normalized = (
+                    (root / name)
+                    .read_bytes()
+                    .replace(APPROVED_VERSION.encode(), b"APPROVED_VERSION")
+                )
+                self.assertEqual(hashlib.sha256(normalized).hexdigest(), expected)
 
     @staticmethod
     def make_artifacts(directory: Path) -> dict[str, Any]:
         rows = []
         for filename in (
-            "memoriesql-0.0.6-py3-none-any.whl",
-            "memoriesql-0.0.6.tar.gz",
+            "memoriesql-0.0.7-py3-none-any.whl",
+            "memoriesql-0.0.7.tar.gz",
         ):
             payload = b"valid"
             (directory / filename).write_bytes(payload)
@@ -235,4 +246,4 @@ class ReleaseControlTests(unittest.TestCase):
                     "sha256": hashlib.sha256(payload).hexdigest(),
                 }
             )
-        return {"version": "0.0.6", "artifacts": rows}
+        return {"version": "0.0.7", "artifacts": rows}
