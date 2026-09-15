@@ -11,9 +11,16 @@ ALTER TABLE memoriesql.logical_unit_materializations
       OR (stable_identity_namespace IS NOT NULL AND stable_identity_hash IS NOT NULL AND stable_content_hash IS NOT NULL AND stable_identity_hash ~ '^[a-f0-9]{64}$' AND stable_content_hash ~ '^[a-f0-9]{64}$'));
 CREATE UNIQUE INDEX source_stable_occurrence_uq ON memoriesql.logical_unit_materializations(tenant_id,stable_identity_hash) WHERE stable_identity_hash IS NOT NULL;
 CREATE INDEX source_stable_event_scope ON memoriesql.logical_unit_materializations(tenant_id,event_id,stable_identity_namespace);
--- Both legacy insertion and v2 admission locate the source without scanning
--- unrelated tenant history; existing revision/sequence indexes are partial.
-CREATE INDEX source_events_identity_mode_scope ON memoriesql.source_events(tenant_id,source_object_id);
+-- Empty mode means legacy. Approved namespaces are nonempty. C ordering makes
+-- first/last index entries detect a differing mode without walking same-mode history.
+CREATE INDEX source_events_identity_mode_scope ON memoriesql.source_events(
+ tenant_id,source_object_id,(COALESCE(CASE WHEN materialization_version=1 THEN metadata->>'source_stable_namespace' END,'') COLLATE "C"));
+CREATE FUNCTION memoriesql.source_identity_mode_conflicts(t uuid,s uuid,ns text) RETURNS boolean
+LANGUAGE sql STABLE SET search_path=pg_catalog,memoriesql AS $$
+ SELECT (COALESCE((SELECT (COALESCE(CASE WHEN e.materialization_version=1 THEN e.metadata->>'source_stable_namespace' END,'') COLLATE "C") FROM memoriesql.source_events e WHERE e.tenant_id=t AND e.source_object_id=s ORDER BY (COALESCE(CASE WHEN e.materialization_version=1 THEN e.metadata->>'source_stable_namespace' END,'') COLLATE "C") ASC LIMIT 1),COALESCE(ns,'')) COLLATE "C") <> (COALESCE(ns,'') COLLATE "C")
+ OR (COALESCE((SELECT (COALESCE(CASE WHEN e.materialization_version=1 THEN e.metadata->>'source_stable_namespace' END,'') COLLATE "C") FROM memoriesql.source_events e WHERE e.tenant_id=t AND e.source_object_id=s ORDER BY (COALESCE(CASE WHEN e.materialization_version=1 THEN e.metadata->>'source_stable_namespace' END,'') COLLATE "C") DESC LIMIT 1),COALESCE(ns,'')) COLLATE "C") <> (COALESCE(ns,'') COLLATE "C");
+$$;
+REVOKE ALL ON FUNCTION memoriesql.source_identity_mode_conflicts(uuid,uuid,text) FROM PUBLIC,memoriesql_application;
 
 -- Include legacy canonical capture in the same source-mode fence. No caller can
 -- opt an already populated source into a new identity interpretation.
@@ -22,8 +29,7 @@ LANGUAGE plpgsql SET search_path=pg_catalog,memoriesql AS $$
 DECLARE ns text:=CASE WHEN NEW.materialization_version=1 THEN NEW.metadata->>'source_stable_namespace' END;
 BEGIN
  PERFORM pg_advisory_xact_lock(hashtextextended(NEW.tenant_id::text||':materialization-source:'||NEW.source_object_id::text,0));
- IF EXISTS (SELECT 1 FROM memoriesql.source_events e WHERE e.tenant_id=NEW.tenant_id AND e.source_object_id=NEW.source_object_id
-   AND (CASE WHEN e.materialization_version=1 THEN e.metadata->>'source_stable_namespace' END) IS DISTINCT FROM ns) THEN
+ IF memoriesql.source_identity_mode_conflicts(NEW.tenant_id,NEW.source_object_id,ns) THEN
    RAISE EXCEPTION 'source_identity_mode_transition_unsupported' USING ERRCODE='55000'; END IF;
  RETURN NEW;
 END; $$;
@@ -77,8 +83,7 @@ BEGIN
     SELECT source_object_id INTO source_id FROM memoriesql.evidence_packages WHERE tenant_id=c.tenant_id AND workspace_id=c.workspace_id AND package_id=(request->>'package_id')::uuid;
     PERFORM memoriesql.evidence_package_authorize(source_id,true);
     PERFORM pg_advisory_xact_lock(hashtextextended(c.tenant_id::text||':materialization-source:'||source_id::text,0));
-    IF EXISTS (SELECT 1 FROM memoriesql.logical_unit_materializations b JOIN memoriesql.source_events e USING(tenant_id,event_id)
-      WHERE e.tenant_id=c.tenant_id AND e.source_object_id=source_id AND b.stable_identity_namespace IS NOT NULL) THEN
+    IF memoriesql.source_identity_mode_conflicts(c.tenant_id,source_id,NULL) THEN
       RAISE EXCEPTION 'revision_sensitive_transition_unsupported' USING ERRCODE='55000'; END IF;
     RETURN memoriesql.materialize_logical_unit_revision_v1(request);
 END; $$;
@@ -129,8 +134,7 @@ BEGIN
     IF e->>'identity_basis'<>'native' OR COALESCE(length(e#>>'{native,native_id}'),0)=0 OR p.declaration->>'occurrence_identity_basis'<>'native' THEN
         RAISE EXCEPTION 'source_stable_identity_unqualified' USING ERRCODE='55000'; END IF;
     PERFORM pg_advisory_xact_lock(hashtextextended(c.tenant_id::text||':materialization-source:'||s.source_object_id::text,0));
-    IF EXISTS (SELECT 1 FROM memoriesql.source_events se WHERE se.tenant_id=c.tenant_id AND se.source_object_id=s.source_object_id
-        AND NOT EXISTS (SELECT 1 FROM memoriesql.logical_unit_materializations b WHERE b.tenant_id=se.tenant_id AND b.event_id=se.event_id AND b.stable_identity_namespace=identity_namespace)) THEN
+    IF memoriesql.source_identity_mode_conflicts(c.tenant_id,s.source_object_id,identity_namespace) THEN
         RAISE EXCEPTION 'source_stable_transition_unsupported' USING ERRCODE='55000'; END IF;
     stable_hash:=encode(sha256(convert_to(jsonb_build_array('source-stable-occurrence.v1',s.source_object_id,identity_namespace,p.declaration->>'occurrence_key')::text,'UTF8')),'hex');
     content_hash:=memoriesql.source_stable_content_hash(c.tenant_id,p.package_id);

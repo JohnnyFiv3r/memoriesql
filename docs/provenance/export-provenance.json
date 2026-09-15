@@ -890,14 +890,14 @@
       "classification": "approved_migration_substrate",
       "license": "Apache-2.0",
       "public_path": "contracts/migration-inventory.json",
-      "public_sha256": "6dd77cb2d559e18973778ffce11e9227e75fcd17fe58f74fc28964d68166fac3",
+      "public_sha256": "2c21ca2a378f48206650684054ee2d9f0d16444de18929a3cb2b622c6006d175",
       "reason": "Public-owned N1 inventory; audited copy/adapt details in migration-extraction.json where applicable."
     },
     {
       "classification": "approved_migration_substrate",
       "license": "Apache-2.0",
       "public_path": "docs/provenance/migration-extraction.json",
-      "public_sha256": "60e56337d866a8b45b1c78a736722f4d343db1c3c7fff81bfe7864ca53385ace",
+      "public_sha256": "0f3c561d3c547ce6b1ef66def798d7fa905511a8fa5f7f280ce6d2fbbd06b40a",
       "reason": "Public-owned N1 inventory; audited copy/adapt details in migration-extraction.json where applicable."
     },
     {
@@ -1205,7 +1205,7 @@
       "classification": "public",
       "license": "Apache-2.0",
       "public_path": "docs/logical-unit-materialization.md",
-      "public_sha256": "c1a7dbc5fb6e0ad010be7a98bdef2e9d62f4d880d1caaae2f637d84ce13034bf",
+      "public_sha256": "f22640364dceef7c540f1dba2def55a3260cf511fa5a45d490e158c99d9d7725",
       "reason": "Public-authored canonical logical-unit materialization slice and focused fictional verification."
     },
     {
@@ -1485,7 +1485,7 @@
       "classification": "public_authored",
       "license": "Apache-2.0",
       "public_path": "migrations/0021_source_stable_occurrence_identity.sql",
-      "public_sha256": "f3ba7bc1c538e39a60aa44103a413d9e681d4370a979228dc39add45ddf6388a",
+      "public_sha256": "deaa78118eda4b48bf7a2a3cd89bb499beea2d94d16f923fd663776b28291d2a",
       "reason": "Public-authored source-stable identity contract, implementation, or fictional verification; no private export."
     },
     {
@@ -1506,7 +1506,7 @@
       "classification": "public_authored",
       "license": "Apache-2.0",
       "public_path": "tests/runtime/test_source_stable_identity.py",
-      "public_sha256": "c58b566986583f05104119c5ebb932609bd9422da6268b5c6d1aceaa57d48caa",
+      "public_sha256": "5a96f828b114a64aea0c777ead6e5eb8fb59e5fa90d364ff469c8c23fc064c62",
       "reason": "Public-authored source-stable identity contract, implementation, or fictional verification; no private export."
     },
     {
@@ -1527,14 +1527,14 @@
       "classification": "public_authored",
       "license": "Apache-2.0",
       "public_path": "docs/verification/source-stable-identity-candidate-artifacts.json",
-      "public_sha256": "583011d0eaba429905213ae5c9bf1ef56928acda092230c2c8be43ba63500bcb",
+      "public_sha256": "89386eb2813fdb3e2c7b7c7a75a7f1b0e8006630d822d24cb8a75e8bdf0a54cd",
       "reason": "Public-authored source-stable identity contract, implementation, or fictional verification; no private export."
     },
     {
       "classification": "public_authored",
       "license": "Apache-2.0",
       "public_path": "docs/verification/source-stable-identity.md",
-      "public_sha256": "0e1527116025e09be120f6ee5a5c158ca44ff85b7b64eadee5715f1b72c9ba07",
+      "public_sha256": "600567c3f86d486d544e04ab5be5712f635e401a99253779f1311b9aa5ef11f4",
       "reason": "Public-authored source-stable identity contract, implementation, or fictional verification; no private export."
     }
   ],

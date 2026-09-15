@@ -245,6 +245,8 @@ in database memory; no whole source history or model prompt is assembled. Existi
 500-ms lock waits and two-second operation deadlines remain. A timeout rolls back
 the materialization and receipt, leaving already retained evidence intact. Same-source
 materializations serialize through the compatibility fence, including legacy calls.
-A nonpartial tenant/source event index bounds the fence to the selected source
-instead of scanning unrelated tenant history.
+A nonpartial tenant/source/mode expression index supports first/last mode
+lookups with a one-row limit. All three fences (canonical insertion and v1/v2
+materialization) share this check. Comparing both extrema detects any differing
+mode without scanning tenant or same-source history; empty mode denotes legacy.
 Verification evidence is recorded in [the existing public qualification lane](verification/source-stable-identity.md).

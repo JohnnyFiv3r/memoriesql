@@ -92,8 +92,8 @@
         "memoriesql/infrastructure/postgres/source_range.py",
         "memoriesql/infrastructure/postgres/transcript_fold.py"
       ],
-      "sha256": "a3726529c4f9d47cb2497086b228e899fc6dbea97678c89b55d5d63d04e4deb8",
-      "size_bytes": 430888
+      "sha256": "1105d9139227ac99e669bc1e36a78ba0f8f0caff4b65fd25645e7d8598c3cd6b",
+      "size_bytes": 430944
     },
     {
       "filename": "memoriesql-0.0.6.tar.gz",
@@ -211,8 +211,8 @@
         "memoriesql-0.0.6/src/memoriesql/infrastructure/postgres/source_range.py",
         "memoriesql-0.0.6/src/memoriesql/infrastructure/postgres/transcript_fold.py"
       ],
-      "sha256": "21ade36995dfa2b2749ef0ad97de671dff5cd7ea61a6f7decee70b423e046e61",
-      "size_bytes": 384109
+      "sha256": "d620807e056a150fed140b26cabe9b0039761b1763ec253cd51455d99876da9e",
+      "size_bytes": 384178
     }
   ],
   "base_public_commit": "6045605f98744a378168b08894ee192378fe12e7",

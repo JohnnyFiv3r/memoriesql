@@ -738,30 +738,80 @@ class SourceStableIdentity(unittest.TestCase):
                     }
                 )
             )
+        for i in range(128):
+            package = self.package(
+                f"same{i}", occurrence=f"tree.{i + 100}", native=f"tree.{i + 100}"
+            )
+            command = self.command(package)
+            event = command.event.model_copy(
+                update={
+                    "event_key": f"same.{i}",
+                    "native": command.event.native.model_copy(
+                        update={"native_id": f"same.{i}"}
+                    ),
+                }
+            )
+            f.materializer.materialize_source_stable(
+                command.model_copy(update={"event": event})
+            )
         f.db.execute("ANALYZE memoriesql.source_events")
-        predicates = (
-            "(CASE WHEN e.materialization_version=1 THEN e.metadata->>'source_stable_namespace' END) IS DISTINCT FROM 'orchard.register.v1'",
-            "NOT EXISTS(SELECT 1 FROM memoriesql.logical_unit_materializations b WHERE b.tenant_id=e.tenant_id AND b.event_id=e.event_id AND b.stable_identity_namespace='orchard.register.v1')",
+        # Explain the actual private helper body: both canonical insertion and
+        # materialization must delegate to these same first/last index lookups.
+        body = f.row(
+            "SELECT prosrc FROM pg_proc WHERE oid='memoriesql.source_identity_mode_conflicts(uuid,uuid,text)'::regprocedure"
+        )[0]
+        query = (
+            body.replace("e.tenant_id=t", "e.tenant_id=%s")
+            .replace("e.source_object_id=s", "e.source_object_id=%s")
+            .replace("COALESCE(ns,", "COALESCE(%s::text,")
         )
-        for predicate in predicates:
-            with self.subTest(predicate=predicate):
+        for source, namespace in (
+            (f.source, "orchard.register.v1"),
+            (uuid.UUID(unrelated), None),
+        ):
+            with self.subTest(source=source):
                 plan = f.row(
-                    "EXPLAIN (ANALYZE,FORMAT JSON) SELECT 1 FROM memoriesql.source_events e WHERE e.tenant_id=%s AND e.source_object_id=%s AND "
-                    + predicate,
-                    (f.tenant, f.source),
+                    "EXPLAIN (ANALYZE,FORMAT JSON) " + query,
+                    (f.tenant, source, namespace, namespace) * 2,
                 )[0][0]
                 nodes = [plan["Plan"]]
                 for node in nodes:
                     nodes.extend(node.get("Plans", []))
-                self.assertTrue(
-                    any(
-                        "tenant_id" in node.get("Index Cond", "")
-                        and "source_object_id" in node.get("Index Cond", "")
-                        for node in nodes
-                    ),
+                probes = [
+                    node
+                    for node in nodes
+                    if "source_object_id" in node.get("Index Cond", "")
+                ]
+                self.assertEqual(len(probes), 2, plan)
+                self.assertEqual(
+                    {probe["Scan Direction"] for probe in probes},
+                    {"Forward", "Backward"},
                     plan,
                 )
-                self.assertLessEqual(
-                    sum(node.get("Rows Removed by Filter", 0) for node in nodes), 1
+                for probe in probes:
+                    self.assertEqual(
+                        probe["Index Name"], "source_events_identity_mode_scope", plan
+                    )
+                    self.assertEqual(probe.get("Actual Rows"), 1, plan)
+                self.assertFalse(
+                    any(node["Node Type"] in {"Sort", "Seq Scan"} for node in nodes),
+                    plan,
                 )
-                print("source-mode fence plan:", plan)
+                self.assertEqual(
+                    sum(node.get("Rows Removed by Filter", 0) for node in nodes),
+                    0,
+                    plan,
+                )
+                print("source-mode first/last index lookups:", plan)
+        for function in (
+            "guard_source_identity_mode()",
+            "materialize_logical_unit_v1(jsonb)",
+            "materialize_logical_unit_v2(jsonb)",
+        ):
+            self.assertIn(
+                "source_identity_mode_conflicts",
+                f.row(
+                    "SELECT prosrc FROM pg_proc WHERE oid=%s::regprocedure",
+                    ("memoriesql." + function,),
+                )[0],
+            )
