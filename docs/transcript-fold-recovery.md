@@ -1,4 +1,4 @@
-# Bounded transcript-fold recovery (unreleased schema 19)
+# Bounded transcript-fold recovery (schema 19, included in the 0.0.6 candidate)
 
 A fresh explicitly authorized service can discover acknowledged fold outcomes
 from a source ID, inspect original stored facts, and read their exact retained
@@ -120,13 +120,13 @@ with current credentials; recovery owns no maintenance or retry machinery.
 
 Migrations 0001–0018 and all previously published record bytes remain unchanged.
 Schema 19, two inventoried runtime modules and one generated record are additive.
-The package metadata remains 0.0.5 only because no new release version is selected;
-the recovery candidate is **not** the published 0.0.5 artifact. Its new inventory
-is separate from the immutable published inventory. Publication controls stay
-pinned to the already approved release and reject these different candidate bytes.
+The 0.0.6 candidate packages this already merged substrate without changing its
+SQL, runtime or record bytes. The earlier schema-19 development inventory and all
+published inventories stay immutable; the new versioned 0.0.6 inventory controls
+release readiness. See [the release guide](releasing.md).
 
-This delivers only recovery substrate. Author-controlled source revisiting is a
-separate public O slice. A later authorized release precedes product consumption;
+This delivers only recovery substrate. Author-controlled source revisiting is supplied by
+the separate schema-20 slice, also included in the 0.0.6 candidate. A later authorized release precedes product consumption;
 producer normalization/qualification, private composition, owner proof, P/Q,
 real-model admission, provider policy and UI remain deferred. Mechanical recovery
 and exposure do not establish model comprehension or independent completeness.

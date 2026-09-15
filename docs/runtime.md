@@ -1,6 +1,6 @@
 # Experimental provider-neutral runtime
 
-The 0.0.5 candidate includes schemas 16–18 and the complete-input path described
+The 0.0.6 candidate preserves schemas 16–18 and includes schemas 19–20 and the complete-input path described
 below. Release preparation changes no runtime behavior or dependencies. Installing
 or upgrading does not provision production trust, activate tasks or configure a
 provider. See [explicit caller composition](releasing.md#caller-composition-and-explicit-opt-in).
@@ -180,14 +180,14 @@ canonical apply and cleanup boundaries are described in
 [the forward execution contract](complete-input-execution.md). This does not
 activate a provider or provision production trust, and PR-02O/CP-2 remain open.
 
-## Unreleased schema-19 recovery
+## Candidate schema-19 recovery
 
 [Transcript-fold recovery](transcript-fold-recovery.md) adds caller-composed,
 service-authorized mechanical evidence recovery. Existing executors, authoring
 contracts and authorization policies remain unchanged. This candidate is not a
 release or production trust-policy configuration.
 
-Unreleased schema 20 adds an explicit revision-3 complete-unit task with typed
+Schema 20, included in the 0.0.6 candidate, adds an explicit revision-3 complete-unit task with typed
 source rereads and unique mandatory exposure through the existing execution path.
 Historical task revisions and SQL 0001–0019 remain unchanged. See the
 [source-revisiting contract](source-revisiting.md). No production trust/provider composition

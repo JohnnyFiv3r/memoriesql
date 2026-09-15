@@ -3,7 +3,7 @@
 # memoriesQL catalogs and provider-neutral runtime
 
 This public repository preserves the original 49 provider-neutral contract records
-and provides 54 records through eight generated catalogs and 12 experimental
+and provides 55 records through eight generated catalogs and 12 experimental
 catalog Python/CLI APIs. Public `memoriesql` owns the canonical PostgreSQL schema,
 authorization, capture/range/fold mechanics, queue, worker, executor and accounting.
 It is not the memoriesQL desktop product, a running background service, a recall
@@ -15,9 +15,10 @@ adds schema 15: immutable accepted observations and explicit version-2
 initial-authoring/correction commands. Corrections create distinct beads with pinned
 supersession. Those releases, tags and inventories remain immutable.
 
-## Prepared 0.0.5 scope
+## Prepared 0.0.6 scope
 
-The 0.0.5 release-readiness candidate packages the already merged schemas 16–18:
+Published 0.0.5 includes schemas 16–18. The 0.0.6 release-readiness candidate
+adds the already merged schemas 19–20 and preserves the earlier paths:
 
 - **Schema 16:** immutable evidence packages retain exact inventory and raw/fold
   lineage for one source-native unit. Bounded authorized reads do not create meaning.
@@ -28,6 +29,10 @@ The 0.0.5 release-readiness candidate packages the already merged schemas 16–1
   queue. Authorized reader v2 supplies bounded batches independently of model
   interaction sizes. Trusted attempt-bound exposure and current authorization are
   required before fenced initial semantic application through the existing sink.
+
+- **Schema 19:** authorized recovery of retained fold outcomes and raw derivation.
+- **Schema 20:** explicit author-controlled source revisiting with trusted delivery
+  and unique mandatory exposure; details below.
 
 An owner cancellation that wins activation's waits prevents successor creation.
 Every successful activation key, including a natural duplicate, is bound to its
@@ -49,12 +54,12 @@ Python `>=3.13,<3.15` is required; 3.13 and 3.14 are qualified by fictional inst
 acceptance. Use a reviewed local candidate until publication is separately verified:
 
 ```console
-python3.13 -m pip install ./memoriesql-0.0.5-py3-none-any.whl
+python3.13 -m pip install ./memoriesql-0.0.6-py3-none-any.whl
 memoriesql contracts --json
 memoriesql contract memoriesql.capture.connector-cursor --json
 ```
 
-After separately authorized and verified publication, pin `memoriesql==0.0.5`.
+After separately authorized and verified publication, pin `memoriesql==0.0.6`.
 Older Python can explicitly pin the immutable catalog-only `0.0.1a1`; it is not a
 runtime fallback. The dependencies remain `psycopg[binary]==3.3.3`,
 `pydantic==2.13.3` and `pydantic-ai-slim==2.27.0`, without provider extras.
@@ -91,7 +96,7 @@ and version payload is immutable. Breaking payload changes require a new contrac
 version; correcting an uploaded distribution requires a new distribution version.
 See [compatibility](docs/architecture/compatibility.md) and [repository ownership](docs/architecture/repository-boundary.md).
 
-This PR prepares exact `v0.0.5` repository controls and candidate hashes. It does not
+This PR prepares exact `v0.0.6` repository controls and candidate hashes. It does not
 publish, tag, approve upload or change external publisher/environment settings.
 The PR head is not the eventual release SHA: later current-main push CI and owner
 authorization must establish that SHA. See [release controls](docs/releasing.md).
@@ -105,17 +110,30 @@ name and banner remain subject to [trademark guidance](TRADEMARKS.md). Contribut
 use the [Developer Certificate of Origin](CONTRIBUTING.md), not a contributor
 license agreement.
 
-## Unreleased recovery substrate
+## Recovery and revisiting included in the 0.0.6 candidate
 
-Schema 19 adds explicitly authorized service recovery of acknowledged fold
-outcomes, stored facts and exact raw derivation through bounded discovery,
-point, lineage and byte operations. It does not qualify producers or create
-semantic work. Published 0.0.5 does not include this unreleased addition; no new
-release version is selected. Installing the candidate does not migrate a database
-or provision service access. See [the recovery contract](https://github.com/JohnnyFiv3r/memoriesql/blob/main/docs/transcript-fold-recovery.md).
+Schema 19 supplies explicitly authorized retained-fold recovery through bounded
+window discovery, outcome, lineage and exact-byte operations. It recovers stored
+facts, including unknown topology and pending tails, without qualifying producers,
+inventing units or creating semantic work. Recovery requires explicit scoped service
+access; installation creates no grant.
 
-Current development also adds explicit, task-scoped author-controlled source revisiting
-through the existing complete-input worker and trusted exposure boundary. This is
-unreleased schema 20, not published 0.0.5 behavior. It requires separate activation
-and qualified caller composition; installing does not enable a provider or grants.
-See [the source-revisiting contract](docs/source-revisiting.md).
+Schema 20 adds explicit `ActivateSourceRevisiting` activation of an untouched
+schema-17 binding into a revision-3 task. The single author can revisit exact
+normalized or raw evidence from the pinned target and explicitly supplied optional
+context, including after forward coverage completes. Existing revision-2 activations
+cannot silently switch. Compose `load_source_revisiting_task_registry`, the existing
+worker/executor and a separately qualified revision-3 dispatch attestor. Production
+trust provisioning and real-model admission remain deferred.
+
+Complete-context delivery is preferred when it fits the existing 65,536-character /
+131,072-JSON-byte window; otherwise delivery and typed rereads stay bounded. The
+131,072-character target, 12 interactions and 262,144 repeated-delivery-unit ceilings
+are unchanged and experimental. Actual trusted dispatch establishes exposure;
+reads, notes and repeated delivery cannot inflate unique mandatory target coverage.
+Current authorization, lease/cancellation fences, immutable accepted meaning and
+cleanup ownership remain required. Mechanical exposure does not prove comprehension
+or source completeness. Complete-input correction/reauthoring is not delivered.
+
+See [retained-fold recovery](https://github.com/JohnnyFiv3r/memoriesql/blob/main/docs/transcript-fold-recovery.md)
+and [source revisiting](https://github.com/JohnnyFiv3r/memoriesql/blob/main/docs/source-revisiting.md).

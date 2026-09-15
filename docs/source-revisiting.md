@@ -1,4 +1,4 @@
-# Author-controlled source revisiting (unreleased schema 20)
+# Author-controlled source revisiting (schema 20, included in the 0.0.6 candidate)
 
 An explicitly activated revision-3 complete-unit author can return to exact earlier
 source evidence during the same attempt, including after forward coverage ends.
@@ -151,10 +151,11 @@ operations/branches in existing admission, authorization and canonical apply.
 There is no competing receipt ledger or evidence store. Version-1/2 behavior,
 receipts and accepted meaning retain their historical contracts.
 
-The package retains 0.0.5 metadata without selecting a release version. These are
-unreleased candidate bytes, distinct from published 0.0.5 and the earlier
-schema-19 candidate; historical artifact inventories and publication controls
-remain intact. See [verification](verification/source-revisiting.md).
+The 0.0.6 candidate packages this already merged substrate without runtime, SQL,
+contract, ceiling or provider-admission changes. Historical development and published
+inventories remain immutable; the new versioned 0.0.6 inventory governs readiness.
+See [historical qualification](verification/source-revisiting.md) and
+[release controls](releasing.md).
 
 This delivers only the public source-revisiting substrate. A separately authorized
 release must precede Desktop consumption. PR-02O/CP-2 remain incomplete pending
