@@ -2,11 +2,11 @@
 
 The `0.x` package line is experimental and provides no general API compatibility
 guarantee. Releases use plain numeric `X.Y.Z` with `vX.Y.Z` tags. This preparation
-selects genuine `0.0.6` metadata and exact `v0.0.6` repository controls; it does not
-publish or authorize a tag. Alpha/beta/rc suffixes require a separate owner decision.
-Published `0.0.1a1`, `0.0.2`, `0.0.3`, `0.0.4` and `0.0.5`, their tags and inventories remain
+selects genuine `0.0.7` metadata and exact `v0.0.7` repository controls; it does not
+itself publish or supply protected upload approval. Alpha/beta/rc suffixes require a separate owner decision.
+Published `0.0.1a1`, `0.0.2`, `0.0.3`, `0.0.4`, `0.0.5` and `0.0.6`, their tags and inventories remain
 immutable. The previous `runtime-package-artifact-inventory.json` still records
-published 0.0.4; the new versioned 0.0.6 candidate inventory is separate.
+published 0.0.4; the new versioned 0.0.7 candidate inventory is separate.
 
 Two narrower integrity rules apply after publication:
 
@@ -14,8 +14,8 @@ Two narrower integrity rules apply after publication:
 2. Breaking contract-payload changes require a new contract version. A defective
    uploaded wheel/sdist is corrected by a new distribution version, never replacement.
 
-The 0.0.6 preparation preserves all runtime behavior, dependencies, migrations
-0001–0020, 55 existing contract records and generated catalogs. Python support stays
+The 0.0.7 preparation preserves all runtime behavior, dependencies, migrations
+0001–0021, 56 existing contract records and generated catalogs. Python support stays
 `>=3.13,<3.15`; 3.13 and 3.14 are tested. Older Python may explicitly pin catalog-only
 `0.0.1a1`; it cannot consume the runtime by falling back to that package.
 
@@ -59,7 +59,7 @@ consumption. PR-02O/CP-2 remain incomplete; the six historical Desktop queue fai
 remain unresolved. Provider qualification, production trust, owner data, deployment
 and checkpoints are separate work.
 
-## Schemas 19–20 in the 0.0.6 candidate
+## Schemas 19–20 retained from 0.0.6
 
 Schema 19 adds authorized retained-fold recovery: bounded discovery, exact outcome
 and lineage inspection, and retained raw-byte reads. No producer qualification or
@@ -74,11 +74,11 @@ and current authorization. Delivery, interaction, token and wall-time ceilings a
 unchanged and experimental. Repeated usage does not inflate unique target coverage.
 See [recovery](../transcript-fold-recovery.md) and [revisiting](../source-revisiting.md).
 
-All published inventories and both development candidate inventories remain unchanged.
-Only the new 0.0.6 inventory is used by the prepared release gate. Production grants,
+All published inventories and historical development candidate inventories remain unchanged.
+Only the new 0.0.7 inventory is used by the prepared release gate. Production grants,
 providers, implicit migration or task activation are not supplied by installation.
 
-## Unreleased schema 21 source-stable opt-in
+## Schema 21 source-stable opt-in in 0.0.7
 
 The separate `memoriesql.source-stable-identity.v1` record supplies materialization
 command/receipt v2. Package v1 continues to bind actual retained revisions. The
@@ -90,10 +90,11 @@ An immutable, explicitly approved producer namespace scopes event/occurrence key
 inside one source and tenant. Unknown native identity cannot opt in. The new path
 rejects changed event/native facts, parent or ordered normalized components/text;
 parts and raw/fold revision lineage may differ. It adds no correction behavior.
-Only an unpopulated source can enter this identity mode; existing canonical events
-cause an explicit unsupported transition. The source-mode fence also prevents
+Only a source without canonical events can enter this identity mode; existing
+canonical events cause an explicit unsupported transition. Raw/fold evidence alone
+does not prevent opt-in. The source-mode fence also prevents
 legacy capture/materialization from creating a second interpretation afterward.
-Unopted sources, published records, receipts and SQL 0001–0020 remain unchanged.
+Unopted sources, published records, receipts and SQL 0001–0021 remain unchanged by release preparation.
 No historical equivalence, migration of bindings or duplicate repair is inferred.
 Production identity-policy approval and a separately authorized release precede
 consumer adoption. PR-02O/CP-2 and the historical queue evidence remain incomplete.

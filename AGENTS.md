@@ -14,4 +14,6 @@ This repository is the staged public boundary for the memoriesQL open core. Keep
 The owner-authorized schema-21 slice adds only explicit source-stable logical
 materialization, reviewed producer identity scope and compatibility fences. See
 `docs/logical-unit-materialization.md`. Preserve SQL 0001–0020 and all earlier
-record bytes. No producer qualification/provisioning or release is authorized.
+record bytes. That implementation slice authorized no provisioning or release. The separately
+owner-authorized 0.0.7 release follows `docs/releasing.md`, preserves all 21 SQL
+files and existing contracts/runtime, and stops for owner-only protected upload approval.
