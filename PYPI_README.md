@@ -1,8 +1,8 @@
 # memoriesQL catalogs and provider-neutral runtime
 
-`memoriesql` 0.0.5 is an experimental, pre-alpha distribution of governed contract
+`memoriesql` 0.0.6 is an experimental, pre-alpha distribution of governed contract
 catalogs and provider-neutral runtime mechanics. It preserves the original 49
-provider-neutral records and contains 54 records: 48 JSON Schema records, five
+provider-neutral records and contains 55 records: 49 JSON Schema records, five
 Python-surface records and one synthetic reference connector. Five other catalog
 kinds remain explicit empty `not_implemented` documents. Twelve experimental catalog
 Python/CLI APIs provide listing and exact lookup.
@@ -69,8 +69,8 @@ callbacks rather than real providers.
 The package requires Python `>=3.13,<3.15`; Python 3.13/3.14 have installed wheel and
 sdist coverage. Dependencies remain exactly `psycopg[binary]==3.3.3`,
 `pydantic==2.13.3` and `pydantic-ai-slim==2.27.0`, without provider extras. Once
-publication is independently verified, install with the exact `memoriesql==0.0.5`
-pin. Before publication, use a reviewed local 0.0.5 artifact. The immutable
+publication is independently verified, install with the exact `memoriesql==0.0.6`
+pin. Before publication, use a reviewed local 0.0.6 artifact. The immutable
 `0.0.1a1` remains catalog-only on its original Python versions: explicitly pin it
 for older Python. An unpinned older-Python request may fail; `--pre` only makes that
 historical catalog fallback eligible, never the incompatible runtime.
@@ -78,7 +78,7 @@ historical catalog fallback eligible, never the incompatible runtime.
 Published 0.0.4/schema-15 immutable accepted meaning and explicit version-2
 corrections remain supported on their existing path. Corrections create distinct
 beads with pinned supersession, not edits to accepted meaning. All migrations
-0001–0018 and existing contract records are unchanged by 0.0.5 release preparation.
+0001–0020 and existing contract records are unchanged by 0.0.6 release preparation.
 Historical receipts remain subject to current authorization.
 
 Retain a worker reporting `cleanup_pending`, its event loop and owned cleanup;
@@ -94,17 +94,30 @@ See the [public release and caller guide](https://github.com/JohnnyFiv3r/memorie
 
 Source uses Apache-2.0; that license does not grant rights to memoriesQL trademarks.
 
-## Unreleased recovery substrate
+## Recovery and revisiting included in the 0.0.6 candidate
 
-Schema 19 adds explicitly authorized service recovery of acknowledged fold
-outcomes, stored facts and exact raw derivation through bounded discovery,
-point, lineage and byte operations. It does not qualify producers or create
-semantic work. Published 0.0.5 does not include this unreleased addition; no new
-release version is selected. Installing the candidate does not migrate a database
-or provision service access. See [the recovery contract](https://github.com/JohnnyFiv3r/memoriesql/blob/main/docs/transcript-fold-recovery.md).
+Schema 19 supplies explicitly authorized retained-fold recovery through bounded
+window discovery, outcome, lineage and exact-byte operations. It recovers stored
+facts, including unknown topology and pending tails, without qualifying producers,
+inventing units or creating semantic work. Recovery requires explicit scoped service
+access; installation creates no grant.
 
-Current development also adds explicit, task-scoped author-controlled source revisiting
-through the existing complete-input worker and trusted exposure boundary. This is
-unreleased schema 20, not published 0.0.5 behavior. It requires separate activation
-and qualified caller composition; installing does not enable a provider or grants.
-See [the source-revisiting contract](https://github.com/JohnnyFiv3r/memoriesql/blob/main/docs/source-revisiting.md).
+Schema 20 adds explicit `ActivateSourceRevisiting` activation of an untouched
+schema-17 binding into a revision-3 task. The single author can revisit exact
+normalized or raw evidence from the pinned target and explicitly supplied optional
+context, including after forward coverage completes. Existing revision-2 activations
+cannot silently switch. Compose `load_source_revisiting_task_registry`, the existing
+worker/executor and a separately qualified revision-3 dispatch attestor. Production
+trust provisioning and real-model admission remain deferred.
+
+Complete-context delivery is preferred when it fits the existing 65,536-character /
+131,072-JSON-byte window; otherwise delivery and typed rereads stay bounded. The
+131,072-character target, 12 interactions and 262,144 repeated-delivery-unit ceilings
+are unchanged and experimental. Actual trusted dispatch establishes exposure;
+reads, notes and repeated delivery cannot inflate unique mandatory target coverage.
+Current authorization, lease/cancellation fences, immutable accepted meaning and
+cleanup ownership remain required. Mechanical exposure does not prove comprehension
+or source completeness. Complete-input correction/reauthoring is not delivered.
+
+See [retained-fold recovery](https://github.com/JohnnyFiv3r/memoriesql/blob/main/docs/transcript-fold-recovery.md)
+and [source revisiting](https://github.com/JohnnyFiv3r/memoriesql/blob/main/docs/source-revisiting.md).

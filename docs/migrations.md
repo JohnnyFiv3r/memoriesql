@@ -1,9 +1,9 @@
 # Canonical migrations
 
 Published `0.0.2` introduced the canonical migration substrate; `0.0.4` added
-schema 15. The 0.0.5 candidate packages the already merged schemas 16–18: evidence
-packages, qualified materialization and explicit complete-input execution. This
-release preparation adds or rewrites no SQL. All 18 migration bytes are preserved.
+schema 15. Published 0.0.5 packages schemas 16–18. The 0.0.6 candidate also includes
+already merged schemas 19–20: authorized retained-fold recovery and source revisiting. This
+release preparation adds or rewrites no SQL. All 20 migration bytes are preserved.
 **Python 3.13+ is required; the initial qualification matrix is 3.13 and 3.14
 (`>=3.13,<3.15`).** It is not a complete capture, authoring, or recall runtime.
 No release or upload is authorized by this change.
@@ -17,8 +17,8 @@ as a runtime setup instruction:
 
 ```console
 python3.13 -m venv migration-env
-migration-env/bin/python -m pip install ./memoriesql-0.0.5-py3-none-any.whl
-migration-env/bin/python -c "from importlib.metadata import version; assert version('memoriesql') == '0.0.5'; from memoriesql.infrastructure.postgres.migration_runner import discover_migrations; assert len(discover_migrations()) == 18"
+migration-env/bin/python -m pip install ./memoriesql-0.0.6-py3-none-any.whl
+migration-env/bin/python -c "from importlib.metadata import version; assert version('memoriesql') == '0.0.6'; from memoriesql.infrastructure.postgres.migration_runner import discover_migrations; assert len(discover_migrations()) == 20"
 ```
 
 The installer rejects this artifact on unsupported interpreters. Publication and
@@ -31,7 +31,7 @@ With an explicitly supplied, idle `psycopg` connection to the intended database:
 
 ```python
 from memoriesql.infrastructure.postgres.migration_runner import migrate
-receipt = migrate(connection, expected_current_version=15, target_version=18)
+receipt = migrate(connection, expected_current_version=18, target_version=20)
 ```
 
 The expected version is mandatory. The runner takes the existing advisory lock,
@@ -136,7 +136,7 @@ exposure is not comprehension or independent source completeness. Rolling-note
 quality and execution ceilings remain experimental; complete-input corrections
 and reauthoring are not delivered.
 
-## Unreleased schema 19
+## Candidate schema 19
 
 `0019_transcript_fold_recovery.sql` adds committed per-source recovery ordering
 to existing fold receipts and a bounded authorized read operation. It backfills
@@ -144,7 +144,7 @@ only new ordering metadata and preserves original receipt fields. Plan the norma
 exclusive migration window; no real database upgrade is authorized by the PR.
 See [ordering and compatibility](transcript-fold-recovery.md#discovery-semantics-and-migration).
 
-Unreleased schema 20 adds an explicit revision-3 complete-unit task with typed
+Schema 20, included in the 0.0.6 candidate, adds an explicit revision-3 complete-unit task with typed
 source rereads and unique mandatory exposure through the existing execution path.
 Historical task revisions and SQL 0001–0019 remain unchanged. See the
 [source-revisiting contract](source-revisiting.md). No production trust/provider composition
