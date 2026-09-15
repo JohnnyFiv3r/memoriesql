@@ -143,3 +143,9 @@ to existing fold receipts and a bounded authorized read operation. It backfills
 only new ordering metadata and preserves original receipt fields. Plan the normal
 exclusive migration window; no real database upgrade is authorized by the PR.
 See [ordering and compatibility](transcript-fold-recovery.md#discovery-semantics-and-migration).
+
+Unreleased schema 20 adds an explicit revision-3 complete-unit task with typed
+source rereads and unique mandatory exposure through the existing execution path.
+Historical task revisions and SQL 0001–0019 remain unchanged. See the
+[source-revisiting contract](source-revisiting.md). No production trust/provider composition
+or implicit migration of existing execution bindings is supplied.

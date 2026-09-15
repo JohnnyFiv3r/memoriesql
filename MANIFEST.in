@@ -59,3 +59,6 @@ include src/memoriesql/infrastructure/postgres/complete_input_execution.py
 
 include src/memoriesql/application/fold_recovery.py
 include src/memoriesql/infrastructure/postgres/fold_recovery.py
+
+include src/memoriesql/application/source_revisiting.py
+include src/memoriesql/infrastructure/jobs/source_revisiting_access.py

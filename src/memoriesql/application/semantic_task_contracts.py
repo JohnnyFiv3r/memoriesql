@@ -35,6 +35,10 @@ if TYPE_CHECKING:
         CompleteInputAccess,
         EvidenceExposureRecorder,
     )
+    from memoriesql.application.source_revisiting import (
+        SourceDeliveryRecorder,
+        SourceRevisitingAccess,
+    )
 
 
 CONTRACT_SNAPSHOT_VERSION = 1
@@ -570,6 +574,8 @@ class SemanticRunDeps:
     monotonic_deadline_ns: int
     complete_input: CompleteInputAccess | None = None
     exposure_recorder: EvidenceExposureRecorder | None = None
+    source_revisiting: SourceRevisitingAccess | None = None
+    source_delivery_recorder: SourceDeliveryRecorder | None = None
 
 
 @dataclass(frozen=True)

@@ -160,10 +160,20 @@ by these metadata/control changes.
 
 ## Unreleased fold-recovery candidate
 
-Current development CI verifies its schema-19 artifacts against
+The preserved schema-19 candidate was verified against
 `docs/verification/fold-recovery-candidate-artifacts.json` using
 `verify_fold_recovery_candidate.py`. Those archives retain 0.0.5 metadata without
 selecting a new release version and are not the published 0.0.5 files. The
 publication workflow and `verify_release.py` remain pinned to the separately
 approved 0.0.5 controls and published inventory; they reject changed candidate
 bytes. A future release needs its own separately authorized readiness decision.
+
+## Unreleased source-revisiting candidate
+
+Current development CI verifies schema-20 archives against
+`docs/verification/source-revisiting-candidate-artifacts.json` through
+`verify_source_revisiting_candidate.py`. Metadata still says 0.0.5; these are
+new unreleased bytes, not a replacement for that published release. No next
+release version is selected. Published inventories, the schema-19 candidate
+inventory, publication workflow, tags and release controls remain unchanged.
+A future release-readiness decision and release precede product consumption.

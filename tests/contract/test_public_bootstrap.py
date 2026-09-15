@@ -47,8 +47,8 @@ class PublicBootstrapTests(unittest.TestCase):
 
     def test_registry_is_explicit_complete_and_default_deny(self) -> None:
         records = load_registry()
-        self.assertEqual(len(records), 54)
-        self.assertEqual(len({record["id"] for record in records}), 54)
+        self.assertEqual(len(records), 55)
+        self.assertEqual(len({record["id"] for record in records}), 55)
         catalogs = load_catalog_definitions()
         self.assertEqual(tuple(item.kind for item in catalogs), CATALOG_KINDS)
         counts = {item.kind: 0 for item in catalogs}
@@ -56,10 +56,10 @@ class PublicBootstrapTests(unittest.TestCase):
             counts[str(record["catalog"])] += 1
             self.assertEqual(record["classification"], "proposed_open_core")
             self.assertEqual(record["package_disposition"], "include")
-        self.assertEqual(counts["json_schema"], 48)
+        self.assertEqual(counts["json_schema"], 49)
         self.assertEqual(counts["python"], 5)
         self.assertEqual(counts["connector"], 1)
-        self.assertEqual(sum(counts.values()), 54)
+        self.assertEqual(sum(counts.values()), 55)
 
     def test_generated_catalogs_have_no_drift(self) -> None:
         for path, expected in expected_outputs().items():
@@ -67,7 +67,7 @@ class PublicBootstrapTests(unittest.TestCase):
 
     def test_boundary_scan_is_clean(self) -> None:
         result = verify()
-        self.assertEqual(result["record_count"], 54)
+        self.assertEqual(result["record_count"], 55)
         self.assertEqual(result["default_policy"], "deny")
         self.assertEqual(result["private_boundary_leaks"], [])
 
@@ -131,7 +131,7 @@ class PublicBootstrapTests(unittest.TestCase):
         workflow = (ROOT / ".github/workflows/python-package.yml").read_text()
         publishing = (ROOT / ".github/workflows/publish-pypi.yml").read_text()
         self.assertIn("inspect_python_distribution.py build/dist-a", workflow)
-        self.assertIn("verify_fold_recovery_candidate.py build/dist-a", workflow)
+        self.assertIn("verify_source_revisiting_candidate.py build/dist-a", workflow)
         self.assertIn("verify_release.py artifacts", publishing)
         self.assertIn('tags: ["v0.0.5"]', publishing)
 
@@ -172,6 +172,7 @@ class PublicBootstrapTests(unittest.TestCase):
                 "contracts/records/memoriesql-complete-input-execution-v1.json",
                 "contracts/records/memoriesql-evidence-package-reader-v2.json",
                 "contracts/records/memoriesql-transcript-fold-recovery-v1.json",
+                "contracts/records/memoriesql-source-revisiting-v1.json",
             },
         )
         owned = next(

@@ -77,6 +77,10 @@
     {
       "filename": "0019_transcript_fold_recovery.sql",
       "sha256": "f48189ccae702d5442a7af9e895fc82ffaafc2259da063071cb8a613a6f55d44"
+    },
+    {
+      "filename": "0020_author_controlled_source_revisiting.sql",
+      "sha256": "32cbc8dfd12cf41b39ec56c8e3e297e0ab4f180a2335e61560b271964884d540"
     }
   ]
 }

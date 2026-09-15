@@ -20,6 +20,11 @@ from memoriesql.application.complete_input_execution import (
     ReadCompleteEvidence,
 )
 from memoriesql.application.semantic_task_contracts import canonical_json_bytes
+from memoriesql.application.source_revisiting import (
+    ActivateSourceRevisiting,
+    SourceDelivery,
+    SourceRevisitingActivationReceipt,
+)
 from memoriesql.infrastructure.postgres.authorization import PostgresAuthorizationPort
 
 
@@ -30,6 +35,20 @@ class PostgresCompleteInput:
         self.connection = connection
         self.credential = credential_sha256
         self.workspace = workspace_id
+
+    def activate_revisiting(
+        self, request: ActivateSourceRevisiting
+    ) -> SourceRevisitingActivationReceipt:
+        request = ActivateSourceRevisiting.model_validate(
+            request.model_dump(mode="json")
+        )
+        return SourceRevisitingActivationReceipt.model_validate(
+            self._call(
+                "SELECT memoriesql.activate_complete_input_v2(%s)",
+                (Jsonb(request.model_dump(mode="json")),),
+                role="memoriesql_application",
+            )
+        )
 
     def activate(
         self, request: ActivateCompleteInput
@@ -93,6 +112,36 @@ class PostgresEvidenceExposureRecorder:
         self.connection_factory = connection_factory
         self.credential = credential_sha256
         self.workspace = workspace_id
+
+    async def record_delivery(
+        self, *, request_id: UUID, request_payload_hash: str, delivery: SourceDelivery
+    ) -> None:
+        payload = SourceDelivery.model_validate(
+            delivery.model_dump(mode="json")
+        ).model_dump(mode="json")
+
+        def write() -> None:
+            with self.connection_factory() as connection:
+                PostgresCompleteInput(
+                    connection,
+                    credential_sha256=self.credential,
+                    workspace_id=self.workspace,
+                )._call(
+                    "SELECT memoriesql.record_source_delivery_v1(%s,%s,%s)",
+                    (request_id, request_payload_hash, Jsonb(payload)),
+                    role="memoriesql_worker",
+                )
+
+        operation = asyncio.create_task(asyncio.to_thread(write))
+        cancelled: asyncio.CancelledError | None = None
+        while True:
+            try:
+                await asyncio.shield(operation)
+                break
+            except asyncio.CancelledError as error:
+                cancelled = error
+        if cancelled is not None:
+            raise cancelled
 
     async def record_received(
         self,

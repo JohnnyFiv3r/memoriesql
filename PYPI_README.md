@@ -102,3 +102,9 @@ point, lineage and byte operations. It does not qualify producers or create
 semantic work. Published 0.0.5 does not include this unreleased addition; no new
 release version is selected. Installing the candidate does not migrate a database
 or provision service access. See [the recovery contract](https://github.com/JohnnyFiv3r/memoriesql/blob/main/docs/transcript-fold-recovery.md).
+
+Current development also adds explicit, task-scoped author-controlled source revisiting
+through the existing complete-input worker and trusted exposure boundary. This is
+unreleased schema 20, not published 0.0.5 behavior. It requires separate activation
+and qualified caller composition; installing does not enable a provider or grants.
+See [the source-revisiting contract](https://github.com/JohnnyFiv3r/memoriesql/blob/main/docs/source-revisiting.md).
