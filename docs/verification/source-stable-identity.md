@@ -54,7 +54,25 @@ installed files to the hash-verified published archive (0.639 seconds). An earli
 parallel attempt conflicted on PostgreSQL's cluster-wide role DDL; the serialized
 reproduction passed. This was fixture setup, not an identity behavior failure.
 
-Exact-head hosted CI and the authorized review are pending at this writing. The separate candidate inventory is
+The single broad review found a missing tenant/source index on the source-mode
+fence. A permanent fictional test first reproduced both fence queries scanning
+256 unrelated accepted events. With the nonpartial index, both queries use an
+index condition on tenant and source: the trigger check touches two shared blocks
+instead of eleven; the admission check touches four instead of thirteen. Measured
+execution times were 0.005/0.016 ms after versus 0.027/0.031 ms before on this small
+fixture. This proves the access path, not a production throughput qualification.
+No scheduler, maintenance process or execution ceiling changed.
+
+Independent local inspection also found global component coalescing could erase
+interleaving: `a:A, b:B, a:C` was accepted as equivalent to `a:AC, b:B`.
+The new regression failed against the installed reviewed candidate before the fix.
+The fingerprint now coalesces only contiguous component runs, preserving order
+while permitting adjacent refragmentation. All seventeen corrected installed-wheel
+identity tests pass in 15.549 seconds; the byte-identical sdist-built wheel passes
+the same seventeen cases from its separate installation in 15.861 seconds. Both
+fixes affect only the new migration;
+published SQL and records are unchanged. One focused rereview and final-head hosted
+CI are pending at this writing. The separate candidate inventory is
 `source-stable-identity-candidate-artifacts.json`. Its unchanged 0.0.6 development
 metadata does not authorize replacing the published release. Publication workflow,
 release verification controls, published archives and historical inventories remain

@@ -640,3 +640,128 @@ class SourceStableIdentity(unittest.TestCase):
         ):
             self.f.accept(self.f.command())
         self.assertEqual(self.f.counts(), (1, 1, 1, 1, 1, 0, 0))
+
+    def test_component_interleaving_is_not_harmless_refragmentation(self) -> None:
+        self.enable()
+        first_parts = tuple(
+            self.f.part(content, ordinal).model_copy(
+                update={"component_key": component, "component_offset": offset}
+            )
+            for ordinal, (component, offset, content) in enumerate(
+                (("a", 0, "A"), ("b", 0, "B"), ("a", 1, "C"))
+            )
+        )
+        first = self.f.create(first_parts)
+        for part in first_parts:
+            self.f.append(first, part)
+        self.f.seal(first)
+        original = self.f.materializer.materialize_source_stable(self.command(first))
+        reordered_parts = tuple(
+            self.f.part(content, ordinal).model_copy(
+                update={"component_key": component, "component_offset": 0}
+            )
+            for ordinal, (component, content) in enumerate((("a", "AC"), ("b", "B")))
+        )
+        reordered = self.f.create(reordered_parts, package_revision=2)
+        for part in reordered_parts:
+            self.f.append(reordered, part)
+        self.f.seal(reordered)
+        with self.assertRaisesRegex(
+            psycopg.Error, "logical_occurrence_identity_conflict"
+        ):
+            self.f.materializer.materialize_source_stable(self.command(reordered))
+        self.assertEqual(self.f.counts(), (1, 1, 1, 1, 1, 0, 0))
+        self.assertEqual(
+            self.f.materializer.materialize_source_stable(
+                self.command(first)
+            ).bound_package,
+            original.bound_package,
+        )
+
+    def test_source_mode_fences_do_not_scan_unrelated_tenant_history(self) -> None:
+        from psycopg import sql
+        from psycopg.types.json import Jsonb
+
+        self.enable()
+        self.f.materializer.materialize_source_stable(
+            self.command(self.package("indexed"))
+        )
+        f = self.f
+        unrelated = str(uuid.uuid4())
+        # Independent fictional ledger history, with all ordinary constraints and
+        # triggers active. No historical/owner events are read or imported.
+        for table, count in (
+            ("protected_resources", 1),
+            ("source_objects", 1),
+        ):
+            template = f.row(f"SELECT to_jsonb(t) FROM memoriesql.{table} t LIMIT 1")[0]
+            rows = []
+            for i in range(count):
+                item = dict(template, source_object_id=unrelated)
+                if table == "protected_resources":
+                    item["resource_id"] = unrelated
+                elif table == "source_objects":
+                    item["external_object_id"] = "unrelated.orchard"
+                rows.append(item)
+            columns = sql.SQL(",").join(
+                sql.Identifier(row[0])
+                for row in f.db.execute(
+                    "SELECT column_name FROM information_schema.columns WHERE table_schema='memoriesql' AND table_name=%s AND is_generated='NEVER' ORDER BY ordinal_position",
+                    (table,),
+                )
+            )
+            f.db.execute(
+                sql.SQL(
+                    "INSERT INTO memoriesql.{} ({}) SELECT {} FROM jsonb_populate_recordset(NULL::memoriesql.{},%s)"
+                ).format(
+                    sql.Identifier(table), columns, columns, sql.Identifier(table)
+                ),
+                (Jsonb(rows),),
+            )
+        for i in range(256):
+            command = f.command()
+            assert command.checkpoint is not None and command.semantic_task is not None
+            f.accept(
+                command.model_copy(
+                    update={
+                        "source_object_id": uuid.UUID(unrelated),
+                        "idempotency_key": f"history.{i}",
+                        "event": command.event.model_copy(
+                            update={"source_identity_key": f"history.{i}"}
+                        ),
+                        "checkpoint": command.checkpoint.model_copy(
+                            update={"checkpoint_key": f"history.{i}"}
+                        ),
+                        "semantic_task": command.semantic_task.model_copy(
+                            update={"idempotency_key": f"history.{i}"}
+                        ),
+                    }
+                )
+            )
+        f.db.execute("ANALYZE memoriesql.source_events")
+        predicates = (
+            "(CASE WHEN e.materialization_version=1 THEN e.metadata->>'source_stable_namespace' END) IS DISTINCT FROM 'orchard.register.v1'",
+            "NOT EXISTS(SELECT 1 FROM memoriesql.logical_unit_materializations b WHERE b.tenant_id=e.tenant_id AND b.event_id=e.event_id AND b.stable_identity_namespace='orchard.register.v1')",
+        )
+        for predicate in predicates:
+            with self.subTest(predicate=predicate):
+                plan = f.row(
+                    "EXPLAIN (ANALYZE,FORMAT JSON) SELECT 1 FROM memoriesql.source_events e WHERE e.tenant_id=%s AND e.source_object_id=%s AND "
+                    + predicate,
+                    (f.tenant, f.source),
+                )[0][0]
+                nodes = [plan["Plan"]]
+                for node in nodes:
+                    nodes.extend(node.get("Plans", []))
+                self.assertTrue(
+                    any(
+                        "tenant_id" in node.get("Index Cond", "")
+                        and "source_object_id" in node.get("Index Cond", "")
+                        for node in nodes
+                    ),
+                    plan,
+                )
+                self.assertLessEqual(
+                    sum(node.get("Rows Removed by Filter", 0) for node in nodes), 1
+                )
+                print("source-mode fence plan:", plan)

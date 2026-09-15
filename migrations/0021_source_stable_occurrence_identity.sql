@@ -11,6 +11,9 @@ ALTER TABLE memoriesql.logical_unit_materializations
       OR (stable_identity_namespace IS NOT NULL AND stable_identity_hash IS NOT NULL AND stable_content_hash IS NOT NULL AND stable_identity_hash ~ '^[a-f0-9]{64}$' AND stable_content_hash ~ '^[a-f0-9]{64}$'));
 CREATE UNIQUE INDEX source_stable_occurrence_uq ON memoriesql.logical_unit_materializations(tenant_id,stable_identity_hash) WHERE stable_identity_hash IS NOT NULL;
 CREATE INDEX source_stable_event_scope ON memoriesql.logical_unit_materializations(tenant_id,event_id,stable_identity_namespace);
+-- Both legacy insertion and v2 admission locate the source without scanning
+-- unrelated tenant history; existing revision/sequence indexes are partial.
+CREATE INDEX source_events_identity_mode_scope ON memoriesql.source_events(tenant_id,source_object_id);
 
 -- Include legacy canonical capture in the same source-mode fence. No caller can
 -- opt an already populated source into a new identity interpretation.
@@ -42,7 +45,7 @@ END; $$;
 REVOKE ALL ON FUNCTION memoriesql.source_stable_authorize(uuid) FROM PUBLIC,memoriesql_application;
 
 -- Consistency, never identity inference. Scan at most one sealed 256-part/16-MiB
--- inventory. Hash ordered logical components, coalescing only storage fragments.
+-- inventory. Coalesce adjacent fragments only: interleaving is retained order.
 -- Raw revisions, lineage, part IDs and fragment boundaries remain in each package.
 CREATE FUNCTION memoriesql.source_stable_content_hash(t uuid,p uuid) RETURNS text
 LANGUAGE sql STABLE SET search_path=pg_catalog,memoriesql AS $$
@@ -51,8 +54,13 @@ LANGUAGE sql STABLE SET search_path=pg_catalog,memoriesql AS $$
    SELECT min(ordinal) AS first_ordinal,
      encode(sha256(convert_to(jsonb_build_array(inventory->'component_key',inventory->'parent_component_key',inventory->'kind',inventory->'native',
        encode(sha256(convert_to(string_agg(content,'' ORDER BY ordinal),'UTF8')),'hex'))::text,'UTF8')),'hex') AS component_hash
-   FROM memoriesql.evidence_package_parts WHERE tenant_id=t AND package_id=p
-   GROUP BY inventory->'component_key',inventory->'parent_component_key',inventory->'kind',inventory->'native'
+   FROM (
+     SELECT ordinal,inventory,content,
+       row_number() OVER (ORDER BY ordinal)
+         - row_number() OVER (PARTITION BY inventory->'component_key' ORDER BY ordinal) AS component_run
+     FROM memoriesql.evidence_package_parts WHERE tenant_id=t AND package_id=p
+   ) ordered_parts
+   GROUP BY component_run,inventory->'component_key',inventory->'parent_component_key',inventory->'kind',inventory->'native'
  ) components;
 $$;
 REVOKE ALL ON FUNCTION memoriesql.source_stable_content_hash(uuid,uuid) FROM PUBLIC,memoriesql_application;

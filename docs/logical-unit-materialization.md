@@ -230,7 +230,9 @@ is read from the approved immutable producer policy, never supplied as an untrus
 certification string in the command. Policy provisioning is external and default-deny.
 
 Consistency hashes cover ordered component keys, parent keys, kinds, native facts
-and exact concatenated UTF-8 content. They exclude only representation attributes
+and exact concatenated UTF-8 content. Only adjacent fragments of the same component
+are coalesced; moving a fragment across another component changes retained order
+and conflicts. They exclude only representation attributes
 (part IDs, offsets defining contiguous fragments, derivation receipts/revisions).
 Unknown metadata cannot silently become known on replay: changed facts conflict.
 Different normalization output conflicts; a new normalization policy that yields
@@ -243,4 +245,6 @@ in database memory; no whole source history or model prompt is assembled. Existi
 500-ms lock waits and two-second operation deadlines remain. A timeout rolls back
 the materialization and receipt, leaving already retained evidence intact. Same-source
 materializations serialize through the compatibility fence, including legacy calls.
+A nonpartial tenant/source event index bounds the fence to the selected source
+instead of scanning unrelated tenant history.
 Verification evidence is recorded in [the existing public qualification lane](verification/source-stable-identity.md).
