@@ -203,15 +203,17 @@ class ReleaseControlTests(unittest.TestCase):
                     expected,
                 )
 
-    def test_release_preserves_runtime_sql_and_contract_inventories(self) -> None:
+    def test_forward_slice_preserves_published_bytes_and_release_controls(self) -> None:
         root = Path(__file__).resolve().parents[2]
-        preserved = {
-            "contracts/runtime-inventory.json": "74d7bd29baf929c8dce49de95b0368cfd189bd4b33f71e040f3e5f95fb79a6ca",
-            "contracts/migration-inventory.json": "3f22e4fd408d8d02bf89cec74a7802891acaacd44882f009baee6a0f147fdd42",
-            "contracts/public-registry.json": "072ebcd56c97b1ae874539f7eaced187784ca12390cb6b9cb01048d43becd477",
-            "requirements-dev.txt": "2d69a4a17d53119c29dfaddda6aea18c35ecf7e8923cb64a7824e7eee5b9e2d4",
-        }
-        for name, expected in preserved.items():
+        # Current inventories legitimately gain forward entries. Verify every
+        # prior record/migration byte and the release gate itself instead.
+        frozen = json.loads(
+            (root / "tests/fixtures/published-0.0.6-integrity.json").read_text()
+        )
+        self.assertEqual(
+            frozen["base_public_commit"], "6045605f98744a378168b08894ee192378fe12e7"
+        )
+        for name, expected in frozen["files"].items():
             with self.subTest(path=name):
                 self.assertEqual(
                     hashlib.sha256((root / name).read_bytes()).hexdigest(), expected

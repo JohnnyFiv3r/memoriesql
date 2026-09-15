@@ -195,3 +195,10 @@ block to test storage limits, not source interpretation. Lock contention tests p
 bounded failure with no partial append or receipt. Installed-package checks verify
 resource ownership, full migration history, unchanged published records and legacy
 runtime behavior. None of this is semantic acceptance or a model-inspection claim.
+
+## Unreleased source-stable materialization
+
+Schema 21 introduces an explicit [source-stable materialization opt-in](logical-unit-materialization.md#proposed-source-stable-opt-in-pr-02o-schema-21).
+Package v1 identity, declarations, raw revision checks, seals and readers remain
+unchanged. This separates a representation's retained revision from its qualified
+canonical event/occurrence identity without weakening or rewriting raw lineage.

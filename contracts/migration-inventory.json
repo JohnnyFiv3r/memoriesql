@@ -81,6 +81,10 @@
     {
       "filename": "0020_author_controlled_source_revisiting.sql",
       "sha256": "32cbc8dfd12cf41b39ec56c8e3e297e0ab4f180a2335e61560b271964884d540"
+    },
+    {
+      "filename": "0021_source_stable_occurrence_identity.sql",
+      "sha256": "deaa78118eda4b48bf7a2a3cd89bb499beea2d94d16f923fd663776b28291d2a"
     }
   ]
 }

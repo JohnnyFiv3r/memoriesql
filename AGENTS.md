@@ -10,3 +10,8 @@ This repository is the staged public boundary for the memoriesQL open core. Keep
 - Treat all 0.x APIs as experimental. Preserve an already published contract ID and version payload; model breaking changes as a new contract version.
 - Every contribution must carry a Developer Certificate of Origin sign-off.
 - Open requested PRs in non-draft state, subscribe to their comments, and address, answer, and resolve actionable review threads. Require CI on the final PR commit. For this bootstrap, request one broad review and at most one focused rereview; do not merge, publish, or change repository visibility without owner authorization.
+
+The owner-authorized schema-21 slice adds only explicit source-stable logical
+materialization, reviewed producer identity scope and compatibility fences. See
+`docs/logical-unit-materialization.md`. Preserve SQL 0001–0020 and all earlier
+record bytes. No producer qualification/provisioning or release is authorized.

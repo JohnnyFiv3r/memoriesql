@@ -172,3 +172,81 @@ and product composition belong in `JohnnyFiv3r/memoriesql-desktop`. This core ch
 must merge and be released before a product consumes it; no private workaround.
 The complete-input executor, production trust decisions, provider activation,
 product adoption and end-to-end capture proof remain separate acceptance work.
+
+## Proposed source-stable opt-in (PR-02O, schema 21)
+
+Implemented in the unmerged candidate; acceptance is still being verified. A new materialization command
+and record preserve package v1, materialization v1, SQL 0001–0020 and all
+published record bytes. No release version or provider is selected.
+
+The qualified identity is `(tenant, source object, approved identity namespace,
+occurrence key)`; event identity uses the same scope and event key. Native IDs
+are not globally unique. Keys require an independently reviewed producer policy
+whose immutable namespace explicitly authorizes this interpretation. Unknown
+identity cannot opt in; equal text is never identity evidence. Policy rotation
+may retain that namespace but cannot reinterpret its meaning.
+
+Package representation remains revision-bound, with exact original raw/fold
+lineage. The first stable materialization retains its original package, task,
+receipts and queue/outbox effects. Subsequent qualified packages receive fresh
+shared-ledger receipts returning that first binding. Native/event declarations,
+parent and ordered normalized component facts/content must agree exactly;
+storage fragmentation, part IDs and raw receipt/revision differences may vary.
+A contradiction fails explicitly; it never silently replaces evidence, merges
+history or starts correction/reauthoring. Mechanical equality is a consistency
+check on an already qualified identity, not proof of that identity.
+
+The conservative transition is source-exclusive: a source with any existing
+canonical events cannot enter this mode; return unsupported transition. Once
+source-stable materialization begins, legacy revision-sensitive materialization
+cannot create events on that source. Sources not opted in retain v1 behavior and
+receipts. Both paths share the source lock to make the boundary atomic. This
+slice does not migrate v1 bindings, infer equivalence or repair historical
+duplicates. Administrators must separately approve production identity scope;
+this slice provisions only fictional test policies.
+
+Minimum changes: schema 21 adds immutable optional identity namespace to existing
+producer policy, stable identity/consistency fields and indexes on existing
+bindings, a new authorized materialization function, and a guarded legacy entry
+point. The original package occurrence hash remains bound to the winning receipt,
+so activation, task inputs, readers and exposure continue to use the original
+exact pin without selecting a newer representation. No second registry of
+receipts, scheduler, evidence store or semantic authority is introduced.
+
+Acceptance checklist for this slice: installed published-0.0.6 reproduction; cross-revision
+and cross-fragmentation convergence; fresh-key/replay/conflict receipts; concurrent
+first bindings; distinct equal-text occurrences; legacy transition denial;
+forged lineage/current authority; original-pin recovery, activation and rereads;
+installed wheel/sdist convergence, exact-head CI and bounded review. PR-02O/CP-2
+remain incomplete; release precedes private consumption. Historical unexplained
+Desktop queue failures remain unresolved.
+
+The new entry point reuses the released clock-aware source/role authorization
+and checks current write permission before and after waits and before return.
+The new receipt has contract version 2, but its original complete-unit task remains
+revision 1/unavailable. Callers use `MaterializeSourceStableUnit` and
+`PostgresLogicalUnitMaterialization.materialize_source_stable`. The identity namespace
+is read from the approved immutable producer policy, never supplied as an untrusted
+certification string in the command. Policy provisioning is external and default-deny.
+
+Consistency hashes cover ordered component keys, parent keys, kinds, native facts
+and exact concatenated UTF-8 content. Only adjacent fragments of the same component
+are coalesced; moving a fragment across another component changes retained order
+and conflicts. They exclude only representation attributes
+(part IDs, offsets defining contiguous fragments, derivation receipts/revisions).
+Unknown metadata cannot silently become known on replay: changed facts conflict.
+Different normalization output conflicts; a new normalization policy that yields
+the same exact components may replay through its separately approved producer policy.
+This does not independently verify normalization or omitted source evidence.
+
+One comparison scans only the submitted sealed package: at most 256 parts and
+16 MiB UTF-8. Component aggregation may hold a component up to that package bound
+in database memory; no whole source history or model prompt is assembled. Existing
+500-ms lock waits and two-second operation deadlines remain. A timeout rolls back
+the materialization and receipt, leaving already retained evidence intact. Same-source
+materializations serialize through the compatibility fence, including legacy calls.
+A nonpartial tenant/source/mode expression index supports first/last mode
+lookups with a one-row limit. All three fences (canonical insertion and v1/v2
+materialization) share this check. Comparing both extrema detects any differing
+mode without scanning tenant or same-source history; empty mode denotes legacy.
+Verification evidence is recorded in [the existing public qualification lane](verification/source-stable-identity.md).

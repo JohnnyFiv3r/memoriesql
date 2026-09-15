@@ -254,7 +254,7 @@
       "disposition": "public",
       "path": "src/memoriesql/infrastructure/postgres/logical_unit_materialization.py",
       "reason": "Public-authored canonical logical-unit materialization and unavailable task binding.",
-      "sha256": "16562bb948d1a9ce37cbf33e1198ee4c83bed73eb0832aa9d19a5d7503f94f10"
+      "sha256": "ceee40bf0b787c4dc3cdc4a101fc545f7b8abf0dd77f2c7ed14cea95a6c72bf2"
     },
     {
       "disposition": "public",
@@ -297,6 +297,12 @@
       "path": "src/memoriesql/infrastructure/jobs/source_revisiting_access.py",
       "reason": "Public-authored task-scoped source revisiting within existing execution ownership.",
       "sha256": "d05e8e6cc8609d5634a3fe6997a3a74ebb1b39a5d65c96aa2547507cb3a8f75f"
+    },
+    {
+      "disposition": "public",
+      "path": "src/memoriesql/application/source_stable_identity.py",
+      "reason": "Public-authored explicit source-stable identity opt-in.",
+      "sha256": "d36df5db0ebb6ffdf50b1ab94428dff5aac45e7c0e8e274b69b284e3f72b99fd"
     }
   ]
 }

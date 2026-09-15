@@ -22,6 +22,10 @@ from memoriesql.application.logical_unit_materialization import (
     MaterializeLogicalUnit,
 )
 from memoriesql.application.semantic_task_contracts import canonical_json_bytes
+from memoriesql.application.source_stable_identity import (
+    MaterializeSourceStableUnit,
+    SourceStableMaterializationReceipt,
+)
 from memoriesql.infrastructure.postgres.authorization import PostgresAuthorizationPort
 
 
@@ -40,6 +44,15 @@ class PostgresLogicalUnitMaterialization:
             command,
             "SELECT memoriesql.materialize_logical_unit_v1(%s)",
             LogicalUnitMaterializationReceipt,
+        )
+
+    def materialize_source_stable(
+        self, command: MaterializeSourceStableUnit
+    ) -> SourceStableMaterializationReceipt:
+        return self._call(
+            command,
+            "SELECT memoriesql.materialize_logical_unit_v2(%s)",
+            SourceStableMaterializationReceipt,
         )
 
     def inspect_event(self, request: InspectLogicalEvent) -> LogicalEventProgress:
