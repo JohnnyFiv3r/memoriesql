@@ -189,6 +189,22 @@ def _wheel_inventory(path: Path) -> list[str]:
     return members
 
 
+AUTHORED_SDIST_FILES = {
+    "LICENSE", "MANIFEST.in", "NOTICE", "PYPI_README.md", "README.md",
+    "pyproject.toml", "setup.py",
+    "contracts/migration-inventory.json", "contracts/runtime-inventory.json",
+    *(f"migrations/{name}" for name in MIGRATION_FILES),
+    *(f"src/{name}" for name in EXPECTED_PACKAGE_FILES - RESOURCE_FILES),
+}
+
+
+def verify_authored_sdist_members(archive: tarfile.TarFile) -> None:
+    for name in sorted(AUTHORED_SDIST_FILES):
+        content = archive.extractfile(f"memoriesql-{VERSION}/{name}")
+        if content is None or content.read() != (ROOT / name).read_bytes():
+            raise ValueError(f"sdist differs from exact checkout payload: {name}")
+
+
 def _sdist_inventory(path: Path) -> list[str]:
     with tarfile.open(path, mode="r:gz") as archive:
         members = sorted(item.name for item in archive.getmembers())
@@ -274,6 +290,7 @@ def _sdist_inventory(path: Path) -> list[str]:
                 f"sdist package allowlist mismatch; missing={missing}; "
                 f"unexpected={unexpected}"
             )
+        verify_authored_sdist_members(archive)
         metadata = archive.extractfile(f"{root}PKG-INFO")
         if metadata is None:
             raise ValueError("sdist is missing PKG-INFO")
