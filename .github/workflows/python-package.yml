@@ -31,6 +31,9 @@ jobs:
           python scripts/generate_fold_recovery_contract.py --check
           python scripts/generate_source_revisiting_contract.py --check
           python scripts/generate_source_stable_identity_contract.py --check
+          python scripts/generate_local_mentions_contract.py --check
+          python scripts/generate_bead_classification_contract.py --check
+          python scripts/generate_stored_bead_inspection_contract.py --check
           python scripts/generate_catalogs.py --check
           python scripts/verify_public_boundary.py
           python scripts/verify_migration_export.py

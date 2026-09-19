@@ -85,6 +85,18 @@
     {
       "filename": "0021_source_stable_occurrence_identity.sql",
       "sha256": "deaa78118eda4b48bf7a2a3cd89bb499beea2d94d16f923fd663776b28291d2a"
+    },
+    {
+      "filename": "0022_authored_local_entity_mentions.sql",
+      "sha256": "b36d52732c5da9df3046defb031e925ec8bfdee5e8b25c9541c6d6f61c2abe97"
+    },
+    {
+      "filename": "0023_attributable_bead_classification.sql",
+      "sha256": "5804a304b32e2c074efe0195d9a6460a0e21c915a1ed45c880d4d9783000f600"
+    },
+    {
+      "filename": "0024_bounded_stored_bead_inspection.sql",
+      "sha256": "db242602f27174605386077307b7bce696e29cd760cc660f350ef61c1b22d604"
     }
   ]
 }

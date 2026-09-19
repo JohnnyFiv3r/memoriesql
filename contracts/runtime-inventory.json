@@ -88,10 +88,10 @@
       "source_sha256": "fb3705d479663d1f0703b5c1a87839a5ec42997ad0ddfe86739adb6f587c1fbe"
     },
     {
-      "disposition": "copy",
+      "disposition": "adapt",
       "path": "src/memoriesql/application/semantic_task_registry.py",
-      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
-      "sha256": "91f6b0dbc18235d227cb845789ff75a8485cb567c1adc3f2a7e0e8f950557dd9",
+      "reason": "Owner-authorized forward classified authorship using existing runtime and fences.",
+      "sha256": "c5571d54dfc3b4bb85b10f439ab8be4cb6500c16887add54550c81b314a3dbf3",
       "source_sha256": "91f6b0dbc18235d227cb845789ff75a8485cb567c1adc3f2a7e0e8f950557dd9"
     },
     {
@@ -130,21 +130,21 @@
       "source_sha256": "fedb9b376d56b5865774f5a410ce49d16fd4000700b98ca67e32e45d66eaefa5"
     },
     {
-      "base_public_commit": "bb459ddef14e5627777b21c1366a896b75f24ca8",
-      "base_public_sha256": "21b68eaa447d18fcf04b91de6ecf83ef74d9e9f3f7f0d15a7c2d4937d0cfb23c",
-      "disposition": "public-forward",
+      "base_public_commit": "1e611c2a426684a6ede479e06e21a123a964a818",
+      "base_public_sha256": "f62ae9354e69406885e202c80b4b1c9701b64d6de165e38b1268312b00a19123",
+      "disposition": "adapt",
       "path": "src/memoriesql/infrastructure/jobs/integrated_semantic_worker.py",
-      "reason": "Public forward complete-input execution through the existing worker, executor and canonical sink; legacy contracts retained.",
-      "sha256": "f62ae9354e69406885e202c80b4b1c9701b64d6de165e38b1268312b00a19123",
+      "reason": "Owner-authorized forward classified authorship using existing runtime and fences.",
+      "sha256": "2af4dcf297014385b89b5a986a098bd5c530ab71d537f66366fb7644c88c8e99",
       "source_sha256": "a6b990a6a74461f34e7e757a3e6f7426020f8cef8df4cdbaad2a95f2fcd10398"
     },
     {
-      "base_public_commit": "bb459ddef14e5627777b21c1366a896b75f24ca8",
-      "base_public_sha256": "8c9a3a3fc34e9c8a4b66a7ea06f2613e97bb67cd9cb81bdff62c1521ccc74c64",
-      "disposition": "public-forward",
+      "base_public_commit": "1e611c2a426684a6ede479e06e21a123a964a818",
+      "base_public_sha256": "1f69ac8f230611c9140982e644ee214fbe46f14c25497d424d9a81ff36947265",
+      "disposition": "adapt",
       "path": "src/memoriesql/infrastructure/jobs/postgres_semantic_queue.py",
-      "reason": "Public forward complete-input execution through the existing worker, executor and canonical sink; legacy contracts retained.",
-      "sha256": "1f69ac8f230611c9140982e644ee214fbe46f14c25497d424d9a81ff36947265",
+      "reason": "Owner-authorized forward classified authorship using existing runtime and fences.",
+      "sha256": "31ba0e82f64b666d49b9424571690b11e348accfdbe33590771fbb0adafd09e8",
       "source_sha256": "5bbff727506cd237a9596adc9e59743519defe90f29c14af9e03fc55a445ce80"
     },
     {
@@ -155,12 +155,12 @@
       "source_sha256": "c15f60eace446302ce7dddfc69010c173a714791a92e3765edef87777da4ccc4"
     },
     {
-      "base_public_commit": "bb459ddef14e5627777b21c1366a896b75f24ca8",
-      "base_public_sha256": "a87f24cfc8e8d652ff90c8acf92f46c0aa47cf4c2f1ef823eda4737aab24eb34",
-      "disposition": "public-forward",
+      "base_public_commit": "1e611c2a426684a6ede479e06e21a123a964a818",
+      "base_public_sha256": "42edabb02a4bd814c858f0558ace03d5981426f1fe4b66d9ed8e264098e2281e",
+      "disposition": "adapt",
       "path": "src/memoriesql/infrastructure/models/pydanticai_executor.py",
-      "reason": "Public forward complete-input execution through the existing worker, executor and canonical sink; legacy contracts retained.",
-      "sha256": "42edabb02a4bd814c858f0558ace03d5981426f1fe4b66d9ed8e264098e2281e",
+      "reason": "Integration of reviewed bounded model admission and classified authorship; existing authorization, accounting and cleanup fences retained.",
+      "sha256": "6c671d1b47b898d921be1885ec3866a82caa2d2e5c259f6c6d77fedd9bd8c915",
       "source_sha256": "07d4c861ce40062c227352f6fd240b7445500776ba6216fdd739027020da3b1c"
     },
     {
@@ -187,10 +187,12 @@
       "source_sha256": "ff404106d39e90bb5c9bc146ba5fa371adfe5e4813c0c5cd3cbbafd76e71b5a1"
     },
     {
-      "disposition": "copy",
+      "base_public_commit": "910cdd9d182f612f6bd72174c32363b1e1c87ed7",
+      "base_public_sha256": "ac7f826b3a3625401683e8828ea2f553d203f5e6b36cf9c3a7f0dc5db3a583ac",
+      "disposition": "public-forward",
       "path": "src/memoriesql/infrastructure/postgres/model_accounting.py",
-      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
-      "sha256": "ac7f826b3a3625401683e8828ea2f553d203f5e6b36cf9c3a7f0dc5db3a583ac",
+      "reason": "Own started accounting writes through loop shutdown; preserve cancellation propagation and ledger-write failure cause.",
+      "sha256": "9371fc5b8781fa3916ea5af0d09376ebc06d450b50d119c922f3eb4be09666a5",
       "source_sha256": "ac7f826b3a3625401683e8828ea2f553d203f5e6b36cf9c3a7f0dc5db3a583ac"
     },
     {
@@ -269,10 +271,13 @@
       "sha256": "cd5e4f713d5049a707326fa9714d7357d140dbac6017444cc650fe2d750004bb"
     },
     {
-      "disposition": "public",
+      "base_public_commit": "1e611c2a426684a6ede479e06e21a123a964a818",
+      "base_public_sha256": "d9bc8119b9a995550b5d7837458cf66ba14a1fb7b2323061e859dbede6475f51",
+      "disposition": "adapt",
       "path": "src/memoriesql/infrastructure/postgres/complete_input_execution.py",
-      "reason": "Public-authored complete-input execution and bounded authorized evidence transport.",
-      "sha256": "d9bc8119b9a995550b5d7837458cf66ba14a1fb7b2323061e859dbede6475f51"
+      "reason": "Owner-authorized forward classified authorship using existing runtime and fences.",
+      "sha256": "7299abb89bd01ae31cd29cdd4bb2cdbafe0c592b1ca1c7b284a52a461cc52823",
+      "source_sha256": "d9bc8119b9a995550b5d7837458cf66ba14a1fb7b2323061e859dbede6475f51"
     },
     {
       "disposition": "public",
@@ -303,6 +308,33 @@
       "path": "src/memoriesql/application/source_stable_identity.py",
       "reason": "Public-authored explicit source-stable identity opt-in.",
       "sha256": "d36df5db0ebb6ffdf50b1ab94428dff5aac45e7c0e8e274b69b284e3f72b99fd"
+    },
+    {
+      "disposition": "public",
+      "path": "src/memoriesql/application/local_entity_mentions.py",
+      "reason": "Public-authored bounded local mention contracts; no global identity matching.",
+      "sha256": "73ef2a2478ea5472a68601b4401c5b487071138c2afb1d150ab615d3435d4829"
+    },
+    {
+      "disposition": "adapt",
+      "path": "src/memoriesql/application/bead_classification.py",
+      "reason": "Owner-authorized forward classified authorship using existing runtime and fences.",
+      "sha256": "de271ed9b5920853cca04f30a940cd1e4e082914a605a5c4584b9b32b63a2ec1",
+      "source_sha256": "2290961c3fcfe802e00fd7aedba622dc07c866b26e01e69fa3bc488421eb7df6"
+    },
+    {
+      "disposition": "adapt",
+      "path": "src/memoriesql/application/stored_bead_inspection.py",
+      "reason": "Q-owned bounded authorized stored-result inspection; no canonical writes.",
+      "sha256": "a4baaddd4698af18cdfcb5a54f8cc92bf7d9e09f14d8ba5bf173625034b85f38",
+      "source_sha256": "19515a463bccf1fdb6d94f74ef76b3bd2bd7906f016133b677b46022821990fb"
+    },
+    {
+      "disposition": "adapt",
+      "path": "src/memoriesql/infrastructure/postgres/stored_bead_inspection.py",
+      "reason": "Q-owned bounded authorized stored-result inspection; no canonical writes.",
+      "sha256": "73a44f68e631af9d2a4f4a02aea034281a5a282e7930f495170a479ca3acc412",
+      "source_sha256": "211283d6cc3c15219250bc9fbbfcfb91a6b1c19d30ef692683692a60c2a53a0d"
     }
   ]
 }

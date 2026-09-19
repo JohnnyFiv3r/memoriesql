@@ -17,3 +17,20 @@ materialization, reviewed producer identity scope and compatibility fences. See
 record bytes. That implementation slice authorized no provisioning or release. The separately
 owner-authorized 0.0.7 release follows `docs/releasing.md`, preserves all 21 SQL
 files and existing contracts/runtime, and stops for owner-only protected upload approval.
+
+The owner-authorized PR-02P development slice permits explicit provider-neutral
+bounded real-model admission and schema-22 atomic authored local mentions. These
+are unreleased forward changes, not replacement 0.0.7 release artifacts. Preserve
+the published SQL/contract bytes and the existing publication gates. Version
+selection, merge, tag, release and private consumption remain separately gated.
+
+The owner-authorized forward schema-23 slice adds provider-neutral typed bead
+classification and one attributable accepted contribution. P owns canonical
+writes and fixtures; Q owns authorized stored-result reads. Preserve historical
+migrations 0001–0022 and records; no provider-specific integration or release is
+part of this public slice. See `docs/bead-classification.md`.
+
+The Q-owned forward schema-24 slice permits bounded, currently authorized stored
+bead/result and evidence inspection. Preserve migrations 0001–0023 and earlier
+records. No inference, canonical writes, provider binding or private consumption
+is introduced. See `docs/stored-bead-inspection.md`.

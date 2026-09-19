@@ -11,6 +11,7 @@ from psycopg import Connection
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel
 
+from memoriesql.application.bead_classification import ApplyClassifiedAuthorship
 from memoriesql.application.canonical_transactions import (
     ApplySemanticAnnotationsCommand,
 )
@@ -19,6 +20,7 @@ from memoriesql.application.complete_input_execution import (
     CompleteEvidenceBatch,
     ReadCompleteEvidence,
 )
+from memoriesql.application.local_entity_mentions import ApplyLocalMentions
 from memoriesql.application.observation_commands import (
     AuthorInitialObservationsCommand,
     CorrectObservationCommand,
@@ -680,9 +682,14 @@ class PostgresSemanticTaskQueue:
             )
         elif (
             result.task_kind == "memory.semantic.author-complete-unit"
-            and result.contract_revision == 3
+            and result.contract_revision in (3, 4, 5)
         ):
-            revisiting_command = ApplySourceRevisiting.model_validate(command_data)
+            revisiting_command = (
+                ApplyClassifiedAuthorship.model_validate(command_data)
+                if result.contract_revision == 5 else ApplyLocalMentions.model_validate(command_data)
+                if result.contract_revision == 4
+                else ApplySourceRevisiting.model_validate(command_data)
+            )
             row = self._connection.execute(
                 "SELECT * FROM memoriesql.apply_semantic_annotations(%s,%s,%s,%s)",
                 (

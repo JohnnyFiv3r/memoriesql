@@ -426,12 +426,22 @@ def inspect_semantic_task_registry(
                 )
 
         if definition.dispatch_mode is DispatchMode.DIRECT_LEAF:
+            # Revision 5 has one runtime-scheduled classification leaf, not a
+            # model delegation tool or a generative conductor.
+            classified = (
+                definition.task_kind == "memory.semantic.author-complete-unit"
+                and definition.contract_revision == 5
+                and definition.allowed_delegate_keys == ("memory.semantic.bead-type-classifier",)
+                and definition.run_budget.max_delegate_calls == 1
+                and definition.run_budget.max_parallel_delegates == 1
+                and "memory.semantic.bead-type-classifier" in agent_by_key
+            )
             if (
                 definition.leaf_agent_key is None
-                or definition.allowed_delegate_keys
+                or (definition.allowed_delegate_keys and not classified)
                 or definition.allowed_tool_keys
-                or definition.run_budget.max_delegate_calls != 0
-                or definition.run_budget.max_parallel_delegates != 0
+                or (definition.run_budget.max_delegate_calls != 0 and not classified)
+                or (definition.run_budget.max_parallel_delegates != 0 and not classified)
             ):
                 _issue(
                     issues,
@@ -588,6 +598,7 @@ class SemanticTaskRegistry:
         effort_profiles: Mapping[str, EffortProfile],
         module_registry_version: str,
         registry_hash: str,
+        leaf_contracts: Sequence[TypedModelContract[BaseModel]] = (),
     ) -> None:
         self._definitions = definitions
         contract_models: dict[tuple[str, int, str], type[BaseModel]] = {}
@@ -603,6 +614,11 @@ class SemanticTaskRegistry:
                         contract.schema_hash,
                     )
                 ] = contract.model_type
+        for contract in leaf_contracts:
+            key = (contract.contract_id, contract.revision, contract.schema_hash)
+            if key in contract_models and contract_models[key] is not contract.model_type:
+                raise ValueError("conflicting typed leaf contract")
+            contract_models[key] = contract.model_type
         self._contract_models = MappingProxyType(contract_models)
         self._definitions_by_key = MappingProxyType(
             {
@@ -633,6 +649,7 @@ class SemanticTaskRegistry:
         effort_profiles: Sequence[EffortProfile],
         model_profiles: Sequence[ModelProfileReference],
         evidence_policies: Sequence[EvidencePolicyContract],
+        *, leaf_contracts: Sequence[TypedModelContract[BaseModel]] = (),
     ) -> SemanticTaskRegistry:
         inspection = inspect_semantic_task_registry(
             module_registry,
@@ -644,6 +661,9 @@ class SemanticTaskRegistry:
             evidence_policies,
         )
         inspection.require_compatible()
+        for contract in leaf_contracts:
+            if not any(contract.reference in (a.input_contract, a.output_contract) for a in agents):
+                raise ValueError("typed leaf contract lacks a registered agent reference")
         return cls(
             tuple(
                 sorted(
@@ -657,6 +677,7 @@ class SemanticTaskRegistry:
             {profile.key: profile for profile in effort_profiles},
             module_registry.combined_module_version,
             inspection.registry_hash,
+            leaf_contracts,
         )
 
     @property

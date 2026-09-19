@@ -24,7 +24,7 @@
     },
     {
       "disposition": "include",
-      "expected_record_count": 50,
+      "expected_record_count": 53,
       "filename": "json-schema.json",
       "kind": "json_schema",
       "note": "Provider-neutral capture, host, source-range, transcript-fold, and harness-lifecycle schemas."
@@ -61,6 +61,17 @@
   "compatibility": "experimental_0_x_no_general_compatibility_guarantee",
   "default_policy": "deny",
   "records": [
+    {
+      "canonical_payload_sha256": "9dfc99fc4bd22dc84aa25f39efe7ca48b8fa4c7cd7b17dfa88d135aa48f8bf4b",
+      "catalog": "json_schema",
+      "classification": "proposed_open_core",
+      "id": "memoriesql.bead-classification.v1",
+      "package_disposition": "include",
+      "path": "contracts/records/memoriesql-bead-classification-v1.json",
+      "public_sha256": "5296ecccae12a0122f25a7abde5d1df3596d7b243175a0207c775441e439196b",
+      "reason": "Explicit owner-authorized provider-neutral classification contribution and canonical acceptance; no provider binding.",
+      "version": "1"
+    },
     {
       "catalog": "json_schema",
       "classification": "proposed_open_core",
@@ -408,6 +419,17 @@
       "version": "1"
     },
     {
+      "canonical_payload_sha256": "abf1a51752e7e527c0e50416c850fa2f2795eeca774ec5de7f348950673b8c69",
+      "catalog": "json_schema",
+      "classification": "proposed_open_core",
+      "id": "memoriesql.local-entity-mentions.v1",
+      "package_disposition": "include",
+      "path": "contracts/records/memoriesql-local-entity-mentions-v1.json",
+      "public_sha256": "b420d80f6e4638533a4c3c0f1516b427af09eac996a58c9dec3cce2eb503b919",
+      "reason": "Public-authored immutable local mention persistence and forward revisiting contracts.",
+      "version": "1"
+    },
+    {
       "canonical_payload_sha256": "d8ff1aed2dd98a17e7ffe555328695d9b6c16f1f5c936ba743eb0d177fe69ad5",
       "catalog": "json_schema",
       "classification": "proposed_open_core",
@@ -542,6 +564,17 @@
       "path": "contracts/records/memoriesql-source-stable-identity-v1.json",
       "public_sha256": "c795b9a2f4855d11bdd9a206353608cd2b5685e98363adb457da40bf21297e62",
       "reason": "Public-authored explicit source-stable canonical identity.",
+      "version": "1"
+    },
+    {
+      "canonical_payload_sha256": "e7443855ea6c180226fbeebf4af634eca6574321ee063b1b5714168fcf770d19",
+      "catalog": "json_schema",
+      "classification": "proposed_open_core",
+      "id": "memoriesql.stored-bead-inspection.v1",
+      "package_disposition": "include",
+      "path": "contracts/records/memoriesql-stored-bead-inspection-v1.json",
+      "public_sha256": "ffe6441a0590a2d1fd91583df1a7e14ff0582995e10d342c8c863d40108f2c4a",
+      "reason": "Owner-authorized Q public stored-result reads stacked on P handoff b98d5cc.",
       "version": "1"
     },
     {

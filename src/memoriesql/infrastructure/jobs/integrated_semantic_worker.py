@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import math
 import time
 from collections.abc import Callable
@@ -352,7 +353,12 @@ class _CleanupAccounting:
         cancellation: asyncio.CancelledError | None = None
         while True:
             try:
-                await asyncio.shield(operation)
+                # Repeated level cancellation must not accumulate shield callbacks
+                # on the owned write. wait removes its callback on every exit and
+                # never cancels the operation when this observer is cancelled.
+                if not operation.done():
+                    await asyncio.wait((operation,))
+                operation.result()
             except asyncio.CancelledError as error:
                 if operation.cancelled():
                     self.usage_failed = True
@@ -421,11 +427,16 @@ class IntegratedSemanticWorker:
             except Exception as error:
                 return _DatabaseCallOutcome(error=error)
 
-        task = asyncio.create_task(asyncio.to_thread(capture))
+        # Loop shutdown cancels Tasks, even shielded ones. Keep ownership of the
+        # executor Future until this started database operation actually finishes.
+        context = contextvars.copy_context()
+        operation_future = asyncio.get_running_loop().run_in_executor(
+            None, context.run, capture
+        )
         delayed_cancellation: asyncio.CancelledError | None = None
         while True:
             try:
-                outcome = await asyncio.shield(task)
+                outcome = await asyncio.shield(operation_future)
             except asyncio.CancelledError as error:
                 delayed_cancellation = error
                 continue
@@ -603,7 +614,7 @@ class IntegratedSemanticWorker:
     async def _await_database_call[T](self, operation: Callable[[], T]) -> T:
         outcome, cancellation = await self._run_database_call(operation)
         if cancellation is not None:
-            raise cancellation
+            raise cancellation from outcome.error
         if outcome.error is not None:
             raise outcome.error
         return outcome.value  # type: ignore[return-value]
@@ -1607,7 +1618,7 @@ class IntegratedSemanticWorker:
             if (
                 settlement_result.status == SemanticResultStatus.SUCCEEDED
                 and claimed.task_kind == "memory.semantic.author-complete-unit"
-                and claimed.contract_revision in (2, 3)
+                and claimed.contract_revision in (2, 3, 4, 5)
                 and not queue.complete_exposure_valid(claimed.fence)
             ):
                 settlement_result = SemanticTaskResult[BaseModel](
