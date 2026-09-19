@@ -187,10 +187,12 @@
       "source_sha256": "ff404106d39e90bb5c9bc146ba5fa371adfe5e4813c0c5cd3cbbafd76e71b5a1"
     },
     {
-      "disposition": "copy",
+      "base_public_commit": "910cdd9d182f612f6bd72174c32363b1e1c87ed7",
+      "base_public_sha256": "ac7f826b3a3625401683e8828ea2f553d203f5e6b36cf9c3a7f0dc5db3a583ac",
+      "disposition": "public-forward",
       "path": "src/memoriesql/infrastructure/postgres/model_accounting.py",
-      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
-      "sha256": "ac7f826b3a3625401683e8828ea2f553d203f5e6b36cf9c3a7f0dc5db3a583ac",
+      "reason": "Own started accounting writes through loop shutdown; preserve cancellation propagation and ledger-write failure cause.",
+      "sha256": "9371fc5b8781fa3916ea5af0d09376ebc06d450b50d119c922f3eb4be09666a5",
       "source_sha256": "ac7f826b3a3625401683e8828ea2f553d203f5e6b36cf9c3a7f0dc5db3a583ac"
     },
     {

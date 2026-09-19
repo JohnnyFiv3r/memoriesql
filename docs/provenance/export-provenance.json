@@ -974,7 +974,7 @@
       "classification": "public-authored",
       "license": "Apache-2.0",
       "public_path": "contracts/runtime-inventory.json",
-      "public_sha256": "91fc5e862c6638f3a6b49d5dc71de3964a6580ce7db2d7ba87621da1c6331359",
+      "public_sha256": "6b6f2ffe7471223ab230978d8fbd63bbaae3662f7082ba156c6acfbba848ae1a",
       "reason": "Public N2 dependency inventory and fictional runtime acceptance."
     },
     {
@@ -1023,7 +1023,7 @@
       "classification": "public-authored",
       "license": "Apache-2.0",
       "public_path": "tests/runtime/test_cancellation_drain.py",
-      "public_sha256": "d6c0a540926f88aeb4f87fea46e5234a22a1e463738950559693846d27b6003a",
+      "public_sha256": "a4e169f6c9f8d5d2a526e78ffa4ac6a6f4d8c43235874035da50011f7a977e8e",
       "reason": "Fictional public cancellation cleanup and forward-provenance verification."
     },
     {
@@ -2036,11 +2036,13 @@
       "source_sha256": "ff404106d39e90bb5c9bc146ba5fa371adfe5e4813c0c5cd3cbbafd76e71b5a1"
     },
     {
-      "classification": "copy",
+      "base_public_commit": "910cdd9d182f612f6bd72174c32363b1e1c87ed7",
+      "base_public_sha256": "ac7f826b3a3625401683e8828ea2f553d203f5e6b36cf9c3a7f0dc5db3a583ac",
+      "classification": "public-forward",
       "license": "Apache-2.0",
       "public_path": "src/memoriesql/infrastructure/postgres/model_accounting.py",
-      "public_sha256": "ac7f826b3a3625401683e8828ea2f553d203f5e6b36cf9c3a7f0dc5db3a583ac",
-      "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
+      "public_sha256": "9371fc5b8781fa3916ea5af0d09376ebc06d450b50d119c922f3eb4be09666a5",
+      "reason": "Public-authored ownership of started accounting writes during loop shutdown; original extraction hash retained as historical provenance.",
       "source_sha256": "ac7f826b3a3625401683e8828ea2f553d203f5e6b36cf9c3a7f0dc5db3a583ac"
     },
     {

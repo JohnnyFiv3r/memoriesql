@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 from collections.abc import Callable
 from typing import Any
 from uuid import UUID
@@ -98,17 +99,21 @@ async def _finish_database_write[T](operation: Callable[[T], None], value: T) ->
             return error
         return None
 
-    task = asyncio.create_task(asyncio.to_thread(capture))
+    # Runner shutdown cancels every Task, including a shielded to_thread Task.
+    # Own the executor Future directly so cancellation cannot discard the result
+    # of an already-started ledger write. Preserve to_thread's context propagation.
+    context = contextvars.copy_context()
+    write = asyncio.get_running_loop().run_in_executor(None, context.run, capture)
     delayed_cancellation: asyncio.CancelledError | None = None
     while True:
         try:
-            write_error = await asyncio.shield(task)
+            write_error = await asyncio.shield(write)
         except asyncio.CancelledError as error:
             delayed_cancellation = error
             continue
         break
     if delayed_cancellation is not None:
-        raise delayed_cancellation
+        raise delayed_cancellation from write_error
     if write_error is not None:
         raise write_error
 
