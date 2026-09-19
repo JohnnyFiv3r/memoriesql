@@ -4,7 +4,7 @@
       "classification": "proposed_open_core",
       "license": "Apache-2.0",
       "public_path": ".github/workflows/python-package.yml",
-      "public_sha256": "d488e22dc7011980ebd5c2a7151d83976a199f00e0fb31876ae60689bd5fcca8",
+      "public_sha256": "2d8f1765e08563ed2cd106cc634e1366e77bb29b0567070481eb146606a0e17d",
       "reason": "Reviewed packaging-spike input ported or adapted for the public bootstrap.",
       "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
       "reviewed_spike_source_sha256": "e1aea0a0ef2e13647d18eacdfb3753b8ee5ea93956724a23d1617496db722b1b"
@@ -557,7 +557,7 @@
       "classification": "proposed_open_core",
       "license": "Apache-2.0",
       "public_path": "scripts/inspect_python_distribution.py",
-      "public_sha256": "faedf686b543f3c907ffa5d87e3eeb7a6d2abf5fbdda021da786d436141cf3be",
+      "public_sha256": "61f2dd4d0b7b504da9ab626afe88cc7975da797dccb5bb1e2bb92d46eb531f1a",
       "reason": "Reviewed packaging-spike input ported or adapted for the public bootstrap.",
       "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
       "reviewed_spike_source_sha256": "17f72b342444381ac5c5aab2004ed261509877f04298c42d03ea0bd186e13f62"
@@ -701,21 +701,21 @@
       "classification": "public_release_configuration",
       "license": "Apache-2.0",
       "public_path": "docs/releasing.md",
-      "public_sha256": "bef1bc25800b7b76558126e42c23de75944f3e21c9a642f692df9d3d4b25e9b4",
+      "public_sha256": "90b31a0d9e9768b5a16f51d560994d0562d26768db83345fd815ba96fd54844b",
       "reason": "Public-owned publisher identity, release controls, and separate owner authorization requirements."
     },
     {
       "classification": "public_release_configuration",
       "license": "Apache-2.0",
       "public_path": "scripts/verify_release.py",
-      "public_sha256": "17c1c09db545a254246566e9fbc2acf1f76bca500e5b0654f8f0aa54b92c9a22",
+      "public_sha256": "5b774fca3de8a391af73cd6be351565003b236ab96186ba20b8034bed8216bfe",
       "reason": "Fail-closed exact-main-head CI and artifact verification for the approved preview."
     },
     {
       "classification": "public_release_configuration",
       "license": "Apache-2.0",
       "public_path": "tests/unit/test_release_controls.py",
-      "public_sha256": "cd0c4450deeba71eaa12659a7184df2a7e6a56b54504d05c6f4d14ea12794523",
+      "public_sha256": "a8883aef099d1db342c2e9ecad17404058d508f8e4e09f3b76a7dbbbccd90270",
       "reason": "Synthetic focused regression tests for release identity, CI status, and artifact integrity."
     },
     {
@@ -876,7 +876,7 @@
       "classification": "public_bootstrap",
       "license": "Apache-2.0",
       "public_path": "tests/contract/test_public_bootstrap.py",
-      "public_sha256": "dff85c824a935c438ddcca1976be373ade000cc0f0ea70e16f3fb06c0452878e",
+      "public_sha256": "5e9cc04dc59cc0f33bd94a4a288463954b27302a7a022b1f8206eb5d33955f3e",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {

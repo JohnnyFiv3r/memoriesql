@@ -1,4 +1,30 @@
-# Owner-controlled 0.0.7 release readiness
+# Development qualification and historical release verification
+
+Development CI qualifies unreleased archives against the checked-out commit and
+its current runtime, migration and contract inventories. The retained
+`python-package-artifacts.json` includes the exact commit, archive sizes/hashes
+and `unreleased-development` designation. Compatibility jobs re-inspect downloaded
+archives against that checkout and compare the receipt, then independently rebuild
+the sdist wheel and run both installed routes with checkout access denied on
+Python 3.13/3.14. Retaining 0.0.7 package metadata does not make these development
+archives the published 0.0.7 release, and does not select a future release version.
+
+Published migrations 0001–0021, contract payloads and historical inventories remain
+byte-frozen on development branches. The complete 0.0.7 runtime/metadata baseline
+is checked separately against immutable published commit
+`1e611c2a426684a6ede479e06e21a123a964a818`, not later development source. The frozen
+fixture and published 0.0.7 artifact inventory are themselves hash-pinned in tests.
+No release check is replaced by a development receipt.
+
+Publication remains fail-closed: `verify_release.py artifacts` accepts only the
+committed, separately approved release inventory, never the downloaded development
+receipt. The existing exact tag/version, exact-main successful CI, protected owner
+approval, and no-build upload controls are unchanged. New release preparation,
+version selection, merge, tag and publication require separate authorization.
+The following section is the retained historical 0.0.7 preparation record; its
+past approvals and availability observations are not current authorization.
+
+## Historical owner-controlled 0.0.7 release readiness
 
 This release prepares genuine `0.0.7` metadata, exact `v0.0.7` repository controls,
 guidance and fresh deterministic wheel/sdist inventories. The owner separately
