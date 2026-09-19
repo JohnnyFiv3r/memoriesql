@@ -1,231 +1,149 @@
-# Development qualification and historical release verification
+# Prepared 0.0.8 release and owner gates
 
-Development CI qualifies unreleased archives against the checked-out commit and
-its current runtime, migration and contract inventories. The retained
-`python-package-artifacts.json` includes the exact commit, archive sizes/hashes
-and `unreleased-development` designation. Compatibility jobs re-inspect downloaded
-archives against that checkout and compare the receipt, then independently rebuild
-the sdist wheel and run both installed routes with checkout access denied on
-Python 3.13/3.14. Retaining 0.0.7 package metadata does not make these development
-archives the published 0.0.7 release, and does not select a future release version.
+This preparation packages the already merged public main
+`8dfa5a2ef6bb4ef52b62e4405ee8a26ccfa36e6b`, which passed
+[exact-main installed qualification](https://github.com/JohnnyFiv3r/memoriesql/actions/runs/35462360085).
+It changes release metadata, repository publication controls, artifact inventory,
+verification and guidance. It changes no runtime behavior, SQL 0001–0024,
+59 contract payloads/catalogs, dependencies, execution ceilings or provider policy.
 
-Published migrations 0001–0021, contract payloads and historical inventories remain
-byte-frozen on development branches. The complete 0.0.7 runtime/metadata baseline
-is checked separately against immutable published commit
-`1e611c2a426684a6ede479e06e21a123a964a818`, not later development source. The frozen
-fixture and published 0.0.7 artifact inventory are themselves hash-pinned in tests.
-No release check is replaced by a development receipt.
+The owner has explicitly authorized preparation, the qualified release-PR merge,
+and creation/push of `v0.0.8` at verified release main after every required gate.
+Protected upload approval remains exclusively the owner's action. Stop when the
+real publishing workflow waits for that approval; never approve it or upload directly.
+There is no publishing-run approval URL until a real workflow exists.
+The PR head is not automatically the release SHA.
 
-Publication remains fail-closed: `verify_release.py artifacts` accepts only the
-committed, separately approved release inventory, never the downloaded development
-receipt. The existing exact tag/version, exact-main successful CI, protected owner
-approval, and no-build upload controls are unchanged. New release preparation,
-version selection, merge, tag and publication require separate authorization.
-The following section is the retained historical 0.0.7 preparation record; its
-past approvals and availability observations are not current authorization.
+## Exact release identity
 
-## Historical owner-controlled 0.0.7 release readiness
-
-This release prepares genuine `0.0.7` metadata, exact `v0.0.7` repository controls,
-guidance and fresh deterministic wheel/sdist inventories. The owner separately
-authorized preparation, its narrowly scoped merge and tag creation after all gates
-pass. Protected upload approval remains exclusively an owner action; automation
-must stop at the waiting publish job and never approve it or change protections.
-The preparation PR head is not automatically the release SHA.
-
-Baseline: `d82f5baf3eff92ac68cdbcda922415a33f2cb0c1`, the merge of PR #18.
-Approved reviewed head `4dcbc08cd60a518be0dd102f02643024ec080e87` is ancestral.
-This preparation changes no runtime behavior, dependencies, SQL 0001–0021,
-56 existing contract record bytes, generated catalogs, Python support, execution
-ceilings or provider admission. A frozen baseline fixture verifies these boundaries.
-
-A live check on 2026-09-15 found PyPI 0.0.7 absent (HTTP 404) and no `v0.0.7`
-repository tag. This is not a reservation: recheck before tagging. If either becomes
-unavailable, stop; never select another version or move a tag. All historical release
-and development inventories, published archives and tags remain immutable.
-The existing GitHub `pypi` environment was verified read-only with exactly tag
-`v0.0.7`, required owner `JohnnyFiv3r` approval and administrator bypass disabled.
-Authenticated current PyPI publisher identity must also be verified before tagging;
-historical provenance is not a substitute.
-
-## Exact release identity and controls
-
-| Setting | Value |
+| Setting | Prepared value |
 | --- | --- |
-| PyPI project | `memoriesql` |
-| GitHub repository | `JohnnyFiv3r/memoriesql` (ID `1357510758`) |
-| Workflow | `.github/workflows/publish-pypi.yml` |
-| Protected environment | `pypi` |
-| Only accepted new tag | `v0.0.7` |
-| Genuine distribution version | `0.0.7` |
-| Committed candidate inventory | `docs/verification/runtime-0.0.7-package-artifact-inventory.json` |
+| Distribution / version | `memoriesql` / `0.0.8` |
+| Repository / ID | `JohnnyFiv3r/memoriesql` / `1357510758` |
+| Only accepted new tag | `v0.0.8` |
+| Workflow / environment | `.github/workflows/publish-pypi.yml` / `pypi` |
+| Authoritative release inventory | `docs/verification/runtime-0.0.8-package-artifact-inventory.json` |
 
-The existing release process is retained:
+A read-only preflight on 2026-09-19 found no `v0.0.8` tag and PyPI returned 404 for
+version 0.0.8. The existing GitHub environment allowed exactly tag `v0.0.8`, required
+owner `JohnnyFiv3r` approval, and disabled administrator bypass. No settings were
+changed. These observations are not reservations or future authorization: recheck
+before any authorized tag creation. If version/tag becomes unavailable, stop;
+never choose another version or move a tag.
 
-- Only creation of exactly `v0.0.7` can trigger publication. Historical/wildcard
-  tags, manual dispatch, PRs and branch pushes cannot upload.
-- The tag commit must equal then-current main, metadata must equal 0.0.7, and the
-  latest exact-head `python-package.yml` **main push** run must have passed.
-  A PR run or earlier green main run cannot authorize release.
-- Download `memoriesql-python-<exact SHA>` only from that selected run ID. Compare
-  filenames, embedded versions, sizes and SHA-256 values with the committed
-  inventory. Missing, extra, altered or symlinked archives fail closed. A downloaded
-  inventory cannot override committed hashes; never rebuild or rename at upload.
-- PR/main package CI checks genuine metadata, deterministic builds, the active
-  committed inventory, installed compatibility and namespace/resource ownership.
-  Independently download and compare the retained archives as a separate check.
-- The verify job stages only the two matched archives. The protected publish job
-  uses pinned actions and OIDC, runs no repository code and alone has
-  `id-token: write`. There is no publication-time build, dependency resolution,
-  token fallback or `skip-existing` behavior.
-- The `pypi` environment must allow the exact authorized tag, require owner approval
-  and disable administrator bypass. Existing self-review allowance may support
-  the sole owner approving their own release; automation cannot approve upload.
+The owner reports PyPI configuration ready. The authenticated publishing page
+redirected to login during this preflight, so current Trusted Publisher identity
+has **not** been independently verified. Before tagging, verify the PyPI project,
+repository owner/name, `publish-pypi.yml` and environment `pypi` in an authenticated
+session. Historical provenance and the owner report do not replace that check.
 
-No external setting is changed here. Before publication, verify current GitHub
-protections and authenticated PyPI Trusted Publisher configuration for this exact
-repository, `publish-pypi.yml` and environment `pypi`. Historical provenance is not
-current configuration proof. Any required setting change needs separate authorization.
+## Development qualification and historical verification
 
-## Caller composition and explicit opt-in
+Development CI still qualifies archives against their exact checkout and records
+full commit, sizes/hashes and `unreleased-development` in the retained receipt.
+That receipt never becomes publication authority. Compatibility jobs re-inspect
+it and independently rebuild the sdist wheel, then test both installed routes with
+checkout access denied on Python 3.13/3.14. Candidate metadata alone does not
+establish publication, including genuine 0.0.8 candidate metadata.
 
-Published 0.0.5 supplies schemas 16–18: exact evidence packages, qualified stable
-unit/thin-bead materialization and unavailable task binding, then explicit
-revision-2 activation, reader v2, trusted exposure and fenced initial application.
-Published 0.0.6 adds schemas 19–20, retained in this release:
+Published archives, tags, historical inventories, migrations and contract payloads
+remain immutable. The complete published 0.0.7 source is independently reproduced
+at `1e611c2a426684a6ede479e06e21a123a964a818`, with its own metadata version rather
+than the current release identity. Its frozen fixture and inventory remain
+hash-pinned. The new 0.0.8 baseline records accepted main and preserves all existing
+historical payloads; runtime reproduction is release-scoped, never a permanent
+freeze on future development source. No 0.0.7 development archive is renamed or
+reused as 0.0.8.
 
-- **19:** authorized retained-fold recovery through bounded discovery, outcome,
-  lineage and exact-byte operations. Stored topology, uncertainty and pending tails
-  remain truthful. Recovery creates no producer qualification or semantic work.
-- **20:** explicit `ActivateSourceRevisiting` can activate an untouched schema-17
-  binding into a revision-3 task. The single author can revisit earlier exact
-  normalized/raw evidence from its pinned target and optional authorized context,
-  including after forward coverage finishes. Existing revision-2 activations cannot
-  silently switch. No correction/reauthoring is added.
+The 0.0.8 wheel and sdist must be freshly and deterministically built. Two builds
+and an independent sdist-to-wheel reconstruction must agree. Independently download
+exact-head hosted archives and compare them against the committed 0.0.8 release
+inventory as well as the development receipt. A modified downloaded receipt cannot
+override committed release hashes. Historical 0.0.7 release guidance remains in
+[its immutable published source](https://github.com/JohnnyFiv3r/memoriesql/blob/v0.0.7/docs/releasing.md).
 
-Installing/upgrading does not migrate a database, provision production trust,
-activate tasks, start a worker or configure a provider. Callers must separately:
+## Existing fail-closed publication path
 
-1. Authorize an explicit forward migration with the actual expected schema version.
-   Backup/recovery, deployment and database upgrade remain separate owner actions.
-2. Supply credentials/workspace and current source authority. Recovery requires
-   an explicitly scoped service grant. Producer qualification and dispatch trust
-   require actual approved policies; arbitrary strings/digests are not certification.
-3. Deliberately choose activation and the matching registry. For revisiting, use
-   `PostgresCompleteInput.activate_revisiting`, `ActivateSourceRevisiting` and
-   `load_source_revisiting_task_registry`, with explicit optional context pins.
-   Original inputs, unavailable snapshots, pins and receipts stay immutable.
-4. Compose the existing module/agent/model registries and worker with its claim
-   policy and a separately trusted `PostgresEvidenceExposureRecorder`. Revision-2
-   dispatch policies cannot certify revision-3 execution. Production trust and
-   real-model admission remain deferred; only fictional callbacks are qualified.
-5. Retain the worker, event loop and owned cleanup through `wait_for_cleanup()`.
-   `cleanup_pending` and foreground cancellation do not prove rollback or reconciled
-   usage. Preserve uncertain settlement outcomes.
+Only creation of exactly `v0.0.8` can trigger the prepared publication workflow.
+PRs, branch pushes, manual dispatch, wildcard and historical tags cannot upload.
+The tag must target actual current main with genuine 0.0.8 metadata, and the latest
+package **main-push** run at that exact SHA must be successful. An earlier green
+run or a PR run cannot authorize publication.
 
-The existing limits remain unchanged: target 131,072 normalized characters;
-revisiting windows up to 65,536 characters/131,072 JSON bytes; 12 interactions;
-262,144 repeated-delivery units; 300 seconds; 524,288 input and 32,768 output tokens.
-Whole-context delivery is preferred when it fits; otherwise bounded delivery and
-typed rereads keep storage pages separate from model interactions and genuine units.
+The verify job downloads only `memoriesql-python-<exact SHA>` from that selected
+run. It checks the exact two filenames, sizes and SHA-256 values against the
+committed 0.0.8 inventory; missing, extra, changed or symlinked archives fail closed.
+It stages only those two verified archives. The protected publish job uses pinned
+actions and OIDC, runs no repository code, and alone has `id-token: write`.
+There is no publication-time build, rename, dependency resolution, token fallback
+or `skip-existing`. Automation must not approve protected upload or change settings.
 
-Actual trusted dispatch establishes exposure; a read, cache, note or model claim
-cannot. Repeated delivery is charged independently of unique required target
-coverage. Current authorization, producer/dispatch policy, attempt/lease/cancellation
-and canonical-apply fences remain required. Mechanical exposure does not establish
-comprehension, correctness or independent source completeness. Rolling-note quality
-and execution ceilings remain experimental. Oversized/unavailable input remains
-retained with its thin bead and explicit unsuccessful outcome.
+Under the explicit owner merge/tag authorization:
 
-The completed PR #13 cancellation/idempotency repairs and PR #16 target-ceiling
-repair are preserved. This metadata slice does not reopen their implementation
-review. See [recovery](transcript-fold-recovery.md), [revisiting](source-revisiting.md),
-[compatibility](architecture/compatibility.md) and [migration operations](migrations.md).
+1. Merge only the reviewed release head after exact-head CI and independent archive
+   checks. Verify actual merged-main CI and archives again; the merge SHA is the
+   release candidate identity, not the earlier PR SHA.
+2. Recheck version/tag availability, authenticated PyPI publisher identity and exact
+   environment protections. Stop on a mismatch rather than weakening controls.
+3. Create/push `v0.0.8` once at that verified main only if explicitly authorized.
+   Observe verification and provide the owner the actual waiting publishing run,
+   release SHA/tag and matched artifact hashes. Do not invent a workflow URL.
+4. Stop for owner-only protected approval. After that separate owner action, verify
+   actual PyPI files, hashes, metadata and Trusted Publisher provenance, then fresh
+   Python 3.13/3.14 installs. Workflow success alone is not publication proof.
 
-Python remains `>=3.13,<3.15`; installed qualification covers 3.13/3.14. Dependencies
-remain `psycopg[binary]==3.3.3`, `pydantic==2.13.3` and `pydantic-ai-slim==2.27.0`,
-without provider extras. Before publication, use a hash-matched reviewed local
-0.0.7 candidate. After separately verified publication, pin `memoriesql==0.0.7`.
-Older Python can explicitly use immutable catalog-only `0.0.1a1`, never as a runtime.
+## Candidate capabilities and caller composition
 
-## Verification evidence
+The candidate retains schemas 15–21 and packages merged public prerequisites:
+bounded real-model admission, schema-22 atomic local mentions, schema-23
+attributable bead classification and schema-24 currently authorized stored-result
+and exact-evidence inspection. It also retains the accounting cancellation repair.
+See [admission](real-model-admission.md), [mentions](local-entity-mentions.md),
+[classification](bead-classification.md) and [stored inspection](stored-bead-inspection.md).
 
-Unchanged-runtime evidence is retained from PR #18's approved head and
-[exact-head installed qualification](https://github.com/JohnnyFiv3r/memoriesql/actions/runs/34993383566):
-208 tests per Python 3.13/3.14 wheel/sdist lane. This release compares all runtime,
-SQL, contracts and historical inventories against merged baseline bytes, runs focused
-release/control checks and verifies fresh genuine wheel and independently rebuilt
-sdist-wheel installations. No local database suite is repeated for version metadata.
-The existing hosted matrix qualifies the final preparation head and then the actual
-merged-main commit. Independently download both selected runs' retained archives and
-compare filenames, embedded versions, sizes and hashes to the committed inventory.
-Local qualification produced genuine 0.0.7 wheel/sdist archives. Two independent
-builds match byte-for-byte, and a wheel rebuilt from the normalized sdist also
-matches. Fresh Python 3.13.5 and 3.14 installations pass CLI/version, all 21 packaged
-migration hashes, 56 contracts, source-stable API and 44-module ownership checks
-from both artifact routes, without database/provider access. Focused release/catalog
-checks passed after updating one stale assertion to the newly active release
-inventory. Ruff, strict typing, provenance/boundary checks and strict archive checks
-pass. No unchanged local database suite was repeated. The PR/evidence lane records
-exact heads, hosted CI, independent archive comparisons and review closure.
+<a id="caller-composition-and-explicit-opt-in"></a>
 
-<a id="separate-owner-actions"></a>
+Installing/upgrading does not migrate a database, provision trust, activate tasks,
+start a worker or configure a provider. Consumers separately authorize forward
+migration and supply current credentials/workspace, source qualification,
+producer/dispatch/claim policies, registered vocabulary, task/module/agent/model
+composition and the trusted exposure recorder. Existing bindings and their exact
+pins do not silently upgrade. See [migration operations](migrations.md).
 
-## Authorized release sequence and protected owner approval
+An admitted model needs an independently qualified, exactly bound transport that
+performs at most one inference per bounded request, enforces input/generated-token
+ceilings before dispatch, and has no unapproved retry/fallback. Public admission
+and reservations are not a supplied provider transport or live-quality proof.
+Q reads are inference-free and recheck current authorization on every request;
+legacy, hidden, absent and authored-empty states remain distinct.
 
-1. Open a signed-off, non-draft preparation PR and subscribe. Complete one broad
-   review and at most one focused rereview, resolving actionable findings. Merge
-   only after final-head CI and independent archive comparison pass.
-2. Fetch then-current main and establish its exact SHA. Wait for the latest
-   successful `python-package.yml` main-push run at that SHA, then independently
-   verify its retained archives against the committed 0.0.7 inventory. A PR run
-   does not qualify. Stop on unexpected main changes, missing artifacts or mismatch.
-3. Recheck version/tag availability, authenticated publisher identity and exact
-   environment protections. Never weaken or recreate settings to proceed.
-4. Create and push `v0.0.7` exactly once at verified main. Do not rebuild at upload.
-   Verify the publishing workflow's verification job succeeds and `publish` waits
-   on the protected `pypi` environment.
-5. Give the owner the actual publishing run, release SHA/tag, exact-main CI and
-   archive filenames/sizes/hashes. Stop for their protected upload approval;
-   preparation review and tag authorization do not authorize automation to approve.
-6. After owner approval, follow the publishing job, independently download both
-   PyPI files and verify hashes, metadata and Trusted Publisher provenance including
-   release SHA. Perform fresh exact-version Python 3.13/3.14 installations and check
-   CLI/imports, packaged contracts/migrations and source-stable materialization APIs.
-   Green workflow status alone is not publication proof. Inspect actual PyPI state
-   before any retry of a partial failure; never overwrite, retag or use skip-existing.
+Retain the worker, event loop and owned cleanup through `wait_for_cleanup()`.
+Foreground cancellation and `cleanup_pending` do not establish rollback,
+termination or reconciled usage. Started writes and late usage remain owned;
+uncertain settlement outcomes stay explicit.
 
-Public release precedes separately authorized Desktop adoption. PR-02O/CP-2 remain
-incomplete pending private composition and owner proof. The existing CP-2 checklist
-remains the progress authority: no new tracker, P/Q advancement or N/N3/CP-1 reopening.
-The six historical unexplained Desktop queue failures remain unresolved. Providers,
-owner data, production provisioning, deployment, UI and checkpoints remain deferred.
+Python stays `>=3.13,<3.15`; dependencies remain `psycopg[binary]==3.3.3`,
+`pydantic==2.13.3` and `pydantic-ai-slim==2.27.0`, without provider extras.
+Before publication use a hash-matched reviewed local 0.0.8 artifact; only after
+independently verified publication pin `memoriesql==0.0.8`. The immutable catalog-only
+`0.0.1a1` is never a runtime fallback. Current bounds remain experimental and unchanged:
+131,072 target characters; 65,536-character/131,072-JSON-byte windows; 12 interactions;
+262,144 repeated-delivery units; 300 seconds; 524,288 input/32,768 output tokens.
 
-## Schema 21: explicit qualified source-stable identity
+## Qualification and remaining gates
 
-`MaterializeSourceStableUnit` and
-`PostgresLogicalUnitMaterialization.materialize_source_stable` provide an explicit
-version-2 materialization path under an administrator-approved immutable producer
-identity namespace. Qualified event/occurrence keys are scoped to tenant, source
-and namespace; native IDs are not assumed globally unique, and equal content is
-not identity proof. Unknown or unapproved identity cannot opt in.
+Accepted main passed 264 tests on each installed Python 3.13/3.14 wheel/sdist route,
+including P/Q authorization/accounting regressions and fresh-process recovery.
+This release delta uses focused release/control tests and fresh installed archive
+smoke checks locally; it does not repeat unchanged local database suites. Final
+release-PR CI and independent inventory comparison are required, then exact merged-main
+qualification after a separately authorized merge. Reviews of unchanged runtime
+slices are retained; release preparation gets one broad review and at most one
+focused rereview.
 
-The same qualified occurrence across retained revisions and package representations
-retains one initial event/unit/bead/task binding, its original inputs, exact evidence
-pin and first receipts. Successful fresh operation keys use the shared receipt
-ledger. Each package's raw/fold lineage still names its actual retained revisions;
-repackaging never switches an existing task to newer evidence. Contradictory native
-facts, event declarations, parent identity or ordered content fail explicitly.
-Adjacent storage fragments may vary; component interleaving remains significant.
-
-Existing canonical events prohibit source opt-in, returning an explicit unsupported
-transition. Raw/fold evidence alone does not prohibit opt-in. After opt-in, legacy
-capture/materialization cannot establish a second identity mode on that source.
-Revision-sensitive v1 behavior remains available elsewhere. No existing binding is
-adopted, no equivalence is inferred, and no historical duplicate repair or
-complete-input correction/reauthoring is added.
-
-Installation does not migrate a database, provision trust, activate tasks or configure
-a provider. Producer qualification and identity-policy approval are separate from
-mechanical consistency checks. Existing explicit activation, authorized readers,
-trusted exposure and canonical-apply fences continue to use the original exact pin.
+Public release precedes separately authorized private pinned consumption. P's real
+provider composition, hard transport bounds, source fidelity/classification-abstention
+and request/token/latency quality proof, Q's private human inspection path, owner-data
+proof and CP-2 remain incomplete. The six historical unexplained Desktop queue
+failures remain unresolved evidence. No private work, provider activation/spending,
+OpenRouter, deployment, production migration or checkpoint is authorized here.

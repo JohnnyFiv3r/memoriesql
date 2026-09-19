@@ -14,9 +14,9 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY = "JohnnyFiv3r/memoriesql"
 REPOSITORY_ID = 1357510758
-APPROVED_VERSION = "0.0.7"
+APPROVED_VERSION = "0.0.8"
 RELEASE_INVENTORY = (
-    ROOT / "docs/verification/runtime-0.0.7-package-artifact-inventory.json"
+    ROOT / "docs/verification/runtime-0.0.8-package-artifact-inventory.json"
 )
 
 
@@ -79,21 +79,35 @@ def verify_artifacts(
 
 
 def verify_source_bytes(
-    directory: Path, frozen: dict[str, Any], *, release_reproduction: bool = False
+    directory: Path,
+    frozen: dict[str, Any],
+    *,
+    release_reproduction: bool = False,
+    metadata_version: str = "0.0.7",
 ) -> None:
     """Preserve published payloads everywhere; freeze runtime only for reproduction."""
     for name, expected in frozen["files"].items():
         historical = name.startswith(
-            ("migrations/", "contracts/records/", "docs/verification/", "tests/fixtures/")
+            (
+                "migrations/",
+                "contracts/records/",
+                "docs/verification/",
+                "tests/fixtures/",
+            )
         )
         if release_reproduction or historical:
             path = directory / name
-            if path.is_symlink() or hashlib.sha256(path.read_bytes()).hexdigest() != expected:
+            if (
+                path.is_symlink()
+                or hashlib.sha256(path.read_bytes()).hexdigest() != expected
+            ):
                 raise ValueError(f"frozen source byte drift: {name}")
     if release_reproduction:
         for name, expected in frozen["metadata"].items():
-            normalized = (directory / name).read_bytes().replace(
-                APPROVED_VERSION.encode(), b"APPROVED_VERSION"
+            normalized = (
+                (directory / name)
+                .read_bytes()
+                .replace(metadata_version.encode(), b"APPROVED_VERSION")
             )
             if hashlib.sha256(normalized).hexdigest() != expected:
                 raise ValueError(f"frozen release metadata drift: {name}")

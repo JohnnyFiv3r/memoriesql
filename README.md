@@ -3,7 +3,7 @@
 # memoriesQL catalogs and provider-neutral runtime
 
 This public repository preserves the original 49 provider-neutral contract records
-and provides 56 records through eight generated catalogs and 12 experimental
+and provides 59 records through eight generated catalogs and 12 experimental
 catalog Python/CLI APIs. Public `memoriesql` owns the canonical PostgreSQL schema,
 authorization, capture/range/fold mechanics, queue, worker, executor and accounting.
 It is not the memoriesQL desktop product, a running background service, a recall
@@ -15,10 +15,25 @@ adds schema 15: immutable accepted observations and explicit version-2
 initial-authoring/correction commands. Corrections create distinct beads with pinned
 supersession. Those releases, tags and inventories remain immutable.
 
-## Prepared 0.0.7 scope
+## Prepared 0.0.8 scope
 
-Published 0.0.6 includes schemas 16–20. The 0.0.7 release candidate includes
-the already merged schema 21 and preserves the earlier paths:
+Published 0.0.7 includes schemas 16–21. The 0.0.8 candidate packages the already merged public prerequisites:
+
+- **Bounded model admission:** exact caller-supplied model/profile/target qualification,
+  pre-dispatch request/token reservation and attributable usage through the existing
+  executor. No production transport or provider entitlement is supplied.
+- **Schema 22:** atomic authored local mentions, including explicit authored-empty
+  and unresolved/ambiguous local state, without inventing global entity resolution.
+- **Schema 23:** a bounded evidence-backed classification packet, registered
+  vocabulary revisions, explicit abstention/disagreement and one attributable
+  accepted contribution. Mechanical acceptance does not prove semantic quality.
+- **Schema 24:** currently authorized stored bead/result and exact-evidence reads;
+  legacy, missing, hidden and authored-empty remain distinct. Reads do not run inference.
+- **Accounting cancellation repair:** already-started database writes and late usage
+  remain owned through repeated cancellation; callers still retain the worker/event
+  loop until cleanup finishes.
+
+The candidate preserves the earlier paths:
 
 - **Schema 16:** immutable evidence packages retain exact inventory and raw/fold
   lineage for one source-native unit. Bounded authorized reads do not create meaning.
@@ -54,12 +69,12 @@ Python `>=3.13,<3.15` is required; 3.13 and 3.14 are qualified by fictional inst
 acceptance. Use a reviewed local candidate until publication is separately verified:
 
 ```console
-python3.13 -m pip install ./memoriesql-0.0.7-py3-none-any.whl
+python3.13 -m pip install ./memoriesql-0.0.8-py3-none-any.whl
 memoriesql contracts --json
 memoriesql contract memoriesql.capture.connector-cursor --json
 ```
 
-After separately authorized and verified publication, pin `memoriesql==0.0.7`.
+After separately authorized and verified publication, pin `memoriesql==0.0.8`.
 Older Python can explicitly pin the immutable catalog-only `0.0.1a1`; it is not a
 runtime fallback. The dependencies remain `psycopg[binary]==3.3.3`,
 `pydantic==2.13.3` and `pydantic-ai-slim==2.27.0`, without provider extras.
@@ -96,12 +111,11 @@ and version payload is immutable. Breaking payload changes require a new contrac
 version; correcting an uploaded distribution requires a new distribution version.
 See [compatibility](docs/architecture/compatibility.md) and [repository ownership](docs/architecture/repository-boundary.md).
 
-This release preparation records exact `v0.0.7` controls and candidate hashes.
-The owner-authorized workflow merges preparation only after verification and
-creates the tag only at verified current main. Protected upload approval remains
-owner-only. The PR head is not automatically the release SHA; successful exact-main
+This preparation records exact `v0.0.8` controls and fresh candidate hashes.
+The owner has authorized preparation and, after the required checks, merge and
+exact tag creation. Protected upload approval remains owner-only. The PR head is not automatically the release SHA; successful exact-main
 push CI and independent archive comparison must establish that identity. See [release controls](docs/releasing.md).
-PR-02O and CP-2 remain incomplete. The six historical Desktop queue-test failures
+Private P/Q composition and proof, PR-02O and CP-2 remain incomplete. The six historical Desktop queue-test failures
 remain unresolved evidence; this preparation does not rerun or label them fixed.
 
 ## Licensing and contribution
@@ -125,7 +139,8 @@ normalized or raw evidence from the pinned target and explicitly supplied option
 context, including after forward coverage completes. Existing revision-2 activations
 cannot silently switch. Compose `load_source_revisiting_task_registry`, the existing
 worker/executor and a separately qualified revision-3 dispatch attestor. Production
-trust provisioning and real-model admission remain deferred.
+trust provisioning and actual provider qualification remain deferred; the public
+bounded-admission interface is included in this candidate.
 
 Complete-context delivery is preferred when it fits the existing 65,536-character /
 131,072-JSON-byte window; otherwise delivery and typed rereads stay bounded. The

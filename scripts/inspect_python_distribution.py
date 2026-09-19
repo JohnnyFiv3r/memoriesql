@@ -11,7 +11,7 @@ import zipfile
 from collections.abc import Sequence
 from pathlib import Path, PurePosixPath
 
-VERSION = "0.0.7"
+VERSION = "0.0.8"
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATION_ROWS = json.loads((ROOT / "contracts/migration-inventory.json").read_text())[
     "migrations"
