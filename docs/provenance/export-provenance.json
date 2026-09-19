@@ -876,7 +876,7 @@
       "classification": "public_bootstrap",
       "license": "Apache-2.0",
       "public_path": "tests/contract/test_public_bootstrap.py",
-      "public_sha256": "f44a1c622db7ed85f9f2d417189a6817b28d2bbc337572815c0f5c0eaa23592a",
+      "public_sha256": "998ec1db680308961198e7e402abf05223aa633c723bf3806aacd95abb620a18",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {
