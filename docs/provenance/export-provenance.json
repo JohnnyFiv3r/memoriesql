@@ -1639,7 +1639,7 @@
       "classification": "public_authored",
       "license": "Apache-2.0",
       "public_path": "tests/runtime/test_bead_classification.py",
-      "public_sha256": "f750681c11a924616cbc274578ce8c4270655aa2847125b322f25acff5ef3c05",
+      "public_sha256": "607910bd5140ce27464f79c07c9df1ca02233915617db2e9b42b6d0fff5eed90",
       "reason": "Explicit owner-authorized provider-neutral classified authorship forward slice."
     },
     {

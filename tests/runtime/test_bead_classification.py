@@ -247,6 +247,63 @@ class BeadClassification(fixtures.LocalMentions):
             (2,),
         )
 
+    def test_bounded_admission_and_classification_share_exact_request_accounting(self) -> None:
+        from unittest.mock import patch
+
+        from memoriesql.infrastructure.models.pydanticai_executor import (
+            BoundedProviderModel,
+            RealModelAdmission,
+        )
+
+        dispatched: list[Any] = []
+        original_binding = ModelProfileBinding
+
+        class BoundedDouble(BoundedProviderModel):
+            def __init__(self, inner: Any) -> None:
+                self.inner = inner
+                super().__init__(profile=inner.profile)
+
+            @property
+            def model_name(self) -> str:
+                return "fictional-integrated"
+
+            @property
+            def system(self) -> str:
+                return "fictional"
+
+            async def request_bounded(self, messages: Any, settings: Any,
+                                      parameters: Any, bounds: Any) -> Any:
+                dispatched.append(bounds)
+                return await self.inner.request(messages, settings, parameters)
+
+        def binding(**kwargs: Any) -> Any:
+            model = BoundedDouble(kwargs["model"])
+            target = kwargs["request_target"].model_copy(update={
+                "max_input_tokens_per_request": 6000,
+                "max_output_tokens_per_request": 1000,
+            })
+            return original_binding(
+                reference=kwargs["reference"], model=model, request_target=target,
+                real_model_admission=RealModelAdmission(
+                    model, kwargs["reference"], target, "fictional.integration.v1"
+                ),
+            )
+
+        self.setup_classification()
+        with patch(f"{__name__}.ModelProfileBinding", side_effect=binding):
+            result = asyncio.run(self.worker().run_once())
+        self.assertEqual(result.task_status, "succeeded", result)
+        self.assertEqual(len(dispatched), 2)
+        self.assertEqual(self.classifier_calls, 1)
+        self.assertEqual(
+            self.db.execute(
+                "SELECT request_sequence FROM memoriesql.model_provider_request_intents ORDER BY request_sequence"
+            ).fetchall(), [(1,), (2,)],
+        )
+        self.assertEqual(self.row("SELECT count(*) FROM memoriesql.model_usage_events"), (2,))
+        self.assertEqual(self.row("SELECT count(*) FROM memoriesql.entity_mentions"), (1,))
+        self.assertEqual(self.row("SELECT count(*) FROM memoriesql.bead_versions"), (1,))
+
     def test_abstention_retains_evidence_without_accepted_meaning(self) -> None:
         self.outcome = "no_fit"
         self.setup_classification()
