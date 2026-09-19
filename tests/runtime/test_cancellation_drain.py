@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import threading
 import unittest
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, cast
@@ -455,3 +456,152 @@ class AccountingCancellation(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(asyncio.CancelledError):
             await asyncio.wait_for(operation, 1)
         self.assertEqual(committed, ["fictional"])
+
+
+class AccountingLoopShutdown(unittest.TestCase):
+    def test_shutdown_owns_started_write_and_preserves_its_outcome(self) -> None:
+        self.assert_owned_shutdown(_finish_database_write)
+
+    def test_shutdown_owns_worker_database_call_and_preserves_its_outcome(self) -> None:
+        worker = IntegratedSemanticWorker.__new__(IntegratedSemanticWorker)
+
+        async def finish(write: Callable[[str], None], value: str) -> None:
+            await worker._await_database_call(lambda: write(value))
+
+        self.assert_owned_shutdown(finish)
+
+    def assert_owned_shutdown(
+        self, finish: Callable[[Callable[[str], None], str], Awaitable[None]]
+    ) -> None:
+        import contextvars
+
+        for fails in (False, True):
+            with self.subTest(write_fails=fails):
+                entered = threading.Event()
+                release = threading.Event()
+                shutdown = threading.Event()
+                finished = threading.Event()
+                returned = threading.Event()
+                context: contextvars.ContextVar[str] = contextvars.ContextVar(
+                    "fictional_ledger_context"
+                )
+                observed: list[str] = []
+                cancellations: list[asyncio.CancelledError] = []
+                errors: list[BaseException] = []
+                failure = RuntimeError("fictional ledger unavailable")
+
+                def write(value: str) -> None:
+                    observed.append(context.get())
+                    entered.set()
+                    if not release.wait(5):
+                        raise AssertionError("test did not release ledger write")
+                    try:
+                        if fails:
+                            raise failure
+                        observed.append(value)
+                    finally:
+                        finished.set()
+
+                async def record() -> None:
+                    try:
+                        await finish(write, "committed")
+                    except asyncio.CancelledError as error:
+                        # Cancellation must never claim the write has finished early.
+                        if not finished.is_set():
+                            errors.append(AssertionError("write ownership was lost"))
+                        cancellations.append(error)
+                        raise
+
+                async def observe_shutdown() -> None:
+                    try:
+                        await asyncio.Event().wait()
+                    finally:
+                        shutdown.set()
+
+                async def scenario() -> None:
+                    context.set("fictional context")
+                    asyncio.create_task(observe_shutdown())
+                    asyncio.create_task(record())
+                    while not entered.is_set():
+                        await asyncio.sleep(0.001)
+                    # Return with the write active: Runner cancels ALL pending Tasks.
+
+                def run() -> None:
+                    try:
+                        asyncio.run(scenario())
+                    except BaseException as error:
+                        errors.append(error)
+                    finally:
+                        returned.set()
+
+                runner = threading.Thread(target=run, daemon=True)
+                runner.start()
+                try:
+                    self.assertTrue(entered.wait(2))
+                    self.assertTrue(shutdown.wait(2))
+                    self.assertFalse(returned.is_set())
+                    self.assertFalse(finished.is_set())
+                finally:
+                    release.set()
+                    runner.join(3)
+                self.assertFalse(runner.is_alive(), "loop shutdown did not drain accounting")
+                self.assertTrue(finished.is_set())
+                self.assertEqual(errors, [])
+                self.assertEqual(len(cancellations), 1)
+                self.assertIs(cancellations[0].__cause__, failure if fails else None)
+                self.assertEqual(
+                    observed,
+                    ["fictional context"] if fails else ["fictional context", "committed"],
+                )
+
+
+class AccountingLevelCancellation(unittest.IsolatedAsyncioTestCase):
+    async def test_completed_usage_is_observed_under_level_cancellation(self) -> None:
+        import anyio
+
+        from memoriesql.infrastructure.jobs.integrated_semantic_worker import (
+            _CleanupAccounting,
+        )
+
+        for fails in (False, True):
+            with self.subTest(write_fails=fails):
+                entered = asyncio.Event()
+                release = asyncio.Event()
+                finished = False
+                propagated = False
+
+                async def append_usage(event: Any) -> None:
+                    nonlocal finished
+                    entered.set()
+                    await release.wait()
+                    finished = True
+                    if fails:
+                        raise RuntimeError("fictional late ledger failure")
+
+                accounting = _CleanupAccounting(
+                    cast(Any, SimpleNamespace(append_usage=append_usage))
+                )
+
+                async def observe() -> None:
+                    nonlocal propagated
+                    with anyio.CancelScope() as scope:
+                        scope.cancel()
+                        try:
+                            await accounting.append_usage(cast(Any, None))
+                        except asyncio.CancelledError:
+                            self.assertTrue(finished)
+                            propagated = True
+                            raise
+
+                observer = asyncio.create_task(observe())
+                try:
+                    await asyncio.wait_for(entered.wait(), 1)
+                    await asyncio.sleep(0.02)
+                    self.assertFalse(observer.done())
+                    self.assertFalse(finished)
+                finally:
+                    release.set()
+                await asyncio.wait_for(observer, 1)
+                self.assertTrue(propagated)
+                self.assertTrue(finished)
+                self.assertEqual(accounting.usage_failed, fails)
