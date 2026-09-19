@@ -530,7 +530,14 @@ class BeadClassification(fixtures.LocalMentions):
             self.assertEqual(settled.task_status if settled else None, "cancelled")
             self.assertFalse(worker.cleanup_pending)
 
-        asyncio.run(scenario())
+        # Capture a wedged loop even when cancellation prevents asyncio timeouts.
+        import faulthandler
+
+        faulthandler.dump_traceback_later(60, exit=True)
+        try:
+            asyncio.run(scenario())
+        finally:
+            faulthandler.cancel_dump_traceback_later()
         self.assertEqual(
             self.row("SELECT count(*) FROM memoriesql.model_usage_events"), (2,)
         )
