@@ -1548,7 +1548,7 @@
       "classification": "public_authored",
       "license": "Apache-2.0",
       "public_path": "scripts/prove_release_installation.py",
-      "public_sha256": "bae1fadcc339b9ab11e42f5c5fbdac238af51f51274b5ac2579314bc6a062ca8",
+      "public_sha256": "b4efcdd62c74cc0a4461c7f4f111122720e43a27fa7f18e6971a541f9492469a",
       "reason": "Public 0.0.7 release verification or evidence; no private export."
     },
     {

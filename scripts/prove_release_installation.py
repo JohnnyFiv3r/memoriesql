@@ -80,7 +80,7 @@ def main() -> None:
             {
                 "version": installed.version,
                 "migrations": len(migrations),
-                "contracts": 58,
+                "contracts": len(tuple(iter_contracts())),
                 "source_stable_materialization": True,
                 "database_or_provider_access": False,
             }
