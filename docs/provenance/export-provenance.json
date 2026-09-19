@@ -939,7 +939,7 @@
       "classification": "approved_migration_substrate",
       "license": "Apache-2.0",
       "public_path": "tests/migrations/test_installed_migrations.py",
-      "public_sha256": "50e908bb1d21ac48c8fd86ec426bb7266458410a38c5abcdd40545f9aef388b2",
+      "public_sha256": "8e6cf65851f72d620e54ad08678c2ce1e27ffb1c78f66be9eff382faa52bb736",
       "reason": "Public-owned N1 inventory; audited copy/adapt details in migration-extraction.json where applicable."
     },
     {
@@ -1016,7 +1016,7 @@
       "classification": "public-authored",
       "license": "Apache-2.0",
       "public_path": "tests/runtime/test_runtime_ownership.py",
-      "public_sha256": "a8ea76510358c43d0bcba7925fd37f6432f03fe40c7ca1099738d7397ec0d3e2",
+      "public_sha256": "0c8e5452cd708792997172061c57e6284ed4864fb10b56d09613cee59cd70aaf",
       "reason": "Installed runtime origin and frozen contract parity checks."
     },
     {
