@@ -683,7 +683,7 @@
       "classification": "proposed_open_core",
       "license": "Apache-2.0",
       "public_path": "tests/unit/test_contract_catalog_preview.py",
-      "public_sha256": "2b7596b36627bdb6cfdcf72dbdc0f132fe350561ef4cb16b3ad08b071dd52d6f",
+      "public_sha256": "64bea41a400364b3f11ab522b3cd65716fefe3cf60f772cb2be71852926f7be2",
       "reason": "Reviewed packaging-spike input ported or adapted for the public bootstrap.",
       "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
       "reviewed_spike_source_sha256": "a9d5f267ab2313fa87a37191f0c0c6aba36469ebe1dbe8bc3942b88e03d5e989"
@@ -939,7 +939,7 @@
       "classification": "approved_migration_substrate",
       "license": "Apache-2.0",
       "public_path": "tests/migrations/test_installed_migrations.py",
-      "public_sha256": "a4084b0c4ea5650ea01ad6984e06d75a9282b11fbb6e49492cc97a03355683ed",
+      "public_sha256": "da5f631629271ab5e6afa93b108110e1554e825e52c851f145bfaaadedad8e6a",
       "reason": "Public-owned N1 inventory; audited copy/adapt details in migration-extraction.json where applicable."
     },
     {
