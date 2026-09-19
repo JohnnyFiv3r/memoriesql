@@ -380,6 +380,162 @@ class BeadClassification(fixtures.LocalMentions):
             (5, True),
         )
 
+    def test_exhausted_shared_request_budget_prevents_classifier_dispatch(self) -> None:
+        self.setup_classification()
+
+        def author(messages: Any, info: Any) -> Any:
+            if len(self.steps) < 11:
+                return self.step(messages, info, "continue")
+            return self.response(messages, info)
+
+        result = asyncio.run(self.worker(author).run_once())
+        self.assertEqual(result.result_status, "budget_exhausted", result)
+        self.assertEqual(self.classifier_calls, 0)
+        self.assertEqual(
+            self.row("SELECT count(*) FROM memoriesql.model_provider_request_intents"),
+            (12,),
+        )
+        self.assertEqual(
+            self.row("SELECT count(*) FROM memoriesql.model_usage_events"), (12,)
+        )
+        self.assert_no_meaning()
+
+    def test_primary_reread_remains_distinct_from_classifier_exposure(self) -> None:
+        self.setup_classification()
+
+        def author(messages: Any, info: Any) -> Any:
+            if not self.steps:
+                return self.step(messages, info, "read", self.selection(limit=67))
+            self.assertEqual(self.steps[0]["forward_delivery_complete"], True)
+            return self.response(messages, info)
+
+        result = asyncio.run(self.worker(author).run_once())
+        self.assertEqual(result.task_status, "succeeded", result)
+        self.assertEqual(
+            self.row(
+                "SELECT sum(end_character-start_character) FROM memoriesql.complete_input_exposures"
+            ),
+            (67,),
+        )
+        self.assertEqual(
+            self.row(
+                "SELECT sum(delivered_units) FROM memoriesql.complete_input_dispatch_receipts"
+            ),
+            (201,),
+        )
+        self.assertEqual(
+            self.row("SELECT count(*) FROM memoriesql.model_usage_events"), (3,)
+        )
+
+    def test_classifier_late_usage_and_cleanup_after_caller_cancellation(self) -> None:
+        from memoriesql.infrastructure.jobs.integrated_semantic_worker import (
+            SemanticWorkerConfig,
+        )
+
+        self.setup_classification()
+        original = self.classify
+
+        async def scenario() -> None:
+            started = asyncio.Event()
+            release = asyncio.Event()
+
+            async def slow(messages: Any, info: Any) -> Any:
+                started.set()
+                while not release.is_set():
+                    try:
+                        await release.wait()
+                    except asyncio.CancelledError:
+                        continue
+                return original(messages, info)
+
+            self.classify = slow  # type: ignore[method-assign]
+            worker = self.worker()
+            worker._config = SemanticWorkerConfig(
+                cancellation_return_timeout_seconds=0.01,
+                heartbeat_interval_seconds=0.1,
+                cancellation_poll_interval_seconds=0.01,
+            )
+            foreground = asyncio.create_task(worker.run_once())
+            try:
+                await asyncio.wait_for(started.wait(), 5)
+                foreground.cancel()
+                with self.assertRaises(asyncio.CancelledError):
+                    await foreground
+                self.assertTrue(worker.cleanup_pending)
+                self.assertEqual(
+                    (await worker.run_once()).cycle_status, "cleanup_pending"
+                )
+            finally:
+                release.set()
+            settled = await asyncio.wait_for(worker.wait_for_cleanup(), 5)
+            self.assertEqual(settled.task_status if settled else None, "cancelled")
+            self.assertFalse(worker.cleanup_pending)
+
+        asyncio.run(scenario())
+        self.assertEqual(
+            self.row("SELECT count(*) FROM memoriesql.model_usage_events"), (2,)
+        )
+        self.assertEqual(
+            self.row(
+                "SELECT count(*) FROM memoriesql.semantic_task_runs WHERE settled"
+            ),
+            (2,),
+        )
+        self.assert_no_meaning()
+
+    def test_owned_classifier_receipt_drains_after_caller_cancellation(self) -> None:
+        import threading
+        from unittest.mock import patch
+
+        from memoriesql.infrastructure.jobs.integrated_semantic_worker import (
+            SemanticWorkerConfig,
+        )
+        from memoriesql.infrastructure.postgres.complete_input_execution import (
+            PostgresCompleteInput,
+        )
+
+        self.setup_classification()
+        started = threading.Event()
+        release = threading.Event()
+        original = PostgresCompleteInput._call
+
+        def blocked(port: Any, query: str, parameters: Any, **kwargs: Any) -> Any:
+            if "record_classification_v1" in query:
+                started.set()
+                if not release.wait(10):
+                    raise AssertionError("fictional classifier receipt gate timed out")
+            return original(port, query, parameters, **kwargs)
+
+        async def scenario() -> None:
+            worker = self.worker()
+            worker._config = SemanticWorkerConfig(
+                cancellation_return_timeout_seconds=0.01,
+                heartbeat_interval_seconds=0.1,
+                cancellation_poll_interval_seconds=0.01,
+            )
+            foreground = asyncio.create_task(worker.run_once())
+            try:
+                self.assertTrue(await asyncio.to_thread(started.wait, 5))
+                foreground.cancel()
+                with self.assertRaises(asyncio.CancelledError):
+                    await foreground
+                self.assertTrue(worker.cleanup_pending)
+                self.assertEqual(
+                    (await worker.run_once()).cycle_status, "cleanup_pending"
+                )
+            finally:
+                release.set()
+            settled = await worker.wait_for_cleanup()
+            self.assertEqual(settled.task_status if settled else None, "cancelled")
+            self.assertFalse(worker.cleanup_pending)
+
+        with patch.object(PostgresCompleteInput, "_call", blocked):
+            asyncio.run(scenario())
+        self.assertEqual(
+            self.row("SELECT count(*) FROM memoriesql.model_usage_events"), (2,)
+        )
+        self.assert_no_meaning()
+
     def test_forged_contribution_rolls_back_and_exact_replay_is_stable(self) -> None:
         import copy
         import hashlib
