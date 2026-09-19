@@ -939,7 +939,7 @@
       "classification": "approved_migration_substrate",
       "license": "Apache-2.0",
       "public_path": "tests/migrations/test_installed_migrations.py",
-      "public_sha256": "8e6cf65851f72d620e54ad08678c2ce1e27ffb1c78f66be9eff382faa52bb736",
+      "public_sha256": "a4084b0c4ea5650ea01ad6984e06d75a9282b11fbb6e49492cc97a03355683ed",
       "reason": "Public-owned N1 inventory; audited copy/adapt details in migration-extraction.json where applicable."
     },
     {
@@ -1016,7 +1016,7 @@
       "classification": "public-authored",
       "license": "Apache-2.0",
       "public_path": "tests/runtime/test_runtime_ownership.py",
-      "public_sha256": "0c8e5452cd708792997172061c57e6284ed4864fb10b56d09613cee59cd70aaf",
+      "public_sha256": "10d22fb43dbc6af280c528ef1281ce917a10cf4e598580b8f09d253fe02c739f",
       "reason": "Installed runtime origin and frozen contract parity checks."
     },
     {
@@ -1639,7 +1639,7 @@
       "classification": "public_authored",
       "license": "Apache-2.0",
       "public_path": "tests/runtime/test_bead_classification.py",
-      "public_sha256": "9c16221e34331f59c6791ae1e7433eccb339b3520c2b5193a8934be8c2652d4e",
+      "public_sha256": "3d395d9679446219e90f64c48cda68cc0ef03a72c6d89c1a8a4390666b567cb1",
       "reason": "Explicit owner-authorized provider-neutral classified authorship forward slice."
     }
   ],
