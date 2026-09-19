@@ -939,7 +939,7 @@
       "classification": "approved_migration_substrate",
       "license": "Apache-2.0",
       "public_path": "tests/migrations/test_installed_migrations.py",
-      "public_sha256": "e21526ab2979e384817042d7bb8f88572236f363f1845fd8208af2c5f54900ea",
+      "public_sha256": "3e46f6bfd9c153b570ab7d49868d280688d42ed2f7a690def24ae82b56f93ff2",
       "reason": "Public-owned N1 inventory; audited copy/adapt details in migration-extraction.json where applicable."
     },
     {
