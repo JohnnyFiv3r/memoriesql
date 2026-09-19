@@ -103,7 +103,7 @@
       "base_public_sha256": "128ed9d1f283b82f82ab9bddc706286d10783a43a467f235c180998e4e398c0e",
       "disposition": "adapt",
       "public_path": "src/memoriesql/infrastructure/postgres/migration_runner.py",
-      "public_sha256": "45ef4d5c9440d4931f1eb7ce4f0a9c0a4a13650a39e49bc8e7665f0139bc0d11",
+      "public_sha256": "eeb2e2933a653402eb0355435bc884712e387a07477148a8e9d8a057ddd2486b",
       "reason": "Explicit schema-22 resource closure; preserve historical migration bytes.",
       "source_sha256": "10841bd32cad98d969faf588c5eeff862a4b1dabefc12a4390f72341567c6b22"
     },
@@ -161,6 +161,13 @@
       "public_path": "migrations/0022_authored_local_entity_mentions.sql",
       "public_sha256": "b36d52732c5da9df3046defb031e925ec8bfdee5e8b25c9541c6d6f61c2abe97",
       "reason": "Public-authored forward local mention acceptance; historical migrations unchanged."
+    },
+    {
+      "disposition": "adapt",
+      "public_path": "migrations/0023_attributable_bead_classification.sql",
+      "public_sha256": "d03c4f3cff8278d7b3a8ed7d5c372e4a0f08e029acd7a506045003906e2bd3ec",
+      "reason": "Explicit public-authored provider-neutral classification acceptance transition.",
+      "source_sha256": "282516c7ea3502fe79240746b9e0f8c47c73d273625e496989b0e17dbf555ff0"
     }
   ],
   "scope": "Canonical migration substrate only",

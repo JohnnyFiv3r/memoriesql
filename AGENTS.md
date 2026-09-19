@@ -23,3 +23,9 @@ bounded real-model admission and schema-22 atomic authored local mentions. These
 are unreleased forward changes, not replacement 0.0.7 release artifacts. Preserve
 the published SQL/contract bytes and the existing publication gates. Version
 selection, merge, tag, release and private consumption remain separately gated.
+
+The owner-authorized forward schema-23 slice adds provider-neutral typed bead
+classification and one attributable accepted contribution. P owns canonical
+writes and fixtures; Q owns authorized stored-result reads. Preserve historical
+migrations 0001–0022 and records; no provider-specific integration or release is
+part of this public slice. See `docs/bead-classification.md`.

@@ -38,6 +38,22 @@ from pydantic_ai.models.wrapper import WrapperModel
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import RunUsage, UsageLimits
 
+from memoriesql.application.bead_classification import (
+    CLASSIFIER_INPUT,
+    CLASSIFIER_KEY,
+    CLASSIFIER_OUTPUT,
+    CLASSIFIER_PROFILE,
+    BeadTypePin,
+    ClassificationAuthorStep,
+    ClassificationContribution,
+    ClassificationDecision,
+    ClassificationEvidenceReference,
+    ClassificationExecutionInput,
+    ClassificationPacket,
+    ClassificationRecorder,
+    ClassifiedExecutionOutput,
+    digest,
+)
 from memoriesql.application.complete_input_execution import (
     CompleteExecutionInput,
     CompleteInputError,
@@ -84,6 +100,7 @@ from memoriesql.application.semantic_task_contracts import (
     SemanticTaskResult,
     UsageSummary,
     ValidationResult,
+    canonical_json_bytes,
     canonical_sha256,
     retry_class_for_status,
 )
@@ -418,6 +435,8 @@ class _TreeState:
     complete_window: EvidenceExecutionWindow | None = None
     source_delivery: SourceDelivery | None = None
     delivered_source_units: int = 0
+    classification_packet: ClassificationPacket | None = None
+    classification_request: tuple[UUID, str] | None = None
     usage_recorder_failed: bool = False
     synchronized_usage: UsageSummary | None = None
     root_correlation: SemanticRootRunCorrelation | None = None
@@ -553,7 +572,7 @@ class _DispatchGuardedModel(WrapperModel):
         await state.require_dispatch_open()
         exposed_window: EvidenceExecutionWindow | None = None
         source_delivery: SourceDelivery | None = None
-        if isinstance(state.task.task_input, RevisitingExecutionInput):
+        if isinstance(state.task.task_input, RevisitingExecutionInput) and self._run_deps.parent_run_id is None:
             if (
                 state.deps.source_revisiting is None
                 or state.deps.source_delivery_recorder is None
@@ -632,6 +651,19 @@ class _DispatchGuardedModel(WrapperModel):
                     "complete_input.exposure_mismatch",
                     "actual dispatch substituted evidence",
                 )
+        classification_packet = None
+        if self._run_deps.binding.agent_key == CLASSIFIER_KEY:
+            classification_packet = state.classification_packet
+            if classification_packet is None or state.classification_request is not None:
+                raise EvidenceGuardError("classification.dispatch_invalid", "exactly one classification dispatch required")
+            supplied = [p.content for m in messages if isinstance(m, ModelRequest)
+                        for p in m.parts if isinstance(p, UserPromptPart)]
+            if len(supplied) != 1 or not isinstance(supplied[0], str) or ClassificationPacket.model_validate_json(supplied[0]) != classification_packet:
+                raise EvidenceGuardError("classification.packet_mismatch", "actual classifier packet differs")
+            delivered = sum(len(e.content) if e.content is not None else len(bytes.fromhex(e.bytes_hex or "")) for e in classification_packet.evidence)
+            if state.delivered_source_units + delivered > DELIVERY_UNITS:
+                raise CompleteInputError(SemanticResultStatus.BUDGET_EXHAUSTED, "classification.delivery_budget")
+            state.delivered_source_units += delivered
         sequence = await state.next_provider_request_sequence()
         request_id = uuid4()
         authorization = state.deps.authorization
@@ -708,6 +740,14 @@ class _DispatchGuardedModel(WrapperModel):
             assert state.deps.source_revisiting is not None
             await state.deps.source_revisiting.authorize_delivery(source_delivery)
             await state.require_dispatch_open()
+        if classification_packet is not None:
+            assert state.deps.source_revisiting is not None
+            for evidence in classification_packet.evidence:
+                await state.deps.source_revisiting.authorize_delivery(SourceDelivery(
+                    task_id=classification_packet.task_id, attempt_id=classification_packet.attempt_id,
+                    package=cast(ClassificationExecutionInput, state.task.task_input).payload.package, read=evidence))
+            await state.require_dispatch_open()
+            state.classification_request = (request_id, intent.request_payload_hash)
         try:
             response = await self.wrapped.request(
                 messages,
@@ -1208,6 +1248,12 @@ class PydanticAISemanticExecutor:
             binding = self.agent_registry.leaf(definition.leaf_agent_key)
             self._validate_leaf_binding(binding)
             self._validate_task_binding(binding, task)
+            if isinstance(task.task_input, ClassificationExecutionInput):
+                classifier = self.agent_registry.leaf(CLASSIFIER_KEY)
+                self._validate_leaf_binding(classifier)
+                if classifier.input_contract != CLASSIFIER_INPUT.reference or classifier.output_contract != CLASSIFIER_OUTPUT.reference or classifier.profile_by_effort.get("standard") != CLASSIFIER_PROFILE:
+                    raise RuntimeContractError("classification.binding_invalid", "exact registered specialist binding required")
+                self.model_profiles.resolve(CLASSIFIER_PROFILE)
             reference = binding.profile_by_effort.get(task.effective_effort.key)
             if reference is None:
                 raise RuntimeContractError(
@@ -1491,7 +1537,20 @@ class PydanticAISemanticExecutor:
                         },
                     )
 
-                if isinstance(state.task.task_input, RevisitingExecutionInput):
+                if binding.agent_key == CLASSIFIER_KEY:
+                    result = await invoke(prompt, ClassificationDecision)
+                    decision = ClassificationDecision.model_validate(result.output)
+                    packet = state.classification_packet
+                    receipt = state.classification_request
+                    recorder = state.deps.source_delivery_recorder
+                    if packet is None or receipt is None or not isinstance(recorder, ClassificationRecorder):
+                        raise EvidenceGuardError("classification.attestation_missing", "trusted classifier receipt required")
+                    pins = {BeadTypePin(key=d.key, revision=d.revision).model_dump_json() for d in packet.vocabulary}
+                    if (decision.selected_type is not None and decision.selected_type.model_dump_json() not in pins) or any(not isinstance(d.type, str) and d.type.model_dump_json() not in pins for d in decision.distribution):
+                        raise RuntimeContractError("classification.unregistered_label", "classifier may not invent vocabulary")
+                    await recorder.record_classification(request_id=receipt[0], request_payload_hash=receipt[1], packet=packet, decision=decision)
+                    result_output = AuthoredSemanticOutput[BaseModel](typed_output=decision, used_evidence_refs=tuple(allowed_evidence_refs))
+                elif isinstance(state.task.task_input, RevisitingExecutionInput):
                     access = state.deps.source_revisiting
                     if access is None or state.deps.source_delivery_recorder is None:
                         raise EvidenceGuardError(
@@ -1529,7 +1588,9 @@ class PydanticAISemanticExecutor:
                             ensure_ascii=True,
                             separators=(",", ":"),
                         )
-                        step_type = (MentionAuthorStep if isinstance(
+                        step_type = (ClassificationAuthorStep if isinstance(
+                            state.task.task_input, ClassificationExecutionInput
+                        ) else MentionAuthorStep if isinstance(
                             state.task.task_input, MentionExecutionInput
                         ) else SourceAuthorStep)
                         result = await invoke(current_prompt, step_type)
@@ -1537,8 +1598,13 @@ class PydanticAISemanticExecutor:
                         notes = step.notes
                         if step.action == "finish":
                             assert step.typed_output is not None
+                            final_output: BaseModel = step.typed_output
+                            if isinstance(step, ClassificationAuthorStep):
+                                if not forward_complete:
+                                    raise EvidenceGuardError("classification.primary_incomplete", "primary must finish all mandatory exposure before classification")
+                                final_output = await self._classify_proposal(run_deps, step)
                             authored_step = AuthoredSemanticOutput[BaseModel](
-                                typed_output=step.typed_output,
+                                typed_output=final_output,
                                 used_evidence_refs=step.used_evidence_refs,
                             )
                             break
@@ -1705,6 +1771,49 @@ class PydanticAISemanticExecutor:
                 "runtime.evidence_not_visible",
                 ", ".join(sorted(not_visible)),
             )
+
+    async def _classify_proposal(self, parent: _AgentRunDeps, step: ClassificationAuthorStep) -> ClassifiedExecutionOutput:
+        state = parent.state
+        task_input = cast(ClassificationExecutionInput, state.task.task_input)
+        access = state.deps.source_revisiting
+        if access is None or not isinstance(state.deps.source_delivery_recorder, ClassificationRecorder):
+            raise EvidenceGuardError("classification.unavailable", "trusted classifier composition required")
+        assert step.typed_output is not None
+        # Author-selected exact intervals, including material qualifications.
+        # The trusted SQL recorder also checks actual primary exposure.
+        evidence = tuple([await access.revisit(selection) for selection in step.supporting_selections])
+        packet = ClassificationPacket(task_id=UUID(task_input.task_id), attempt_id=UUID(state.deps.attempt_id),
+            author_run_id=parent.run_id, proposal=step.typed_output,
+            vocabulary=task_input.payload.classification_vocabulary, evidence=evidence)
+        await state.reserve_delegate()
+        binding = self.agent_registry.leaf(CLASSIFIER_KEY)
+        child_id = self._run_id_factory("delegate")
+        delegation_id = f"{child_id}.delegation"
+        correlation = SemanticDelegatedRunCorrelation(run_id=child_id, parent_run_id=parent.run_id,
+            agent_contract=SemanticAgentContractIdentity(agent_key=CLASSIFIER_KEY, input_contract=binding.input_contract, output_contract=binding.output_contract),
+            model_profile=CLASSIFIER_PROFILE, delegation_id=delegation_id)
+        await self._emit(state, SemanticRunEventKind.DELEGATION_STARTED, correlation)
+        state.open_delegations += 1
+        state.delegations_closed.clear()
+        state.classification_packet = packet
+        try:
+            async with state.delegate_semaphore:
+                result = await self._run_registered_agent(state, binding, run_role="delegate", parent_run_id=parent.run_id,
+                    prompt=packet.model_dump_json(), allowed_evidence_refs=parent.allowed_evidence_refs,
+                    initially_visible_evidence_refs=parent.allowed_evidence_refs,
+                    model_profile=self.model_profiles.resolve(CLASSIFIER_PROFILE), run_id=child_id, delegation_id=delegation_id)
+        finally:
+            await self._emit_delegation_finished(state, correlation)
+        decision = ClassificationDecision.model_validate(result.typed_output)
+        bead = step.typed_output.annotations[0]
+        if decision.outcome != "selected" or decision.proposal_alignment != "consistent" or decision.selected_type != BeadTypePin(key=bead.bead_type_key, revision=bead.bead_type_revision):
+            raise CompleteInputError(SemanticResultStatus.INVALID_OUTPUT, "classification.non_acceptance")
+        assert state.classification_request is not None
+        contribution = ClassificationContribution(request_id=state.classification_request[0], model_run_ref=child_id,
+            author_run_ref=parent.run_id, packet_sha256=digest(packet), proposal_sha256=digest(step.typed_output),
+            vocabulary_sha256=hashlib.sha256(canonical_json_bytes([d.model_dump(mode="json") for d in packet.vocabulary])).hexdigest(),
+            evidence=tuple(ClassificationEvidenceReference(selection=e.request, sha256=e.sha256) for e in evidence), decision=decision)
+        return ClassifiedExecutionOutput(annotations=step.typed_output.annotations, classification=contribution)
 
     async def _delegate(
         self,

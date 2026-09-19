@@ -11,6 +11,12 @@ from psycopg import Connection
 from psycopg.pq import TransactionStatus
 from psycopg.types.json import Jsonb
 
+from memoriesql.application.bead_classification import (
+    ActivateClassifiedAuthorship,
+    ClassificationActivationReceipt,
+    ClassificationDecision,
+    ClassificationPacket,
+)
 from memoriesql.application.complete_input_execution import (
     READER_RESPONSE_BYTES,
     ActivateCompleteInput,
@@ -39,6 +45,11 @@ class PostgresCompleteInput:
         self.connection = connection
         self.credential = credential_sha256
         self.workspace = workspace_id
+
+    def activate_classified(self, request: ActivateClassifiedAuthorship) -> ClassificationActivationReceipt:
+        return ClassificationActivationReceipt.model_validate(self._call(
+            "SELECT memoriesql.activate_complete_input_v4(%s)",
+            (Jsonb(request.model_dump(mode="json")),), role="memoriesql_application"))
 
     def activate_mentions(
         self, request: ActivateMentionAuthorship
@@ -130,6 +141,26 @@ class PostgresEvidenceExposureRecorder:
         self.connection_factory = connection_factory
         self.credential = credential_sha256
         self.workspace = workspace_id
+
+    async def record_classification(self, *, request_id: UUID, request_payload_hash: str,
+                                    packet: ClassificationPacket, decision: ClassificationDecision) -> None:
+        def write() -> None:
+            with self.connection_factory() as connection:
+                PostgresCompleteInput(connection, credential_sha256=self.credential,
+                    workspace_id=self.workspace)._call(
+                    "SELECT memoriesql.record_classification_v1(%s,%s,%s,%s)",
+                    (request_id,request_payload_hash,Jsonb(packet.model_dump(mode="json")),Jsonb(decision.model_dump(mode="json"))),
+                    role="memoriesql_worker")
+        operation = asyncio.create_task(asyncio.to_thread(write))
+        cancelled: asyncio.CancelledError | None = None
+        while True:
+            try:
+                await asyncio.shield(operation)
+                break
+            except asyncio.CancelledError as error:
+                cancelled = error
+        if cancelled is not None:
+            raise cancelled
 
     async def record_delivery(
         self, *, request_id: UUID, request_payload_hash: str, delivery: SourceDelivery

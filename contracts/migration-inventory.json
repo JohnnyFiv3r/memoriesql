@@ -89,6 +89,10 @@
     {
       "filename": "0022_authored_local_entity_mentions.sql",
       "sha256": "b36d52732c5da9df3046defb031e925ec8bfdee5e8b25c9541c6d6f61c2abe97"
+    },
+    {
+      "filename": "0023_attributable_bead_classification.sql",
+      "sha256": "d03c4f3cff8278d7b3a8ed7d5c372e4a0f08e029acd7a506045003906e2bd3ec"
     }
   ]
 }

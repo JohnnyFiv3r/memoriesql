@@ -24,7 +24,7 @@
     },
     {
       "disposition": "include",
-      "expected_record_count": 51,
+      "expected_record_count": 52,
       "filename": "json-schema.json",
       "kind": "json_schema",
       "note": "Provider-neutral capture, host, source-range, transcript-fold, and harness-lifecycle schemas."
@@ -61,6 +61,17 @@
   "compatibility": "experimental_0_x_no_general_compatibility_guarantee",
   "default_policy": "deny",
   "records": [
+    {
+      "canonical_payload_sha256": "9dfc99fc4bd22dc84aa25f39efe7ca48b8fa4c7cd7b17dfa88d135aa48f8bf4b",
+      "catalog": "json_schema",
+      "classification": "proposed_open_core",
+      "id": "memoriesql.bead-classification.v1",
+      "package_disposition": "include",
+      "path": "contracts/records/memoriesql-bead-classification-v1.json",
+      "public_sha256": "5296ecccae12a0122f25a7abde5d1df3596d7b243175a0207c775441e439196b",
+      "reason": "Explicit owner-authorized provider-neutral classification contribution and canonical acceptance; no provider binding.",
+      "version": "1"
+    },
     {
       "catalog": "json_schema",
       "classification": "proposed_open_core",

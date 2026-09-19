@@ -136,6 +136,7 @@ class SourceRevisiting(CompleteInputExecution):
             fake_task["contract_revision"] = 2
             fake_task["payload"] = dict(fake_task["payload"])
             fake_task["payload"].pop("authorized_context")
+            fake_task["payload"].pop("classification_vocabulary", None)
             fake_task["payload"]["required_execution"] = (
                 "trusted_complete_input_exposure_v1"
             )

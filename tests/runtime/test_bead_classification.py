@@ -1,0 +1,479 @@
+"""Fictional two-contributor acceptance; no provider transport or owner data."""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import unittest
+import uuid
+from typing import TYPE_CHECKING, Any, cast
+
+from pydantic_ai.messages import ModelResponse, ToolCallPart
+from pydantic_ai.models.function import FunctionModel
+from pydantic_ai.usage import RequestUsage
+
+from memoriesql.application.bead_classification import (
+    CLASSIFICATION_TASK,
+    CLASSIFIER_AGENT,
+    CLASSIFIER_INPUT,
+    CLASSIFIER_KEY,
+    CLASSIFIER_OUTPUT,
+    CLASSIFIER_PROFILE,
+    ActivateClassifiedAuthorship,
+    BeadTypePin,
+    load_classification_task_registry,
+)
+from memoriesql.application.semantic_task_contracts import AgentContract
+from memoriesql.infrastructure.models.pydanticai_executor import (
+    CHARACTERIZED_TEST_REQUEST_TARGET,
+    LeafAgentSpec,
+    ModelProfileBinding,
+    PydanticAIAgentRegistry,
+    PydanticAIModelProfileRegistry,
+    PydanticAISemanticExecutor,
+)
+from memoriesql.infrastructure.postgres.migration_runner import migrate
+
+if TYPE_CHECKING:
+    from tests.runtime import test_local_entity_mentions as fixtures
+    from tests.runtime import test_source_revisiting as source_fixtures
+else:
+    import test_local_entity_mentions as fixtures
+    import test_source_revisiting as source_fixtures
+
+
+class BeadClassification(fixtures.LocalMentions):
+    def setUp(self) -> None:
+        super().setUp()
+        migrate(self.db, expected_current_version=22, target_version=23)
+        old = self.dispatch_policy
+        self.dispatch_policy = uuid.uuid4()
+        self.db.execute(
+            "INSERT INTO memoriesql.complete_input_dispatch_policies SELECT tenant_id,%s,workspace_id,access_scope_id,source_object_id,attestor_principal_id,approved_by_principal_id,qualification_evidence_sha256,created_at,expires_at,status,5 FROM memoriesql.complete_input_dispatch_policies WHERE dispatch_policy_id=%s",
+            (self.dispatch_policy, old),
+        )
+        self.db.execute(
+            "INSERT INTO memoriesql.semantic_worker_claim_policies SELECT c.tenant_id,c.workspace_id,c.principal_id,c.pairing_grant_id,p.semantic_registry_hash,p.task_kind,p.contract_revision,p.queue_name FROM memoriesql.semantic_worker_claim_policies c JOIN memoriesql.semantic_task_admission_policies p ON p.task_kind=c.task_kind AND p.contract_revision=5 WHERE c.principal_id=%s AND c.contract_revision=4",
+            (self.worker_principal,),
+        )
+        self.outcome = "selected"
+        self.label = "observation"
+        self.alignment = "consistent"
+        self.classifier_calls = 0
+
+    def setup_classification(self) -> None:
+        self.setup_revisiting(
+            "Alex proposed counting four fictional trees; no count has occurred.",
+            activate=False,
+        )
+        self.activation = self.complete.activate_classified(
+            ActivateClassifiedAuthorship(
+                idempotency_key="orchard.classified",
+                binding_task_id=self.bound.task_id,
+                dispatch_policy_id=self.dispatch_policy,
+                classification_vocabulary=(
+                    BeadTypePin(key="observation", revision=1),
+                    BeadTypePin(key="action", revision=1),
+                ),
+            )
+        )
+
+    def response(self, messages: Any, info: Any) -> Any:
+        response = super().response(messages, info)
+        part = cast(ToolCallPart, response.parts[0])
+        data = part.args_as_dict()
+        data["supporting_selections"] = (
+            [self.selection(limit=16384)] if data["action"] == "finish" else []
+        )
+        if data["typed_output"] is not None:
+            bead = data["typed_output"]["annotations"][0]
+            text = "Alex proposed a count; no count has occurred."
+            bead["statements"][0]["statement_text"] = text
+            bead["statements"][0]["model_run_ref"] = "orchard.direct_leaf"
+            bead["render"]["title"]["text"] = text
+            bead["render"]["summary"][0]["text"] = text
+        part.args = data
+        return response
+
+    def classify(self, messages: Any, info: Any) -> Any:
+        self.classifier_calls += 1
+        from pydantic_ai.messages import ModelRequest, UserPromptPart
+
+        packet = json.loads(
+            cast(
+                str,
+                next(
+                    p.content
+                    for m in messages
+                    if isinstance(m, ModelRequest)
+                    for p in m.parts
+                    if isinstance(p, UserPromptPart)
+                ),
+            )
+        )
+        self.assertIn("no count has occurred", packet["evidence"][0]["content"])
+        self.assertTrue(packet["proposal"]["annotations"][0]["statements"])
+        self.assertEqual(packet["vocabulary"][0]["revision"], 1)
+        return ModelResponse(
+            parts=[
+                ToolCallPart(
+                    info.output_tools[0].name,
+                    dict(
+                        contract_version=1,
+                        outcome=self.outcome,
+                        proposal_alignment=self.alignment,
+                        selected_type=dict(key=self.label, revision=1)
+                        if self.outcome == "selected"
+                        else None,
+                        rationale=None,
+                        confidence=0.7,
+                        distribution=[
+                            dict(type=dict(key="observation", revision=1), score=0.7),
+                            dict(type="ambiguous", score=0.3),
+                        ],
+                        alignment_distribution=[
+                            dict(alignment="consistent", score=0.9),
+                            dict(alignment="uncertain", score=0.1),
+                        ],
+                        alignment_confidence=0.8,
+                    ),
+                )
+            ],
+            usage=RequestUsage(input_tokens=31, output_tokens=9),
+        )
+
+    def worker(
+        self, callback: Any = None, *, recorder: Any = True, **kwargs: Any
+    ) -> Any:
+        from unittest.mock import patch
+
+        # Reuse O's worker/identity/cleanup composition, substituting typed registries only.
+        original = PydanticAISemanticExecutor
+        owner = self
+
+        def executor(**kw: Any) -> Any:
+            t = CLASSIFICATION_TASK
+            author = LeafAgentSpec(
+                agent_key=cast(str, t.leaf_agent_key),
+                input_contract=t.input_contract.reference,
+                output_contract=t.output_contract.reference,
+                input_model_type=t.input_contract.model_type,
+                output_model_type=t.output_contract.model_type,
+                instructions="Fictional author; preserve qualifiers.",
+                model_profiles=(t.model_profile,),
+            )
+            classifier = LeafAgentSpec(
+                agent_key=CLASSIFIER_KEY,
+                input_contract=CLASSIFIER_INPUT.reference,
+                output_contract=CLASSIFIER_OUTPUT.reference,
+                input_model_type=CLASSIFIER_INPUT.model_type,
+                output_model_type=CLASSIFIER_OUTPUT.model_type,
+                instructions="Classify the exact evidence-backed proposal against supplied definitions; abstain if needed.",
+                model_profiles=(CLASSIFIER_PROFILE,),
+            )
+            kw["agent_registry"] = PydanticAIAgentRegistry(
+                leaf_specs=(author, classifier),
+                conductors=(),
+                agent_contracts=(
+                    AgentContract(
+                        agent_key=cast(str, t.leaf_agent_key),
+                        input_contract=t.input_contract.reference,
+                        output_contract=t.output_contract.reference,
+                        maximum_effort_key="standard",
+                    ),
+                    CLASSIFIER_AGENT,
+                ),
+            )
+            kw["model_profiles"] = PydanticAIModelProfileRegistry(
+                (
+                    ModelProfileBinding(
+                        reference=t.model_profile,
+                        model=FunctionModel(callback or owner.response),
+                        request_target=CHARACTERIZED_TEST_REQUEST_TARGET,
+                    ),
+                    ModelProfileBinding(
+                        reference=CLASSIFIER_PROFILE,
+                        model=FunctionModel(owner.classify),
+                        request_target=CHARACTERIZED_TEST_REQUEST_TARGET,
+                    ),
+                )
+            )
+            kw["run_id_factory"] = lambda role: "orchard." + role
+            return original(**kw)
+
+        fixture_module = source_fixtures
+        with patch.object(fixture_module, "PydanticAISemanticExecutor", executor):
+            return fixture_module.SourceRevisiting.worker(
+                self,
+                callback,
+                recorder=recorder,
+                task_definition=CLASSIFICATION_TASK,
+                registry_factory=load_classification_task_registry,
+            )
+
+    def test_two_attributable_runs_one_immutable_accepted_bundle(self) -> None:
+        self.setup_classification()
+        result = asyncio.run(self.worker().run_once())
+        self.assertEqual(result.task_status, "succeeded", result)
+        self.assertEqual(self.classifier_calls, 1)
+        self.assertEqual(
+            self.row("SELECT count(*) FROM memoriesql.model_provider_request_intents"),
+            (2,),
+        )
+        self.assertEqual(
+            self.row("SELECT count(*) FROM memoriesql.model_usage_events"), (2,)
+        )
+        self.assertEqual(
+            self.row("SELECT count(*) FROM memoriesql.entity_mentions"), (1,)
+        )
+        self.assertEqual(
+            self.row(
+                "SELECT classification_contribution#>>'{decision,outcome}' FROM memoriesql.bead_versions"
+            ),
+            ("selected",),
+        )
+        self.assertEqual(
+            self.row(
+                "SELECT sum(end_character-start_character) FROM memoriesql.complete_input_exposures"
+            ),
+            (67,),
+        )
+        self.assertEqual(
+            self.row(
+                "SELECT count(*) FROM memoriesql.semantic_task_runs WHERE settled"
+            ),
+            (2,),
+        )
+
+    def test_abstention_retains_evidence_without_accepted_meaning(self) -> None:
+        self.outcome = "no_fit"
+        self.setup_classification()
+        result = asyncio.run(self.worker().run_once())
+        self.assertNotEqual(result.task_status, "succeeded", result)
+        self.assert_no_meaning()
+        self.assertEqual(
+            self.row("SELECT count(*) FROM memoriesql.model_usage_events"), (2,)
+        )
+        self.assertEqual(
+            self.row(
+                "SELECT selection#>>'{decision,outcome}' FROM memoriesql.complete_input_dispatch_receipts WHERE delivery_version=3"
+            ),
+            ("no_fit",),
+        )
+
+    def test_disagreement_cannot_relabel_authored_proposal(self) -> None:
+        self.label = "action"
+        self.setup_classification()
+        result = asyncio.run(self.worker().run_once())
+        self.assertNotEqual(result.task_status, "succeeded", result)
+        self.assert_no_meaning()
+
+    def test_missing_primary_attestation_cannot_be_replaced_by_classifier(self) -> None:
+        self.setup_classification()
+
+        class NoPrimary:
+            async def record_delivery(self, **kw: Any) -> None:
+                pass
+
+            async def record_classification(self, **kw: Any) -> None:
+                pass
+
+        result = asyncio.run(self.worker(recorder=NoPrimary()).run_once())
+        self.assertNotEqual(result.task_status, "succeeded", result)
+        self.assert_no_meaning()
+
+    def test_conflicting_rationale_with_same_label_is_not_accepted(self) -> None:
+        self.alignment = "conflicting"
+        self.setup_classification()
+        result = asyncio.run(self.worker().run_once())
+        self.assertNotEqual(result.task_status, "succeeded", result)
+        self.assertEqual(self.classifier_calls, 1)
+        self.assert_no_meaning()
+
+    def test_insufficient_and_ambiguous_are_explicit_non_acceptance(self) -> None:
+        self.outcome = "insufficient_evidence"
+        self.setup_classification()
+        result = asyncio.run(self.worker().run_once())
+        self.assertNotEqual(result.task_status, "succeeded", result)
+        self.assertEqual(
+            self.row(
+                "SELECT selection#>>'{decision,outcome}' FROM memoriesql.complete_input_dispatch_receipts WHERE delivery_version=3"
+            ),
+            (self.outcome,),
+        )
+        self.assert_no_meaning()
+
+    def test_ambiguous_is_explicit_non_acceptance(self) -> None:
+        self.outcome = "ambiguous"
+        self.setup_classification()
+        result = asyncio.run(self.worker().run_once())
+        self.assertNotEqual(result.task_status, "succeeded", result)
+        self.assertEqual(
+            self.row(
+                "SELECT selection#>>'{decision,outcome}' FROM memoriesql.complete_input_dispatch_receipts WHERE delivery_version=3"
+            ),
+            (self.outcome,),
+        )
+        self.assert_no_meaning()
+
+    def test_unregistered_classifier_label_is_rejected(self) -> None:
+        self.label = "invented"
+        self.setup_classification()
+        result = asyncio.run(self.worker().run_once())
+        self.assertNotEqual(result.task_status, "succeeded", result)
+        self.assert_no_meaning()
+        self.assertEqual(
+            self.row("SELECT count(*) FROM memoriesql.model_usage_events"), (2,)
+        )
+
+    def test_classifier_failure_keeps_retained_source_and_usage(self) -> None:
+        self.setup_classification()
+
+        def failed(*args: Any) -> Any:
+            raise RuntimeError("fictional classifier unavailable")
+
+        self.classify = failed  # type: ignore[method-assign, assignment]
+        result = asyncio.run(self.worker().run_once())
+        self.assertNotEqual(result.task_status, "succeeded", result)
+        self.assert_no_meaning()
+        self.assertEqual(
+            self.row("SELECT count(*) FROM memoriesql.model_usage_events"), (2,)
+        )
+        self.assertEqual(
+            self.row(
+                "SELECT sum(char_length(content)) FROM memoriesql.evidence_package_parts"
+            ),
+            (67,),
+        )
+
+    def test_classifier_revocation_rejects_atomically_and_keeps_usage(self) -> None:
+        self.setup_classification()
+        original = self.classify
+
+        def revoke(*args: Any) -> Any:
+            self.db.execute(
+                "UPDATE memoriesql.evidence_producer_policies SET status='revoked' WHERE producer_policy_id=%s",
+                (self.policy,),
+            )
+            return original(*args)
+
+        self.classify = revoke  # type: ignore[method-assign, assignment]
+        result = asyncio.run(self.worker().run_once())
+        self.assertNotEqual(result.task_status, "succeeded", result)
+        self.assert_no_meaning()
+        self.assertEqual(
+            self.row("SELECT count(*) FROM memoriesql.model_usage_events"), (2,)
+        )
+
+    def test_authored_empty_mentions_and_classification_are_distinct(self) -> None:
+        self.mentions = []
+        self.setup_classification()
+        result = asyncio.run(self.worker().run_once())
+        self.assertEqual(result.task_status, "succeeded", result)
+        self.assertEqual(
+            self.row("SELECT count(*) FROM memoriesql.entity_mentions"), (0,)
+        )
+        self.assertEqual(
+            self.row(
+                "SELECT r.task_contract_version,v.classification_contribution IS NOT NULL FROM memoriesql.bead_versions v JOIN memoriesql.semantic_task_receipts r USING(tenant_id,semantic_task_receipt_id)"
+            ),
+            (5, True),
+        )
+
+    def test_forged_contribution_rolls_back_and_exact_replay_is_stable(self) -> None:
+        import copy
+        import hashlib
+        from unittest.mock import patch
+
+        import psycopg
+        from psycopg.types.json import Jsonb
+
+        from memoriesql.application.bead_classification import ApplyClassifiedAuthorship
+        from memoriesql.application.semantic_task_contracts import canonical_json_bytes
+        from memoriesql.infrastructure.jobs.postgres_semantic_queue import (
+            PostgresSemanticTaskQueue,
+        )
+
+        self.setup_classification()
+        original = PostgresSemanticTaskQueue.record_canonical_result
+        owner = self
+
+        def intercept(queue: Any, fence: Any, result: Any, *, recorded_at: Any) -> str:
+            payload = result.typed_output.model_dump(mode="json")
+            encoded = canonical_json_bytes(payload)
+            command = ApplyClassifiedAuthorship(
+                idempotency_key=f"semantic-apply.{fence.attempt_id}",
+                tenant_id=fence.tenant_id,
+                workspace_id=fence.workspace_id,
+                access_scope_id=fence.access_scope_id,
+                task_id=fence.task_id,
+                attempt_id=fence.attempt_id,
+                lease_generation=fence.lease_generation,
+                output_contract_hash=result.output_contract_hash,
+                semantic_result_hash=hashlib.sha256(encoded).hexdigest(),
+                semantic_payload_canonical_json=encoded.decode(),
+                used_evidence_refs=result.used_evidence_refs,
+                model_run_refs=result.model_run_refs,
+                payload=payload,
+            ).model_dump(mode="json")
+            bad = copy.deepcopy(command)
+            bad["payload"]["classification"]["decision"]["rationale"] = (
+                "Substituted classifier result."
+            )
+            encoded = canonical_json_bytes(bad["payload"])
+            bad.update(
+                semantic_payload_canonical_json=encoded.decode(),
+                semantic_result_hash=hashlib.sha256(encoded).hexdigest(),
+            )
+            with (
+                owner.assertRaisesRegex(
+                    psycopg.Error, "classification_acceptance_required"
+                ),
+                queue._connection.transaction(),
+            ):
+                queue._connection.execute(
+                    "SELECT * FROM memoriesql.apply_semantic_annotations(%s,%s,%s,%s)",
+                    (
+                        Jsonb(bad),
+                        fence.worker_id,
+                        fence.worker_instance_id,
+                        recorded_at,
+                    ),
+                )
+            queue._connection.execute("SET LOCAL ROLE NONE")
+            for table in (
+                "bead_versions",
+                "entity_mentions",
+                "bead_semantic_statements",
+                "semantic_task_receipts",
+            ):
+                owner.assertEqual(
+                    queue._connection.execute(
+                        "SELECT count(*) FROM memoriesql." + table
+                    ).fetchone(),
+                    (0,),
+                )
+            queue._connection.execute("SET LOCAL ROLE memoriesql_worker")
+            status = original(queue, fence, result, recorded_at=recorded_at)
+            owner.assertEqual(
+                original(queue, fence, result, recorded_at=recorded_at), status
+            )
+            return status
+
+        with patch.object(
+            PostgresSemanticTaskQueue, "record_canonical_result", intercept
+        ):
+            result = asyncio.run(self.worker().run_once())
+        self.assertEqual(result.task_status, "succeeded", result)
+        with self.assertRaises(psycopg.Error), self.db.transaction():
+            self.db.execute(
+                "UPDATE memoriesql.bead_versions SET classification_contribution=NULL"
+            )
+
+
+def load_tests(loader: Any, standard_tests: Any, pattern: Any) -> Any:
+    return unittest.TestSuite(
+        BeadClassification(name)
+        for name in BeadClassification.__dict__
+        if name.startswith("test_")
+    )
