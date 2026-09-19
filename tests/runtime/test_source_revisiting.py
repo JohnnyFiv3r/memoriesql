@@ -167,13 +167,14 @@ class SourceRevisiting(CompleteInputExecution):
         return self.step(messages, info)
 
     def worker(
-        self, callback: Any = None, *, recorder: Any = True
+        self, callback: Any = None, *, recorder: Any = True,
+        task_definition: Any = None, registry_factory: Any = None,
     ) -> IntegratedSemanticWorker:
-        task = SOURCE_REVISITING_TASK
+        task = task_definition or SOURCE_REVISITING_TASK
         modules = BuiltInModuleRegistry._from_source_controlled(
             (), (ProfileDefinition("core", ()),), {}
         )
-        registry = load_source_revisiting_task_registry(modules)
+        registry = (registry_factory or load_source_revisiting_task_registry)(modules)
         agents = PydanticAIAgentRegistry(
             leaf_specs=(
                 LeafAgentSpec(

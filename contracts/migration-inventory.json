@@ -85,6 +85,10 @@
     {
       "filename": "0021_source_stable_occurrence_identity.sql",
       "sha256": "deaa78118eda4b48bf7a2a3cd89bb499beea2d94d16f923fd663776b28291d2a"
+    },
+    {
+      "filename": "0022_authored_local_entity_mentions.sql",
+      "sha256": "0a5e493b7a44d02ac69d066460b1afe116f75b5aa7dc626c94ff059792d97986"
     }
   ]
 }

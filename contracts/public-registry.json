@@ -24,7 +24,7 @@
     },
     {
       "disposition": "include",
-      "expected_record_count": 50,
+      "expected_record_count": 51,
       "filename": "json-schema.json",
       "kind": "json_schema",
       "note": "Provider-neutral capture, host, source-range, transcript-fold, and harness-lifecycle schemas."
@@ -405,6 +405,17 @@
       "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
       "reviewed_spike_record_sha256": "44c90789470e410174bfdad84f81d6c96ab63030319b766e45334d95762eed8a",
       "reviewed_spike_source_sha256": "765f8dd3d4b5e594980ba38f6e1ac11f29d3198746299217361e1c56b360cf26",
+      "version": "1"
+    },
+    {
+      "canonical_payload_sha256": "e978152c3494abbfa90dee46c03ef4a04344dbbb74a39fe45292db64f7c786eb",
+      "catalog": "json_schema",
+      "classification": "proposed_open_core",
+      "id": "memoriesql.local-entity-mentions.v1",
+      "package_disposition": "include",
+      "path": "contracts/records/memoriesql-local-entity-mentions-v1.json",
+      "public_sha256": "c8936231544e8e41aab925479f78d1229bc4396a35333581b9547c02df700fba",
+      "reason": "Public-authored immutable local mention persistence and forward revisiting contracts.",
       "version": "1"
     },
     {

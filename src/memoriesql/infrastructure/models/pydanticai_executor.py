@@ -44,6 +44,10 @@ from memoriesql.application.complete_input_execution import (
     EvidenceExecutionWindow,
     InspectionCheckpoint,
 )
+from memoriesql.application.local_entity_mentions import (
+    MentionAuthorStep,
+    MentionExecutionInput,
+)
 from memoriesql.application.model_accounting import (
     AccountingPersistenceError,
     AllowanceState,
@@ -1525,8 +1529,11 @@ class PydanticAISemanticExecutor:
                             ensure_ascii=True,
                             separators=(",", ":"),
                         )
-                        result = await invoke(current_prompt, SourceAuthorStep)
-                        step = SourceAuthorStep.model_validate(result.output)
+                        step_type = (MentionAuthorStep if isinstance(
+                            state.task.task_input, MentionExecutionInput
+                        ) else SourceAuthorStep)
+                        result = await invoke(current_prompt, step_type)
+                        step = step_type.model_validate(result.output)
                         notes = step.notes
                         if step.action == "finish":
                             assert step.typed_output is not None

@@ -11792,6 +11792,3650 @@
     },
     {
       "contract": {
+        "empty_set": "Required mentions array may be empty. Accepted bead version's own task receipt (author-complete-unit revision 4) proves capability; legacy or unavailable results do not imply empty.",
+        "evidence": "Enclosing immutable bead/source unit and original task/package pin; no fabricated character offsets or statement links.",
+        "registry_hash": "semantic-tasks-v1:bac958e312a9c7ff3a33fe90152bb1c807d15c713fa876326fc2d47c9c97e98a",
+        "schemas": {
+          "ActivateMentionAuthorship": {
+            "$defs": {
+              "AuthorizedContextPin": {
+                "additionalProperties": false,
+                "properties": {
+                  "package": {
+                    "$ref": "#/$defs/SealedPackagePin"
+                  },
+                  "source_object_id": {
+                    "format": "uuid",
+                    "title": "Source Object Id",
+                    "type": "string"
+                  },
+                  "source_schema_version": {
+                    "minimum": 1,
+                    "title": "Source Schema Version",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "package",
+                  "source_object_id",
+                  "source_schema_version"
+                ],
+                "title": "AuthorizedContextPin",
+                "type": "object"
+              },
+              "SealedPackagePin": {
+                "additionalProperties": false,
+                "properties": {
+                  "coverage": {
+                    "const": "entire_sealed_inventory",
+                    "default": "entire_sealed_inventory",
+                    "title": "Coverage",
+                    "type": "string"
+                  },
+                  "inventory_sha256": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "title": "Inventory Sha256",
+                    "type": "string"
+                  },
+                  "package_id": {
+                    "format": "uuid",
+                    "title": "Package Id",
+                    "type": "string"
+                  },
+                  "required_characters": {
+                    "maximum": 16777216,
+                    "minimum": 1,
+                    "title": "Required Characters",
+                    "type": "integer"
+                  },
+                  "required_parts": {
+                    "maximum": 256,
+                    "minimum": 1,
+                    "title": "Required Parts",
+                    "type": "integer"
+                  },
+                  "required_utf8_bytes": {
+                    "maximum": 16777216,
+                    "minimum": 1,
+                    "title": "Required Utf8 Bytes",
+                    "type": "integer"
+                  },
+                  "sealed_receipt_id": {
+                    "format": "uuid",
+                    "title": "Sealed Receipt Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "package_id",
+                  "sealed_receipt_id",
+                  "inventory_sha256",
+                  "required_parts",
+                  "required_characters",
+                  "required_utf8_bytes"
+                ],
+                "title": "SealedPackagePin",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "authorized_context": {
+                "default": [],
+                "items": {
+                  "$ref": "#/$defs/AuthorizedContextPin"
+                },
+                "maxItems": 4,
+                "title": "Authorized Context",
+                "type": "array"
+              },
+              "binding_task_id": {
+                "format": "uuid",
+                "title": "Binding Task Id",
+                "type": "string"
+              },
+              "contract_version": {
+                "const": 3,
+                "default": 3,
+                "title": "Contract Version",
+                "type": "integer"
+              },
+              "dispatch_policy_id": {
+                "format": "uuid",
+                "title": "Dispatch Policy Id",
+                "type": "string"
+              },
+              "expected_schema_version": {
+                "const": 22,
+                "default": 22,
+                "title": "Expected Schema Version",
+                "type": "integer"
+              },
+              "idempotency_key": {
+                "maxLength": 512,
+                "minLength": 1,
+                "title": "Idempotency Key",
+                "type": "string"
+              }
+            },
+            "required": [
+              "idempotency_key",
+              "binding_task_id",
+              "dispatch_policy_id"
+            ],
+            "title": "ActivateMentionAuthorship",
+            "type": "object"
+          },
+          "ApplyLocalMentions": {
+            "$defs": {
+              "AuthoredBeadRender": {
+                "additionalProperties": false,
+                "properties": {
+                  "detail": {
+                    "default": [],
+                    "items": {
+                      "$ref": "#/$defs/AuthoredRenderClause"
+                    },
+                    "maxItems": 8,
+                    "title": "Detail",
+                    "type": "array"
+                  },
+                  "omissions": {
+                    "default": [],
+                    "items": {
+                      "$ref": "#/$defs/AuthoredRenderOmission"
+                    },
+                    "maxItems": 64,
+                    "title": "Omissions",
+                    "type": "array"
+                  },
+                  "summary": {
+                    "items": {
+                      "$ref": "#/$defs/AuthoredRenderClause"
+                    },
+                    "maxItems": 3,
+                    "minItems": 1,
+                    "title": "Summary",
+                    "type": "array"
+                  },
+                  "title": {
+                    "$ref": "#/$defs/AuthoredRenderClause"
+                  }
+                },
+                "required": [
+                  "title",
+                  "summary"
+                ],
+                "title": "AuthoredBeadRender",
+                "type": "object"
+              },
+              "AuthoredRenderClause": {
+                "additionalProperties": false,
+                "properties": {
+                  "statement_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "maxItems": 64,
+                    "minItems": 1,
+                    "title": "Statement Ids",
+                    "type": "array"
+                  },
+                  "text": {
+                    "maxLength": 2048,
+                    "minLength": 1,
+                    "title": "Text",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "text",
+                  "statement_ids"
+                ],
+                "title": "AuthoredRenderClause",
+                "type": "object"
+              },
+              "AuthoredRenderOmission": {
+                "additionalProperties": false,
+                "properties": {
+                  "reason": {
+                    "maxLength": 512,
+                    "minLength": 1,
+                    "title": "Reason",
+                    "type": "string"
+                  },
+                  "statement_id": {
+                    "format": "uuid",
+                    "title": "Statement Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "statement_id",
+                  "reason"
+                ],
+                "title": "AuthoredRenderOmission",
+                "type": "object"
+              },
+              "LocalEntityMention": {
+                "additionalProperties": false,
+                "properties": {
+                  "entity_mention_id": {
+                    "format": "uuid",
+                    "title": "Entity Mention Id",
+                    "type": "string"
+                  },
+                  "local_identity_reason": {
+                    "anyOf": [
+                      {
+                        "maxLength": 1024,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Local Identity Reason"
+                  },
+                  "local_identity_state": {
+                    "enum": [
+                      "unresolved",
+                      "ambiguous"
+                    ],
+                    "title": "Local Identity State",
+                    "type": "string"
+                  },
+                  "surface_text": {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "title": "Surface Text",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "entity_mention_id",
+                  "surface_text",
+                  "local_identity_state"
+                ],
+                "title": "LocalEntityMention",
+                "type": "object"
+              },
+              "MentionBeadDraft": {
+                "additionalProperties": false,
+                "properties": {
+                  "bead_id": {
+                    "format": "uuid",
+                    "title": "Bead Id",
+                    "type": "string"
+                  },
+                  "bead_type_key": {
+                    "pattern": "^[a-z][a-z0-9_]*$",
+                    "title": "Bead Type Key",
+                    "type": "string"
+                  },
+                  "bead_type_revision": {
+                    "minimum": 1,
+                    "title": "Bead Type Revision",
+                    "type": "integer"
+                  },
+                  "bead_version_id": {
+                    "format": "uuid",
+                    "title": "Bead Version Id",
+                    "type": "string"
+                  },
+                  "event_id": {
+                    "format": "uuid",
+                    "title": "Event Id",
+                    "type": "string"
+                  },
+                  "expected_bead_version": {
+                    "const": 0,
+                    "default": 0,
+                    "title": "Expected Bead Version",
+                    "type": "integer"
+                  },
+                  "mentions": {
+                    "items": {
+                      "$ref": "#/$defs/LocalEntityMention"
+                    },
+                    "maxItems": 32,
+                    "title": "Mentions",
+                    "type": "array"
+                  },
+                  "render": {
+                    "$ref": "#/$defs/AuthoredBeadRender"
+                  },
+                  "source_unit_id": {
+                    "format": "uuid",
+                    "title": "Source Unit Id",
+                    "type": "string"
+                  },
+                  "statements": {
+                    "items": {
+                      "$ref": "#/$defs/SemanticStatementDraft"
+                    },
+                    "maxItems": 64,
+                    "minItems": 1,
+                    "title": "Statements",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "bead_id",
+                  "event_id",
+                  "source_unit_id",
+                  "bead_version_id",
+                  "bead_type_key",
+                  "bead_type_revision",
+                  "statements",
+                  "render",
+                  "mentions"
+                ],
+                "title": "MentionBeadDraft",
+                "type": "object"
+              },
+              "MentionExecutionOutput": {
+                "additionalProperties": false,
+                "properties": {
+                  "annotations": {
+                    "items": {
+                      "$ref": "#/$defs/MentionBeadDraft"
+                    },
+                    "maxItems": 1,
+                    "minItems": 1,
+                    "title": "Annotations",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "annotations"
+                ],
+                "title": "MentionExecutionOutput",
+                "type": "object"
+              },
+              "SemanticStatementDraft": {
+                "additionalProperties": false,
+                "properties": {
+                  "context_source_ids": {
+                    "default": [],
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "title": "Context Source Ids",
+                    "type": "array"
+                  },
+                  "correction_reason": {
+                    "anyOf": [
+                      {
+                        "maxLength": 1024,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Correction Reason"
+                  },
+                  "evidence": {
+                    "items": {
+                      "$ref": "#/$defs/StatementEvidence"
+                    },
+                    "maxItems": 64,
+                    "minItems": 1,
+                    "title": "Evidence",
+                    "type": "array"
+                  },
+                  "model_run_ref": {
+                    "maxLength": 128,
+                    "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                    "title": "Model Run Ref",
+                    "type": "string"
+                  },
+                  "statement_id": {
+                    "format": "uuid",
+                    "title": "Statement Id",
+                    "type": "string"
+                  },
+                  "statement_kind": {
+                    "$ref": "#/$defs/StatementKind"
+                  },
+                  "statement_text": {
+                    "maxLength": 8192,
+                    "minLength": 1,
+                    "title": "Statement Text",
+                    "type": "string"
+                  },
+                  "supersedes_statement_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Supersedes Statement Id"
+                  }
+                },
+                "required": [
+                  "statement_id",
+                  "statement_kind",
+                  "statement_text",
+                  "evidence",
+                  "model_run_ref"
+                ],
+                "title": "SemanticStatementDraft",
+                "type": "object"
+              },
+              "StatementEvidence": {
+                "additionalProperties": false,
+                "properties": {
+                  "content_hash": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "title": "Content Hash",
+                    "type": "string"
+                  },
+                  "source_unit_id": {
+                    "format": "uuid",
+                    "title": "Source Unit Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "source_unit_id",
+                  "content_hash"
+                ],
+                "title": "StatementEvidence",
+                "type": "object"
+              },
+              "StatementKind": {
+                "enum": [
+                  "observation",
+                  "context",
+                  "qualification",
+                  "correction"
+                ],
+                "title": "StatementKind",
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "access_scope_id": {
+                "format": "uuid",
+                "title": "Access Scope Id",
+                "type": "string"
+              },
+              "attempt_id": {
+                "format": "uuid",
+                "title": "Attempt Id",
+                "type": "string"
+              },
+              "contract_revision": {
+                "const": 4,
+                "default": 4,
+                "title": "Contract Revision",
+                "type": "integer"
+              },
+              "contract_version": {
+                "const": 5,
+                "default": 5,
+                "title": "Contract Version",
+                "type": "integer"
+              },
+              "expected_schema_version": {
+                "const": 22,
+                "default": 22,
+                "title": "Expected Schema Version",
+                "type": "integer"
+              },
+              "idempotency_key": {
+                "maxLength": 512,
+                "minLength": 1,
+                "title": "Idempotency Key",
+                "type": "string"
+              },
+              "lease_generation": {
+                "minimum": 1,
+                "title": "Lease Generation",
+                "type": "integer"
+              },
+              "model_run_refs": {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 1,
+                "minItems": 1,
+                "title": "Model Run Refs",
+                "type": "array"
+              },
+              "output_contract_hash": {
+                "pattern": "^[a-f0-9]{64}$",
+                "title": "Output Contract Hash",
+                "type": "string"
+              },
+              "payload": {
+                "$ref": "#/$defs/MentionExecutionOutput"
+              },
+              "semantic_payload_canonical_json": {
+                "maxLength": 12000,
+                "minLength": 2,
+                "title": "Semantic Payload Canonical Json",
+                "type": "string"
+              },
+              "semantic_result_hash": {
+                "pattern": "^[a-f0-9]{64}$",
+                "title": "Semantic Result Hash",
+                "type": "string"
+              },
+              "task_id": {
+                "format": "uuid",
+                "title": "Task Id",
+                "type": "string"
+              },
+              "task_kind": {
+                "const": "memory.semantic.author-complete-unit",
+                "default": "memory.semantic.author-complete-unit",
+                "title": "Task Kind",
+                "type": "string"
+              },
+              "tenant_id": {
+                "format": "uuid",
+                "title": "Tenant Id",
+                "type": "string"
+              },
+              "used_evidence_refs": {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 1,
+                "minItems": 1,
+                "title": "Used Evidence Refs",
+                "type": "array"
+              },
+              "workspace_id": {
+                "format": "uuid",
+                "title": "Workspace Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "idempotency_key",
+              "tenant_id",
+              "workspace_id",
+              "access_scope_id",
+              "task_id",
+              "attempt_id",
+              "lease_generation",
+              "output_contract_hash",
+              "semantic_result_hash",
+              "semantic_payload_canonical_json",
+              "used_evidence_refs",
+              "model_run_refs",
+              "payload"
+            ],
+            "title": "ApplyLocalMentions",
+            "type": "object"
+          },
+          "LocalEntityMention": {
+            "additionalProperties": false,
+            "properties": {
+              "entity_mention_id": {
+                "format": "uuid",
+                "title": "Entity Mention Id",
+                "type": "string"
+              },
+              "local_identity_reason": {
+                "anyOf": [
+                  {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Local Identity Reason"
+              },
+              "local_identity_state": {
+                "enum": [
+                  "unresolved",
+                  "ambiguous"
+                ],
+                "title": "Local Identity State",
+                "type": "string"
+              },
+              "surface_text": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "title": "Surface Text",
+                "type": "string"
+              }
+            },
+            "required": [
+              "entity_mention_id",
+              "surface_text",
+              "local_identity_state"
+            ],
+            "title": "LocalEntityMention",
+            "type": "object"
+          },
+          "MentionActivationReceipt": {
+            "$defs": {
+              "AuthorizedContextPin": {
+                "additionalProperties": false,
+                "properties": {
+                  "package": {
+                    "$ref": "#/$defs/SealedPackagePin"
+                  },
+                  "source_object_id": {
+                    "format": "uuid",
+                    "title": "Source Object Id",
+                    "type": "string"
+                  },
+                  "source_schema_version": {
+                    "minimum": 1,
+                    "title": "Source Schema Version",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "package",
+                  "source_object_id",
+                  "source_schema_version"
+                ],
+                "title": "AuthorizedContextPin",
+                "type": "object"
+              },
+              "SealedPackagePin": {
+                "additionalProperties": false,
+                "properties": {
+                  "coverage": {
+                    "const": "entire_sealed_inventory",
+                    "default": "entire_sealed_inventory",
+                    "title": "Coverage",
+                    "type": "string"
+                  },
+                  "inventory_sha256": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "title": "Inventory Sha256",
+                    "type": "string"
+                  },
+                  "package_id": {
+                    "format": "uuid",
+                    "title": "Package Id",
+                    "type": "string"
+                  },
+                  "required_characters": {
+                    "maximum": 16777216,
+                    "minimum": 1,
+                    "title": "Required Characters",
+                    "type": "integer"
+                  },
+                  "required_parts": {
+                    "maximum": 256,
+                    "minimum": 1,
+                    "title": "Required Parts",
+                    "type": "integer"
+                  },
+                  "required_utf8_bytes": {
+                    "maximum": 16777216,
+                    "minimum": 1,
+                    "title": "Required Utf8 Bytes",
+                    "type": "integer"
+                  },
+                  "sealed_receipt_id": {
+                    "format": "uuid",
+                    "title": "Sealed Receipt Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "package_id",
+                  "sealed_receipt_id",
+                  "inventory_sha256",
+                  "required_parts",
+                  "required_characters",
+                  "required_utf8_bytes"
+                ],
+                "title": "SealedPackagePin",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "authorized_context": {
+                "items": {
+                  "$ref": "#/$defs/AuthorizedContextPin"
+                },
+                "title": "Authorized Context",
+                "type": "array"
+              },
+              "binding_task_id": {
+                "format": "uuid",
+                "title": "Binding Task Id",
+                "type": "string"
+              },
+              "contract_version": {
+                "const": 3,
+                "default": 3,
+                "title": "Contract Version",
+                "type": "integer"
+              },
+              "enqueue_receipt_id": {
+                "format": "uuid",
+                "title": "Enqueue Receipt Id",
+                "type": "string"
+              },
+              "execution_task_id": {
+                "format": "uuid",
+                "title": "Execution Task Id",
+                "type": "string"
+              },
+              "idempotency_receipt_id": {
+                "format": "uuid",
+                "title": "Idempotency Receipt Id",
+                "type": "string"
+              },
+              "package": {
+                "$ref": "#/$defs/SealedPackagePin"
+              },
+              "replayed": {
+                "title": "Replayed",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "binding_task_id",
+              "execution_task_id",
+              "idempotency_receipt_id",
+              "enqueue_receipt_id",
+              "package",
+              "authorized_context",
+              "replayed"
+            ],
+            "title": "MentionActivationReceipt",
+            "type": "object"
+          },
+          "MentionAuthorStep": {
+            "$defs": {
+              "AuthoredBeadRender": {
+                "additionalProperties": false,
+                "properties": {
+                  "detail": {
+                    "default": [],
+                    "items": {
+                      "$ref": "#/$defs/AuthoredRenderClause"
+                    },
+                    "maxItems": 8,
+                    "title": "Detail",
+                    "type": "array"
+                  },
+                  "omissions": {
+                    "default": [],
+                    "items": {
+                      "$ref": "#/$defs/AuthoredRenderOmission"
+                    },
+                    "maxItems": 64,
+                    "title": "Omissions",
+                    "type": "array"
+                  },
+                  "summary": {
+                    "items": {
+                      "$ref": "#/$defs/AuthoredRenderClause"
+                    },
+                    "maxItems": 3,
+                    "minItems": 1,
+                    "title": "Summary",
+                    "type": "array"
+                  },
+                  "title": {
+                    "$ref": "#/$defs/AuthoredRenderClause"
+                  }
+                },
+                "required": [
+                  "title",
+                  "summary"
+                ],
+                "title": "AuthoredBeadRender",
+                "type": "object"
+              },
+              "AuthoredRenderClause": {
+                "additionalProperties": false,
+                "properties": {
+                  "statement_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "maxItems": 64,
+                    "minItems": 1,
+                    "title": "Statement Ids",
+                    "type": "array"
+                  },
+                  "text": {
+                    "maxLength": 2048,
+                    "minLength": 1,
+                    "title": "Text",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "text",
+                  "statement_ids"
+                ],
+                "title": "AuthoredRenderClause",
+                "type": "object"
+              },
+              "AuthoredRenderOmission": {
+                "additionalProperties": false,
+                "properties": {
+                  "reason": {
+                    "maxLength": 512,
+                    "minLength": 1,
+                    "title": "Reason",
+                    "type": "string"
+                  },
+                  "statement_id": {
+                    "format": "uuid",
+                    "title": "Statement Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "statement_id",
+                  "reason"
+                ],
+                "title": "AuthoredRenderOmission",
+                "type": "object"
+              },
+              "LocalEntityMention": {
+                "additionalProperties": false,
+                "properties": {
+                  "entity_mention_id": {
+                    "format": "uuid",
+                    "title": "Entity Mention Id",
+                    "type": "string"
+                  },
+                  "local_identity_reason": {
+                    "anyOf": [
+                      {
+                        "maxLength": 1024,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Local Identity Reason"
+                  },
+                  "local_identity_state": {
+                    "enum": [
+                      "unresolved",
+                      "ambiguous"
+                    ],
+                    "title": "Local Identity State",
+                    "type": "string"
+                  },
+                  "surface_text": {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "title": "Surface Text",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "entity_mention_id",
+                  "surface_text",
+                  "local_identity_state"
+                ],
+                "title": "LocalEntityMention",
+                "type": "object"
+              },
+              "MentionBeadDraft": {
+                "additionalProperties": false,
+                "properties": {
+                  "bead_id": {
+                    "format": "uuid",
+                    "title": "Bead Id",
+                    "type": "string"
+                  },
+                  "bead_type_key": {
+                    "pattern": "^[a-z][a-z0-9_]*$",
+                    "title": "Bead Type Key",
+                    "type": "string"
+                  },
+                  "bead_type_revision": {
+                    "minimum": 1,
+                    "title": "Bead Type Revision",
+                    "type": "integer"
+                  },
+                  "bead_version_id": {
+                    "format": "uuid",
+                    "title": "Bead Version Id",
+                    "type": "string"
+                  },
+                  "event_id": {
+                    "format": "uuid",
+                    "title": "Event Id",
+                    "type": "string"
+                  },
+                  "expected_bead_version": {
+                    "const": 0,
+                    "default": 0,
+                    "title": "Expected Bead Version",
+                    "type": "integer"
+                  },
+                  "mentions": {
+                    "items": {
+                      "$ref": "#/$defs/LocalEntityMention"
+                    },
+                    "maxItems": 32,
+                    "title": "Mentions",
+                    "type": "array"
+                  },
+                  "render": {
+                    "$ref": "#/$defs/AuthoredBeadRender"
+                  },
+                  "source_unit_id": {
+                    "format": "uuid",
+                    "title": "Source Unit Id",
+                    "type": "string"
+                  },
+                  "statements": {
+                    "items": {
+                      "$ref": "#/$defs/SemanticStatementDraft"
+                    },
+                    "maxItems": 64,
+                    "minItems": 1,
+                    "title": "Statements",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "bead_id",
+                  "event_id",
+                  "source_unit_id",
+                  "bead_version_id",
+                  "bead_type_key",
+                  "bead_type_revision",
+                  "statements",
+                  "render",
+                  "mentions"
+                ],
+                "title": "MentionBeadDraft",
+                "type": "object"
+              },
+              "MentionExecutionOutput": {
+                "additionalProperties": false,
+                "properties": {
+                  "annotations": {
+                    "items": {
+                      "$ref": "#/$defs/MentionBeadDraft"
+                    },
+                    "maxItems": 1,
+                    "minItems": 1,
+                    "title": "Annotations",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "annotations"
+                ],
+                "title": "MentionExecutionOutput",
+                "type": "object"
+              },
+              "ReadSourceEvidence": {
+                "additionalProperties": false,
+                "description": "Ordinal identifies retained storage, never an invented semantic unit.",
+                "properties": {
+                  "inventory_sha256": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "title": "Inventory Sha256",
+                    "type": "string"
+                  },
+                  "limit": {
+                    "default": 16384,
+                    "maximum": 32768,
+                    "minimum": 1,
+                    "title": "Limit",
+                    "type": "integer"
+                  },
+                  "lineage_ordinal": {
+                    "anyOf": [
+                      {
+                        "exclusiveMaximum": 16,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Lineage Ordinal"
+                  },
+                  "offset": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Offset",
+                    "type": "integer"
+                  },
+                  "package_id": {
+                    "format": "uuid",
+                    "title": "Package Id",
+                    "type": "string"
+                  },
+                  "part_ordinal": {
+                    "exclusiveMaximum": 256,
+                    "minimum": 0,
+                    "title": "Part Ordinal",
+                    "type": "integer"
+                  },
+                  "representation": {
+                    "default": "normalized",
+                    "enum": [
+                      "normalized",
+                      "raw"
+                    ],
+                    "title": "Representation",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "package_id",
+                  "inventory_sha256",
+                  "part_ordinal"
+                ],
+                "title": "ReadSourceEvidence",
+                "type": "object"
+              },
+              "SemanticStatementDraft": {
+                "additionalProperties": false,
+                "properties": {
+                  "context_source_ids": {
+                    "default": [],
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "title": "Context Source Ids",
+                    "type": "array"
+                  },
+                  "correction_reason": {
+                    "anyOf": [
+                      {
+                        "maxLength": 1024,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Correction Reason"
+                  },
+                  "evidence": {
+                    "items": {
+                      "$ref": "#/$defs/StatementEvidence"
+                    },
+                    "maxItems": 64,
+                    "minItems": 1,
+                    "title": "Evidence",
+                    "type": "array"
+                  },
+                  "model_run_ref": {
+                    "maxLength": 128,
+                    "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                    "title": "Model Run Ref",
+                    "type": "string"
+                  },
+                  "statement_id": {
+                    "format": "uuid",
+                    "title": "Statement Id",
+                    "type": "string"
+                  },
+                  "statement_kind": {
+                    "$ref": "#/$defs/StatementKind"
+                  },
+                  "statement_text": {
+                    "maxLength": 8192,
+                    "minLength": 1,
+                    "title": "Statement Text",
+                    "type": "string"
+                  },
+                  "supersedes_statement_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Supersedes Statement Id"
+                  }
+                },
+                "required": [
+                  "statement_id",
+                  "statement_kind",
+                  "statement_text",
+                  "evidence",
+                  "model_run_ref"
+                ],
+                "title": "SemanticStatementDraft",
+                "type": "object"
+              },
+              "StatementEvidence": {
+                "additionalProperties": false,
+                "properties": {
+                  "content_hash": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "title": "Content Hash",
+                    "type": "string"
+                  },
+                  "source_unit_id": {
+                    "format": "uuid",
+                    "title": "Source Unit Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "source_unit_id",
+                  "content_hash"
+                ],
+                "title": "StatementEvidence",
+                "type": "object"
+              },
+              "StatementKind": {
+                "enum": [
+                  "observation",
+                  "context",
+                  "qualification",
+                  "correction"
+                ],
+                "title": "StatementKind",
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "action": {
+                "enum": [
+                  "next",
+                  "read",
+                  "continue",
+                  "finish",
+                  "incomplete"
+                ],
+                "title": "Action",
+                "type": "string"
+              },
+              "notes": {
+                "default": "",
+                "maxLength": 4096,
+                "title": "Notes",
+                "type": "string"
+              },
+              "read": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ReadSourceEvidence"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "typed_output": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/MentionExecutionOutput"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "used_evidence_refs": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "title": "Used Evidence Refs",
+                "type": "array"
+              }
+            },
+            "required": [
+              "action"
+            ],
+            "title": "MentionAuthorStep",
+            "type": "object"
+          },
+          "MentionBeadDraft": {
+            "$defs": {
+              "AuthoredBeadRender": {
+                "additionalProperties": false,
+                "properties": {
+                  "detail": {
+                    "default": [],
+                    "items": {
+                      "$ref": "#/$defs/AuthoredRenderClause"
+                    },
+                    "maxItems": 8,
+                    "title": "Detail",
+                    "type": "array"
+                  },
+                  "omissions": {
+                    "default": [],
+                    "items": {
+                      "$ref": "#/$defs/AuthoredRenderOmission"
+                    },
+                    "maxItems": 64,
+                    "title": "Omissions",
+                    "type": "array"
+                  },
+                  "summary": {
+                    "items": {
+                      "$ref": "#/$defs/AuthoredRenderClause"
+                    },
+                    "maxItems": 3,
+                    "minItems": 1,
+                    "title": "Summary",
+                    "type": "array"
+                  },
+                  "title": {
+                    "$ref": "#/$defs/AuthoredRenderClause"
+                  }
+                },
+                "required": [
+                  "title",
+                  "summary"
+                ],
+                "title": "AuthoredBeadRender",
+                "type": "object"
+              },
+              "AuthoredRenderClause": {
+                "additionalProperties": false,
+                "properties": {
+                  "statement_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "maxItems": 64,
+                    "minItems": 1,
+                    "title": "Statement Ids",
+                    "type": "array"
+                  },
+                  "text": {
+                    "maxLength": 2048,
+                    "minLength": 1,
+                    "title": "Text",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "text",
+                  "statement_ids"
+                ],
+                "title": "AuthoredRenderClause",
+                "type": "object"
+              },
+              "AuthoredRenderOmission": {
+                "additionalProperties": false,
+                "properties": {
+                  "reason": {
+                    "maxLength": 512,
+                    "minLength": 1,
+                    "title": "Reason",
+                    "type": "string"
+                  },
+                  "statement_id": {
+                    "format": "uuid",
+                    "title": "Statement Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "statement_id",
+                  "reason"
+                ],
+                "title": "AuthoredRenderOmission",
+                "type": "object"
+              },
+              "LocalEntityMention": {
+                "additionalProperties": false,
+                "properties": {
+                  "entity_mention_id": {
+                    "format": "uuid",
+                    "title": "Entity Mention Id",
+                    "type": "string"
+                  },
+                  "local_identity_reason": {
+                    "anyOf": [
+                      {
+                        "maxLength": 1024,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Local Identity Reason"
+                  },
+                  "local_identity_state": {
+                    "enum": [
+                      "unresolved",
+                      "ambiguous"
+                    ],
+                    "title": "Local Identity State",
+                    "type": "string"
+                  },
+                  "surface_text": {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "title": "Surface Text",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "entity_mention_id",
+                  "surface_text",
+                  "local_identity_state"
+                ],
+                "title": "LocalEntityMention",
+                "type": "object"
+              },
+              "SemanticStatementDraft": {
+                "additionalProperties": false,
+                "properties": {
+                  "context_source_ids": {
+                    "default": [],
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "title": "Context Source Ids",
+                    "type": "array"
+                  },
+                  "correction_reason": {
+                    "anyOf": [
+                      {
+                        "maxLength": 1024,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Correction Reason"
+                  },
+                  "evidence": {
+                    "items": {
+                      "$ref": "#/$defs/StatementEvidence"
+                    },
+                    "maxItems": 64,
+                    "minItems": 1,
+                    "title": "Evidence",
+                    "type": "array"
+                  },
+                  "model_run_ref": {
+                    "maxLength": 128,
+                    "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                    "title": "Model Run Ref",
+                    "type": "string"
+                  },
+                  "statement_id": {
+                    "format": "uuid",
+                    "title": "Statement Id",
+                    "type": "string"
+                  },
+                  "statement_kind": {
+                    "$ref": "#/$defs/StatementKind"
+                  },
+                  "statement_text": {
+                    "maxLength": 8192,
+                    "minLength": 1,
+                    "title": "Statement Text",
+                    "type": "string"
+                  },
+                  "supersedes_statement_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Supersedes Statement Id"
+                  }
+                },
+                "required": [
+                  "statement_id",
+                  "statement_kind",
+                  "statement_text",
+                  "evidence",
+                  "model_run_ref"
+                ],
+                "title": "SemanticStatementDraft",
+                "type": "object"
+              },
+              "StatementEvidence": {
+                "additionalProperties": false,
+                "properties": {
+                  "content_hash": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "title": "Content Hash",
+                    "type": "string"
+                  },
+                  "source_unit_id": {
+                    "format": "uuid",
+                    "title": "Source Unit Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "source_unit_id",
+                  "content_hash"
+                ],
+                "title": "StatementEvidence",
+                "type": "object"
+              },
+              "StatementKind": {
+                "enum": [
+                  "observation",
+                  "context",
+                  "qualification",
+                  "correction"
+                ],
+                "title": "StatementKind",
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "bead_id": {
+                "format": "uuid",
+                "title": "Bead Id",
+                "type": "string"
+              },
+              "bead_type_key": {
+                "pattern": "^[a-z][a-z0-9_]*$",
+                "title": "Bead Type Key",
+                "type": "string"
+              },
+              "bead_type_revision": {
+                "minimum": 1,
+                "title": "Bead Type Revision",
+                "type": "integer"
+              },
+              "bead_version_id": {
+                "format": "uuid",
+                "title": "Bead Version Id",
+                "type": "string"
+              },
+              "event_id": {
+                "format": "uuid",
+                "title": "Event Id",
+                "type": "string"
+              },
+              "expected_bead_version": {
+                "const": 0,
+                "default": 0,
+                "title": "Expected Bead Version",
+                "type": "integer"
+              },
+              "mentions": {
+                "items": {
+                  "$ref": "#/$defs/LocalEntityMention"
+                },
+                "maxItems": 32,
+                "title": "Mentions",
+                "type": "array"
+              },
+              "render": {
+                "$ref": "#/$defs/AuthoredBeadRender"
+              },
+              "source_unit_id": {
+                "format": "uuid",
+                "title": "Source Unit Id",
+                "type": "string"
+              },
+              "statements": {
+                "items": {
+                  "$ref": "#/$defs/SemanticStatementDraft"
+                },
+                "maxItems": 64,
+                "minItems": 1,
+                "title": "Statements",
+                "type": "array"
+              }
+            },
+            "required": [
+              "bead_id",
+              "event_id",
+              "source_unit_id",
+              "bead_version_id",
+              "bead_type_key",
+              "bead_type_revision",
+              "statements",
+              "render",
+              "mentions"
+            ],
+            "title": "MentionBeadDraft",
+            "type": "object"
+          },
+          "MentionExecutionInput": {
+            "$defs": {
+              "AuthorizedContextPin": {
+                "additionalProperties": false,
+                "properties": {
+                  "package": {
+                    "$ref": "#/$defs/SealedPackagePin"
+                  },
+                  "source_object_id": {
+                    "format": "uuid",
+                    "title": "Source Object Id",
+                    "type": "string"
+                  },
+                  "source_schema_version": {
+                    "minimum": 1,
+                    "title": "Source Schema Version",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "package",
+                  "source_object_id",
+                  "source_schema_version"
+                ],
+                "title": "AuthorizedContextPin",
+                "type": "object"
+              },
+              "EvidenceManifest": {
+                "additionalProperties": false,
+                "properties": {
+                  "manifest_id": {
+                    "minLength": 1,
+                    "title": "Manifest Id",
+                    "type": "string"
+                  },
+                  "references": {
+                    "items": {
+                      "$ref": "#/$defs/EvidenceReference"
+                    },
+                    "title": "References",
+                    "type": "array"
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "manifest_id",
+                  "revision",
+                  "references"
+                ],
+                "title": "EvidenceManifest",
+                "type": "object"
+              },
+              "EvidenceReference": {
+                "additionalProperties": false,
+                "properties": {
+                  "content_hash": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "title": "Content Hash",
+                    "type": "string"
+                  },
+                  "declared_characters": {
+                    "minimum": 0,
+                    "title": "Declared Characters",
+                    "type": "integer"
+                  },
+                  "reference_id": {
+                    "minLength": 1,
+                    "title": "Reference Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "reference_id",
+                  "content_hash",
+                  "declared_characters"
+                ],
+                "title": "EvidenceReference",
+                "type": "object"
+              },
+              "LogicalEventDeclaration": {
+                "additionalProperties": false,
+                "description": "Producer-asserted genuine event identity, not a batching window.",
+                "properties": {
+                  "event_key": {
+                    "maxLength": 256,
+                    "minLength": 1,
+                    "title": "Event Key",
+                    "type": "string"
+                  },
+                  "expected_units": {
+                    "anyOf": [
+                      {
+                        "maximum": 2147483647,
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Expected Units"
+                  },
+                  "identity_basis": {
+                    "enum": [
+                      "native",
+                      "producer_assigned"
+                    ],
+                    "title": "Identity Basis",
+                    "type": "string"
+                  },
+                  "native": {
+                    "$ref": "#/$defs/NativeFacts"
+                  },
+                  "source_type": {
+                    "$ref": "#/$defs/SourceType"
+                  }
+                },
+                "required": [
+                  "event_key",
+                  "identity_basis",
+                  "source_type",
+                  "native"
+                ],
+                "title": "LogicalEventDeclaration",
+                "type": "object"
+              },
+              "NativeFacts": {
+                "additionalProperties": false,
+                "description": "Null means unknown, never a fabricated native identifier.",
+                "properties": {
+                  "branch_native_id": {
+                    "anyOf": [
+                      {
+                        "maxLength": 256,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Branch Native Id"
+                  },
+                  "native_id": {
+                    "anyOf": [
+                      {
+                        "maxLength": 256,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Native Id"
+                  },
+                  "occurred_at": {
+                    "anyOf": [
+                      {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Occurred At"
+                  },
+                  "occurred_at_raw": {
+                    "anyOf": [
+                      {
+                        "maxLength": 256,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Occurred At Raw"
+                  },
+                  "parent_native_id": {
+                    "anyOf": [
+                      {
+                        "maxLength": 256,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Parent Native Id"
+                  },
+                  "participant_native_id": {
+                    "anyOf": [
+                      {
+                        "maxLength": 256,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Participant Native Id"
+                  },
+                  "role": {
+                    "anyOf": [
+                      {
+                        "maxLength": 128,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Role"
+                  },
+                  "session_native_id": {
+                    "anyOf": [
+                      {
+                        "maxLength": 256,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Session Native Id"
+                  },
+                  "source_order": {
+                    "anyOf": [
+                      {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Source Order"
+                  },
+                  "time_precision": {
+                    "anyOf": [
+                      {
+                        "maxLength": 64,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Time Precision"
+                  }
+                },
+                "title": "NativeFacts",
+                "type": "object"
+              },
+              "PackageDeclaration": {
+                "additionalProperties": false,
+                "properties": {
+                  "expected_characters": {
+                    "maximum": 16777216,
+                    "minimum": 1,
+                    "title": "Expected Characters",
+                    "type": "integer"
+                  },
+                  "expected_inventory_sha256": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "title": "Expected Inventory Sha256",
+                    "type": "string"
+                  },
+                  "expected_parts": {
+                    "maximum": 256,
+                    "minimum": 1,
+                    "title": "Expected Parts",
+                    "type": "integer"
+                  },
+                  "expected_utf8_bytes": {
+                    "maximum": 16777216,
+                    "minimum": 1,
+                    "title": "Expected Utf8 Bytes",
+                    "type": "integer"
+                  },
+                  "native": {
+                    "$ref": "#/$defs/NativeFacts"
+                  },
+                  "normalization_policy_version": {
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "title": "Normalization Policy Version",
+                    "type": "string"
+                  },
+                  "occurrence_identity_basis": {
+                    "enum": [
+                      "native",
+                      "producer_assigned"
+                    ],
+                    "title": "Occurrence Identity Basis",
+                    "type": "string"
+                  },
+                  "occurrence_key": {
+                    "maxLength": 256,
+                    "minLength": 1,
+                    "title": "Occurrence Key",
+                    "type": "string"
+                  },
+                  "package_revision": {
+                    "default": 1,
+                    "minimum": 1,
+                    "title": "Package Revision",
+                    "type": "integer"
+                  },
+                  "qualification": {
+                    "$ref": "#/$defs/SourceQualification"
+                  },
+                  "source_object_id": {
+                    "format": "uuid",
+                    "title": "Source Object Id",
+                    "type": "string"
+                  },
+                  "source_revision_key": {
+                    "maxLength": 512,
+                    "minLength": 1,
+                    "title": "Source Revision Key",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "source_object_id",
+                  "source_revision_key",
+                  "occurrence_key",
+                  "occurrence_identity_basis",
+                  "normalization_policy_version",
+                  "native",
+                  "qualification",
+                  "expected_parts",
+                  "expected_characters",
+                  "expected_utf8_bytes",
+                  "expected_inventory_sha256"
+                ],
+                "title": "PackageDeclaration",
+                "type": "object"
+              },
+              "RevisitingPayload": {
+                "additionalProperties": false,
+                "properties": {
+                  "authorized_context": {
+                    "items": {
+                      "$ref": "#/$defs/AuthorizedContextPin"
+                    },
+                    "maxItems": 4,
+                    "title": "Authorized Context",
+                    "type": "array"
+                  },
+                  "bead_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "maxItems": 1,
+                    "minItems": 1,
+                    "title": "Bead Ids",
+                    "type": "array"
+                  },
+                  "binding_task_id": {
+                    "format": "uuid",
+                    "title": "Binding Task Id",
+                    "type": "string"
+                  },
+                  "declaration": {
+                    "$ref": "#/$defs/PackageDeclaration"
+                  },
+                  "dispatch_policy_id": {
+                    "format": "uuid",
+                    "title": "Dispatch Policy Id",
+                    "type": "string"
+                  },
+                  "event_declaration": {
+                    "$ref": "#/$defs/LogicalEventDeclaration"
+                  },
+                  "event_id": {
+                    "format": "uuid",
+                    "title": "Event Id",
+                    "type": "string"
+                  },
+                  "package": {
+                    "$ref": "#/$defs/SealedPackagePin"
+                  },
+                  "parent_resolution": {
+                    "enum": [
+                      "canonical",
+                      "native_identity_only",
+                      "unknown"
+                    ],
+                    "title": "Parent Resolution",
+                    "type": "string"
+                  },
+                  "parent_source_unit_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Parent Source Unit Id"
+                  },
+                  "producer_policy_id": {
+                    "format": "uuid",
+                    "title": "Producer Policy Id",
+                    "type": "string"
+                  },
+                  "required_execution": {
+                    "const": "trusted_source_revisiting_v1",
+                    "default": "trusted_source_revisiting_v1",
+                    "title": "Required Execution",
+                    "type": "string"
+                  },
+                  "source_object_id": {
+                    "format": "uuid",
+                    "title": "Source Object Id",
+                    "type": "string"
+                  },
+                  "source_unit_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "maxItems": 1,
+                    "minItems": 1,
+                    "title": "Source Unit Ids",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "binding_task_id",
+                  "source_object_id",
+                  "event_id",
+                  "source_unit_ids",
+                  "bead_ids",
+                  "package",
+                  "producer_policy_id",
+                  "dispatch_policy_id",
+                  "declaration",
+                  "event_declaration",
+                  "parent_source_unit_id",
+                  "parent_resolution",
+                  "authorized_context"
+                ],
+                "title": "RevisitingPayload",
+                "type": "object"
+              },
+              "SealedPackagePin": {
+                "additionalProperties": false,
+                "properties": {
+                  "coverage": {
+                    "const": "entire_sealed_inventory",
+                    "default": "entire_sealed_inventory",
+                    "title": "Coverage",
+                    "type": "string"
+                  },
+                  "inventory_sha256": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "title": "Inventory Sha256",
+                    "type": "string"
+                  },
+                  "package_id": {
+                    "format": "uuid",
+                    "title": "Package Id",
+                    "type": "string"
+                  },
+                  "required_characters": {
+                    "maximum": 16777216,
+                    "minimum": 1,
+                    "title": "Required Characters",
+                    "type": "integer"
+                  },
+                  "required_parts": {
+                    "maximum": 256,
+                    "minimum": 1,
+                    "title": "Required Parts",
+                    "type": "integer"
+                  },
+                  "required_utf8_bytes": {
+                    "maximum": 16777216,
+                    "minimum": 1,
+                    "title": "Required Utf8 Bytes",
+                    "type": "integer"
+                  },
+                  "sealed_receipt_id": {
+                    "format": "uuid",
+                    "title": "Sealed Receipt Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "package_id",
+                  "sealed_receipt_id",
+                  "inventory_sha256",
+                  "required_parts",
+                  "required_characters",
+                  "required_utf8_bytes"
+                ],
+                "title": "SealedPackagePin",
+                "type": "object"
+              },
+              "SourceQualification": {
+                "additionalProperties": false,
+                "description": "Producer assertions. Core does not qualify source formats or semantics.",
+                "properties": {
+                  "boundary": {
+                    "enum": [
+                      "qualified_native_unit",
+                      "unresolved"
+                    ],
+                    "title": "Boundary",
+                    "type": "string"
+                  },
+                  "boundary_basis": {
+                    "maxLength": 512,
+                    "minLength": 1,
+                    "title": "Boundary Basis",
+                    "type": "string"
+                  },
+                  "exclusions": {
+                    "default": [],
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 16,
+                    "title": "Exclusions",
+                    "type": "array"
+                  },
+                  "normalized_input": {
+                    "enum": [
+                      "complete",
+                      "incomplete"
+                    ],
+                    "title": "Normalized Input",
+                    "type": "string"
+                  },
+                  "physical_records": {
+                    "enum": [
+                      "complete",
+                      "pending_tail"
+                    ],
+                    "title": "Physical Records",
+                    "type": "string"
+                  },
+                  "qualification_ref": {
+                    "maxLength": 256,
+                    "minLength": 1,
+                    "title": "Qualification Ref",
+                    "type": "string"
+                  },
+                  "source_completeness": {
+                    "enum": [
+                      "producer_attested",
+                      "unresolved"
+                    ],
+                    "title": "Source Completeness",
+                    "type": "string"
+                  },
+                  "topology": {
+                    "enum": [
+                      "known",
+                      "partially_known",
+                      "unknown"
+                    ],
+                    "title": "Topology",
+                    "type": "string"
+                  },
+                  "unresolved_coverage": {
+                    "default": [],
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 16,
+                    "title": "Unresolved Coverage",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "qualification_ref",
+                  "boundary",
+                  "boundary_basis",
+                  "physical_records",
+                  "topology",
+                  "normalized_input",
+                  "source_completeness"
+                ],
+                "title": "SourceQualification",
+                "type": "object"
+              },
+              "SourceType": {
+                "enum": [
+                  "transcript",
+                  "document",
+                  "media",
+                  "relational",
+                  "operational"
+                ],
+                "title": "SourceType",
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "contract_revision": {
+                "const": 4,
+                "default": 4,
+                "title": "Contract Revision",
+                "type": "integer"
+              },
+              "evidence_manifest": {
+                "$ref": "#/$defs/EvidenceManifest"
+              },
+              "expected_target_revision": {
+                "const": 0,
+                "default": 0,
+                "title": "Expected Target Revision",
+                "type": "integer"
+              },
+              "payload": {
+                "$ref": "#/$defs/RevisitingPayload"
+              },
+              "requested_budget": {
+                "default": null,
+                "title": "Requested Budget",
+                "type": "null"
+              },
+              "requested_effort_key": {
+                "default": null,
+                "title": "Requested Effort Key",
+                "type": "null"
+              },
+              "target_reference": {
+                "minLength": 1,
+                "title": "Target Reference",
+                "type": "string"
+              },
+              "task_id": {
+                "minLength": 1,
+                "title": "Task Id",
+                "type": "string"
+              },
+              "task_kind": {
+                "const": "memory.semantic.author-complete-unit",
+                "default": "memory.semantic.author-complete-unit",
+                "title": "Task Kind",
+                "type": "string"
+              }
+            },
+            "required": [
+              "task_id",
+              "target_reference",
+              "evidence_manifest",
+              "payload"
+            ],
+            "title": "MentionExecutionInput",
+            "type": "object"
+          },
+          "MentionExecutionOutput": {
+            "$defs": {
+              "AuthoredBeadRender": {
+                "additionalProperties": false,
+                "properties": {
+                  "detail": {
+                    "default": [],
+                    "items": {
+                      "$ref": "#/$defs/AuthoredRenderClause"
+                    },
+                    "maxItems": 8,
+                    "title": "Detail",
+                    "type": "array"
+                  },
+                  "omissions": {
+                    "default": [],
+                    "items": {
+                      "$ref": "#/$defs/AuthoredRenderOmission"
+                    },
+                    "maxItems": 64,
+                    "title": "Omissions",
+                    "type": "array"
+                  },
+                  "summary": {
+                    "items": {
+                      "$ref": "#/$defs/AuthoredRenderClause"
+                    },
+                    "maxItems": 3,
+                    "minItems": 1,
+                    "title": "Summary",
+                    "type": "array"
+                  },
+                  "title": {
+                    "$ref": "#/$defs/AuthoredRenderClause"
+                  }
+                },
+                "required": [
+                  "title",
+                  "summary"
+                ],
+                "title": "AuthoredBeadRender",
+                "type": "object"
+              },
+              "AuthoredRenderClause": {
+                "additionalProperties": false,
+                "properties": {
+                  "statement_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "maxItems": 64,
+                    "minItems": 1,
+                    "title": "Statement Ids",
+                    "type": "array"
+                  },
+                  "text": {
+                    "maxLength": 2048,
+                    "minLength": 1,
+                    "title": "Text",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "text",
+                  "statement_ids"
+                ],
+                "title": "AuthoredRenderClause",
+                "type": "object"
+              },
+              "AuthoredRenderOmission": {
+                "additionalProperties": false,
+                "properties": {
+                  "reason": {
+                    "maxLength": 512,
+                    "minLength": 1,
+                    "title": "Reason",
+                    "type": "string"
+                  },
+                  "statement_id": {
+                    "format": "uuid",
+                    "title": "Statement Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "statement_id",
+                  "reason"
+                ],
+                "title": "AuthoredRenderOmission",
+                "type": "object"
+              },
+              "LocalEntityMention": {
+                "additionalProperties": false,
+                "properties": {
+                  "entity_mention_id": {
+                    "format": "uuid",
+                    "title": "Entity Mention Id",
+                    "type": "string"
+                  },
+                  "local_identity_reason": {
+                    "anyOf": [
+                      {
+                        "maxLength": 1024,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Local Identity Reason"
+                  },
+                  "local_identity_state": {
+                    "enum": [
+                      "unresolved",
+                      "ambiguous"
+                    ],
+                    "title": "Local Identity State",
+                    "type": "string"
+                  },
+                  "surface_text": {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "title": "Surface Text",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "entity_mention_id",
+                  "surface_text",
+                  "local_identity_state"
+                ],
+                "title": "LocalEntityMention",
+                "type": "object"
+              },
+              "MentionBeadDraft": {
+                "additionalProperties": false,
+                "properties": {
+                  "bead_id": {
+                    "format": "uuid",
+                    "title": "Bead Id",
+                    "type": "string"
+                  },
+                  "bead_type_key": {
+                    "pattern": "^[a-z][a-z0-9_]*$",
+                    "title": "Bead Type Key",
+                    "type": "string"
+                  },
+                  "bead_type_revision": {
+                    "minimum": 1,
+                    "title": "Bead Type Revision",
+                    "type": "integer"
+                  },
+                  "bead_version_id": {
+                    "format": "uuid",
+                    "title": "Bead Version Id",
+                    "type": "string"
+                  },
+                  "event_id": {
+                    "format": "uuid",
+                    "title": "Event Id",
+                    "type": "string"
+                  },
+                  "expected_bead_version": {
+                    "const": 0,
+                    "default": 0,
+                    "title": "Expected Bead Version",
+                    "type": "integer"
+                  },
+                  "mentions": {
+                    "items": {
+                      "$ref": "#/$defs/LocalEntityMention"
+                    },
+                    "maxItems": 32,
+                    "title": "Mentions",
+                    "type": "array"
+                  },
+                  "render": {
+                    "$ref": "#/$defs/AuthoredBeadRender"
+                  },
+                  "source_unit_id": {
+                    "format": "uuid",
+                    "title": "Source Unit Id",
+                    "type": "string"
+                  },
+                  "statements": {
+                    "items": {
+                      "$ref": "#/$defs/SemanticStatementDraft"
+                    },
+                    "maxItems": 64,
+                    "minItems": 1,
+                    "title": "Statements",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "bead_id",
+                  "event_id",
+                  "source_unit_id",
+                  "bead_version_id",
+                  "bead_type_key",
+                  "bead_type_revision",
+                  "statements",
+                  "render",
+                  "mentions"
+                ],
+                "title": "MentionBeadDraft",
+                "type": "object"
+              },
+              "SemanticStatementDraft": {
+                "additionalProperties": false,
+                "properties": {
+                  "context_source_ids": {
+                    "default": [],
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "title": "Context Source Ids",
+                    "type": "array"
+                  },
+                  "correction_reason": {
+                    "anyOf": [
+                      {
+                        "maxLength": 1024,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Correction Reason"
+                  },
+                  "evidence": {
+                    "items": {
+                      "$ref": "#/$defs/StatementEvidence"
+                    },
+                    "maxItems": 64,
+                    "minItems": 1,
+                    "title": "Evidence",
+                    "type": "array"
+                  },
+                  "model_run_ref": {
+                    "maxLength": 128,
+                    "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                    "title": "Model Run Ref",
+                    "type": "string"
+                  },
+                  "statement_id": {
+                    "format": "uuid",
+                    "title": "Statement Id",
+                    "type": "string"
+                  },
+                  "statement_kind": {
+                    "$ref": "#/$defs/StatementKind"
+                  },
+                  "statement_text": {
+                    "maxLength": 8192,
+                    "minLength": 1,
+                    "title": "Statement Text",
+                    "type": "string"
+                  },
+                  "supersedes_statement_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Supersedes Statement Id"
+                  }
+                },
+                "required": [
+                  "statement_id",
+                  "statement_kind",
+                  "statement_text",
+                  "evidence",
+                  "model_run_ref"
+                ],
+                "title": "SemanticStatementDraft",
+                "type": "object"
+              },
+              "StatementEvidence": {
+                "additionalProperties": false,
+                "properties": {
+                  "content_hash": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "title": "Content Hash",
+                    "type": "string"
+                  },
+                  "source_unit_id": {
+                    "format": "uuid",
+                    "title": "Source Unit Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "source_unit_id",
+                  "content_hash"
+                ],
+                "title": "StatementEvidence",
+                "type": "object"
+              },
+              "StatementKind": {
+                "enum": [
+                  "observation",
+                  "context",
+                  "qualification",
+                  "correction"
+                ],
+                "title": "StatementKind",
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "annotations": {
+                "items": {
+                  "$ref": "#/$defs/MentionBeadDraft"
+                },
+                "maxItems": 1,
+                "minItems": 1,
+                "title": "Annotations",
+                "type": "array"
+              }
+            },
+            "required": [
+              "annotations"
+            ],
+            "title": "MentionExecutionOutput",
+            "type": "object"
+          }
+        },
+        "task_contract_hash": "eb9c91885e0eb7570e2426e01bc32fbd1ffcc3d2a02c3d1a634a1ddf68a58762",
+        "task_definition": {
+          "allowed_delegate_keys": [],
+          "allowed_tool_keys": [],
+          "contract_revision": 4,
+          "default_effort_key": "standard",
+          "dispatch_mode": "direct_leaf",
+          "evidence_policy_key": "source-revisiting-v1",
+          "input_contract": {
+            "contract_id": "memory.semantic.local-mentions.input",
+            "json_schema": {
+              "$defs": {
+                "AuthorizedContextPin": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "package": {
+                      "$ref": "#/$defs/SealedPackagePin"
+                    },
+                    "source_object_id": {
+                      "format": "uuid",
+                      "title": "Source Object Id",
+                      "type": "string"
+                    },
+                    "source_schema_version": {
+                      "minimum": 1,
+                      "title": "Source Schema Version",
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "package",
+                    "source_object_id",
+                    "source_schema_version"
+                  ],
+                  "title": "AuthorizedContextPin",
+                  "type": "object"
+                },
+                "EvidenceManifest": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "manifest_id": {
+                      "minLength": 1,
+                      "title": "Manifest Id",
+                      "type": "string"
+                    },
+                    "references": {
+                      "items": {
+                        "$ref": "#/$defs/EvidenceReference"
+                      },
+                      "title": "References",
+                      "type": "array"
+                    },
+                    "revision": {
+                      "minimum": 1,
+                      "title": "Revision",
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "manifest_id",
+                    "revision",
+                    "references"
+                  ],
+                  "title": "EvidenceManifest",
+                  "type": "object"
+                },
+                "EvidenceReference": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "content_hash": {
+                      "pattern": "^[a-f0-9]{64}$",
+                      "title": "Content Hash",
+                      "type": "string"
+                    },
+                    "declared_characters": {
+                      "minimum": 0,
+                      "title": "Declared Characters",
+                      "type": "integer"
+                    },
+                    "reference_id": {
+                      "minLength": 1,
+                      "title": "Reference Id",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "reference_id",
+                    "content_hash",
+                    "declared_characters"
+                  ],
+                  "title": "EvidenceReference",
+                  "type": "object"
+                },
+                "LogicalEventDeclaration": {
+                  "additionalProperties": false,
+                  "description": "Producer-asserted genuine event identity, not a batching window.",
+                  "properties": {
+                    "event_key": {
+                      "maxLength": 256,
+                      "minLength": 1,
+                      "title": "Event Key",
+                      "type": "string"
+                    },
+                    "expected_units": {
+                      "anyOf": [
+                        {
+                          "maximum": 2147483647,
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "title": "Expected Units"
+                    },
+                    "identity_basis": {
+                      "enum": [
+                        "native",
+                        "producer_assigned"
+                      ],
+                      "title": "Identity Basis",
+                      "type": "string"
+                    },
+                    "native": {
+                      "$ref": "#/$defs/NativeFacts"
+                    },
+                    "source_type": {
+                      "$ref": "#/$defs/SourceType"
+                    }
+                  },
+                  "required": [
+                    "event_key",
+                    "identity_basis",
+                    "source_type",
+                    "native"
+                  ],
+                  "title": "LogicalEventDeclaration",
+                  "type": "object"
+                },
+                "NativeFacts": {
+                  "additionalProperties": false,
+                  "description": "Null means unknown, never a fabricated native identifier.",
+                  "properties": {
+                    "branch_native_id": {
+                      "anyOf": [
+                        {
+                          "maxLength": 256,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "title": "Branch Native Id"
+                    },
+                    "native_id": {
+                      "anyOf": [
+                        {
+                          "maxLength": 256,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "title": "Native Id"
+                    },
+                    "occurred_at": {
+                      "anyOf": [
+                        {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "title": "Occurred At"
+                    },
+                    "occurred_at_raw": {
+                      "anyOf": [
+                        {
+                          "maxLength": 256,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "title": "Occurred At Raw"
+                    },
+                    "parent_native_id": {
+                      "anyOf": [
+                        {
+                          "maxLength": 256,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "title": "Parent Native Id"
+                    },
+                    "participant_native_id": {
+                      "anyOf": [
+                        {
+                          "maxLength": 256,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "title": "Participant Native Id"
+                    },
+                    "role": {
+                      "anyOf": [
+                        {
+                          "maxLength": 128,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "title": "Role"
+                    },
+                    "session_native_id": {
+                      "anyOf": [
+                        {
+                          "maxLength": 256,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "title": "Session Native Id"
+                    },
+                    "source_order": {
+                      "anyOf": [
+                        {
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "title": "Source Order"
+                    },
+                    "time_precision": {
+                      "anyOf": [
+                        {
+                          "maxLength": 64,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "title": "Time Precision"
+                    }
+                  },
+                  "title": "NativeFacts",
+                  "type": "object"
+                },
+                "PackageDeclaration": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "expected_characters": {
+                      "maximum": 16777216,
+                      "minimum": 1,
+                      "title": "Expected Characters",
+                      "type": "integer"
+                    },
+                    "expected_inventory_sha256": {
+                      "pattern": "^[a-f0-9]{64}$",
+                      "title": "Expected Inventory Sha256",
+                      "type": "string"
+                    },
+                    "expected_parts": {
+                      "maximum": 256,
+                      "minimum": 1,
+                      "title": "Expected Parts",
+                      "type": "integer"
+                    },
+                    "expected_utf8_bytes": {
+                      "maximum": 16777216,
+                      "minimum": 1,
+                      "title": "Expected Utf8 Bytes",
+                      "type": "integer"
+                    },
+                    "native": {
+                      "$ref": "#/$defs/NativeFacts"
+                    },
+                    "normalization_policy_version": {
+                      "maxLength": 128,
+                      "minLength": 1,
+                      "title": "Normalization Policy Version",
+                      "type": "string"
+                    },
+                    "occurrence_identity_basis": {
+                      "enum": [
+                        "native",
+                        "producer_assigned"
+                      ],
+                      "title": "Occurrence Identity Basis",
+                      "type": "string"
+                    },
+                    "occurrence_key": {
+                      "maxLength": 256,
+                      "minLength": 1,
+                      "title": "Occurrence Key",
+                      "type": "string"
+                    },
+                    "package_revision": {
+                      "default": 1,
+                      "minimum": 1,
+                      "title": "Package Revision",
+                      "type": "integer"
+                    },
+                    "qualification": {
+                      "$ref": "#/$defs/SourceQualification"
+                    },
+                    "source_object_id": {
+                      "format": "uuid",
+                      "title": "Source Object Id",
+                      "type": "string"
+                    },
+                    "source_revision_key": {
+                      "maxLength": 512,
+                      "minLength": 1,
+                      "title": "Source Revision Key",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "source_object_id",
+                    "source_revision_key",
+                    "occurrence_key",
+                    "occurrence_identity_basis",
+                    "normalization_policy_version",
+                    "native",
+                    "qualification",
+                    "expected_parts",
+                    "expected_characters",
+                    "expected_utf8_bytes",
+                    "expected_inventory_sha256"
+                  ],
+                  "title": "PackageDeclaration",
+                  "type": "object"
+                },
+                "RevisitingPayload": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "authorized_context": {
+                      "items": {
+                        "$ref": "#/$defs/AuthorizedContextPin"
+                      },
+                      "maxItems": 4,
+                      "title": "Authorized Context",
+                      "type": "array"
+                    },
+                    "bead_ids": {
+                      "items": {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      "maxItems": 1,
+                      "minItems": 1,
+                      "title": "Bead Ids",
+                      "type": "array"
+                    },
+                    "binding_task_id": {
+                      "format": "uuid",
+                      "title": "Binding Task Id",
+                      "type": "string"
+                    },
+                    "declaration": {
+                      "$ref": "#/$defs/PackageDeclaration"
+                    },
+                    "dispatch_policy_id": {
+                      "format": "uuid",
+                      "title": "Dispatch Policy Id",
+                      "type": "string"
+                    },
+                    "event_declaration": {
+                      "$ref": "#/$defs/LogicalEventDeclaration"
+                    },
+                    "event_id": {
+                      "format": "uuid",
+                      "title": "Event Id",
+                      "type": "string"
+                    },
+                    "package": {
+                      "$ref": "#/$defs/SealedPackagePin"
+                    },
+                    "parent_resolution": {
+                      "enum": [
+                        "canonical",
+                        "native_identity_only",
+                        "unknown"
+                      ],
+                      "title": "Parent Resolution",
+                      "type": "string"
+                    },
+                    "parent_source_unit_id": {
+                      "anyOf": [
+                        {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Parent Source Unit Id"
+                    },
+                    "producer_policy_id": {
+                      "format": "uuid",
+                      "title": "Producer Policy Id",
+                      "type": "string"
+                    },
+                    "required_execution": {
+                      "const": "trusted_source_revisiting_v1",
+                      "default": "trusted_source_revisiting_v1",
+                      "title": "Required Execution",
+                      "type": "string"
+                    },
+                    "source_object_id": {
+                      "format": "uuid",
+                      "title": "Source Object Id",
+                      "type": "string"
+                    },
+                    "source_unit_ids": {
+                      "items": {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      "maxItems": 1,
+                      "minItems": 1,
+                      "title": "Source Unit Ids",
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "binding_task_id",
+                    "source_object_id",
+                    "event_id",
+                    "source_unit_ids",
+                    "bead_ids",
+                    "package",
+                    "producer_policy_id",
+                    "dispatch_policy_id",
+                    "declaration",
+                    "event_declaration",
+                    "parent_source_unit_id",
+                    "parent_resolution",
+                    "authorized_context"
+                  ],
+                  "title": "RevisitingPayload",
+                  "type": "object"
+                },
+                "SealedPackagePin": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "coverage": {
+                      "const": "entire_sealed_inventory",
+                      "default": "entire_sealed_inventory",
+                      "title": "Coverage",
+                      "type": "string"
+                    },
+                    "inventory_sha256": {
+                      "pattern": "^[a-f0-9]{64}$",
+                      "title": "Inventory Sha256",
+                      "type": "string"
+                    },
+                    "package_id": {
+                      "format": "uuid",
+                      "title": "Package Id",
+                      "type": "string"
+                    },
+                    "required_characters": {
+                      "maximum": 16777216,
+                      "minimum": 1,
+                      "title": "Required Characters",
+                      "type": "integer"
+                    },
+                    "required_parts": {
+                      "maximum": 256,
+                      "minimum": 1,
+                      "title": "Required Parts",
+                      "type": "integer"
+                    },
+                    "required_utf8_bytes": {
+                      "maximum": 16777216,
+                      "minimum": 1,
+                      "title": "Required Utf8 Bytes",
+                      "type": "integer"
+                    },
+                    "sealed_receipt_id": {
+                      "format": "uuid",
+                      "title": "Sealed Receipt Id",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "package_id",
+                    "sealed_receipt_id",
+                    "inventory_sha256",
+                    "required_parts",
+                    "required_characters",
+                    "required_utf8_bytes"
+                  ],
+                  "title": "SealedPackagePin",
+                  "type": "object"
+                },
+                "SourceQualification": {
+                  "additionalProperties": false,
+                  "description": "Producer assertions. Core does not qualify source formats or semantics.",
+                  "properties": {
+                    "boundary": {
+                      "enum": [
+                        "qualified_native_unit",
+                        "unresolved"
+                      ],
+                      "title": "Boundary",
+                      "type": "string"
+                    },
+                    "boundary_basis": {
+                      "maxLength": 512,
+                      "minLength": 1,
+                      "title": "Boundary Basis",
+                      "type": "string"
+                    },
+                    "exclusions": {
+                      "default": [],
+                      "items": {
+                        "type": "string"
+                      },
+                      "maxItems": 16,
+                      "title": "Exclusions",
+                      "type": "array"
+                    },
+                    "normalized_input": {
+                      "enum": [
+                        "complete",
+                        "incomplete"
+                      ],
+                      "title": "Normalized Input",
+                      "type": "string"
+                    },
+                    "physical_records": {
+                      "enum": [
+                        "complete",
+                        "pending_tail"
+                      ],
+                      "title": "Physical Records",
+                      "type": "string"
+                    },
+                    "qualification_ref": {
+                      "maxLength": 256,
+                      "minLength": 1,
+                      "title": "Qualification Ref",
+                      "type": "string"
+                    },
+                    "source_completeness": {
+                      "enum": [
+                        "producer_attested",
+                        "unresolved"
+                      ],
+                      "title": "Source Completeness",
+                      "type": "string"
+                    },
+                    "topology": {
+                      "enum": [
+                        "known",
+                        "partially_known",
+                        "unknown"
+                      ],
+                      "title": "Topology",
+                      "type": "string"
+                    },
+                    "unresolved_coverage": {
+                      "default": [],
+                      "items": {
+                        "type": "string"
+                      },
+                      "maxItems": 16,
+                      "title": "Unresolved Coverage",
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "qualification_ref",
+                    "boundary",
+                    "boundary_basis",
+                    "physical_records",
+                    "topology",
+                    "normalized_input",
+                    "source_completeness"
+                  ],
+                  "title": "SourceQualification",
+                  "type": "object"
+                },
+                "SourceType": {
+                  "enum": [
+                    "transcript",
+                    "document",
+                    "media",
+                    "relational",
+                    "operational"
+                  ],
+                  "title": "SourceType",
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false,
+              "properties": {
+                "contract_revision": {
+                  "const": 4,
+                  "default": 4,
+                  "title": "Contract Revision",
+                  "type": "integer"
+                },
+                "evidence_manifest": {
+                  "$ref": "#/$defs/EvidenceManifest"
+                },
+                "expected_target_revision": {
+                  "const": 0,
+                  "default": 0,
+                  "title": "Expected Target Revision",
+                  "type": "integer"
+                },
+                "payload": {
+                  "$ref": "#/$defs/RevisitingPayload"
+                },
+                "requested_budget": {
+                  "default": null,
+                  "title": "Requested Budget",
+                  "type": "null"
+                },
+                "requested_effort_key": {
+                  "default": null,
+                  "title": "Requested Effort Key",
+                  "type": "null"
+                },
+                "target_reference": {
+                  "minLength": 1,
+                  "title": "Target Reference",
+                  "type": "string"
+                },
+                "task_id": {
+                  "minLength": 1,
+                  "title": "Task Id",
+                  "type": "string"
+                },
+                "task_kind": {
+                  "const": "memory.semantic.author-complete-unit",
+                  "default": "memory.semantic.author-complete-unit",
+                  "title": "Task Kind",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "task_id",
+                "target_reference",
+                "evidence_manifest",
+                "payload"
+              ],
+              "title": "MentionExecutionInput",
+              "type": "object"
+            },
+            "revision": 1,
+            "schema_hash": "70c870e5bcb500d3df004281feb961ebf29d603f9dc165d1a681218ff81aac40"
+          },
+          "leaf_agent_key": "memory.semantic.local-mentions-author",
+          "maximum_effort_key": "standard",
+          "model_profile": {
+            "effort_key": "standard",
+            "profile_key": "quality-first.standard",
+            "revision": 1
+          },
+          "output_contract": {
+            "contract_id": "memory.semantic.local-mentions.output",
+            "json_schema": {
+              "$defs": {
+                "AuthoredBeadRender": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "detail": {
+                      "default": [],
+                      "items": {
+                        "$ref": "#/$defs/AuthoredRenderClause"
+                      },
+                      "maxItems": 8,
+                      "title": "Detail",
+                      "type": "array"
+                    },
+                    "omissions": {
+                      "default": [],
+                      "items": {
+                        "$ref": "#/$defs/AuthoredRenderOmission"
+                      },
+                      "maxItems": 64,
+                      "title": "Omissions",
+                      "type": "array"
+                    },
+                    "summary": {
+                      "items": {
+                        "$ref": "#/$defs/AuthoredRenderClause"
+                      },
+                      "maxItems": 3,
+                      "minItems": 1,
+                      "title": "Summary",
+                      "type": "array"
+                    },
+                    "title": {
+                      "$ref": "#/$defs/AuthoredRenderClause"
+                    }
+                  },
+                  "required": [
+                    "title",
+                    "summary"
+                  ],
+                  "title": "AuthoredBeadRender",
+                  "type": "object"
+                },
+                "AuthoredRenderClause": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "statement_ids": {
+                      "items": {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      "maxItems": 64,
+                      "minItems": 1,
+                      "title": "Statement Ids",
+                      "type": "array"
+                    },
+                    "text": {
+                      "maxLength": 2048,
+                      "minLength": 1,
+                      "title": "Text",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "text",
+                    "statement_ids"
+                  ],
+                  "title": "AuthoredRenderClause",
+                  "type": "object"
+                },
+                "AuthoredRenderOmission": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "reason": {
+                      "maxLength": 512,
+                      "minLength": 1,
+                      "title": "Reason",
+                      "type": "string"
+                    },
+                    "statement_id": {
+                      "format": "uuid",
+                      "title": "Statement Id",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "statement_id",
+                    "reason"
+                  ],
+                  "title": "AuthoredRenderOmission",
+                  "type": "object"
+                },
+                "LocalEntityMention": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "entity_mention_id": {
+                      "format": "uuid",
+                      "title": "Entity Mention Id",
+                      "type": "string"
+                    },
+                    "local_identity_reason": {
+                      "anyOf": [
+                        {
+                          "maxLength": 1024,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "title": "Local Identity Reason"
+                    },
+                    "local_identity_state": {
+                      "enum": [
+                        "unresolved",
+                        "ambiguous"
+                      ],
+                      "title": "Local Identity State",
+                      "type": "string"
+                    },
+                    "surface_text": {
+                      "maxLength": 1024,
+                      "minLength": 1,
+                      "title": "Surface Text",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "entity_mention_id",
+                    "surface_text",
+                    "local_identity_state"
+                  ],
+                  "title": "LocalEntityMention",
+                  "type": "object"
+                },
+                "MentionBeadDraft": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "bead_id": {
+                      "format": "uuid",
+                      "title": "Bead Id",
+                      "type": "string"
+                    },
+                    "bead_type_key": {
+                      "pattern": "^[a-z][a-z0-9_]*$",
+                      "title": "Bead Type Key",
+                      "type": "string"
+                    },
+                    "bead_type_revision": {
+                      "minimum": 1,
+                      "title": "Bead Type Revision",
+                      "type": "integer"
+                    },
+                    "bead_version_id": {
+                      "format": "uuid",
+                      "title": "Bead Version Id",
+                      "type": "string"
+                    },
+                    "event_id": {
+                      "format": "uuid",
+                      "title": "Event Id",
+                      "type": "string"
+                    },
+                    "expected_bead_version": {
+                      "const": 0,
+                      "default": 0,
+                      "title": "Expected Bead Version",
+                      "type": "integer"
+                    },
+                    "mentions": {
+                      "items": {
+                        "$ref": "#/$defs/LocalEntityMention"
+                      },
+                      "maxItems": 32,
+                      "title": "Mentions",
+                      "type": "array"
+                    },
+                    "render": {
+                      "$ref": "#/$defs/AuthoredBeadRender"
+                    },
+                    "source_unit_id": {
+                      "format": "uuid",
+                      "title": "Source Unit Id",
+                      "type": "string"
+                    },
+                    "statements": {
+                      "items": {
+                        "$ref": "#/$defs/SemanticStatementDraft"
+                      },
+                      "maxItems": 64,
+                      "minItems": 1,
+                      "title": "Statements",
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "bead_id",
+                    "event_id",
+                    "source_unit_id",
+                    "bead_version_id",
+                    "bead_type_key",
+                    "bead_type_revision",
+                    "statements",
+                    "render",
+                    "mentions"
+                  ],
+                  "title": "MentionBeadDraft",
+                  "type": "object"
+                },
+                "SemanticStatementDraft": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "context_source_ids": {
+                      "default": [],
+                      "items": {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      "title": "Context Source Ids",
+                      "type": "array"
+                    },
+                    "correction_reason": {
+                      "anyOf": [
+                        {
+                          "maxLength": 1024,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "title": "Correction Reason"
+                    },
+                    "evidence": {
+                      "items": {
+                        "$ref": "#/$defs/StatementEvidence"
+                      },
+                      "maxItems": 64,
+                      "minItems": 1,
+                      "title": "Evidence",
+                      "type": "array"
+                    },
+                    "model_run_ref": {
+                      "maxLength": 128,
+                      "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                      "title": "Model Run Ref",
+                      "type": "string"
+                    },
+                    "statement_id": {
+                      "format": "uuid",
+                      "title": "Statement Id",
+                      "type": "string"
+                    },
+                    "statement_kind": {
+                      "$ref": "#/$defs/StatementKind"
+                    },
+                    "statement_text": {
+                      "maxLength": 8192,
+                      "minLength": 1,
+                      "title": "Statement Text",
+                      "type": "string"
+                    },
+                    "supersedes_statement_id": {
+                      "anyOf": [
+                        {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "title": "Supersedes Statement Id"
+                    }
+                  },
+                  "required": [
+                    "statement_id",
+                    "statement_kind",
+                    "statement_text",
+                    "evidence",
+                    "model_run_ref"
+                  ],
+                  "title": "SemanticStatementDraft",
+                  "type": "object"
+                },
+                "StatementEvidence": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "content_hash": {
+                      "pattern": "^[a-f0-9]{64}$",
+                      "title": "Content Hash",
+                      "type": "string"
+                    },
+                    "source_unit_id": {
+                      "format": "uuid",
+                      "title": "Source Unit Id",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "source_unit_id",
+                    "content_hash"
+                  ],
+                  "title": "StatementEvidence",
+                  "type": "object"
+                },
+                "StatementKind": {
+                  "enum": [
+                    "observation",
+                    "context",
+                    "qualification",
+                    "correction"
+                  ],
+                  "title": "StatementKind",
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false,
+              "properties": {
+                "annotations": {
+                  "items": {
+                    "$ref": "#/$defs/MentionBeadDraft"
+                  },
+                  "maxItems": 1,
+                  "minItems": 1,
+                  "title": "Annotations",
+                  "type": "array"
+                }
+              },
+              "required": [
+                "annotations"
+              ],
+              "title": "MentionExecutionOutput",
+              "type": "object"
+            },
+            "revision": 1,
+            "schema_hash": "dd4d7b719b0b388667c7e76c1bf216d76aaedcd09510f14d2e3edda8d204da6e"
+          },
+          "owning_module": "memoriesql.kernel",
+          "run_budget": {
+            "cost_safety_limit_microusd": null,
+            "evidence_item_limit": 1,
+            "hydrated_character_limit": 131072,
+            "input_token_limit": 524288,
+            "max_delegate_calls": 0,
+            "max_parallel_delegates": 0,
+            "output_retries": 0,
+            "output_token_limit": 32768,
+            "request_limit": 12,
+            "tool_call_limit": 0,
+            "tool_retries": 0,
+            "total_token_limit": 557056,
+            "wall_clock_seconds": 300
+          },
+          "task_kind": "memory.semantic.author-complete-unit"
+        },
+        "uncertainty": "Immutable local unresolved/ambiguous state is separate from later governed entity resolution; no canonical candidates invented."
+      },
+      "id": "memoriesql.local-entity-mentions.v1",
+      "kind": "json_schema",
+      "status": "available",
+      "summary": "Atomic authored local mentions through revision-4 source revisiting; no global identity resolution.",
+      "version": "1"
+    },
+    {
+      "contract": {
         "binding_spec": {
           "contract_revision": 1,
           "execution_available": false,

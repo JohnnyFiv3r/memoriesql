@@ -130,21 +130,21 @@
       "source_sha256": "fedb9b376d56b5865774f5a410ce49d16fd4000700b98ca67e32e45d66eaefa5"
     },
     {
-      "base_public_commit": "bb459ddef14e5627777b21c1366a896b75f24ca8",
-      "base_public_sha256": "21b68eaa447d18fcf04b91de6ecf83ef74d9e9f3f7f0d15a7c2d4937d0cfb23c",
+      "base_public_commit": "1e611c2a426684a6ede479e06e21a123a964a818",
+      "base_public_sha256": "f62ae9354e69406885e202c80b4b1c9701b64d6de165e38b1268312b00a19123",
       "disposition": "public-forward",
       "path": "src/memoriesql/infrastructure/jobs/integrated_semantic_worker.py",
-      "reason": "Public forward complete-input execution through the existing worker, executor and canonical sink; legacy contracts retained.",
-      "sha256": "f62ae9354e69406885e202c80b4b1c9701b64d6de165e38b1268312b00a19123",
+      "reason": "Public forward local mention authorship through existing source revisiting and canonical worker.",
+      "sha256": "83223d54a75b384fa88c02231225f5f2e7b311239c88e517d2abbd38252fd7b6",
       "source_sha256": "a6b990a6a74461f34e7e757a3e6f7426020f8cef8df4cdbaad2a95f2fcd10398"
     },
     {
-      "base_public_commit": "bb459ddef14e5627777b21c1366a896b75f24ca8",
-      "base_public_sha256": "8c9a3a3fc34e9c8a4b66a7ea06f2613e97bb67cd9cb81bdff62c1521ccc74c64",
+      "base_public_commit": "1e611c2a426684a6ede479e06e21a123a964a818",
+      "base_public_sha256": "1f69ac8f230611c9140982e644ee214fbe46f14c25497d424d9a81ff36947265",
       "disposition": "public-forward",
       "path": "src/memoriesql/infrastructure/jobs/postgres_semantic_queue.py",
-      "reason": "Public forward complete-input execution through the existing worker, executor and canonical sink; legacy contracts retained.",
-      "sha256": "1f69ac8f230611c9140982e644ee214fbe46f14c25497d424d9a81ff36947265",
+      "reason": "Public forward local mention authorship through existing source revisiting and canonical worker.",
+      "sha256": "e4d46205a0435cfb876bd6b27d74b057ae276e7f3f2f55be331915138d9adbdb",
       "source_sha256": "5bbff727506cd237a9596adc9e59743519defe90f29c14af9e03fc55a445ce80"
     },
     {
@@ -155,12 +155,12 @@
       "source_sha256": "c15f60eace446302ce7dddfc69010c173a714791a92e3765edef87777da4ccc4"
     },
     {
-      "base_public_commit": "bb459ddef14e5627777b21c1366a896b75f24ca8",
-      "base_public_sha256": "a87f24cfc8e8d652ff90c8acf92f46c0aa47cf4c2f1ef823eda4737aab24eb34",
+      "base_public_commit": "1e611c2a426684a6ede479e06e21a123a964a818",
+      "base_public_sha256": "42edabb02a4bd814c858f0558ace03d5981426f1fe4b66d9ed8e264098e2281e",
       "disposition": "public-forward",
       "path": "src/memoriesql/infrastructure/models/pydanticai_executor.py",
-      "reason": "Public forward complete-input execution through the existing worker, executor and canonical sink; legacy contracts retained.",
-      "sha256": "42edabb02a4bd814c858f0558ace03d5981426f1fe4b66d9ed8e264098e2281e",
+      "reason": "Public forward local mention authorship through existing source revisiting and canonical worker.",
+      "sha256": "ff40bab261019167bfa89993a7550ba1e0e7cf6c6deffa8f1ae65f97af7c4a73",
       "source_sha256": "07d4c861ce40062c227352f6fd240b7445500776ba6216fdd739027020da3b1c"
     },
     {
@@ -269,10 +269,13 @@
       "sha256": "cd5e4f713d5049a707326fa9714d7357d140dbac6017444cc650fe2d750004bb"
     },
     {
-      "disposition": "public",
+      "base_public_commit": "1e611c2a426684a6ede479e06e21a123a964a818",
+      "base_public_sha256": "d9bc8119b9a995550b5d7837458cf66ba14a1fb7b2323061e859dbede6475f51",
+      "disposition": "public-forward",
       "path": "src/memoriesql/infrastructure/postgres/complete_input_execution.py",
-      "reason": "Public-authored complete-input execution and bounded authorized evidence transport.",
-      "sha256": "d9bc8119b9a995550b5d7837458cf66ba14a1fb7b2323061e859dbede6475f51"
+      "reason": "Public forward local mention authorship through existing source revisiting and canonical worker.",
+      "sha256": "fd4e8536be34db68c27691a924a29ccebaf0db20be97f0c8313847dc6ab082e2",
+      "source_sha256": "d9bc8119b9a995550b5d7837458cf66ba14a1fb7b2323061e859dbede6475f51"
     },
     {
       "disposition": "public",
@@ -303,6 +306,12 @@
       "path": "src/memoriesql/application/source_stable_identity.py",
       "reason": "Public-authored explicit source-stable identity opt-in.",
       "sha256": "d36df5db0ebb6ffdf50b1ab94428dff5aac45e7c0e8e274b69b284e3f72b99fd"
+    },
+    {
+      "disposition": "public",
+      "path": "src/memoriesql/application/local_entity_mentions.py",
+      "reason": "Public-authored bounded local mention contracts; no global identity matching.",
+      "sha256": "4106235ce486771dc94d2ffcba8a83134ed2ac596d619478d3f1c19c62703f4b"
     }
   ]
 }
