@@ -1,6 +1,7 @@
 # Attributable bead classification v1
 
-This unreleased forward slice builds on authored local mentions at schema 22.
+Included in the prepared 0.0.8 candidate, this merged slice builds on authored
+local mentions at schema 22.
 Schema 23/task `memory.semantic.author-complete-unit` revision 5 pins explicitly
 selected registered bead-type definitions at activation. It uses the existing
 source-revisiting author, one sequential typed classification leaf, queue, run

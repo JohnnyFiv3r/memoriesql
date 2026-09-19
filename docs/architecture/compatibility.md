@@ -2,11 +2,11 @@
 
 The `0.x` package line is experimental and provides no general API compatibility
 guarantee. Releases use plain numeric `X.Y.Z` with `vX.Y.Z` tags. This preparation
-selects genuine `0.0.7` metadata and exact `v0.0.7` repository controls; it does not
+selects genuine `0.0.8` metadata and exact `v0.0.8` repository controls; it does not
 itself publish or supply protected upload approval. Alpha/beta/rc suffixes require a separate owner decision.
-Published `0.0.1a1`, `0.0.2`, `0.0.3`, `0.0.4`, `0.0.5` and `0.0.6`, their tags and inventories remain
+Published `0.0.1a1`, `0.0.2`, `0.0.3`, `0.0.4`, `0.0.5`, `0.0.6` and `0.0.7`, their tags and inventories remain
 immutable. The previous `runtime-package-artifact-inventory.json` still records
-published 0.0.4; the new versioned 0.0.7 candidate inventory is separate.
+published 0.0.4; the new versioned 0.0.8 candidate inventory is separate.
 
 Two narrower integrity rules apply after publication:
 
@@ -14,8 +14,8 @@ Two narrower integrity rules apply after publication:
 2. Breaking contract-payload changes require a new contract version. A defective
    uploaded wheel/sdist is corrected by a new distribution version, never replacement.
 
-The 0.0.7 preparation preserves all runtime behavior, dependencies, migrations
-0001–0021, 56 existing contract records and generated catalogs. Python support stays
+The 0.0.8 preparation preserves all runtime behavior, dependencies, migrations
+0001–0024, 59 existing contract records and generated catalogs. Python support stays
 `>=3.13,<3.15`; 3.13 and 3.14 are tested. Older Python may explicitly pin catalog-only
 `0.0.1a1`; it cannot consume the runtime by falling back to that package.
 
@@ -75,7 +75,7 @@ unchanged and experimental. Repeated usage does not inflate unique target covera
 See [recovery](../transcript-fold-recovery.md) and [revisiting](../source-revisiting.md).
 
 All published inventories and historical development candidate inventories remain unchanged.
-Only the new 0.0.7 inventory is used by the prepared release gate. Production grants,
+Only the new 0.0.8 inventory is used by the prepared release gate. Production grants,
 providers, implicit migration or task activation are not supplied by installation.
 
 ## Schema 21 source-stable opt-in in 0.0.7
@@ -98,3 +98,25 @@ Unopted sources, published records, receipts and SQL 0001–0021 remain unchange
 No historical equivalence, migration of bindings or duplicate repair is inferred.
 Production identity-policy approval and a separately authorized release precede
 consumer adoption. PR-02O/CP-2 and the historical queue evidence remain incomplete.
+
+## Prepared 0.0.8 public composition
+
+The 0.0.8 candidate packages the already merged public prerequisites:
+
+- **Bounded model admission:** exact caller-supplied model/profile/target qualification,
+  pre-dispatch request/token reservation and attributable usage through the existing
+  executor. No production transport or provider entitlement is supplied.
+- **Schema 22:** atomic authored local mentions, including explicit authored-empty
+  and unresolved/ambiguous local state, without inventing global entity resolution.
+- **Schema 23:** a bounded evidence-backed classification packet, registered
+  vocabulary revisions, explicit abstention/disagreement and one attributable
+  accepted contribution. Mechanical acceptance does not prove semantic quality.
+- **Schema 24:** currently authorized stored bead/result and exact-evidence reads;
+  legacy, missing, hidden and authored-empty remain distinct. Reads do not run inference.
+- **Accounting cancellation repair:** already-started database writes and late usage
+  remain owned through repeated cancellation; callers still retain the worker/event
+  loop until cleanup finishes.
+
+These capabilities are merged public code. The release PR does not establish
+publication, private adoption, live-provider quality or CP-2 completion. The owner has explicitly authorized the qualified release merge/tag sequence;
+protected upload approval remains a separate owner gate.

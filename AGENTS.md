@@ -34,3 +34,12 @@ The Q-owned forward schema-24 slice permits bounded, currently authorized stored
 bead/result and evidence inspection. Preserve migrations 0001–0023 and earlier
 records. No inference, canonical writes, provider binding or private consumption
 is introduced. See `docs/stored-bead-inspection.md`.
+
+The owner-authorized 0.0.8 preparation starts from merged main
+`8dfa5a2ef6bb4ef52b62e4405ee8a26ccfa36e6b`. Only release metadata, exact repository
+publication controls, fresh release inventory, focused verification/provenance and
+truthful guidance may change. Preserve runtime behavior, all SQL 0001–0024,
+59 contracts, dependencies, ceilings and provider policy. The owner has also explicitly authorized merging the reviewed, qualified release
+PR and creating/pushing v0.0.8 once at verified release main after all required
+checks. Stop at the protected approval gate; never approve upload. Publication
+protected approval and private consumption remain separate.

@@ -1,8 +1,8 @@
 # memoriesQL catalogs and provider-neutral runtime
 
-`memoriesql` 0.0.7 is an experimental, pre-alpha distribution of governed contract
+`memoriesql` 0.0.8 is an experimental, pre-alpha distribution of governed contract
 catalogs and provider-neutral runtime mechanics. It preserves the original 49
-provider-neutral records and contains 56 records: 50 JSON Schema records, five
+provider-neutral records and contains 59 records: 53 JSON Schema records, five
 Python-surface records and one synthetic reference connector. Five other catalog
 kinds remain explicit empty `not_implemented` documents. Twelve experimental catalog
 Python/CLI APIs provide listing and exact lookup.
@@ -24,6 +24,22 @@ from memoriesql.contracts import get_contract, load_catalog
 schemas = load_catalog("json_schema")
 cursor = get_contract("memoriesql.capture.connector-cursor")
 ```
+
+The 0.0.8 candidate packages the already merged public prerequisites:
+
+- **Bounded model admission:** exact caller-supplied model/profile/target qualification,
+  pre-dispatch request/token reservation and attributable usage through the existing
+  executor. No production transport or provider entitlement is supplied.
+- **Schema 22:** atomic authored local mentions, including explicit authored-empty
+  and unresolved/ambiguous local state, without inventing global entity resolution.
+- **Schema 23:** a bounded evidence-backed classification packet, registered
+  vocabulary revisions, explicit abstention/disagreement and one attributable
+  accepted contribution. Mechanical acceptance does not prove semantic quality.
+- **Schema 24:** currently authorized stored bead/result and exact-evidence reads;
+  legacy, missing, hidden and authored-empty remain distinct. Reads do not run inference.
+- **Accounting cancellation repair:** already-started database writes and late usage
+  remain owned through repeated cancellation; callers still retain the worker/event
+  loop until cleanup finishes.
 
 ## Evidence packages and complete-input opt-in
 
@@ -69,8 +85,8 @@ callbacks rather than real providers.
 The package requires Python `>=3.13,<3.15`; Python 3.13/3.14 have installed wheel and
 sdist coverage. Dependencies remain exactly `psycopg[binary]==3.3.3`,
 `pydantic==2.13.3` and `pydantic-ai-slim==2.27.0`, without provider extras. Once
-publication is independently verified, install with the exact `memoriesql==0.0.7`
-pin. Before publication, use a reviewed local 0.0.7 artifact. The immutable
+publication is independently verified, install with the exact `memoriesql==0.0.8`
+pin. Before publication, use a reviewed local 0.0.8 artifact. The immutable
 `0.0.1a1` remains catalog-only on its original Python versions: explicitly pin it
 for older Python. An unpinned older-Python request may fail; `--pre` only makes that
 historical catalog fallback eligible, never the incompatible runtime.
@@ -78,7 +94,7 @@ historical catalog fallback eligible, never the incompatible runtime.
 Published 0.0.4/schema-15 immutable accepted meaning and explicit version-2
 corrections remain supported on their existing path. Corrections create distinct
 beads with pinned supersession, not edits to accepted meaning. All migrations
-0001–0021 and all 56 existing contract records are unchanged by 0.0.7 release preparation.
+0001–0024 and all 59 existing contract records are unchanged by 0.0.8 release preparation.
 Historical receipts remain subject to current authorization.
 
 Retain a worker reporting `cleanup_pending`, its event loop and owned cleanup;
@@ -108,7 +124,8 @@ normalized or raw evidence from the pinned target and explicitly supplied option
 context, including after forward coverage completes. Existing revision-2 activations
 cannot silently switch. Compose `load_source_revisiting_task_registry`, the existing
 worker/executor and a separately qualified revision-3 dispatch attestor. Production
-trust provisioning and real-model admission remain deferred.
+trust provisioning and actual provider qualification remain deferred; the public
+bounded-admission interface is included in this candidate.
 
 Complete-context delivery is preferred when it fits the existing 65,536-character /
 131,072-JSON-byte window; otherwise delivery and typed rereads stay bounded. The
