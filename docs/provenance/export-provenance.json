@@ -1016,7 +1016,7 @@
       "classification": "public-authored",
       "license": "Apache-2.0",
       "public_path": "tests/runtime/test_runtime_ownership.py",
-      "public_sha256": "10d22fb43dbc6af280c528ef1281ce917a10cf4e598580b8f09d253fe02c739f",
+      "public_sha256": "cd7ea7b877313cd4d7bae4649a627352ec678a8bde7367d10dd3f9bb83f513c7",
       "reason": "Installed runtime origin and frozen contract parity checks."
     },
     {
