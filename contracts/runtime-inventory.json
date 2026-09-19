@@ -159,8 +159,8 @@
       "base_public_sha256": "42edabb02a4bd814c858f0558ace03d5981426f1fe4b66d9ed8e264098e2281e",
       "disposition": "adapt",
       "path": "src/memoriesql/infrastructure/models/pydanticai_executor.py",
-      "reason": "Owner-authorized forward classified authorship using existing runtime and fences.",
-      "sha256": "3de1a23873555eb32169a96a957a8fe28d15ea9506698be8d2809a406ae83139",
+      "reason": "Integration of reviewed bounded model admission and classified authorship; existing authorization, accounting and cleanup fences retained.",
+      "sha256": "6c671d1b47b898d921be1885ec3866a82caa2d2e5c259f6c6d77fedd9bd8c915",
       "source_sha256": "07d4c861ce40062c227352f6fd240b7445500776ba6216fdd739027020da3b1c"
     },
     {

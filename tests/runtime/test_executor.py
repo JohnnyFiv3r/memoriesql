@@ -102,7 +102,8 @@ class Ports:
 
 def fixture(
     *, conductor: bool = False, model_callback: Any = None,
-    request_target: Any = CHARACTERIZED_TEST_REQUEST_TARGET
+    request_target: Any = CHARACTERIZED_TEST_REQUEST_TARGET,
+    binding_factory: Any = None,
 ) -> tuple[Any, Any, SemanticRunDeps, Ports]:
     ports = Ports()
     modules = BuiltInModuleRegistry._from_source_controlled(
@@ -283,7 +284,10 @@ def fixture(
         composition_provider=lambda: composition,
         agent_registry=agents,
         model_profiles=PydanticAIModelProfileRegistry(
-            (ModelProfileBinding(profile, FunctionModel(model_callback or respond), request_target=request_target),)
+            ((binding_factory(profile, model_callback or respond, request_target)
+              if binding_factory else ModelProfileBinding(
+                  profile, FunctionModel(model_callback or respond),
+                  request_target=request_target)),)
         ),
     )
     return executor, resolved, deps, ports

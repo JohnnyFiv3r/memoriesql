@@ -974,7 +974,7 @@
       "classification": "public-authored",
       "license": "Apache-2.0",
       "public_path": "contracts/runtime-inventory.json",
-      "public_sha256": "5c175610fc7a6af6733a641be21c1fa2bbf7b258e3d8004c3a4d3ca5d2ab2bf4",
+      "public_sha256": "91fc5e862c6638f3a6b49d5dc71de3964a6580ce7db2d7ba87621da1c6331359",
       "reason": "Public N2 dependency inventory and fictional runtime acceptance."
     },
     {
@@ -988,7 +988,7 @@
       "classification": "public-authored",
       "license": "Apache-2.0",
       "public_path": "tests/runtime/test_executor.py",
-      "public_sha256": "73b8aa3f6297e5545fdcd9451f60354a607be2cfbd8add2f87a912402186d85e",
+      "public_sha256": "1560f4f9f7ff597a768e081b12e6032b392304d43f7af7e803df68e13013bf35",
       "reason": "Public N2 dependency inventory and fictional runtime acceptance."
     },
     {
@@ -1690,6 +1690,20 @@
       "public_path": "tests/runtime/test_stored_bead_inspection.py",
       "public_sha256": "4bcd39b5025d1d513def142807b2f637573c44945e71a181ff8d8f009c12bc97",
       "reason": "Q-owned bounded authorized stored-result inspection, fictional tests and explicit contract catalog."
+    },
+    {
+      "classification": "public_authored",
+      "license": "Apache-2.0",
+      "public_path": "docs/real-model-admission.md",
+      "public_sha256": "bb005374115fbce194a53ecfded5b2a3b6866c46038ebd8a64e3c1c72e7ad4be",
+      "reason": "Document provider-neutral explicit bounded admission and qualification limits."
+    },
+    {
+      "classification": "public_authored",
+      "license": "Apache-2.0",
+      "public_path": "tests/runtime/test_real_model_admission.py",
+      "public_sha256": "39b98a0ad93edd06ff1f8e7a0a75704a1ad6a3c2c297a4f9d3aa5b40024ff3b4",
+      "reason": "Fictional public coverage of explicit admission, conservative reservations and cancellation accounting."
     }
   ],
   "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
@@ -1993,7 +2007,7 @@
       "classification": "public-forward",
       "license": "Apache-2.0",
       "public_path": "src/memoriesql/infrastructure/models/pydanticai_executor.py",
-      "public_sha256": "3de1a23873555eb32169a96a957a8fe28d15ea9506698be8d2809a406ae83139",
+      "public_sha256": "6c671d1b47b898d921be1885ec3866a82caa2d2e5c259f6c6d77fedd9bd8c915",
       "reason": "Public-authored cancellation cleanup ownership and post-intent dispatch gate; original N2 extraction hash retained as historical provenance.",
       "source_sha256": "07d4c861ce40062c227352f6fd240b7445500776ba6216fdd739027020da3b1c"
     },
