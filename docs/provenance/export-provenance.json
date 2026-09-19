@@ -1653,7 +1653,7 @@
       "classification": "proposed_open_core",
       "license": "Apache-2.0",
       "public_path": "docs/stored-bead-inspection.md",
-      "public_sha256": "d614fc9cfcc693278be30b73f5cf2cf0a55a408cc070c2ea9b116c1c867e9e7a",
+      "public_sha256": "10a93a1bc7805713cdbc930c0010009f27f8cd1d90efb7766820eb2e2aeb1918",
       "reason": "Q-owned bounded authorized stored-result inspection, fictional tests and explicit contract catalog."
     },
     {
@@ -1688,7 +1688,7 @@
       "classification": "proposed_open_core",
       "license": "Apache-2.0",
       "public_path": "tests/runtime/test_stored_bead_inspection.py",
-      "public_sha256": "f410a145b7c8a4713fe02529f9fb81f9c63230b01fee64614e0769ceb661f529",
+      "public_sha256": "8d0c44bd3d2047cd76314f0b4ced92550153c919475121644f20cb41fec2915b",
       "reason": "Q-owned bounded authorized stored-result inspection, fictional tests and explicit contract catalog."
     }
   ],

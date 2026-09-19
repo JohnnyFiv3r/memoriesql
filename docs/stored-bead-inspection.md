@@ -1,7 +1,8 @@
 # Stored bead inspection v1
 
 Q's schema-24 forward slice stacks on P's verified schema-23 contract at
-`b98d5cc79056547c18cfa51842f3d91373f48ad6`. It adds no canonical writes, model calls,
+`b98d5cc79056547c18cfa51842f3d91373f48ad6`, rebased onto the verified replay fix
+`899fd0906aa5786e6d95f484c2c52f994e2443bc`. It adds no canonical writes, model calls,
 classification, relationship decisions, provider binding, release or private
 consumption. P owns mention and classification writes and migrations 0022/0023.
 
