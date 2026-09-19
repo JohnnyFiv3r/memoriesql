@@ -1,14 +1,22 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
+import tarfile
 import tempfile
 import tomllib
 import unittest
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
+from scripts.inspect_python_distribution import (
+    AUTHORED_SDIST_FILES,
+    development_inventory,
+    verify_authored_sdist_members,
+)
 from scripts.verify_release import (
     APPROVED_VERSION,
     RELEASE_INVENTORY,
@@ -16,6 +24,7 @@ from scripts.verify_release import (
     REPOSITORY_ID,
     select_ci_run,
     verify_artifacts,
+    verify_source_bytes,
 )
 
 SHA = "a" * 40
@@ -190,6 +199,7 @@ class ReleaseControlTests(unittest.TestCase):
         self.assertEqual(project["version"], APPROVED_VERSION)
         # These entire published/historical inventory files are immutable.
         historical = {
+            "runtime-0.0.7-package-artifact-inventory.json": "d874d237b198f7bd6637b10c248a6aa474f94b412adf4284392a84ee633a3335",
             "source-stable-identity-candidate-artifacts.json": "89386eb2813fdb3e2c7b7c7a75a7f1b0e8006630d822d24cb8a75e8bdf0a54cd",
             "runtime-0.0.6-package-artifact-inventory.json": "aff0e87586233cd50dd1bc08a2512ac85160923034f100c42d6544dae64d1db0",
             "runtime-0.0.5-package-artifact-inventory.json": "3b065ca784c82b47cfaf6e06ed99c180da856d8d31ed31f61026c5b76afa6d2e",
@@ -208,7 +218,7 @@ class ReleaseControlTests(unittest.TestCase):
                     expected,
                 )
 
-    def test_release_preserves_runtime_and_historical_bytes(self) -> None:
+    def test_development_preserves_published_historical_bytes(self) -> None:
         root = Path(__file__).resolve().parents[2]
         frozen = json.loads(
             (root / "tests/fixtures/release-0.0.7-baseline-integrity.json").read_text()
@@ -216,19 +226,79 @@ class ReleaseControlTests(unittest.TestCase):
         self.assertEqual(
             frozen["base_public_commit"], "d82f5baf3eff92ac68cdbcda922415a33f2cb0c1"
         )
-        for name, expected in frozen["files"].items():
-            with self.subTest(path=name):
-                self.assertEqual(
-                    hashlib.sha256((root / name).read_bytes()).hexdigest(), expected
-                )
-        for name, expected in frozen["metadata"].items():
-            with self.subTest(metadata=name):
-                normalized = (
-                    (root / name)
-                    .read_bytes()
-                    .replace(APPROVED_VERSION.encode(), b"APPROVED_VERSION")
-                )
-                self.assertEqual(hashlib.sha256(normalized).hexdigest(), expected)
+        self.assertEqual(
+            hashlib.sha256(
+                (root / "tests/fixtures/release-0.0.7-baseline-integrity.json").read_bytes()
+            ).hexdigest(),
+            "a996aa1a3b10e5aca820e391f9581a17880f494ae036adc5dccddf1cd4ddd5e9",
+        )
+        verify_source_bytes(root, frozen)
+
+    def test_historical_tampering_fails_and_runtime_freeze_is_release_scoped(self) -> None:
+        names = (
+            "migrations/0001.sql",
+            "contracts/records/published.json",
+            "docs/verification/published.json",
+            "src/runtime.py",
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for name in names:
+                path = root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b"original")
+            frozen = {
+                "files": {name: hashlib.sha256(b"original").hexdigest() for name in names},
+                "metadata": {},
+            }
+            verify_source_bytes(root, frozen, release_reproduction=True)
+            (root / "src/runtime.py").write_bytes(b"forward development")
+            verify_source_bytes(root, frozen)
+            with self.assertRaisesRegex(ValueError, "src/runtime.py"):
+                verify_source_bytes(root, frozen, release_reproduction=True)
+            for name in names[:-1]:
+                (root / name).write_bytes(b"tampered")
+                with self.subTest(path=name), self.assertRaises(ValueError):
+                    verify_source_bytes(root, frozen)
+                (root / name).write_bytes(b"original")
+
+    def test_development_receipt_cannot_authorize_release_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            development = self.make_artifacts(directory)
+            (directory / "python-package-artifacts.json").write_text(
+                json.dumps(development)
+            )
+            with self.assertRaises(ValueError):
+                verify_artifacts(directory, json.loads(RELEASE_INVENTORY.read_text()))
+
+    def test_development_inventory_rejects_wrong_commit(self) -> None:
+        with patch("scripts.inspect_python_distribution.subprocess.check_output", return_value=SHA):
+            result = development_inventory({"artifacts": []}, SHA)
+            self.assertEqual(result["qualification"], "unreleased-development")
+            for wrong in ("b" * 40, "main", ""):
+                with self.subTest(commit=wrong), self.assertRaises(ValueError):
+                    development_inventory({"artifacts": []}, wrong)
+
+    def test_authored_sdist_bytes_are_checked_even_without_wheel_effect(self) -> None:
+        root = Path(__file__).resolve().parents[2]
+        for tampered in (None, "setup.py", "MANIFEST.in", "README.md"):
+            payload = io.BytesIO()
+            with tarfile.open(fileobj=payload, mode="w") as archive:
+                for name in sorted(AUTHORED_SDIST_FILES):
+                    content = (root / name).read_bytes()
+                    if name == tampered:
+                        content += b"\n# sdist-only tampering\n"
+                    member = tarfile.TarInfo(f"memoriesql-0.0.7/{name}")
+                    member.size = len(content)
+                    archive.addfile(member, io.BytesIO(content))
+            payload.seek(0)
+            with self.subTest(tampered=tampered), tarfile.open(fileobj=payload) as archive:
+                if tampered is None:
+                    verify_authored_sdist_members(archive)
+                else:
+                    with self.assertRaisesRegex(ValueError, "sdist differs"):
+                        verify_authored_sdist_members(archive)
 
     @staticmethod
     def make_artifacts(directory: Path) -> dict[str, Any]:

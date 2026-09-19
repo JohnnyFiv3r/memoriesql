@@ -38,6 +38,14 @@ jobs:
           python scripts/verify_export_provenance.py
           python -m unittest discover -v
           python -m compileall -q src scripts tests
+      - name: Check out the immutable published source for release reproduction
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: 1e611c2a426684a6ede479e06e21a123a964a818
+          path: build/published-0.0.7
+          persist-credentials: false
+      - name: Verify the complete frozen 0.0.7 source baseline
+        run: python scripts/verify_release.py source build/published-0.0.7
       - name: Lint and type-check
         run: |
           ruff check src scripts tests
@@ -48,9 +56,9 @@ jobs:
           python -m build --sdist --wheel --outdir build/dist-a
           python scripts/normalize_python_sdist.py build/dist-a/memoriesql-0.0.7.tar.gz
           python -m twine check --strict build/dist-a/*
-          python scripts/inspect_python_distribution.py build/dist-a > build/dist-a/python-package-artifacts.json
-          # Match the committed 0.0.7 release inventory; historical inventories are immutable.
-          python scripts/verify_release.py artifacts build/dist-a
+          # Development receipts never replace the immutable publication inventory.
+          python scripts/inspect_python_distribution.py build/dist-a --source-commit "${{ github.event.pull_request.head.sha || github.sha }}" > build/dist-a/python-package-artifacts.json
+          python scripts/inspect_python_distribution.py build/dist-a --source-commit "${{ github.event.pull_request.head.sha || github.sha }}" --check-inventory build/dist-a/python-package-artifacts.json > /dev/null
       - name: Prove deterministic rebuild
         run: |
           export SOURCE_DATE_EPOCH=315532800
@@ -95,6 +103,8 @@ jobs:
         with:
           name: memoriesql-python-${{ github.event.pull_request.head.sha || github.sha }}
           path: build/reviewed-package
+      - name: Verify downloaded development artifacts against this exact checkout
+        run: python scripts/inspect_python_distribution.py build/reviewed-package --source-commit "${{ github.event.pull_request.head.sha || github.sha }}" --check-inventory build/reviewed-package/python-package-artifacts.json > /dev/null
       - name: Resolve audited runtime dependencies and record artifact hashes
         run: |
           python -m pip download 'psycopg[binary]==3.3.3' 'pydantic==2.13.3' 'pydantic-ai-slim==2.27.0' --only-binary=:all: --dest build/dependencies

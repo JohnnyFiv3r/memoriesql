@@ -133,7 +133,11 @@ class PublicBootstrapTests(unittest.TestCase):
         workflow = (ROOT / ".github/workflows/python-package.yml").read_text()
         publishing = (ROOT / ".github/workflows/publish-pypi.yml").read_text()
         self.assertIn("inspect_python_distribution.py build/dist-a", workflow)
-        self.assertIn("verify_release.py artifacts build/dist-a", workflow)
+        self.assertIn("verify_release.py source build/published-0.0.7", workflow)
+        self.assertIn("ref: 1e611c2a426684a6ede479e06e21a123a964a818", workflow)
+        self.assertIn("--check-inventory", workflow)
+        self.assertIn("--source-commit", workflow)
+        self.assertNotIn("verify_release.py artifacts build/dist-a", workflow)
         self.assertIn("verify_release.py artifacts", publishing)
         self.assertIn('tags: ["v0.0.7"]', publishing)
 
