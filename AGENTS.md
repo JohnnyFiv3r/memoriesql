@@ -17,3 +17,9 @@ materialization, reviewed producer identity scope and compatibility fences. See
 record bytes. That implementation slice authorized no provisioning or release. The separately
 owner-authorized 0.0.7 release follows `docs/releasing.md`, preserves all 21 SQL
 files and existing contracts/runtime, and stops for owner-only protected upload approval.
+
+The owner-authorized PR-02P development slice permits explicit provider-neutral
+bounded real-model admission and schema-22 atomic authored local mentions. These
+are unreleased forward changes, not replacement 0.0.7 release artifacts. Preserve
+the published SQL/contract bytes and the existing publication gates. Version
+selection, merge, tag, release and private consumption remain separately gated.

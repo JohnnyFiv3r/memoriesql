@@ -65,7 +65,7 @@ def main() -> None:
         assert MaterializeSourceStableUnit.model_fields["contract_version"].default == 2
         assert (
             MaterializeSourceStableUnit.model_fields["expected_schema_version"].default
-            == 22
+            == 21
         )
         assert callable(PostgresLogicalUnitMaterialization.materialize_source_stable)
         output = io.StringIO()

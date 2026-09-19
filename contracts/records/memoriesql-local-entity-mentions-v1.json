@@ -2,7 +2,7 @@
   "contract": {
     "empty_set": "Required mentions array may be empty. Accepted bead version's own task receipt (author-complete-unit revision 4) proves capability; legacy or unavailable results do not imply empty.",
     "evidence": "Enclosing immutable bead/source unit and original task/package pin; no fabricated character offsets or statement links.",
-    "registry_hash": "semantic-tasks-v1:bac958e312a9c7ff3a33fe90152bb1c807d15c713fa876326fc2d47c9c97e98a",
+    "registry_hash": "semantic-tasks-v1:0876addc48bcf62db405dff9d1a8b75eb497cbec739945d741d4db72aea4b6dd",
     "schemas": {
       "ActivateMentionAuthorship": {
         "$defs": {
@@ -347,6 +347,7 @@
           },
           "MentionExecutionOutput": {
             "additionalProperties": false,
+            "description": "Whole canonical JSON output is limited to 12,000 UTF-8 bytes.",
             "properties": {
               "annotations": {
                 "items": {
@@ -988,6 +989,7 @@
           },
           "MentionExecutionOutput": {
             "additionalProperties": false,
+            "description": "Whole canonical JSON output is limited to 12,000 UTF-8 bytes.",
             "properties": {
               "annotations": {
                 "items": {
@@ -2557,6 +2559,7 @@
           }
         },
         "additionalProperties": false,
+        "description": "Whole canonical JSON output is limited to 12,000 UTF-8 bytes.",
         "properties": {
           "annotations": {
             "items": {
@@ -2575,7 +2578,7 @@
         "type": "object"
       }
     },
-    "task_contract_hash": "eb9c91885e0eb7570e2426e01bc32fbd1ffcc3d2a02c3d1a634a1ddf68a58762",
+    "task_contract_hash": "8488d4fddf19e65a2eb41203d6b26d7b400d73516c044700246ab3a7e75adce5",
     "task_definition": {
       "allowed_delegate_keys": [],
       "allowed_tool_keys": [],
@@ -3596,6 +3599,7 @@
             }
           },
           "additionalProperties": false,
+          "description": "Whole canonical JSON output is limited to 12,000 UTF-8 bytes.",
           "properties": {
             "annotations": {
               "items": {
@@ -3614,7 +3618,7 @@
           "type": "object"
         },
         "revision": 1,
-        "schema_hash": "dd4d7b719b0b388667c7e76c1bf216d76aaedcd09510f14d2e3edda8d204da6e"
+        "schema_hash": "0baecb82f0993a29dbc6c1afb6e41a5f3b83b8ebfe1f70315d87b5a7672d8e8c"
       },
       "owning_module": "memoriesql.kernel",
       "run_budget": {

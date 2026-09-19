@@ -408,13 +408,13 @@
       "version": "1"
     },
     {
-      "canonical_payload_sha256": "e978152c3494abbfa90dee46c03ef4a04344dbbb74a39fe45292db64f7c786eb",
+      "canonical_payload_sha256": "abf1a51752e7e527c0e50416c850fa2f2795eeca774ec5de7f348950673b8c69",
       "catalog": "json_schema",
       "classification": "proposed_open_core",
       "id": "memoriesql.local-entity-mentions.v1",
       "package_disposition": "include",
       "path": "contracts/records/memoriesql-local-entity-mentions-v1.json",
-      "public_sha256": "c8936231544e8e41aab925479f78d1229bc4396a35333581b9547c02df700fba",
+      "public_sha256": "b420d80f6e4638533a4c3c0f1516b427af09eac996a58c9dec3cce2eb503b919",
       "reason": "Public-authored immutable local mention persistence and forward revisiting contracts.",
       "version": "1"
     },

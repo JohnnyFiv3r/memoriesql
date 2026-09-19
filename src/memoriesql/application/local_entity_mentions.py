@@ -65,7 +65,16 @@ class MentionBeadDraft(InitialBeadDraft):
 
 
 class MentionExecutionOutput(CompleteExecutionOutput):
+    """Whole canonical JSON output is limited to 12,000 UTF-8 bytes."""
+
     annotations: tuple[MentionBeadDraft, ...] = Field(min_length=1, max_length=1)
+
+
+    @model_validator(mode="after")
+    def aggregate_output_bound(self) -> MentionExecutionOutput:
+        if len(canonical_json_bytes(self.model_dump(mode="json"))) > 12000:
+            raise ValueError("local mention output exceeds 12000 canonical UTF-8 bytes")
+        return self
 
 
 class MentionExecutionInput(RevisitingExecutionInput):

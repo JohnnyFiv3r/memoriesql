@@ -9,7 +9,9 @@ Every authored bead requires `mentions`, a collection of at most 32 items; an em
 collection is valid. Each item has an opaque UUID `entity_mention_id`, nonblank
 `surface_text` of at most 1024 characters, `local_identity_state` of `unresolved` or
 `ambiguous`, and optional nonblank `local_identity_reason` of at most 1024
-characters. Ambiguity requires a reason. Names never identify canonical entities.
+characters. The entire canonical JSON output is additionally limited to 12,000
+UTF-8 bytes, matching SQL acceptance; individual field maxima cannot all be used
+simultaneously. Ambiguity requires a reason. Names never identify canonical entities.
 No global entity/candidate/resolution records are created.
 
 Acceptance writes existing `entity_mentions` rows in the same transaction as

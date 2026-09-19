@@ -311,7 +311,7 @@
       "disposition": "public",
       "path": "src/memoriesql/application/local_entity_mentions.py",
       "reason": "Public-authored bounded local mention contracts; no global identity matching.",
-      "sha256": "4106235ce486771dc94d2ffcba8a83134ed2ac596d619478d3f1c19c62703f4b"
+      "sha256": "73ef2a2478ea5472a68601b4401c5b487071138c2afb1d150ab615d3435d4829"
     }
   ]
 }

@@ -119,7 +119,7 @@ BEGIN
     input:=jsonb_build_object('task_id',tid,'task_kind','memory.semantic.author-complete-unit','contract_revision',4,'target_reference',b.source_unit_id,'expected_target_revision',0,'requested_effort_key',NULL,'requested_budget',NULL,
       'evidence_manifest',jsonb_build_object('manifest_id','complete-input.'||tid::text,'revision',1,'references',jsonb_build_array(jsonb_build_object('reference_id',b.source_unit_id,'content_hash',p.inventory_hash,'declared_characters',p.character_count))),
       'payload',jsonb_build_object('binding_task_id',b.task_id,'source_object_id',p.source_object_id,'event_id',b.event_id,'source_unit_ids',jsonb_build_array(b.source_unit_id),'bead_ids',jsonb_build_array(b.bead_id),'package',b.package_pin,'producer_policy_id',b.producer_policy_id,'dispatch_policy_id',request->>'dispatch_policy_id','declaration',p.declaration,'event_declaration',(SELECT declaration FROM memoriesql.source_event_materializations WHERE tenant_id=b.tenant_id AND event_id=b.event_id),'parent_source_unit_id',(SELECT parent_unit_id FROM memoriesql.source_units WHERE tenant_id=b.tenant_id AND source_unit_id=b.source_unit_id),'parent_resolution',(SELECT structure->'parent_resolution' FROM memoriesql.source_units WHERE tenant_id=b.tenant_id AND source_unit_id=b.source_unit_id),'required_execution','trusted_source_revisiting_v1','authorized_context',request->'authorized_context'));
-    SELECT q.idempotency_receipt_id INTO eid FROM memoriesql.enqueue_semantic_task(tid,'complete-input.v3:'||b.task_id::text,'memoriesql.kernel','memory.semantic.author-complete-unit',4,'eb9c91885e0eb7570e2426e01bc32fbd1ffcc3d2a02c3d1a634a1ddf68a58762','semantic-tasks-v1:bac958e312a9c7ff3a33fe90152bb1c807d15c713fa876326fc2d47c9c97e98a',b.source_unit_id::text,0,input,input#>>'{evidence_manifest,manifest_id}',b.access_scope_id,started,b.task_id,started) q;
+    SELECT q.idempotency_receipt_id INTO eid FROM memoriesql.enqueue_semantic_task(tid,'complete-input.v3:'||b.task_id::text,'memoriesql.kernel','memory.semantic.author-complete-unit',4,'8488d4fddf19e65a2eb41203d6b26d7b400d73516c044700246ab3a7e75adce5','semantic-tasks-v1:0876addc48bcf62db405dff9d1a8b75eb497cbec739945d741d4db72aea4b6dd',b.source_unit_id::text,0,input,input#>>'{evidence_manifest,manifest_id}',b.access_scope_id,started,b.task_id,started) q;
     result:=jsonb_build_object('contract_version',3,'authorized_context',request->'authorized_context','binding_task_id',b.task_id,'execution_task_id',tid,'idempotency_receipt_id',rid,'enqueue_receipt_id',eid,'package',b.package_pin,'replayed',false);
     PERFORM memoriesql.complete_input_authorize(c.tenant_id,b.task_id,(request->>'dispatch_policy_id')::uuid);
 
@@ -553,8 +553,8 @@ BEGIN
     END IF;
     IF e.execution_task_id IS NULL OR b.task_id IS NULL OR t.task_id IS NULL OR t.input_payload IS DISTINCT FROM expected OR t.rerun_of_task_id IS DISTINCT FROM b.task_id OR
        t.origin_principal_id IS DISTINCT FROM p.producer_principal_id OR t.access_scope_id IS DISTINCT FROM b.access_scope_id OR t.workspace_id IS DISTINCT FROM b.workspace_id OR
-       t.task_contract_hash IS DISTINCT FROM (CASE WHEN e.execution_contract_revision=4 THEN 'eb9c91885e0eb7570e2426e01bc32fbd1ffcc3d2a02c3d1a634a1ddf68a58762' WHEN e.execution_contract_revision=3 THEN 'c8c172146c570bde75077745d7f00afa116b5db8f1b78bca4aebada561066e2d' ELSE '5288a780557724d7c5be81afd28f50a0cc5e5b86a3c8e89ae241033e12f3f3fe' END) OR
-       t.semantic_registry_hash IS DISTINCT FROM (CASE WHEN e.execution_contract_revision=4 THEN 'semantic-tasks-v1:bac958e312a9c7ff3a33fe90152bb1c807d15c713fa876326fc2d47c9c97e98a' WHEN e.execution_contract_revision=3 THEN 'semantic-tasks-v1:116ac71ae8ac94ad8abc3018a0577a60a5e5e543ddf3660ae7db467f09764aef' ELSE 'semantic-tasks-v1:7e8a296cf1143deb86715144ed06cceefcb28dcc9955892ba7df5a06ded8f71f' END) THEN
+       t.task_contract_hash IS DISTINCT FROM (CASE WHEN e.execution_contract_revision=4 THEN '8488d4fddf19e65a2eb41203d6b26d7b400d73516c044700246ab3a7e75adce5' WHEN e.execution_contract_revision=3 THEN 'c8c172146c570bde75077745d7f00afa116b5db8f1b78bca4aebada561066e2d' ELSE '5288a780557724d7c5be81afd28f50a0cc5e5b86a3c8e89ae241033e12f3f3fe' END) OR
+       t.semantic_registry_hash IS DISTINCT FROM (CASE WHEN e.execution_contract_revision=4 THEN 'semantic-tasks-v1:0876addc48bcf62db405dff9d1a8b75eb497cbec739945d741d4db72aea4b6dd' WHEN e.execution_contract_revision=3 THEN 'semantic-tasks-v1:116ac71ae8ac94ad8abc3018a0577a60a5e5e543ddf3660ae7db467f09764aef' ELSE 'semantic-tasks-v1:7e8a296cf1143deb86715144ed06cceefcb28dcc9955892ba7df5a06ded8f71f' END) THEN
         RAISE EXCEPTION 'complete_execution_binding_conflict' USING ERRCODE='23514'; END IF;
     RETURN NULL;
 END; $$;
@@ -682,7 +682,7 @@ BEGIN
                 AND requested_command->>'output_contract_hash'='7399c5039812e98d4d53566cb028350effb476a395a83c6fa17b8445ad9f1124')
             OR (requested_command->>'contract_version'='5' AND requested_command->>'expected_schema_version'='22'
                 AND requested_command->>'task_kind'='memory.semantic.author-complete-unit' AND requested_command->>'contract_revision'='4'
-                AND requested_command->>'output_contract_hash'='dd4d7b719b0b388667c7e76c1bf216d76aaedcd09510f14d2e3edda8d204da6e')
+                AND requested_command->>'output_contract_hash'='0baecb82f0993a29dbc6c1afb6e41a5f3b83b8ebfe1f70315d87b5a7672d8e8c')
             OR (is_v2
              AND requested_command ->> 'expected_schema_version' IS NOT DISTINCT FROM '15'
              AND requested_command ->> 'contract_revision' IS NOT DISTINCT FROM '2'
@@ -1597,4 +1597,4 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog,memoriesql AS $$
     AND x.package_id=b.package_id AND x.inventory_hash=b.package_pin->>'inventory_sha256' AND x.part_id=p.part_id AND x.end_character=(p.inventory->>'characters')::integer) END))
 $$;
 
-INSERT INTO memoriesql.semantic_task_admission_policies (semantic_registry_hash,task_kind,contract_revision,owning_module,task_contract_hash,target_kind,required_capability,queue_name,base_priority,max_attempts,concurrency_key,concurrency_limit) VALUES ('semantic-tasks-v1:bac958e312a9c7ff3a33fe90152bb1c807d15c713fa876326fc2d47c9c97e98a','memory.semantic.author-complete-unit',4,'memoriesql.kernel','eb9c91885e0eb7570e2426e01bc32fbd1ffcc3d2a02c3d1a634a1ddf68a58762','canonical_semantics','memory.capture','capture',50,3,NULL,NULL);
+INSERT INTO memoriesql.semantic_task_admission_policies (semantic_registry_hash,task_kind,contract_revision,owning_module,task_contract_hash,target_kind,required_capability,queue_name,base_priority,max_attempts,concurrency_key,concurrency_limit) VALUES ('semantic-tasks-v1:0876addc48bcf62db405dff9d1a8b75eb497cbec739945d741d4db72aea4b6dd','memory.semantic.author-complete-unit',4,'memoriesql.kernel','8488d4fddf19e65a2eb41203d6b26d7b400d73516c044700246ab3a7e75adce5','canonical_semantics','memory.capture','capture',50,3,NULL,NULL);

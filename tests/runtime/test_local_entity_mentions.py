@@ -129,6 +129,18 @@ class LocalMentions(fixtures.SourceRevisiting):
         self.assert_no_meaning()
         self.assertEqual(self.row("SELECT count(*) FROM memoriesql.entity_mentions"), (0,))
 
+    def test_aggregate_payload_bound_rejects_individually_valid_mentions(self) -> None:
+        self.mentions = [dict(
+            entity_mention_id=str(uuid.uuid4()), surface_text="🌳" * 1024,
+            local_identity_state="unresolved", local_identity_reason=None,
+        ) for _ in range(32)]
+        self.setup_mentions()
+        result = asyncio.run(self.worker().run_once())
+        self.assertNotEqual(result.task_status, "succeeded", result)
+        self.assert_no_meaning()
+        self.assertEqual(self.row("SELECT count(*) FROM memoriesql.entity_mentions"), (0,))
+        self.assertEqual(self.row("SELECT count(*) FROM memoriesql.model_usage_events"), (1,))
+
     def test_sql_failure_rolls_back_mentions_and_replay_preserves_set(self) -> None:
         import copy
         import hashlib
