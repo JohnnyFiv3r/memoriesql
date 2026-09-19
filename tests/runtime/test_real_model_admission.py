@@ -113,6 +113,21 @@ class AdmissionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.status, "budget_exhausted", result)
         self.assertEqual(len(ports.usages), 1)
         self.assertIsNone(result.typed_output)
+        self.assertEqual(result.usage.requests, 1)
+        self.assertEqual(result.usage.input_tokens, 601)
+        self.assertEqual(result.usage.output_tokens, 1)
+        self.assertEqual(ports.usage, result.usage)
+
+    async def test_existing_usage_is_reserved_before_new_dispatch(self) -> None:
+        from memoriesql.application.semantic_task_contracts import UsageSummary
+        executor, task, deps, ports = fixture(binding_factory=admitted)
+        ports.usage = UsageSummary(requests=1, input_tokens=500)
+        result = await executor.execute(task, deps)
+        self.assertEqual(result.status, "budget_exhausted", result)
+        self.assertEqual(ports.intents, [])
+        self.assertNotIn("model", ports.order)
+        self.assertEqual(result.usage, ports.usage)
+        self.assertEqual(result.usage.input_tokens, 500)
 
     def test_default_denial_and_exact_admission(self) -> None:
         captured = []

@@ -477,6 +477,7 @@ class _TreeState:
     run_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     delegate_calls: int = 0
     provider_request_sequence: int = 0
+    reserved_requests: int = 0
     reserved_input_tokens: int = 0
     reserved_output_tokens: int = 0
     run_refs: list[str] = field(default_factory=list)
@@ -498,6 +499,9 @@ class _TreeState:
 
     def __post_init__(self) -> None:
         self.delegations_closed.set()
+        self.reserved_requests = self.usage.requests
+        self.reserved_input_tokens = self.usage.input_tokens
+        self.reserved_output_tokens = self.usage.output_tokens
 
     async def add_run(self, run_id: str) -> None:
         async with self.run_lock:
@@ -513,7 +517,7 @@ class _TreeState:
                 inputs = self.reserved_input_tokens + bounds.input_tokens
                 outputs = self.reserved_output_tokens + bounds.output_tokens
                 if (
-                    self.provider_request_sequence >= budget.request_limit
+                    self.reserved_requests >= budget.request_limit
                     or inputs > budget.input_token_limit
                     or outputs > budget.output_token_limit
                     or inputs + outputs > budget.total_token_limit
@@ -521,6 +525,7 @@ class _TreeState:
                     raise UsageLimitExceeded("next provider request exceeds reserved budget")
                 # Never refund unknown, failed, cancelled or cached usage. This
                 # deliberately conservative allowance is shared by the run tree.
+                self.reserved_requests += 1
                 self.reserved_input_tokens = inputs
                 self.reserved_output_tokens = outputs
             self.provider_request_sequence += 1
@@ -883,6 +888,8 @@ class _DispatchGuardedModel(WrapperModel):
         ):
             # Preserve truthful accounting, but never accept a transport that
             # violated its qualification as trusted exposure or authored output.
+            state.usage.requests += 1
+            state.usage.incr(response.usage)
             raise UsageLimitExceeded("provider exceeded admitted request bounds")
         if exposed_window is not None:
             await state.require_dispatch_open()

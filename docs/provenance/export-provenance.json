@@ -974,7 +974,7 @@
       "classification": "public-authored",
       "license": "Apache-2.0",
       "public_path": "contracts/runtime-inventory.json",
-      "public_sha256": "a6a44773da80ed686eb8a6693398be09f7991985519d95048861a3bc813127f2",
+      "public_sha256": "d6befe5d1f3ab6731497807a9a5dcc5109dbac8bcfa7cf0c93c6b0942b7aa719",
       "reason": "Public N2 dependency inventory and fictional runtime acceptance."
     },
     {
@@ -1562,14 +1562,14 @@
       "classification": "public_authored",
       "license": "Apache-2.0",
       "public_path": "docs/real-model-admission.md",
-      "public_sha256": "82b6616a562325977e60b78ca354e3c7081d7212cfc6274e5b4416598c6acefb",
+      "public_sha256": "bb005374115fbce194a53ecfded5b2a3b6866c46038ebd8a64e3c1c72e7ad4be",
       "reason": "Document provider-neutral explicit bounded admission and qualification limits."
     },
     {
       "classification": "public_authored",
       "license": "Apache-2.0",
       "public_path": "tests/runtime/test_real_model_admission.py",
-      "public_sha256": "c9e7b3c95b1cc1d7f27acb0eb6816284629b3dfb7977d4d00073e01f752ff044",
+      "public_sha256": "39b98a0ad93edd06ff1f8e7a0a75704a1ad6a3c2c297a4f9d3aa5b40024ff3b4",
       "reason": "Fictional public coverage of explicit admission, conservative reservations and cancellation accounting."
     }
   ],
@@ -1874,7 +1874,7 @@
       "classification": "public-forward",
       "license": "Apache-2.0",
       "public_path": "src/memoriesql/infrastructure/models/pydanticai_executor.py",
-      "public_sha256": "801a8ea43cebd4270c02fe72925a37a8c938d5fd137214e85a7af0ee62233591",
+      "public_sha256": "d0433de2619e63e19db6d2d52c81498d7721d86476065478d23e60668d1dc2f7",
       "reason": "Public-authored cancellation cleanup ownership and post-intent dispatch gate; original N2 extraction hash retained as historical provenance.",
       "source_sha256": "07d4c861ce40062c227352f6fd240b7445500776ba6216fdd739027020da3b1c"
     },

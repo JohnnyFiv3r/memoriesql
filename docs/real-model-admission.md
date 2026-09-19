@@ -22,7 +22,7 @@ The existing executor retains concurrency, queue/attempt fencing, authorization,
 trusted source delivery and canonical acceptance. It reserves the next request's
 maximum input and output under the execution tree's request lock before durable
 intent and inference. All reservations count against request, directional and total
-token limits. Reservations are never refunded, even when usage is small, missing,
+token limits, starting from the trusted initial usage snapshot. Reservations are never refunded, even when usage is small, missing,
 cached, failed or cancelled. The durable intent records these maxima; usage remains
 truthful and independent. Reported overruns are accounted but cannot authorize
 exposure or successful output. This detects a broken adapter; it cannot undo a

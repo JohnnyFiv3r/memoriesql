@@ -160,7 +160,7 @@
       "disposition": "public-forward",
       "path": "src/memoriesql/infrastructure/models/pydanticai_executor.py",
       "reason": "Public forward explicit bounded real-model admission and conservative pre-dispatch run-tree reservations; existing characterized execution retained.",
-      "sha256": "801a8ea43cebd4270c02fe72925a37a8c938d5fd137214e85a7af0ee62233591",
+      "sha256": "d0433de2619e63e19db6d2d52c81498d7721d86476065478d23e60668d1dc2f7",
       "source_sha256": "07d4c861ce40062c227352f6fd240b7445500776ba6216fdd739027020da3b1c"
     },
     {
