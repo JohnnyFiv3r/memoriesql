@@ -557,7 +557,7 @@
       "classification": "proposed_open_core",
       "license": "Apache-2.0",
       "public_path": "scripts/inspect_python_distribution.py",
-      "public_sha256": "61f2dd4d0b7b504da9ab626afe88cc7975da797dccb5bb1e2bb92d46eb531f1a",
+      "public_sha256": "82a6aae2cc615133c58d8a46b95ef9dd84be7e68e5656e9e784552ad60e9057b",
       "reason": "Reviewed packaging-spike input ported or adapted for the public bootstrap.",
       "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
       "reviewed_spike_source_sha256": "17f72b342444381ac5c5aab2004ed261509877f04298c42d03ea0bd186e13f62"
@@ -715,7 +715,7 @@
       "classification": "public_release_configuration",
       "license": "Apache-2.0",
       "public_path": "tests/unit/test_release_controls.py",
-      "public_sha256": "a8883aef099d1db342c2e9ecad17404058d508f8e4e09f3b76a7dbbbccd90270",
+      "public_sha256": "0636dd7d76ecf21518d0245678fc9d2c74016c661ac4561cbd88567f94879ca1",
       "reason": "Synthetic focused regression tests for release identity, CI status, and artifact integrity."
     },
     {

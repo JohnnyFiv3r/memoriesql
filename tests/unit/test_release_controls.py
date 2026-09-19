@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
+import tarfile
 import tempfile
 import tomllib
 import unittest
@@ -10,7 +12,11 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
-from scripts.inspect_python_distribution import development_inventory
+from scripts.inspect_python_distribution import (
+    AUTHORED_SDIST_FILES,
+    development_inventory,
+    verify_authored_sdist_members,
+)
 from scripts.verify_release import (
     APPROVED_VERSION,
     RELEASE_INVENTORY,
@@ -273,6 +279,26 @@ class ReleaseControlTests(unittest.TestCase):
             for wrong in ("b" * 40, "main", ""):
                 with self.subTest(commit=wrong), self.assertRaises(ValueError):
                     development_inventory({"artifacts": []}, wrong)
+
+    def test_authored_sdist_bytes_are_checked_even_without_wheel_effect(self) -> None:
+        root = Path(__file__).resolve().parents[2]
+        for tampered in (None, "setup.py", "MANIFEST.in", "README.md"):
+            payload = io.BytesIO()
+            with tarfile.open(fileobj=payload, mode="w") as archive:
+                for name in sorted(AUTHORED_SDIST_FILES):
+                    content = (root / name).read_bytes()
+                    if name == tampered:
+                        content += b"\n# sdist-only tampering\n"
+                    member = tarfile.TarInfo(f"memoriesql-0.0.7/{name}")
+                    member.size = len(content)
+                    archive.addfile(member, io.BytesIO(content))
+            payload.seek(0)
+            with self.subTest(tampered=tampered), tarfile.open(fileobj=payload) as archive:
+                if tampered is None:
+                    verify_authored_sdist_members(archive)
+                else:
+                    with self.assertRaisesRegex(ValueError, "sdist differs"):
+                        verify_authored_sdist_members(archive)
 
     @staticmethod
     def make_artifacts(directory: Path) -> dict[str, Any]:
