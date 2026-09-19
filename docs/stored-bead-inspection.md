@@ -30,7 +30,8 @@ resolution is never substituted. No partial candidate set is returned.
 The application adapter owns a fresh transaction and current authorization context
 per request. Source, statement, context and classification dependencies are checked;
 the contribution is withheld as part of the whole bead if a prerequisite is
-unavailable. All pinned optional classification context is conservatively checked,
+unavailable. All pinned optional authoring context is conservatively checked for every accepted
+execution revision, including results without classification,
 even when it was not used as supporting evidence. It is never displayed as support.
 Revoking producer/dispatch permission does not itself revoke a human's permission
 to inspect already stored evidence. Source and model resource permissions do.
@@ -49,7 +50,10 @@ source topology remains unknown. No synthetic statement-to-span links are added.
 
 Bounds: one bead, 32 statements, 64 unit support links per statement, 32 mentions,
 64 authorized resolution candidates, 262144 canonical response bytes, 16384
-normalized characters or 32768 raw bytes per page. Larger stored aggregates yield
+normalized characters or 32768 raw bytes per page, with offsets at most 262143.
+Candidate cardinality is checked with a 65-row sentinel before candidate
+authorization; oversized global decisions stay unavailable without disclosing
+protected existence or counts. Larger stored statement/mention aggregates yield
 `budget_exhausted` without truncation. The adapter sets a 2.5-second statement and
 500ms lock timeout; timeout/lock exhaustion yields the same explicit bounded
 outcome. Missing and protected resources return identical `unavailable` shapes.

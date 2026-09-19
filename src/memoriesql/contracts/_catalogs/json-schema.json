@@ -28076,9 +28076,9 @@
           },
           "ReadStoredBeadEvidence": {
             "$defs": {
-              "ReadSourceEvidence": {
+              "StoredEvidenceSelection": {
                 "additionalProperties": false,
-                "description": "Ordinal identifies retained storage, never an invented semantic unit.",
+                "description": "Q reader bound; the earlier worker selection contract is unchanged.",
                 "properties": {
                   "inventory_sha256": {
                     "pattern": "^[a-f0-9]{64}$",
@@ -28108,6 +28108,7 @@
                   },
                   "offset": {
                     "default": 0,
+                    "maximum": 262143,
                     "minimum": 0,
                     "title": "Offset",
                     "type": "integer"
@@ -28138,7 +28139,7 @@
                   "inventory_sha256",
                   "part_ordinal"
                 ],
-                "title": "ReadSourceEvidence",
+                "title": "StoredEvidenceSelection",
                 "type": "object"
               }
             },
@@ -28156,7 +28157,7 @@
                 "type": "integer"
               },
               "selection": {
-                "$ref": "#/$defs/ReadSourceEvidence"
+                "$ref": "#/$defs/StoredEvidenceSelection"
               }
             },
             "required": [

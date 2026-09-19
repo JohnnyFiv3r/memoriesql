@@ -567,13 +567,13 @@
       "version": "1"
     },
     {
-      "canonical_payload_sha256": "8548386f5eafb5c8c237ed27c56ec25708163eeaf449545dfcbef5d06f36ff76",
+      "canonical_payload_sha256": "e7443855ea6c180226fbeebf4af634eca6574321ee063b1b5714168fcf770d19",
       "catalog": "json_schema",
       "classification": "proposed_open_core",
       "id": "memoriesql.stored-bead-inspection.v1",
       "package_disposition": "include",
       "path": "contracts/records/memoriesql-stored-bead-inspection-v1.json",
-      "public_sha256": "7634376e810818396b64af9d2f519e3c2d7dac48e5c68f55f99828285f5ebbbc",
+      "public_sha256": "ffe6441a0590a2d1fd91583df1a7e14ff0582995e10d342c8c863d40108f2c4a",
       "reason": "Owner-authorized Q public stored-result reads stacked on P handoff b98d5cc.",
       "version": "1"
     },

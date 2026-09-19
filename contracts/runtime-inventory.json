@@ -324,7 +324,7 @@
       "disposition": "adapt",
       "path": "src/memoriesql/application/stored_bead_inspection.py",
       "reason": "Q-owned bounded authorized stored-result inspection; no canonical writes.",
-      "sha256": "af82f03e7d2e50a1e803b7ca0dcd8a1fc7a6ef996990c1e260a8601567b9a5f2",
+      "sha256": "a4baaddd4698af18cdfcb5a54f8cc92bf7d9e09f14d8ba5bf173625034b85f38",
       "source_sha256": "19515a463bccf1fdb6d94f74ef76b3bd2bd7906f016133b677b46022821990fb"
     },
     {

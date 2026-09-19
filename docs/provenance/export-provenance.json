@@ -638,7 +638,7 @@
       "classification": "proposed_open_core",
       "license": "Apache-2.0",
       "public_path": "src/memoriesql/contracts/_catalogs/json-schema.json",
-      "public_sha256": "ab7462eb7711776bc0b537819c961c82a41e26dec78ded6e856a3b28e6959d8d",
+      "public_sha256": "f83e87397a0ddee7e2aeb1669de896dc4a4c6a0c010d43c036d9fdf345a1c169",
       "reason": "Approved record payloads regenerated with public-owned catalog metadata.",
       "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
       "reviewed_spike_source_sha256": "765f8dd3d4b5e594980ba38f6e1ac11f29d3198746299217361e1c56b360cf26"
@@ -792,7 +792,7 @@
       "classification": "public_bootstrap",
       "license": "Apache-2.0",
       "public_path": "contracts/public-registry.json",
-      "public_sha256": "45637e2142ed0cf4437d1fd836126475fb3ca1524cb2f1820316f4902fccebbc",
+      "public_sha256": "11cccffd447f1be8ba0d94dd6759bb442e72fb740e06858d8540ae466bd19a77",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {
@@ -890,14 +890,14 @@
       "classification": "approved_migration_substrate",
       "license": "Apache-2.0",
       "public_path": "contracts/migration-inventory.json",
-      "public_sha256": "b7ec50021b143ce908f2648d1d5c3e0775582aa931e244b38be68cd87d21d26b",
+      "public_sha256": "ee4c55d3fd0f1da05eb6a10e9c8b681cff84b38b69beecbd4da6ee0b9c3489cd",
       "reason": "Public-owned N1 inventory; audited copy/adapt details in migration-extraction.json where applicable."
     },
     {
       "classification": "approved_migration_substrate",
       "license": "Apache-2.0",
       "public_path": "docs/provenance/migration-extraction.json",
-      "public_sha256": "aac644c8f0f5bfd6272c8bb5e97dd6fa3fe2a5417d6723dc5494417ec8103b03",
+      "public_sha256": "8125de723af04b52aa80aed648095aef3ab14974c7311d485ecd0daa1419d635",
       "reason": "Public-owned N1 inventory; audited copy/adapt details in migration-extraction.json where applicable."
     },
     {
@@ -974,7 +974,7 @@
       "classification": "public-authored",
       "license": "Apache-2.0",
       "public_path": "contracts/runtime-inventory.json",
-      "public_sha256": "236a048b626ddccc9c5446446d248635d033f34b8730f668bb9909ab8ad319ba",
+      "public_sha256": "5c175610fc7a6af6733a641be21c1fa2bbf7b258e3d8004c3a4d3ca5d2ab2bf4",
       "reason": "Public N2 dependency inventory and fictional runtime acceptance."
     },
     {
@@ -1646,21 +1646,21 @@
       "classification": "proposed_open_core",
       "license": "Apache-2.0",
       "public_path": "contracts/records/memoriesql-stored-bead-inspection-v1.json",
-      "public_sha256": "7634376e810818396b64af9d2f519e3c2d7dac48e5c68f55f99828285f5ebbbc",
+      "public_sha256": "ffe6441a0590a2d1fd91583df1a7e14ff0582995e10d342c8c863d40108f2c4a",
       "reason": "Q-owned bounded authorized stored-result inspection, fictional tests and explicit contract catalog."
     },
     {
       "classification": "proposed_open_core",
       "license": "Apache-2.0",
       "public_path": "docs/stored-bead-inspection.md",
-      "public_sha256": "10a93a1bc7805713cdbc930c0010009f27f8cd1d90efb7766820eb2e2aeb1918",
+      "public_sha256": "ea7fc9bf539172b9005e3741246bc7790d4590ac1541c335f8c7ea091550a92c",
       "reason": "Q-owned bounded authorized stored-result inspection, fictional tests and explicit contract catalog."
     },
     {
       "classification": "proposed_open_core",
       "license": "Apache-2.0",
       "public_path": "migrations/0024_bounded_stored_bead_inspection.sql",
-      "public_sha256": "da9dd494a5e62191f85866dbc6c793e84886677d7cf5fcdf475292e5448750ff",
+      "public_sha256": "db242602f27174605386077307b7bce696e29cd760cc660f350ef61c1b22d604",
       "reason": "Q-owned bounded authorized stored-result inspection, fictional tests and explicit contract catalog."
     },
     {
@@ -1674,7 +1674,7 @@
       "classification": "proposed_open_core",
       "license": "Apache-2.0",
       "public_path": "src/memoriesql/application/stored_bead_inspection.py",
-      "public_sha256": "af82f03e7d2e50a1e803b7ca0dcd8a1fc7a6ef996990c1e260a8601567b9a5f2",
+      "public_sha256": "a4baaddd4698af18cdfcb5a54f8cc92bf7d9e09f14d8ba5bf173625034b85f38",
       "reason": "Q-owned bounded authorized stored-result inspection, fictional tests and explicit contract catalog."
     },
     {
@@ -1688,7 +1688,7 @@
       "classification": "proposed_open_core",
       "license": "Apache-2.0",
       "public_path": "tests/runtime/test_stored_bead_inspection.py",
-      "public_sha256": "8d0c44bd3d2047cd76314f0b4ced92550153c919475121644f20cb41fec2915b",
+      "public_sha256": "4bcd39b5025d1d513def142807b2f637573c44945e71a181ff8d8f009c12bc97",
       "reason": "Q-owned bounded authorized stored-result inspection, fictional tests and explicit contract catalog."
     }
   ],

@@ -135,10 +135,16 @@ class StoredBeadInspection(FrozenContractModel):
         return self
 
 
+class StoredEvidenceSelection(ReadSourceEvidence):
+    """Q reader bound; the earlier worker selection contract is unchanged."""
+
+    offset: int = Field(default=0, ge=0, le=262143)
+
+
 class ReadStoredBeadEvidence(FrozenContractModel):
     contract_version: Literal[1] = 1
     bead_id: UUID
-    selection: ReadSourceEvidence
+    selection: StoredEvidenceSelection
 
 
 class StoredBeadEvidence(FrozenContractModel):

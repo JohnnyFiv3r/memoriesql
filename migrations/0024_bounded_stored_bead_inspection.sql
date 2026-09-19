@@ -20,6 +20,7 @@ DECLARE
  decision jsonb; entities jsonb; meaning jsonb:=NULL; provenance jsonb:=NULL;
  result jsonb; bead_type jsonb; status text; lifecycle text:='thin';
  sources uuid[]:='{}'; source uuid; watermark bigint; amount integer;
+ candidate_id uuid; candidates_authorized boolean;
  started timestamptz:=clock_timestamp();
  unavailable constant jsonb:='{"contract_version":1,"outcome":"unavailable","bead":null}';
  budget constant jsonb:='{"contract_version":1,"outcome":"budget_exhausted","bead":null}';
@@ -59,6 +60,19 @@ BEGIN
   SELECT * INTO r FROM memoriesql.semantic_task_receipts WHERE tenant_id=v.tenant_id AND semantic_task_receipt_id=v.semantic_task_receipt_id;
   SELECT * INTO ir FROM memoriesql.idempotency_receipts WHERE tenant_id=r.tenant_id AND idempotency_receipt_id=r.idempotency_receipt_id;
   IF r.semantic_task_receipt_id IS NULL OR ir.status IS DISTINCT FROM 'succeeded' THEN RETURN unavailable; END IF;
+  -- Accepted provenance is bound to its own receipt, never the newest source task.
+  SELECT * INTO execution FROM memoriesql.complete_input_executions
+   WHERE tenant_id=r.tenant_id AND execution_task_id=ir.resource_id;
+  IF ir.operation_kind IN ('complete_input.apply.v1','complete_input.apply.v2','complete_input.apply.v3','complete_input.apply.v4')
+   AND execution.execution_task_id IS NULL THEN RETURN unavailable; END IF;
+  SELECT q.status INTO status FROM memoriesql.semantic_tasks q
+   WHERE q.tenant_id=r.tenant_id AND q.task_id=execution.execution_task_id;
+  -- Every accepted author can depend on optional context, including revisions 3/4
+  -- without a classifier. Conservatively authorize every pinned source.
+  FOR item IN SELECT value FROM jsonb_array_elements(execution.authorized_context) LOOP
+   source:=(item->>'source_object_id')::uuid;
+   PERFORM memoriesql.revisiting_source_authorize(source); sources:=array_append(sources,source);
+  END LOOP;
   SELECT statement_watermark INTO watermark FROM memoriesql.bead_statement_revisions WHERE tenant_id=v.tenant_id AND bead_version_id=v.bead_version_id;
   SELECT count(*) INTO amount FROM (SELECT 1 FROM memoriesql.bead_semantic_statements
    WHERE tenant_id=v.tenant_id AND bead_id=v.bead_id AND statement_sequence<=watermark LIMIT 33) bounded;
@@ -100,13 +114,27 @@ BEGIN
     decision:=jsonb_build_object('availability','unavailable','resolution_id',NULL,'status',NULL,'entity_ids',NULL);
     IF resolution.entity_mention_resolution_id IS NOT NULL AND
       memoriesql.current_context_bead_version_authorized(resolution.tenant_id,resolution.workspace_id,resolution.access_scope_id,resolution.evidence_bead_version_id)
-      AND (resolution.resolved_entity_id IS NULL OR memoriesql.current_context_entity_authorized(resolution.tenant_id,resolution.workspace_id,resolution.access_scope_id,resolution.resolved_entity_id))
-      AND (resolution.resolution_status<>'ambiguous' OR memoriesql.current_context_entity_candidates_authorized(resolution.tenant_id,resolution.workspace_id,resolution.access_scope_id,resolution.entity_mention_resolution_id)) THEN
-     SELECT count(*) INTO amount FROM (SELECT 1 FROM memoriesql.entity_resolution_candidates WHERE tenant_id=m.tenant_id AND entity_mention_resolution_id=resolution.entity_mention_resolution_id LIMIT 65) bounded;
-     IF amount>64 THEN RETURN budget; END IF;
-     SELECT COALESCE(jsonb_agg(candidate_entity_id ORDER BY candidate_ordinal),'[]') INTO entities FROM memoriesql.entity_resolution_candidates WHERE tenant_id=m.tenant_id AND entity_mention_resolution_id=resolution.entity_mention_resolution_id;
-     IF resolution.resolved_entity_id IS NOT NULL THEN entities:=jsonb_build_array(resolution.resolved_entity_id); END IF;
-     decision:=jsonb_build_object('availability','available','resolution_id',resolution.entity_mention_resolution_id,'status',resolution.resolution_status,'entity_ids',entities);
+      AND (resolution.resolved_entity_id IS NULL OR memoriesql.current_context_entity_authorized(resolution.tenant_id,resolution.workspace_id,resolution.access_scope_id,resolution.resolved_entity_id)) THEN
+     -- Materialize at most 65 candidates once. Never invoke the unbounded aggregate
+     -- predicate or re-query the full set after the bound (including under insert races).
+     SELECT COALESCE(jsonb_agg(candidate_entity_id ORDER BY candidate_ordinal),'[]') INTO entities
+      FROM (SELECT candidate_entity_id,candidate_ordinal FROM memoriesql.entity_resolution_candidates
+       WHERE tenant_id=m.tenant_id AND entity_mention_resolution_id=resolution.entity_mention_resolution_id
+       ORDER BY candidate_ordinal LIMIT 65) bounded;
+     amount:=jsonb_array_length(entities);
+     -- An oversized decision stays indistinguishable from a protected/absent decision.
+     IF amount<=64 THEN
+      candidates_authorized:=resolution.resolution_status<>'ambiguous' OR amount>=2;
+      FOR candidate_id IN SELECT value::uuid FROM jsonb_array_elements_text(entities) LOOP
+       IF NOT memoriesql.current_context_entity_authorized(resolution.tenant_id,resolution.workspace_id,resolution.access_scope_id,candidate_id) THEN
+        candidates_authorized:=false; EXIT;
+       END IF;
+      END LOOP;
+      IF candidates_authorized THEN
+       IF resolution.resolved_entity_id IS NOT NULL THEN entities:=jsonb_build_array(resolution.resolved_entity_id); END IF;
+       decision:=jsonb_build_object('availability','available','resolution_id',resolution.entity_mention_resolution_id,'status',resolution.resolution_status,'entity_ids',entities);
+      END IF;
+     END IF;
     END IF;
     mentions:=mentions||jsonb_build_array(jsonb_build_object('entity_mention_id',m.entity_mention_id,'surface_text',m.surface_text,
      'local_identity_state',m.local_identity_state,'local_identity_reason',m.local_identity_reason,'resolution',decision));
@@ -119,12 +147,6 @@ BEGIN
     AND request_id=(v.classification_contribution->>'request_id')::uuid AND task_id=ir.resource_id;
    IF intent.request_id IS NULL OR intent.workspace_id<>c.workspace_id OR
     NOT memoriesql.current_context_scope_authorized(intent.access_scope_id,'memory.query','read') THEN RETURN unavailable; END IF;
-   -- The contribution, packet and model provenance depend on every exposed source,
-   -- including inspected optional context. Do not confuse that context with support.
-   FOR item IN SELECT value FROM jsonb_array_elements(execution.authorized_context) LOOP
-    source:=(item->>'source_object_id')::uuid;
-    PERFORM memoriesql.revisiting_source_authorize(source); sources:=array_append(sources,source);
-   END LOOP;
    FOR item IN SELECT value FROM jsonb_array_elements(v.classification_contribution->'evidence') LOOP
     SELECT * INTO p FROM memoriesql.evidence_packages WHERE tenant_id=v.tenant_id AND package_id=(item#>>'{selection,package_id}')::uuid;
     IF p.package_id IS NULL OR p.inventory_hash IS DISTINCT FROM item#>>'{selection,inventory_sha256}' THEN RETURN unavailable; END IF;
@@ -233,6 +255,12 @@ BEGIN
  OR request->>'contract_version' IS DISTINCT FROM '1' OR octet_length(request::text)>4096
  OR jsonb_typeof(selection) IS DISTINCT FROM 'object' THEN
   RAISE EXCEPTION 'invalid_stored_evidence_read' USING ERRCODE='22023'; END IF;
+ -- Validate the public Q bound before any integer narrowing in storage mechanics.
+ IF jsonb_typeof(selection->'offset') IS DISTINCT FROM 'number'
+ OR COALESCE(selection->>'offset','') !~ '^[0-9]{1,6}$' THEN
+  RAISE EXCEPTION 'invalid_stored_evidence_offset' USING ERRCODE='22023'; END IF;
+ IF (selection->>'offset')::integer>262143 THEN
+  RAISE EXCEPTION 'invalid_stored_evidence_offset' USING ERRCODE='22023'; END IF;
  snapshot:=memoriesql.inspect_stored_bead_v1(request-'selection');
  IF snapshot->>'outcome'<>'available' THEN RETURN jsonb_build_object('contract_version',1,'outcome',snapshot->>'outcome','evidence',NULL); END IF;
  -- Target package is whole-unit support. Other packages require an actually persisted

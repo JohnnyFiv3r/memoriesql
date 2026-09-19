@@ -172,7 +172,7 @@
     {
       "disposition": "adapt",
       "public_path": "migrations/0024_bounded_stored_bead_inspection.sql",
-      "public_sha256": "da9dd494a5e62191f85866dbc6c793e84886677d7cf5fcdf475292e5448750ff",
+      "public_sha256": "db242602f27174605386077307b7bce696e29cd760cc660f350ef61c1b22d604",
       "reason": "Q-owned bounded authorized stored-result inspection; no canonical writes.",
       "source_sha256": "182cf71fba7cdab3a2d5c8e89d33942346e3998b9ff83f4c1c117b15b741e1c6"
     }

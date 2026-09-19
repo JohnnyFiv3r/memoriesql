@@ -7,10 +7,10 @@ import unittest
 import uuid
 from typing import TYPE_CHECKING, Any, cast
 
-from memoriesql.application.source_revisiting import ReadSourceEvidence
 from memoriesql.application.stored_bead_inspection import (
     InspectStoredBead,
     ReadStoredBeadEvidence,
+    StoredEvidenceSelection,
 )
 from memoriesql.infrastructure.postgres.migration_runner import migrate
 from memoriesql.infrastructure.postgres.stored_bead_inspection import (
@@ -25,6 +25,57 @@ else:
     from test_bead_classification import BeadClassification
     from test_local_entity_mentions import LocalMentions
     from test_source_revisiting import SourceRevisiting
+
+
+def optional_context_fixture(self: Any) -> tuple[uuid.UUID, Any]:
+    from memoriesql.application.logical_unit_materialization import SealedPackagePin
+    from memoriesql.application.source_revisiting import AuthorizedContextPin
+
+    other = uuid.uuid4()
+    self.db.execute(
+        "INSERT INTO memoriesql.protected_resources SELECT tenant_id,workspace_id,access_scope_id,%s,resource_kind,owner_user_id,status,created_by_principal_id,created_at FROM memoriesql.protected_resources WHERE resource_id=%s",
+        (other, self.source),
+    )
+    self.db.execute(
+        "INSERT INTO memoriesql.source_objects(tenant_id,workspace_id,access_scope_id,source_object_id,source_system,object_kind,external_object_id,schema_version,metadata,created_at,last_observed_at,owner_user_id) SELECT tenant_id,workspace_id,access_scope_id,%s,source_system,object_kind,'orchard.private-context',schema_version,metadata,created_at,last_observed_at,owner_user_id FROM memoriesql.source_objects WHERE source_object_id=%s",
+        (other, self.source),
+    )
+    original = self.source
+    self.source = other
+    import sys
+    from unittest.mock import patch
+
+    fixture = sys.modules[self.part.__module__]
+    builder = fixture.build_capture_source_range_command
+
+    def other_checkpoint(**kwargs: Any) -> Any:
+        kwargs["checkpoint_key"] = "orchard.other.raw"
+        return builder(**kwargs)
+
+    with patch.object(
+        fixture, "build_capture_source_range_command", side_effect=other_checkpoint
+    ):
+        package = self.package(
+            "Separate fictional context.", occurrence_key="orchard.other.context"
+        )
+    status = self.status(package)
+    self.source = original
+    self.offset = 0
+    self.sequence = 0
+    pin = SealedPackagePin(
+        package_id=package.package_id,
+        sealed_receipt_id=self.row(
+            "SELECT sealed_receipt_id FROM memoriesql.evidence_packages WHERE package_id=%s",
+            (package.package_id,),
+        )[0],
+        inventory_sha256=status.inventory_sha256,
+        required_parts=status.appended_parts,
+        required_characters=status.appended_characters,
+        required_utf8_bytes=status.appended_utf8_bytes,
+    )
+    return other, AuthorizedContextPin(
+        package=pin, source_object_id=other, source_schema_version=1
+    )
 
 
 class StoredInspection(BeadClassification):
@@ -103,7 +154,7 @@ class StoredInspection(BeadClassification):
         before = self.row(
             "SELECT count(*) FROM memoriesql.complete_input_dispatch_receipts"
         )
-        selection = ReadSourceEvidence.model_validate(self.selection(limit=8))
+        selection = StoredEvidenceSelection.model_validate(self.selection(limit=8))
         request = ReadStoredBeadEvidence(bead_id=bead, selection=selection)
         first = reader.read(request)
         self.assertEqual(first.outcome, "available")
@@ -137,7 +188,7 @@ class StoredInspection(BeadClassification):
         result = self.reader().read(
             ReadStoredBeadEvidence(
                 bead_id=bead,
-                selection=ReadSourceEvidence(
+                selection=StoredEvidenceSelection(
                     package_id=other.package_id,
                     inventory_sha256=other_status.inventory_sha256,
                     part_ordinal=0,
@@ -223,7 +274,7 @@ class StoredInspection(BeadClassification):
     def test_raw_and_normalized_offsets_and_terminal_are_distinct(self) -> None:
         bead = self.accepted_fixture()
         reader = self.reader()
-        raw = ReadSourceEvidence.model_validate(
+        raw = StoredEvidenceSelection.model_validate(
             self.selection(representation="raw", lineage_ordinal=0, limit=5)
         )
         page = reader.read(ReadStoredBeadEvidence(bead_id=bead, selection=raw))
@@ -260,7 +311,7 @@ class StoredInspection(BeadClassification):
             reader.read(
                 ReadStoredBeadEvidence(
                     bead_id=bead,
-                    selection=ReadSourceEvidence.model_validate(
+                    selection=StoredEvidenceSelection.model_validate(
                         self.selection(limit=8)
                     ),
                 )
@@ -280,7 +331,7 @@ class StoredInspection(BeadClassification):
         page = reader.read(
             ReadStoredBeadEvidence(
                 bead_id=bead,
-                selection=ReadSourceEvidence(
+                selection=StoredEvidenceSelection(
                     package_id=inspected.bead.package.package_id,
                     inventory_sha256=inspected.bead.package.inventory_sha256,
                     part_ordinal=0,
@@ -296,51 +347,8 @@ class StoredInspection(BeadClassification):
             ActivateClassifiedAuthorship,
             BeadTypePin,
         )
-        from memoriesql.application.logical_unit_materialization import SealedPackagePin
-        from memoriesql.application.source_revisiting import AuthorizedContextPin
 
-        other = uuid.uuid4()
-        self.db.execute(
-            "INSERT INTO memoriesql.protected_resources SELECT tenant_id,workspace_id,access_scope_id,%s,resource_kind,owner_user_id,status,created_by_principal_id,created_at FROM memoriesql.protected_resources WHERE resource_id=%s",
-            (other, self.source),
-        )
-        self.db.execute(
-            "INSERT INTO memoriesql.source_objects(tenant_id,workspace_id,access_scope_id,source_object_id,source_system,object_kind,external_object_id,schema_version,metadata,created_at,last_observed_at,owner_user_id) SELECT tenant_id,workspace_id,access_scope_id,%s,source_system,object_kind,'orchard.private-context',schema_version,metadata,created_at,last_observed_at,owner_user_id FROM memoriesql.source_objects WHERE source_object_id=%s",
-            (other, self.source),
-        )
-        original = self.source
-        self.source = other
-        import sys
-        from unittest.mock import patch
-
-        fixture = sys.modules[self.part.__module__]
-        builder = fixture.build_capture_source_range_command
-
-        def other_checkpoint(**kwargs: Any) -> Any:
-            kwargs["checkpoint_key"] = "orchard.other.raw"
-            return builder(**kwargs)
-
-        with patch.object(
-            fixture, "build_capture_source_range_command", side_effect=other_checkpoint
-        ):
-            package = self.package(
-                "Separate fictional context.", occurrence_key="orchard.other.context"
-            )
-        status = self.status(package)
-        self.source = original
-        self.offset = 0
-        self.sequence = 0
-        pin = SealedPackagePin(
-            package_id=package.package_id,
-            sealed_receipt_id=self.row(
-                "SELECT sealed_receipt_id FROM memoriesql.evidence_packages WHERE package_id=%s",
-                (package.package_id,),
-            )[0],
-            inventory_sha256=status.inventory_sha256,
-            required_parts=status.appended_parts,
-            required_characters=status.appended_characters,
-            required_utf8_bytes=status.appended_utf8_bytes,
-        )
+        other, context = optional_context_fixture(self)
         self.setup_revisiting(
             "Alex proposed counting four fictional trees; no count has occurred.",
             activate=False,
@@ -354,11 +362,7 @@ class StoredInspection(BeadClassification):
                     BeadTypePin(key="observation", revision=1),
                     BeadTypePin(key="action", revision=1),
                 ),
-                authorized_context=(
-                    AuthorizedContextPin(
-                        package=pin, source_object_id=other, source_schema_version=1
-                    ),
-                ),
+                authorized_context=(context,),
             )
         )
         result = asyncio.run(self.worker().run_once())
@@ -394,7 +398,7 @@ class StoredInspection(BeadClassification):
             page = reader.read(
                 ReadStoredBeadEvidence(
                     bead_id=bead,
-                    selection=ReadSourceEvidence(
+                    selection=StoredEvidenceSelection(
                         package_id=pin.package_id,
                         inventory_sha256=pin.inventory_sha256,
                         part_ordinal=0,
@@ -416,6 +420,102 @@ class StoredInspection(BeadClassification):
         self.assertEqual(
             self.row("SELECT count(*) FROM memoriesql.semantic_tasks"), before
         )
+
+    def test_oversized_candidate_set_never_runs_unbounded_authorization(self) -> None:
+        bead = self.accepted_fixture()
+        version = self.row("SELECT bead_version_id FROM memoriesql.bead_versions")[0]
+        mention = uuid.UUID(self.mentions[0]["entity_mention_id"])
+        resolution = uuid.uuid4()
+        with self.db.transaction():
+            self.db.execute(
+                "INSERT INTO memoriesql.entity_mention_resolutions VALUES(%s,%s,%s,%s,%s,1,'ambiguous',NULL,%s,%s,%s)",
+                (
+                    self.tenant,
+                    self.workspace,
+                    self.scope,
+                    resolution,
+                    mention,
+                    version,
+                    self.principal,
+                    self.now,
+                ),
+            )
+            for ordinal in range(1, 66):
+                entity = uuid.uuid4()
+                self.db.execute(
+                    "INSERT INTO memoriesql.protected_resources SELECT tenant_id,workspace_id,access_scope_id,%s,'model',owner_user_id,status,created_by_principal_id,created_at FROM memoriesql.protected_resources WHERE resource_id=%s",
+                    (entity, self.source),
+                )
+                self.db.execute(
+                    "INSERT INTO memoriesql.entities(tenant_id,workspace_id,access_scope_id,entity_id,initial_status,originating_bead_version_id,created_by_principal_id,created_at) VALUES(%s,%s,%s,%s,'active',%s,%s,%s)",
+                    (
+                        self.tenant,
+                        self.workspace,
+                        self.scope,
+                        entity,
+                        version,
+                        self.principal,
+                        self.now,
+                    ),
+                )
+                self.db.execute(
+                    "INSERT INTO memoriesql.entity_resolution_candidates VALUES(%s,%s,%s,%s,%s,%s)",
+                    (
+                        self.tenant,
+                        self.workspace,
+                        self.scope,
+                        resolution,
+                        entity,
+                        ordinal,
+                    ),
+                )
+        reader = self.reader()
+        # Instrument the existing unbounded predicate: over-budget inspection must
+        # never invoke it, even when called directly without adapter timeouts.
+        self.db.execute(
+            "CREATE OR REPLACE FUNCTION memoriesql.current_context_entity_candidates_authorized(requested_tenant_id uuid,requested_workspace_id uuid,requested_access_scope_id uuid,requested_entity_mention_resolution_id uuid) RETURNS boolean LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'unbounded candidate authorization invoked'; END; $$"
+        )
+        result = reader.inspect(InspectStoredBead(bead_id=bead))
+        assert result.bead and result.bead.meaning and result.bead.meaning.mentions
+        self.assertEqual(
+            result.bead.meaning.mentions[0].resolution.availability, "unavailable"
+        )
+
+    def test_direct_sql_large_offset_is_invalid_not_numeric_overflow(self) -> None:
+        from pydantic import ValidationError
+
+        with self.assertRaises(ValidationError):
+            StoredEvidenceSelection(
+                package_id=uuid.uuid4(),
+                inventory_sha256="a" * 64,
+                part_ordinal=0,
+                offset=2**40,
+            )
+        from psycopg.errors import InvalidParameterValue
+        from psycopg.types.json import Jsonb
+
+        from memoriesql.infrastructure.postgres.authorization import (
+            PostgresAuthorizationPort,
+        )
+
+        bead = self.accepted_fixture()
+        self.reader()
+        selection = self.selection(limit=8)
+        selection["offset"] = 2**40
+        with self.assertRaises(InvalidParameterValue), self.db.transaction():
+            self.db.execute("SET LOCAL ROLE memoriesql_application")
+            PostgresAuthorizationPort(self.db).begin_context(
+                credential_sha256=self.secret_hash,
+                requested_workspace_id=self.workspace,
+            )
+            self.db.execute(
+                "SELECT memoriesql.read_stored_bead_evidence_v1(%s)",
+                (
+                    Jsonb(
+                        dict(contract_version=1, bead_id=str(bead), selection=selection)
+                    ),
+                ),
+            )
 
 
 class MentionOnlyInspection(LocalMentions):
@@ -448,6 +548,48 @@ class LegacyInspection(SourceRevisiting):
         assert inspected.bead and inspected.bead.meaning
         self.assertIsNone(inspected.bead.meaning.mentions)
         self.assertIsNone(inspected.bead.meaning.classification)
+
+    def test_revoked_used_legacy_context_withholds_meaning_and_pages(self) -> None:
+        other, context = optional_context_fixture(self)
+        self.setup_revisiting(contexts=(context,))
+        selection = StoredEvidenceSelection(
+            package_id=context.package.package_id,
+            inventory_sha256=context.package.inventory_sha256,
+            part_ordinal=0,
+            limit=8,
+        ).model_dump(mode="json")
+
+        def author(messages: Any, info: Any) -> Any:
+            if not self.steps:
+                return self.step(messages, info, "read", selection)
+            return self.step(messages, info, "finish")
+
+        result = asyncio.run(self.worker(author).run_once())
+        self.assertEqual(result.task_status, "succeeded", result)
+        bead = self.row("SELECT bead_id FROM memoriesql.bead_versions")[0]
+        migrate(self.db, expected_current_version=20, target_version=24)
+        reader = PostgresStoredBeadInspection(
+            self.db, credential_sha256=self.secret_hash, workspace_id=self.workspace
+        )
+        self.assertEqual(
+            reader.inspect(InspectStoredBead(bead_id=bead)).outcome, "available"
+        )
+        self.db.execute(
+            "UPDATE memoriesql.protected_resources SET status='revoked',revoked_at=clock_timestamp() WHERE resource_id=%s",
+            (other,),
+        )
+        hidden = reader.inspect(InspectStoredBead(bead_id=bead))
+        self.assertEqual(hidden.outcome, "unavailable")
+        self.assertIsNone(hidden.bead)
+        page = reader.read(
+            ReadStoredBeadEvidence(
+                bead_id=bead,
+                selection=StoredEvidenceSelection.model_validate(
+                    self.selection(limit=8)
+                ),
+            )
+        )
+        self.assertEqual(page.outcome, "unavailable")
 
 
 if __name__ == "__main__":
