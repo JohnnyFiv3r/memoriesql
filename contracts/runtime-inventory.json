@@ -155,12 +155,12 @@
       "source_sha256": "c15f60eace446302ce7dddfc69010c173a714791a92e3765edef87777da4ccc4"
     },
     {
-      "base_public_commit": "bb459ddef14e5627777b21c1366a896b75f24ca8",
-      "base_public_sha256": "a87f24cfc8e8d652ff90c8acf92f46c0aa47cf4c2f1ef823eda4737aab24eb34",
+      "base_public_commit": "1e611c2a426684a6ede479e06e21a123a964a818",
+      "base_public_sha256": "42edabb02a4bd814c858f0558ace03d5981426f1fe4b66d9ed8e264098e2281e",
       "disposition": "public-forward",
       "path": "src/memoriesql/infrastructure/models/pydanticai_executor.py",
-      "reason": "Public forward complete-input execution through the existing worker, executor and canonical sink; legacy contracts retained.",
-      "sha256": "42edabb02a4bd814c858f0558ace03d5981426f1fe4b66d9ed8e264098e2281e",
+      "reason": "Public forward explicit bounded real-model admission and conservative pre-dispatch run-tree reservations; existing characterized execution retained.",
+      "sha256": "801a8ea43cebd4270c02fe72925a37a8c938d5fd137214e85a7af0ee62233591",
       "source_sha256": "07d4c861ce40062c227352f6fd240b7445500776ba6216fdd739027020da3b1c"
     },
     {

@@ -5,6 +5,7 @@ import hashlib
 import json
 import math
 import time
+from abc import abstractmethod
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from importlib.metadata import version as distribution_version
@@ -184,8 +185,70 @@ class EvidenceToolResult(FrozenContractModel):
 
 
 @dataclass(frozen=True)
+class ProviderRequestBounds:
+    """Hard ceilings for one inference, including cached input and reasoning."""
+
+    input_tokens: int
+    output_tokens: int
+
+    def __post_init__(self) -> None:
+        if self.input_tokens < 1 or self.output_tokens < 1:
+            raise ValueError("provider request bounds must be positive")
+
+
+class BoundedProviderModel(Model):
+    """Trusted transport interface, not a generic SDK admission bypass.
+
+    Implementations must enforce bounds before provider dispatch, count the
+    complete supplied request, and perform at most one inference without retries,
+    fallback, hidden context or internal tool loops. Output includes reasoning.
+    Cancellation must propagate while retaining ownership of late settlement.
+    Composition must independently qualify these properties before admission.
+    """
+
+    async def request(
+        self,
+        messages: list[ModelMessage],
+        model_settings: ModelSettings | None,
+        model_request_parameters: ModelRequestParameters,
+    ) -> ModelResponse:
+        raise RuntimeError("bounded provider models require admitted dispatch")
+
+    @abstractmethod
+    async def request_bounded(
+        self,
+        messages: list[ModelMessage],
+        model_settings: ModelSettings,
+        model_request_parameters: ModelRequestParameters,
+        bounds: ProviderRequestBounds,
+    ) -> ModelResponse:
+        """Enforce bounds locally and at the transport; reject if unsupported."""
+        raise NotImplementedError
+
+
+@dataclass(frozen=True)
+class RealModelAdmission:
+    """Explicit trusted composition decision for one exact adapter and target.
+
+    This is a qualification reference, not self-certification by a model or
+    provider response. It does not establish subscription availability.
+    """
+
+    model: BoundedProviderModel
+    reference: ModelProfileReference
+    request_target: ProviderRequestTarget
+    qualification_revision: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.model, BoundedProviderModel):
+            raise ValueError("admission requires the bounded transport interface")
+        if not IDENTIFIER_PATTERN.fullmatch(self.qualification_revision):
+            raise ValueError("admission requires a stable qualification revision")
+
+
+@dataclass(frozen=True)
 class ModelProfileBinding:
-    """One exact provider-neutral profile bound to a local characterized model."""
+    """One exact profile bound to a characterized or explicitly admitted model."""
 
     reference: ModelProfileReference
     model: Model
@@ -193,16 +256,23 @@ class ModelProfileBinding:
     max_queued: int = 16
     request_target: ProviderRequestTarget = CHARACTERIZED_TEST_REQUEST_TARGET
     conservative_reservation_microunits: int = 0
+    real_model_admission: RealModelAdmission | None = None
 
     def __post_init__(self) -> None:
         if self.max_running < 1 or self.max_queued < 0:
             raise ValueError(
                 "model concurrency limits must be bounded and non-negative"
             )
-        if not isinstance(self.model, TestModel | FunctionModel):
-            raise ValueError(
-                "PR-01E accepts only characterized TestModel or FunctionModel bindings"
-            )
+        admission = self.real_model_admission
+        if admission is None:
+            if type(self.model) not in (TestModel, FunctionModel):
+                raise ValueError("real models require explicit bounded admission")
+        elif (
+            admission.model is not self.model
+            or admission.reference != self.reference
+            or admission.request_target != self.request_target
+        ):
+            raise ValueError("real-model admission does not match the exact binding")
         if self.conservative_reservation_microunits < 0:
             raise ValueError("provider cost reservation cannot be negative")
         if (
@@ -229,6 +299,8 @@ class PydanticAIModelProfileRegistry:
     """Immutable exact profile map with process-local concurrency control."""
 
     def __init__(self, bindings: tuple[ModelProfileBinding, ...]) -> None:
+        if len({b.real_model_admission is not None for b in bindings}) > 1:
+            raise ValueError("real and characterized profiles cannot share a registry")
         resolved: dict[tuple[str, int], _ResolvedModelProfile] = {}
         for binding in bindings:
             key = binding.reference.profile_key, binding.reference.revision
@@ -405,6 +477,8 @@ class _TreeState:
     run_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     delegate_calls: int = 0
     provider_request_sequence: int = 0
+    reserved_input_tokens: int = 0
+    reserved_output_tokens: int = 0
     run_refs: list[str] = field(default_factory=list)
     started_run_ids: set[str] = field(default_factory=set)
     run_terminal_events: dict[str, asyncio.Event] = field(default_factory=dict)
@@ -430,8 +504,25 @@ class _TreeState:
             self.run_refs.append(run_id)
             self.run_terminal_events[run_id] = asyncio.Event()
 
-    async def next_provider_request_sequence(self) -> int:
+    async def next_provider_request_sequence(
+        self, bounds: ProviderRequestBounds | None = None
+    ) -> int:
         async with self.request_lock:
+            if bounds is not None:
+                budget = self.task.effective_budget
+                inputs = self.reserved_input_tokens + bounds.input_tokens
+                outputs = self.reserved_output_tokens + bounds.output_tokens
+                if (
+                    self.provider_request_sequence >= budget.request_limit
+                    or inputs > budget.input_token_limit
+                    or outputs > budget.output_token_limit
+                    or inputs + outputs > budget.total_token_limit
+                ):
+                    raise UsageLimitExceeded("next provider request exceeds reserved budget")
+                # Never refund unknown, failed, cancelled or cached usage. This
+                # deliberately conservative allowance is shared by the run tree.
+                self.reserved_input_tokens = inputs
+                self.reserved_output_tokens = outputs
             self.provider_request_sequence += 1
             return self.provider_request_sequence
 
@@ -628,7 +719,6 @@ class _DispatchGuardedModel(WrapperModel):
                     "complete_input.exposure_mismatch",
                     "actual dispatch substituted evidence",
                 )
-        sequence = await state.next_provider_request_sequence()
         request_id = uuid4()
         authorization = state.deps.authorization
         access_scope_ids = tuple(sorted(authorization.allowed_access_scope_ids))
@@ -657,6 +747,15 @@ class _DispatchGuardedModel(WrapperModel):
                 configured_max_tokens,
             )
         bounded_model_settings["max_tokens"] = maximum_output_tokens
+        bounds = (
+            ProviderRequestBounds(
+                input_tokens=binding.request_target.max_input_tokens_per_request,
+                output_tokens=maximum_output_tokens,
+            )
+            if binding.real_model_admission is not None
+            else None
+        )
+        sequence = await state.next_provider_request_sequence(bounds)
         intent = ProviderRequestIntent(
             request_id=request_id,
             tenant_id=authorization.tenant_id,
@@ -705,11 +804,17 @@ class _DispatchGuardedModel(WrapperModel):
             await state.deps.source_revisiting.authorize_delivery(source_delivery)
             await state.require_dispatch_open()
         try:
-            response = await self.wrapped.request(
-                messages,
-                bounded_model_settings,
-                model_request_parameters,
-            )
+            if bounds is not None:
+                assert binding.real_model_admission is not None
+                response = await binding.real_model_admission.model.request_bounded(
+                    messages, bounded_model_settings, model_request_parameters, bounds
+                )
+            else:
+                response = await self.wrapped.request(
+                    messages,
+                    bounded_model_settings,
+                    model_request_parameters,
+                )
         except asyncio.CancelledError:
             await state.deps.model_accounting.append_usage(
                 _request_usage_event(
@@ -772,6 +877,13 @@ class _DispatchGuardedModel(WrapperModel):
                 usage_provenance=binding.request_target.usage_provenance,
             )
         )
+        if bounds is not None and (
+            response.usage.input_tokens > bounds.input_tokens
+            or response.usage.output_tokens > bounds.output_tokens
+        ):
+            # Preserve truthful accounting, but never accept a transport that
+            # violated its qualification as trusted exposure or authored output.
+            raise UsageLimitExceeded("provider exceeded admitted request bounds")
         if exposed_window is not None:
             await state.require_dispatch_open()
             assert state.deps.exposure_recorder is not None
@@ -2647,12 +2759,15 @@ __all__ = (
     "PYDANTIC_AI_WHEEL_SHA256",
     "RUNTIME_ADAPTER_VERSION",
     "AuthoredSemanticOutput",
+    "BoundedProviderModel",
     "ConductorAgentSpec",
     "DelegationOutcome",
     "DelegationRequest",
     "EvidenceToolResult",
     "LeafAgentSpec",
     "ModelProfileBinding",
+    "ProviderRequestBounds",
+    "RealModelAdmission",
     "PydanticAIAgentRegistry",
     "PydanticAIModelProfileRegistry",
     "PydanticAISemanticExecutor",
