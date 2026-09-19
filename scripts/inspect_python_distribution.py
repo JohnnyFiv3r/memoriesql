@@ -3,7 +3,9 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import stat
+import subprocess
 import tarfile
 import zipfile
 from collections.abc import Sequence
@@ -137,6 +139,17 @@ def _wheel_inventory(path: Path) -> list[str]:
                 != row["sha256"]
             ):
                 raise ValueError("wheel runtime byte drift")
+        for name in EXPECTED_PACKAGE_FILES:
+            if name in RESOURCE_FILES:
+                source = (
+                    ROOT / "contracts/migration-inventory.json"
+                    if name.endswith("_migration_inventory.json")
+                    else ROOT / "migrations" / PurePosixPath(name).name
+                )
+            else:
+                source = ROOT / "src" / name
+            if archive.read(name) != source.read_bytes():
+                raise ValueError(f"wheel differs from exact checkout payload: {name}")
         package_members = {name for name in members if name.startswith("memoriesql/")}
         if package_members != EXPECTED_PACKAGE_FILES:
             missing = sorted(EXPECTED_PACKAGE_FILES - package_members)
@@ -316,6 +329,11 @@ def inspect_distribution(directory: Path) -> dict[str, object]:
     sdists = sorted(directory.glob("*.tar.gz"))
     if len(wheels) != 1 or len(sdists) != 1:
         raise ValueError("expected exactly one wheel and one source distribution")
+    expected = {f"memoriesql-{VERSION}-py3-none-any.whl", f"memoriesql-{VERSION}.tar.gz"}
+    if {path.name for path in directory.iterdir()} - {"python-package-artifacts.json"} != expected:
+        raise ValueError("unexpected development artifact filenames")
+    if any(path.is_symlink() or not path.is_file() for path in (*wheels, *sdists)):
+        raise ValueError("development archives must be regular files")
     artifacts = []
     for path, members in (
         (wheels[0], _wheel_inventory(wheels[0])),
@@ -338,17 +356,37 @@ def inspect_distribution(directory: Path) -> dict[str, object]:
     }
 
 
+def development_inventory(inventory: dict[str, object], source_commit: str) -> dict[str, object]:
+    head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+    if not re.fullmatch(r"[0-9a-f]{40}", source_commit) or source_commit != head:
+        raise ValueError("development inventory requires exact checked-out commit")
+    return inventory | {
+        "qualification": "unreleased-development",
+        "source_commit": source_commit,
+    }
+
+
 def parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Inspect the allowlisted memoriesQL Python distributions."
     )
     parser.add_argument("directory", type=Path)
+    parser.add_argument("--source-commit")
+    parser.add_argument("--check-inventory", type=Path)
     return parser.parse_args(arguments)
 
 
 def main(arguments: Sequence[str] | None = None) -> int:
     args = parse_args(arguments)
-    print(json.dumps(inspect_distribution(args.directory), indent=2, sort_keys=True))
+    inventory = inspect_distribution(args.directory)
+    if args.source_commit is not None:
+        inventory = development_inventory(inventory, args.source_commit)
+    if args.check_inventory is not None:
+        if args.source_commit is None:
+            raise ValueError("development inventory comparison requires exact source commit")
+        if json.loads(args.check_inventory.read_text()) != inventory:
+            raise ValueError("development inventory differs from exact-head artifacts")
+    print(json.dumps(inventory, indent=2, sort_keys=True))
     return 0
 
 
