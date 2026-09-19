@@ -28052,6 +28052,1675 @@
     },
     {
       "contract": {
+        "schemas": {
+          "InspectStoredBead": {
+            "additionalProperties": false,
+            "properties": {
+              "bead_id": {
+                "format": "uuid",
+                "title": "Bead Id",
+                "type": "string"
+              },
+              "contract_version": {
+                "const": 1,
+                "default": 1,
+                "title": "Contract Version",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "bead_id"
+            ],
+            "title": "InspectStoredBead",
+            "type": "object"
+          },
+          "ReadStoredBeadEvidence": {
+            "$defs": {
+              "ReadSourceEvidence": {
+                "additionalProperties": false,
+                "description": "Ordinal identifies retained storage, never an invented semantic unit.",
+                "properties": {
+                  "inventory_sha256": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "title": "Inventory Sha256",
+                    "type": "string"
+                  },
+                  "limit": {
+                    "default": 16384,
+                    "maximum": 32768,
+                    "minimum": 1,
+                    "title": "Limit",
+                    "type": "integer"
+                  },
+                  "lineage_ordinal": {
+                    "anyOf": [
+                      {
+                        "exclusiveMaximum": 16,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Lineage Ordinal"
+                  },
+                  "offset": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Offset",
+                    "type": "integer"
+                  },
+                  "package_id": {
+                    "format": "uuid",
+                    "title": "Package Id",
+                    "type": "string"
+                  },
+                  "part_ordinal": {
+                    "exclusiveMaximum": 256,
+                    "minimum": 0,
+                    "title": "Part Ordinal",
+                    "type": "integer"
+                  },
+                  "representation": {
+                    "default": "normalized",
+                    "enum": [
+                      "normalized",
+                      "raw"
+                    ],
+                    "title": "Representation",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "package_id",
+                  "inventory_sha256",
+                  "part_ordinal"
+                ],
+                "title": "ReadSourceEvidence",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "bead_id": {
+                "format": "uuid",
+                "title": "Bead Id",
+                "type": "string"
+              },
+              "contract_version": {
+                "const": 1,
+                "default": 1,
+                "title": "Contract Version",
+                "type": "integer"
+              },
+              "selection": {
+                "$ref": "#/$defs/ReadSourceEvidence"
+              }
+            },
+            "required": [
+              "bead_id",
+              "selection"
+            ],
+            "title": "ReadStoredBeadEvidence",
+            "type": "object"
+          },
+          "StoredBeadEvidence": {
+            "$defs": {
+              "EvidenceInventoryEntry": {
+                "additionalProperties": false,
+                "properties": {
+                  "characters": {
+                    "maximum": 65536,
+                    "minimum": 1,
+                    "title": "Characters",
+                    "type": "integer"
+                  },
+                  "component_key": {
+                    "maxLength": 256,
+                    "minLength": 1,
+                    "title": "Component Key",
+                    "type": "string"
+                  },
+                  "component_offset": {
+                    "minimum": 0,
+                    "title": "Component Offset",
+                    "type": "integer"
+                  },
+                  "content_sha256": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "title": "Content Sha256",
+                    "type": "string"
+                  },
+                  "derivation": {
+                    "enum": [
+                      "identity_utf8",
+                      "producer_normalized"
+                    ],
+                    "title": "Derivation",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "lineage": {
+                    "items": {
+                      "$ref": "#/$defs/RawEvidenceSlice"
+                    },
+                    "maxItems": 16,
+                    "minItems": 1,
+                    "title": "Lineage",
+                    "type": "array"
+                  },
+                  "native": {
+                    "$ref": "#/$defs/NativeFacts"
+                  },
+                  "ordinal": {
+                    "exclusiveMaximum": 256,
+                    "minimum": 0,
+                    "title": "Ordinal",
+                    "type": "integer"
+                  },
+                  "parent_component_key": {
+                    "anyOf": [
+                      {
+                        "maxLength": 256,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Parent Component Key"
+                  },
+                  "part_id": {
+                    "format": "uuid",
+                    "title": "Part Id",
+                    "type": "string"
+                  },
+                  "utf8_bytes": {
+                    "maximum": 65536,
+                    "minimum": 1,
+                    "title": "Utf8 Bytes",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "part_id",
+                  "ordinal",
+                  "component_key",
+                  "component_offset",
+                  "parent_component_key",
+                  "kind",
+                  "native",
+                  "derivation",
+                  "lineage",
+                  "content_sha256",
+                  "characters",
+                  "utf8_bytes"
+                ],
+                "title": "EvidenceInventoryEntry",
+                "type": "object"
+              },
+              "NativeFacts": {
+                "additionalProperties": false,
+                "description": "Null means unknown, never a fabricated native identifier.",
+                "properties": {
+                  "branch_native_id": {
+                    "anyOf": [
+                      {
+                        "maxLength": 256,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Branch Native Id"
+                  },
+                  "native_id": {
+                    "anyOf": [
+                      {
+                        "maxLength": 256,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Native Id"
+                  },
+                  "occurred_at": {
+                    "anyOf": [
+                      {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Occurred At"
+                  },
+                  "occurred_at_raw": {
+                    "anyOf": [
+                      {
+                        "maxLength": 256,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Occurred At Raw"
+                  },
+                  "parent_native_id": {
+                    "anyOf": [
+                      {
+                        "maxLength": 256,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Parent Native Id"
+                  },
+                  "participant_native_id": {
+                    "anyOf": [
+                      {
+                        "maxLength": 256,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Participant Native Id"
+                  },
+                  "role": {
+                    "anyOf": [
+                      {
+                        "maxLength": 128,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Role"
+                  },
+                  "session_native_id": {
+                    "anyOf": [
+                      {
+                        "maxLength": 256,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Session Native Id"
+                  },
+                  "source_order": {
+                    "anyOf": [
+                      {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Source Order"
+                  },
+                  "time_precision": {
+                    "anyOf": [
+                      {
+                        "maxLength": 64,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Time Precision"
+                  }
+                },
+                "title": "NativeFacts",
+                "type": "object"
+              },
+              "RawEvidenceSlice": {
+                "additionalProperties": false,
+                "properties": {
+                  "byte_end_exclusive": {
+                    "exclusiveMinimum": 0,
+                    "title": "Byte End Exclusive",
+                    "type": "integer"
+                  },
+                  "byte_start": {
+                    "minimum": 0,
+                    "title": "Byte Start",
+                    "type": "integer"
+                  },
+                  "fold_outcome_ordinal": {
+                    "anyOf": [
+                      {
+                        "maximum": 255,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Fold Outcome Ordinal"
+                  },
+                  "fold_receipt_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Fold Receipt Id"
+                  },
+                  "source_bytes_sha256": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "title": "Source Bytes Sha256",
+                    "type": "string"
+                  },
+                  "source_range_receipt_id": {
+                    "format": "uuid",
+                    "title": "Source Range Receipt Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "source_range_receipt_id",
+                  "byte_start",
+                  "byte_end_exclusive",
+                  "source_bytes_sha256"
+                ],
+                "title": "RawEvidenceSlice",
+                "type": "object"
+              },
+              "ReadSourceEvidence": {
+                "additionalProperties": false,
+                "description": "Ordinal identifies retained storage, never an invented semantic unit.",
+                "properties": {
+                  "inventory_sha256": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "title": "Inventory Sha256",
+                    "type": "string"
+                  },
+                  "limit": {
+                    "default": 16384,
+                    "maximum": 32768,
+                    "minimum": 1,
+                    "title": "Limit",
+                    "type": "integer"
+                  },
+                  "lineage_ordinal": {
+                    "anyOf": [
+                      {
+                        "exclusiveMaximum": 16,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Lineage Ordinal"
+                  },
+                  "offset": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Offset",
+                    "type": "integer"
+                  },
+                  "package_id": {
+                    "format": "uuid",
+                    "title": "Package Id",
+                    "type": "string"
+                  },
+                  "part_ordinal": {
+                    "exclusiveMaximum": 256,
+                    "minimum": 0,
+                    "title": "Part Ordinal",
+                    "type": "integer"
+                  },
+                  "representation": {
+                    "default": "normalized",
+                    "enum": [
+                      "normalized",
+                      "raw"
+                    ],
+                    "title": "Representation",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "package_id",
+                  "inventory_sha256",
+                  "part_ordinal"
+                ],
+                "title": "ReadSourceEvidence",
+                "type": "object"
+              },
+              "SourceEvidenceRead": {
+                "additionalProperties": false,
+                "properties": {
+                  "bytes_hex": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Bytes Hex"
+                  },
+                  "content": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Content"
+                  },
+                  "inventory": {
+                    "$ref": "#/$defs/EvidenceInventoryEntry"
+                  },
+                  "next_offset": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Next Offset"
+                  },
+                  "request": {
+                    "$ref": "#/$defs/ReadSourceEvidence"
+                  },
+                  "sha256": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "title": "Sha256",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "request",
+                  "inventory",
+                  "content",
+                  "bytes_hex",
+                  "sha256",
+                  "next_offset"
+                ],
+                "title": "SourceEvidenceRead",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "contract_version": {
+                "const": 1,
+                "default": 1,
+                "title": "Contract Version",
+                "type": "integer"
+              },
+              "evidence": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/SourceEvidenceRead"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "outcome": {
+                "enum": [
+                  "available",
+                  "unavailable",
+                  "budget_exhausted"
+                ],
+                "title": "Outcome",
+                "type": "string"
+              }
+            },
+            "required": [
+              "outcome"
+            ],
+            "title": "StoredBeadEvidence",
+            "type": "object"
+          },
+          "StoredBeadInspection": {
+            "$defs": {
+              "AcceptedMeaning": {
+                "additionalProperties": false,
+                "properties": {
+                  "bead_type": {
+                    "$ref": "#/$defs/BeadTypeDefinition"
+                  },
+                  "bead_version_id": {
+                    "format": "uuid",
+                    "title": "Bead Version Id",
+                    "type": "string"
+                  },
+                  "classification": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/ClassificationContribution"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "classification_provenance": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/ContributionProvenance"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "classification_vocabulary": {
+                    "anyOf": [
+                      {
+                        "items": {
+                          "$ref": "#/$defs/BeadTypeDefinition"
+                        },
+                        "maxItems": 32,
+                        "type": "array"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Classification Vocabulary"
+                  },
+                  "mentions": {
+                    "anyOf": [
+                      {
+                        "items": {
+                          "$ref": "#/$defs/StoredMention"
+                        },
+                        "maxItems": 32,
+                        "type": "array"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Mentions"
+                  },
+                  "receipt_id": {
+                    "format": "uuid",
+                    "title": "Receipt Id",
+                    "type": "string"
+                  },
+                  "render": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/AuthoredBeadRender"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "render_contract_revision": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Render Contract Revision"
+                  },
+                  "statements": {
+                    "items": {
+                      "$ref": "#/$defs/StoredStatement"
+                    },
+                    "maxItems": 32,
+                    "title": "Statements",
+                    "type": "array"
+                  },
+                  "task_contract_key": {
+                    "title": "Task Contract Key",
+                    "type": "string"
+                  },
+                  "task_contract_version": {
+                    "title": "Task Contract Version",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "bead_version_id",
+                  "receipt_id",
+                  "task_contract_key",
+                  "task_contract_version",
+                  "bead_type",
+                  "render_contract_revision",
+                  "render",
+                  "statements",
+                  "mentions",
+                  "classification",
+                  "classification_vocabulary",
+                  "classification_provenance"
+                ],
+                "title": "AcceptedMeaning",
+                "type": "object"
+              },
+              "AlignmentScore": {
+                "additionalProperties": false,
+                "properties": {
+                  "alignment": {
+                    "enum": [
+                      "consistent",
+                      "conflicting",
+                      "uncertain"
+                    ],
+                    "title": "Alignment",
+                    "type": "string"
+                  },
+                  "score": {
+                    "maximum": 1,
+                    "minimum": 0,
+                    "title": "Score",
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "alignment",
+                  "score"
+                ],
+                "title": "AlignmentScore",
+                "type": "object"
+              },
+              "AuthoredBeadRender": {
+                "additionalProperties": false,
+                "properties": {
+                  "detail": {
+                    "default": [],
+                    "items": {
+                      "$ref": "#/$defs/AuthoredRenderClause"
+                    },
+                    "maxItems": 8,
+                    "title": "Detail",
+                    "type": "array"
+                  },
+                  "omissions": {
+                    "default": [],
+                    "items": {
+                      "$ref": "#/$defs/AuthoredRenderOmission"
+                    },
+                    "maxItems": 64,
+                    "title": "Omissions",
+                    "type": "array"
+                  },
+                  "summary": {
+                    "items": {
+                      "$ref": "#/$defs/AuthoredRenderClause"
+                    },
+                    "maxItems": 3,
+                    "minItems": 1,
+                    "title": "Summary",
+                    "type": "array"
+                  },
+                  "title": {
+                    "$ref": "#/$defs/AuthoredRenderClause"
+                  }
+                },
+                "required": [
+                  "title",
+                  "summary"
+                ],
+                "title": "AuthoredBeadRender",
+                "type": "object"
+              },
+              "AuthoredRenderClause": {
+                "additionalProperties": false,
+                "properties": {
+                  "statement_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "maxItems": 64,
+                    "minItems": 1,
+                    "title": "Statement Ids",
+                    "type": "array"
+                  },
+                  "text": {
+                    "maxLength": 2048,
+                    "minLength": 1,
+                    "title": "Text",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "text",
+                  "statement_ids"
+                ],
+                "title": "AuthoredRenderClause",
+                "type": "object"
+              },
+              "AuthoredRenderOmission": {
+                "additionalProperties": false,
+                "properties": {
+                  "reason": {
+                    "maxLength": 512,
+                    "minLength": 1,
+                    "title": "Reason",
+                    "type": "string"
+                  },
+                  "statement_id": {
+                    "format": "uuid",
+                    "title": "Statement Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "statement_id",
+                  "reason"
+                ],
+                "title": "AuthoredRenderOmission",
+                "type": "object"
+              },
+              "BeadTypeDefinition": {
+                "additionalProperties": false,
+                "properties": {
+                  "definition": {
+                    "maxLength": 4096,
+                    "minLength": 1,
+                    "title": "Definition",
+                    "type": "string"
+                  },
+                  "key": {
+                    "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                    "title": "Key",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "key",
+                  "revision",
+                  "definition"
+                ],
+                "title": "BeadTypeDefinition",
+                "type": "object"
+              },
+              "BeadTypePin": {
+                "additionalProperties": false,
+                "properties": {
+                  "key": {
+                    "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                    "title": "Key",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "key",
+                  "revision"
+                ],
+                "title": "BeadTypePin",
+                "type": "object"
+              },
+              "ClassificationContribution": {
+                "additionalProperties": false,
+                "description": "One accepted contribution; request_id is its stable opaque identity.",
+                "properties": {
+                  "author_run_ref": {
+                    "maxLength": 512,
+                    "minLength": 1,
+                    "title": "Author Run Ref",
+                    "type": "string"
+                  },
+                  "contract_version": {
+                    "const": 1,
+                    "default": 1,
+                    "title": "Contract Version",
+                    "type": "integer"
+                  },
+                  "decision": {
+                    "$ref": "#/$defs/ClassificationDecision"
+                  },
+                  "evidence": {
+                    "items": {
+                      "$ref": "#/$defs/ClassificationEvidenceReference"
+                    },
+                    "maxItems": 8,
+                    "minItems": 1,
+                    "title": "Evidence",
+                    "type": "array"
+                  },
+                  "model_run_ref": {
+                    "maxLength": 512,
+                    "minLength": 1,
+                    "title": "Model Run Ref",
+                    "type": "string"
+                  },
+                  "packet_sha256": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "title": "Packet Sha256",
+                    "type": "string"
+                  },
+                  "proposal_sha256": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "title": "Proposal Sha256",
+                    "type": "string"
+                  },
+                  "request_id": {
+                    "format": "uuid",
+                    "title": "Request Id",
+                    "type": "string"
+                  },
+                  "vocabulary_sha256": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "title": "Vocabulary Sha256",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "request_id",
+                  "model_run_ref",
+                  "author_run_ref",
+                  "packet_sha256",
+                  "proposal_sha256",
+                  "vocabulary_sha256",
+                  "evidence",
+                  "decision"
+                ],
+                "title": "ClassificationContribution",
+                "type": "object"
+              },
+              "ClassificationDecision": {
+                "additionalProperties": false,
+                "properties": {
+                  "alignment_confidence": {
+                    "anyOf": [
+                      {
+                        "maximum": 1,
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Alignment Confidence"
+                  },
+                  "alignment_distribution": {
+                    "default": [],
+                    "items": {
+                      "$ref": "#/$defs/AlignmentScore"
+                    },
+                    "maxItems": 3,
+                    "title": "Alignment Distribution",
+                    "type": "array"
+                  },
+                  "confidence": {
+                    "anyOf": [
+                      {
+                        "maximum": 1,
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Confidence"
+                  },
+                  "contract_version": {
+                    "const": 1,
+                    "default": 1,
+                    "title": "Contract Version",
+                    "type": "integer"
+                  },
+                  "distribution": {
+                    "default": [],
+                    "items": {
+                      "$ref": "#/$defs/ClassificationScore"
+                    },
+                    "maxItems": 35,
+                    "title": "Distribution",
+                    "type": "array"
+                  },
+                  "outcome": {
+                    "enum": [
+                      "selected",
+                      "no_fit",
+                      "insufficient_evidence",
+                      "ambiguous"
+                    ],
+                    "title": "Outcome",
+                    "type": "string"
+                  },
+                  "proposal_alignment": {
+                    "enum": [
+                      "consistent",
+                      "conflicting",
+                      "uncertain"
+                    ],
+                    "title": "Proposal Alignment",
+                    "type": "string"
+                  },
+                  "rationale": {
+                    "anyOf": [
+                      {
+                        "maxLength": 2048,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Rationale"
+                  },
+                  "selected_type": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/BeadTypePin"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  }
+                },
+                "required": [
+                  "outcome",
+                  "proposal_alignment"
+                ],
+                "title": "ClassificationDecision",
+                "type": "object"
+              },
+              "ClassificationEvidenceReference": {
+                "additionalProperties": false,
+                "properties": {
+                  "selection": {
+                    "$ref": "#/$defs/ReadSourceEvidence"
+                  },
+                  "sha256": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "title": "Sha256",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "selection",
+                  "sha256"
+                ],
+                "title": "ClassificationEvidenceReference",
+                "type": "object"
+              },
+              "ClassificationScore": {
+                "additionalProperties": false,
+                "properties": {
+                  "score": {
+                    "maximum": 1,
+                    "minimum": 0,
+                    "title": "Score",
+                    "type": "number"
+                  },
+                  "type": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/BeadTypePin"
+                      },
+                      {
+                        "enum": [
+                          "no_fit",
+                          "insufficient_evidence",
+                          "ambiguous"
+                        ],
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Type"
+                  }
+                },
+                "required": [
+                  "type",
+                  "score"
+                ],
+                "title": "ClassificationScore",
+                "type": "object"
+              },
+              "ContributionProvenance": {
+                "additionalProperties": false,
+                "properties": {
+                  "attempt_id": {
+                    "format": "uuid",
+                    "title": "Attempt Id",
+                    "type": "string"
+                  },
+                  "authorization_policy_revision": {
+                    "title": "Authorization Policy Revision",
+                    "type": "integer"
+                  },
+                  "model_id": {
+                    "title": "Model Id",
+                    "type": "string"
+                  },
+                  "model_profile_key": {
+                    "title": "Model Profile Key",
+                    "type": "string"
+                  },
+                  "model_profile_revision": {
+                    "title": "Model Profile Revision",
+                    "type": "integer"
+                  },
+                  "pricing_revision_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Pricing Revision Id"
+                  },
+                  "quality_policy_revision_id": {
+                    "format": "uuid",
+                    "title": "Quality Policy Revision Id",
+                    "type": "string"
+                  },
+                  "request_id": {
+                    "format": "uuid",
+                    "title": "Request Id",
+                    "type": "string"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "request_id",
+                  "task_id",
+                  "attempt_id",
+                  "model_id",
+                  "model_profile_key",
+                  "model_profile_revision",
+                  "authorization_policy_revision",
+                  "quality_policy_revision_id",
+                  "pricing_revision_id"
+                ],
+                "title": "ContributionProvenance",
+                "type": "object"
+              },
+              "ReadSourceEvidence": {
+                "additionalProperties": false,
+                "description": "Ordinal identifies retained storage, never an invented semantic unit.",
+                "properties": {
+                  "inventory_sha256": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "title": "Inventory Sha256",
+                    "type": "string"
+                  },
+                  "limit": {
+                    "default": 16384,
+                    "maximum": 32768,
+                    "minimum": 1,
+                    "title": "Limit",
+                    "type": "integer"
+                  },
+                  "lineage_ordinal": {
+                    "anyOf": [
+                      {
+                        "exclusiveMaximum": 16,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Lineage Ordinal"
+                  },
+                  "offset": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Offset",
+                    "type": "integer"
+                  },
+                  "package_id": {
+                    "format": "uuid",
+                    "title": "Package Id",
+                    "type": "string"
+                  },
+                  "part_ordinal": {
+                    "exclusiveMaximum": 256,
+                    "minimum": 0,
+                    "title": "Part Ordinal",
+                    "type": "integer"
+                  },
+                  "representation": {
+                    "default": "normalized",
+                    "enum": [
+                      "normalized",
+                      "raw"
+                    ],
+                    "title": "Representation",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "package_id",
+                  "inventory_sha256",
+                  "part_ordinal"
+                ],
+                "title": "ReadSourceEvidence",
+                "type": "object"
+              },
+              "SealedPackagePin": {
+                "additionalProperties": false,
+                "properties": {
+                  "coverage": {
+                    "const": "entire_sealed_inventory",
+                    "default": "entire_sealed_inventory",
+                    "title": "Coverage",
+                    "type": "string"
+                  },
+                  "inventory_sha256": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "title": "Inventory Sha256",
+                    "type": "string"
+                  },
+                  "package_id": {
+                    "format": "uuid",
+                    "title": "Package Id",
+                    "type": "string"
+                  },
+                  "required_characters": {
+                    "maximum": 16777216,
+                    "minimum": 1,
+                    "title": "Required Characters",
+                    "type": "integer"
+                  },
+                  "required_parts": {
+                    "maximum": 256,
+                    "minimum": 1,
+                    "title": "Required Parts",
+                    "type": "integer"
+                  },
+                  "required_utf8_bytes": {
+                    "maximum": 16777216,
+                    "minimum": 1,
+                    "title": "Required Utf8 Bytes",
+                    "type": "integer"
+                  },
+                  "sealed_receipt_id": {
+                    "format": "uuid",
+                    "title": "Sealed Receipt Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "package_id",
+                  "sealed_receipt_id",
+                  "inventory_sha256",
+                  "required_parts",
+                  "required_characters",
+                  "required_utf8_bytes"
+                ],
+                "title": "SealedPackagePin",
+                "type": "object"
+              },
+              "StoredBead": {
+                "additionalProperties": false,
+                "properties": {
+                  "bead_id": {
+                    "format": "uuid",
+                    "title": "Bead Id",
+                    "type": "string"
+                  },
+                  "binding_task_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Binding Task Id"
+                  },
+                  "event_id": {
+                    "format": "uuid",
+                    "title": "Event Id",
+                    "type": "string"
+                  },
+                  "execution_status": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Execution Status"
+                  },
+                  "execution_task_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Execution Task Id"
+                  },
+                  "lifecycle": {
+                    "enum": [
+                      "accepted",
+                      "thin",
+                      "pending",
+                      "failed"
+                    ],
+                    "title": "Lifecycle",
+                    "type": "string"
+                  },
+                  "meaning": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/AcceptedMeaning"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "package": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SealedPackagePin"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "parent_resolution": {
+                    "enum": [
+                      "canonical",
+                      "native_identity_only",
+                      "unknown"
+                    ],
+                    "title": "Parent Resolution",
+                    "type": "string"
+                  },
+                  "parent_source_unit_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Parent Source Unit Id"
+                  },
+                  "source_object_id": {
+                    "format": "uuid",
+                    "title": "Source Object Id",
+                    "type": "string"
+                  },
+                  "source_unit_id": {
+                    "format": "uuid",
+                    "title": "Source Unit Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "bead_id",
+                  "event_id",
+                  "source_object_id",
+                  "source_unit_id",
+                  "parent_source_unit_id",
+                  "parent_resolution",
+                  "package",
+                  "binding_task_id",
+                  "execution_task_id",
+                  "execution_status",
+                  "lifecycle",
+                  "meaning"
+                ],
+                "title": "StoredBead",
+                "type": "object"
+              },
+              "StoredMention": {
+                "additionalProperties": false,
+                "properties": {
+                  "entity_mention_id": {
+                    "format": "uuid",
+                    "title": "Entity Mention Id",
+                    "type": "string"
+                  },
+                  "local_identity_reason": {
+                    "anyOf": [
+                      {
+                        "maxLength": 1024,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Local Identity Reason"
+                  },
+                  "local_identity_state": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "unresolved",
+                          "ambiguous"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Local Identity State"
+                  },
+                  "resolution": {
+                    "$ref": "#/$defs/StoredResolution"
+                  },
+                  "surface_text": {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "title": "Surface Text",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "entity_mention_id",
+                  "surface_text",
+                  "local_identity_state",
+                  "local_identity_reason",
+                  "resolution"
+                ],
+                "title": "StoredMention",
+                "type": "object"
+              },
+              "StoredResolution": {
+                "additionalProperties": false,
+                "properties": {
+                  "availability": {
+                    "enum": [
+                      "available",
+                      "unavailable"
+                    ],
+                    "title": "Availability",
+                    "type": "string"
+                  },
+                  "entity_ids": {
+                    "anyOf": [
+                      {
+                        "items": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "maxItems": 64,
+                        "type": "array"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Entity Ids"
+                  },
+                  "resolution_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Resolution Id"
+                  },
+                  "status": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "unresolved",
+                          "resolved",
+                          "ambiguous",
+                          "rejected"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Status"
+                  }
+                },
+                "required": [
+                  "availability"
+                ],
+                "title": "StoredResolution",
+                "type": "object"
+              },
+              "StoredStatement": {
+                "additionalProperties": false,
+                "properties": {
+                  "correction_reason": {
+                    "anyOf": [
+                      {
+                        "maxLength": 1024,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Correction Reason"
+                  },
+                  "evidence": {
+                    "items": {
+                      "$ref": "#/$defs/UnitSupport"
+                    },
+                    "maxItems": 64,
+                    "minItems": 1,
+                    "title": "Evidence",
+                    "type": "array"
+                  },
+                  "kind": {
+                    "enum": [
+                      "observation",
+                      "context",
+                      "qualification",
+                      "correction"
+                    ],
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "sequence": {
+                    "minimum": 1,
+                    "title": "Sequence",
+                    "type": "integer"
+                  },
+                  "statement_id": {
+                    "format": "uuid",
+                    "title": "Statement Id",
+                    "type": "string"
+                  },
+                  "supersedes_statement_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Supersedes Statement Id"
+                  },
+                  "text": {
+                    "maxLength": 8192,
+                    "minLength": 1,
+                    "title": "Text",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "statement_id",
+                  "sequence",
+                  "kind",
+                  "text",
+                  "supersedes_statement_id",
+                  "correction_reason",
+                  "evidence"
+                ],
+                "title": "StoredStatement",
+                "type": "object"
+              },
+              "UnitSupport": {
+                "additionalProperties": false,
+                "description": "An actual unit-level link, never a sentence or span citation.",
+                "properties": {
+                  "content_sha256": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "title": "Content Sha256",
+                    "type": "string"
+                  },
+                  "event_id": {
+                    "format": "uuid",
+                    "title": "Event Id",
+                    "type": "string"
+                  },
+                  "source_unit_id": {
+                    "format": "uuid",
+                    "title": "Source Unit Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "event_id",
+                  "source_unit_id",
+                  "content_sha256"
+                ],
+                "title": "UnitSupport",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "bead": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/StoredBead"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "contract_version": {
+                "const": 1,
+                "default": 1,
+                "title": "Contract Version",
+                "type": "integer"
+              },
+              "outcome": {
+                "enum": [
+                  "available",
+                  "unavailable",
+                  "budget_exhausted"
+                ],
+                "title": "Outcome",
+                "type": "string"
+              }
+            },
+            "required": [
+              "outcome"
+            ],
+            "title": "StoredBeadInspection",
+            "type": "object"
+          }
+        }
+      },
+      "id": "memoriesql.stored-bead-inspection.v1",
+      "kind": "json_schema",
+      "status": "available",
+      "summary": "Bounded authorized stored bead meaning and contribution provenance; no inference.",
+      "version": "1"
+    },
+    {
+      "contract": {
         "additionalProperties": false,
         "properties": {
           "authority_principal_id": {

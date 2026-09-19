@@ -29,3 +29,8 @@ classification and one attributable accepted contribution. P owns canonical
 writes and fixtures; Q owns authorized stored-result reads. Preserve historical
 migrations 0001–0022 and records; no provider-specific integration or release is
 part of this public slice. See `docs/bead-classification.md`.
+
+The Q-owned forward schema-24 slice permits bounded, currently authorized stored
+bead/result and evidence inspection. Preserve migrations 0001–0023 and earlier
+records. No inference, canonical writes, provider binding or private consumption
+is introduced. See `docs/stored-bead-inspection.md`.

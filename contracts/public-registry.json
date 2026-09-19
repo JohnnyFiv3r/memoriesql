@@ -24,7 +24,7 @@
     },
     {
       "disposition": "include",
-      "expected_record_count": 52,
+      "expected_record_count": 53,
       "filename": "json-schema.json",
       "kind": "json_schema",
       "note": "Provider-neutral capture, host, source-range, transcript-fold, and harness-lifecycle schemas."
@@ -564,6 +564,17 @@
       "path": "contracts/records/memoriesql-source-stable-identity-v1.json",
       "public_sha256": "c795b9a2f4855d11bdd9a206353608cd2b5685e98363adb457da40bf21297e62",
       "reason": "Public-authored explicit source-stable canonical identity.",
+      "version": "1"
+    },
+    {
+      "canonical_payload_sha256": "8548386f5eafb5c8c237ed27c56ec25708163eeaf449545dfcbef5d06f36ff76",
+      "catalog": "json_schema",
+      "classification": "proposed_open_core",
+      "id": "memoriesql.stored-bead-inspection.v1",
+      "package_disposition": "include",
+      "path": "contracts/records/memoriesql-stored-bead-inspection-v1.json",
+      "public_sha256": "7634376e810818396b64af9d2f519e3c2d7dac48e5c68f55f99828285f5ebbbc",
+      "reason": "Owner-authorized Q public stored-result reads stacked on P handoff b98d5cc.",
       "version": "1"
     },
     {

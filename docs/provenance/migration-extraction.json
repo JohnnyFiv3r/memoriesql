@@ -103,7 +103,7 @@
       "base_public_sha256": "128ed9d1f283b82f82ab9bddc706286d10783a43a467f235c180998e4e398c0e",
       "disposition": "adapt",
       "public_path": "src/memoriesql/infrastructure/postgres/migration_runner.py",
-      "public_sha256": "eeb2e2933a653402eb0355435bc884712e387a07477148a8e9d8a057ddd2486b",
+      "public_sha256": "7d8dae23f87b9190acc4e9594563a96e231ff5c25b38e5f123ab47661a09d90f",
       "reason": "Explicit schema-22 resource closure; preserve historical migration bytes.",
       "source_sha256": "10841bd32cad98d969faf588c5eeff862a4b1dabefc12a4390f72341567c6b22"
     },
@@ -168,6 +168,13 @@
       "public_sha256": "5804a304b32e2c074efe0195d9a6460a0e21c915a1ed45c880d4d9783000f600",
       "reason": "Explicit public-authored provider-neutral classification acceptance transition.",
       "source_sha256": "282516c7ea3502fe79240746b9e0f8c47c73d273625e496989b0e17dbf555ff0"
+    },
+    {
+      "disposition": "adapt",
+      "public_path": "migrations/0024_bounded_stored_bead_inspection.sql",
+      "public_sha256": "da9dd494a5e62191f85866dbc6c793e84886677d7cf5fcdf475292e5448750ff",
+      "reason": "Q-owned bounded authorized stored-result inspection; no canonical writes.",
+      "source_sha256": "182cf71fba7cdab3a2d5c8e89d33942346e3998b9ff83f4c1c117b15b741e1c6"
     }
   ],
   "scope": "Canonical migration substrate only",
