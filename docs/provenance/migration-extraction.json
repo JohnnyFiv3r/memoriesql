@@ -165,7 +165,7 @@
     {
       "disposition": "adapt",
       "public_path": "migrations/0023_attributable_bead_classification.sql",
-      "public_sha256": "d03c4f3cff8278d7b3a8ed7d5c372e4a0f08e029acd7a506045003906e2bd3ec",
+      "public_sha256": "5804a304b32e2c074efe0195d9a6460a0e21c915a1ed45c880d4d9783000f600",
       "reason": "Explicit public-authored provider-neutral classification acceptance transition.",
       "source_sha256": "282516c7ea3502fe79240746b9e0f8c47c73d273625e496989b0e17dbf555ff0"
     }

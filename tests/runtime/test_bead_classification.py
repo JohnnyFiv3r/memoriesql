@@ -61,16 +61,18 @@ class BeadClassification(fixtures.LocalMentions):
         self.alignment = "consistent"
         self.classifier_calls = 0
 
-    def setup_classification(self) -> None:
+    def setup_classification(self, contexts: tuple[Any, ...] = ()) -> None:
         self.setup_revisiting(
             "Alex proposed counting four fictional trees; no count has occurred.",
             activate=False,
+            contexts=contexts,
         )
         self.activation = self.complete.activate_classified(
             ActivateClassifiedAuthorship(
                 idempotency_key="orchard.classified",
                 binding_task_id=self.bound.task_id,
                 dispatch_policy_id=self.dispatch_policy,
+                authorized_context=contexts,
                 classification_vocabulary=(
                     BeadTypePin(key="observation", revision=1),
                     BeadTypePin(key="action", revision=1),
@@ -535,6 +537,144 @@ class BeadClassification(fixtures.LocalMentions):
             self.row("SELECT count(*) FROM memoriesql.model_usage_events"), (2,)
         )
         self.assert_no_meaning()
+
+    def test_exact_classified_replay_reauthorizes_optional_source(self) -> None:
+        from datetime import UTC, datetime
+        from unittest.mock import patch
+
+        import psycopg
+        from psycopg.types.json import Jsonb
+
+        from memoriesql.application.logical_unit_materialization import SealedPackagePin
+        from memoriesql.application.source_revisiting import (
+            AuthorizedContextPin,
+            ReadSourceEvidence,
+        )
+        from memoriesql.infrastructure.jobs.postgres_semantic_queue import (
+            PostgresSemanticTaskQueue,
+        )
+
+        target_source = self.source
+        optional_source = uuid.uuid4()
+        for table, key in (
+            ("protected_resources", "resource_id"),
+            ("source_objects", "source_object_id"),
+        ):
+            extra = {key: str(optional_source)}
+            if table == "source_objects":
+                extra["external_object_id"] = "orchard.optional"
+            from psycopg import sql
+
+            columns = [
+                r[0]
+                for r in self.db.execute(
+                    "SELECT attname FROM pg_attribute WHERE attrelid=%s::regclass AND attnum>0 AND NOT attisdropped AND attgenerated='' ORDER BY attnum",
+                    ("memoriesql." + table,),
+                )
+            ]
+            names = sql.SQL(",").join(sql.Identifier(c) for c in columns)
+            self.db.execute(
+                sql.SQL(
+                    "INSERT INTO memoriesql.{} ({}) SELECT {} FROM jsonb_populate_record(NULL::memoriesql.{},(SELECT to_jsonb(r)||%s FROM memoriesql.{} r WHERE {}=%s))"
+                ).format(
+                    sql.Identifier(table),
+                    names,
+                    names,
+                    sql.Identifier(table),
+                    sql.Identifier(table),
+                    sql.Identifier(key),
+                ),
+                (Jsonb(extra), target_source),
+            )
+        self.source = optional_source
+        import importlib
+
+        capture_fixture = importlib.import_module(cast(Any, self.part).__module__)
+        builder = capture_fixture.build_capture_source_range_command
+        with patch.object(
+            capture_fixture,
+            "build_capture_source_range_command",
+            side_effect=lambda **kw: builder(
+                **(kw | {"checkpoint_key": "orchard.optional.raw"})
+            ),
+        ):
+            context = self.package(
+                "Optional source confirms no count has occurred.",
+                occurrence_key="orchard.optional",
+                seal=False,
+            )
+        sealed = self.seal(context)
+        status = self.status(context)
+        pin = SealedPackagePin(
+            package_id=context.package_id,
+            sealed_receipt_id=sealed.idempotency_receipt_id,
+            inventory_sha256=status.inventory_sha256,
+            required_parts=status.appended_parts,
+            required_characters=status.appended_characters,
+            required_utf8_bytes=status.appended_utf8_bytes,
+        )
+        self.source = target_source
+        self.offset = self.sequence = 0
+        self.setup_classification(
+            (
+                AuthorizedContextPin(
+                    package=pin,
+                    source_object_id=optional_source,
+                    source_schema_version=1,
+                ),
+            )
+        )
+        read = ReadSourceEvidence(
+            package_id=pin.package_id,
+            inventory_sha256=pin.inventory_sha256,
+            part_ordinal=0,
+            limit=100,
+        ).model_dump(mode="json")
+
+        def author(messages: Any, info: Any) -> Any:
+            if not self.steps:
+                return self.step(messages, info, "read", read)
+            result = self.response(messages, info)
+            part = cast(ToolCallPart, result.parts[0])
+            data = part.args_as_dict()
+            data["supporting_selections"].append(read)
+            part.args = data
+            return result
+
+        recorded: list[tuple[Any, Any]] = []
+        original = PostgresSemanticTaskQueue.record_canonical_result
+
+        def capture(queue: Any, fence: Any, result: Any, **kwargs: Any) -> Any:
+            recorded.append((fence, result))
+            return original(queue, fence, result, **kwargs)
+
+        with patch.object(
+            PostgresSemanticTaskQueue, "record_canonical_result", capture
+        ):
+            result = asyncio.run(self.worker(author).run_once())
+        self.assertEqual(result.task_status, "succeeded", result)
+        fence, output = recorded[0]
+        with self.db.transaction():
+            self.assertEqual(
+                self.worker_queue().record_canonical_result(
+                    fence, output, recorded_at=datetime.now(UTC)
+                ),
+                "succeeded",
+            )
+        self.db.execute(
+            "UPDATE memoriesql.protected_resources SET status='revoked',revoked_at=clock_timestamp() WHERE resource_id=%s",
+            (optional_source,),
+        )
+        with self.assertRaises(psycopg.Error), self.db.transaction():
+            self.worker_queue().record_canonical_result(
+                fence, output, recorded_at=datetime.now(UTC)
+            )
+        self.assertEqual(
+            self.row("SELECT count(*) FROM memoriesql.bead_versions"), (1,)
+        )
+        self.assertEqual(
+            self.row("SELECT count(*) FROM memoriesql.model_usage_events"), (3,)
+        )
 
     def test_forged_contribution_rolls_back_and_exact_replay_is_stable(self) -> None:
         import copy

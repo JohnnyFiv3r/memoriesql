@@ -942,7 +942,7 @@ BEGIN
         RAISE EXCEPTION 'semantic annotation command is outside authorization'
             USING ERRCODE = '42501';
     END IF;
-    IF requested_command->>'contract_version' IN ('4','5') THEN
+    IF requested_command->>'contract_version' IN ('4','5','6') THEN
         PERFORM memoriesql.source_revisiting_authorize(command_tenant_id,command_task_id);
     END IF;
     IF is_complete THEN

@@ -890,14 +890,14 @@
       "classification": "approved_migration_substrate",
       "license": "Apache-2.0",
       "public_path": "contracts/migration-inventory.json",
-      "public_sha256": "124d67fabbf030f7e042cc11960166627b536d5ba3949514f35a66fd1307b08f",
+      "public_sha256": "ea7d49d60e528fd08d4c0c8325b081300b3c71bf0e2835091edb2c805df5b795",
       "reason": "Public-owned N1 inventory; audited copy/adapt details in migration-extraction.json where applicable."
     },
     {
       "classification": "approved_migration_substrate",
       "license": "Apache-2.0",
       "public_path": "docs/provenance/migration-extraction.json",
-      "public_sha256": "8396e1ff5df784f5ef4bef336268a2d65240f877fdc30584967aa73b46a22fa6",
+      "public_sha256": "deb2a90ba8505525b8df7ef41a6d37dac822868b103c2927c37a331803e5cd4b",
       "reason": "Public-owned N1 inventory; audited copy/adapt details in migration-extraction.json where applicable."
     },
     {
@@ -1618,7 +1618,7 @@
       "classification": "public_authored",
       "license": "Apache-2.0",
       "public_path": "migrations/0023_attributable_bead_classification.sql",
-      "public_sha256": "d03c4f3cff8278d7b3a8ed7d5c372e4a0f08e029acd7a506045003906e2bd3ec",
+      "public_sha256": "5804a304b32e2c074efe0195d9a6460a0e21c915a1ed45c880d4d9783000f600",
       "reason": "Explicit owner-authorized provider-neutral classified authorship forward slice."
     },
     {
@@ -1639,7 +1639,7 @@
       "classification": "public_authored",
       "license": "Apache-2.0",
       "public_path": "tests/runtime/test_bead_classification.py",
-      "public_sha256": "3d395d9679446219e90f64c48cda68cc0ef03a72c6d89c1a8a4390666b567cb1",
+      "public_sha256": "f750681c11a924616cbc274578ce8c4270655aa2847125b322f25acff5ef3c05",
       "reason": "Explicit owner-authorized provider-neutral classified authorship forward slice."
     }
   ],
