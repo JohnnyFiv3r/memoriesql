@@ -10,6 +10,10 @@ from psycopg.pq import TransactionStatus
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel
 
+from memoriesql.application.declared_evidence_scope import (
+    DeclaredScopeMaterializationReceipt,
+    MaterializeDeclaredScope,
+)
 from memoriesql.application.evidence_packages import (
     LOCK_TIMEOUT_MS,
     OPERATION_TIMEOUT_MS,
@@ -53,6 +57,15 @@ class PostgresLogicalUnitMaterialization:
             command,
             "SELECT memoriesql.materialize_logical_unit_v2(%s)",
             SourceStableMaterializationReceipt,
+        )
+
+    def materialize_declared_scope(
+        self, command: MaterializeDeclaredScope
+    ) -> DeclaredScopeMaterializationReceipt:
+        return self._call(
+            command,
+            "SELECT memoriesql.materialize_declared_scope_v1(%s)",
+            DeclaredScopeMaterializationReceipt,
         )
 
     def inspect_event(self, request: InspectLogicalEvent) -> LogicalEventProgress:

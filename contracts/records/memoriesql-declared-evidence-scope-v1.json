@@ -1,0 +1,1043 @@
+{
+  "contract": {
+    "cross_revision": "explicit_qualified_carry_forward_and_unchanged_content_required",
+    "episode_completeness": "unknown",
+    "identity_scope": [
+      "tenant",
+      "source_object",
+      "approved_namespace",
+      "scope_id"
+    ],
+    "native_boundary": "unresolved",
+    "overlap": "not_identity_or_automatic_supersession",
+    "package_contract": "memoriesql.evidence-package.v1",
+    "replay": "reuse_persisted_scope_declaration_and_original_pins",
+    "schemas": {
+      "DeclaredScopeMaterializationReceipt": {
+        "$defs": {
+          "DeclaredEvidenceScope": {
+            "additionalProperties": false,
+            "properties": {
+              "amendment_reason": {
+                "anyOf": [
+                  {
+                    "maxLength": 512,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Amendment Reason"
+              },
+              "amends_source_unit_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Amends Source Unit Id"
+              },
+              "boundary_basis": {
+                "maxLength": 512,
+                "minLength": 1,
+                "title": "Boundary Basis",
+                "type": "string"
+              },
+              "episode_completeness": {
+                "const": "unknown",
+                "default": "unknown",
+                "title": "Episode Completeness",
+                "type": "string"
+              },
+              "scope_id": {
+                "format": "uuid",
+                "title": "Scope Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "scope_id",
+              "boundary_basis"
+            ],
+            "title": "DeclaredEvidenceScope",
+            "type": "object"
+          },
+          "LogicalEventProgress": {
+            "additionalProperties": false,
+            "properties": {
+              "declared_units": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Declared Units"
+              },
+              "event_id": {
+                "format": "uuid",
+                "title": "Event Id",
+                "type": "string"
+              },
+              "independently_proven_source_complete": {
+                "const": false,
+                "default": false,
+                "title": "Independently Proven Source Complete",
+                "type": "boolean"
+              },
+              "inventory_state": {
+                "enum": [
+                  "partial",
+                  "declared_inventory_materialized",
+                  "total_unknown"
+                ],
+                "title": "Inventory State",
+                "type": "string"
+              },
+              "materialized_units": {
+                "title": "Materialized Units",
+                "type": "integer"
+              },
+              "remaining_declared_units": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Remaining Declared Units"
+              }
+            },
+            "required": [
+              "event_id",
+              "declared_units",
+              "materialized_units",
+              "remaining_declared_units",
+              "inventory_state"
+            ],
+            "title": "LogicalEventProgress",
+            "type": "object"
+          },
+          "ScopeCarryForward": {
+            "additionalProperties": false,
+            "description": "Qualified producer assertion, not equivalence inferred from equal text.",
+            "properties": {
+              "correspondence_basis": {
+                "maxLength": 512,
+                "minLength": 1,
+                "title": "Correspondence Basis",
+                "type": "string"
+              },
+              "original_package_id": {
+                "format": "uuid",
+                "title": "Original Package Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "original_package_id",
+              "correspondence_basis"
+            ],
+            "title": "ScopeCarryForward",
+            "type": "object"
+          },
+          "SealedPackagePin": {
+            "additionalProperties": false,
+            "properties": {
+              "coverage": {
+                "const": "entire_sealed_inventory",
+                "default": "entire_sealed_inventory",
+                "title": "Coverage",
+                "type": "string"
+              },
+              "inventory_sha256": {
+                "pattern": "^[a-f0-9]{64}$",
+                "title": "Inventory Sha256",
+                "type": "string"
+              },
+              "package_id": {
+                "format": "uuid",
+                "title": "Package Id",
+                "type": "string"
+              },
+              "required_characters": {
+                "maximum": 16777216,
+                "minimum": 1,
+                "title": "Required Characters",
+                "type": "integer"
+              },
+              "required_parts": {
+                "maximum": 256,
+                "minimum": 1,
+                "title": "Required Parts",
+                "type": "integer"
+              },
+              "required_utf8_bytes": {
+                "maximum": 16777216,
+                "minimum": 1,
+                "title": "Required Utf8 Bytes",
+                "type": "integer"
+              },
+              "sealed_receipt_id": {
+                "format": "uuid",
+                "title": "Sealed Receipt Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "package_id",
+              "sealed_receipt_id",
+              "inventory_sha256",
+              "required_parts",
+              "required_characters",
+              "required_utf8_bytes"
+            ],
+            "title": "SealedPackagePin",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "bead_id": {
+            "format": "uuid",
+            "title": "Bead Id",
+            "type": "string"
+          },
+          "bound_package": {
+            "$ref": "#/$defs/SealedPackagePin"
+          },
+          "carry_forward": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ScopeCarryForward"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "contract_version": {
+            "const": 3,
+            "default": 3,
+            "title": "Contract Version",
+            "type": "integer"
+          },
+          "event_id": {
+            "format": "uuid",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "event_progress_at_commit": {
+            "$ref": "#/$defs/LogicalEventProgress"
+          },
+          "execution_availability": {
+            "const": "unavailable",
+            "default": "unavailable",
+            "title": "Execution Availability",
+            "type": "string"
+          },
+          "execution_reason": {
+            "const": "complete_input_executor_unavailable",
+            "default": "complete_input_executor_unavailable",
+            "title": "Execution Reason",
+            "type": "string"
+          },
+          "idempotency_receipt_id": {
+            "format": "uuid",
+            "title": "Idempotency Receipt Id",
+            "type": "string"
+          },
+          "initial_materialization_receipt_id": {
+            "format": "uuid",
+            "title": "Initial Materialization Receipt Id",
+            "type": "string"
+          },
+          "replayed": {
+            "title": "Replayed",
+            "type": "boolean"
+          },
+          "scope": {
+            "$ref": "#/$defs/DeclaredEvidenceScope"
+          },
+          "source_unit_id": {
+            "format": "uuid",
+            "title": "Source Unit Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "materialized",
+              "already_exists"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "submitted_package_id": {
+            "format": "uuid",
+            "title": "Submitted Package Id",
+            "type": "string"
+          },
+          "task_enqueue_receipt_id": {
+            "format": "uuid",
+            "title": "Task Enqueue Receipt Id",
+            "type": "string"
+          },
+          "task_id": {
+            "format": "uuid",
+            "title": "Task Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "idempotency_receipt_id",
+          "initial_materialization_receipt_id",
+          "task_enqueue_receipt_id",
+          "submitted_package_id",
+          "bound_package",
+          "event_id",
+          "source_unit_id",
+          "bead_id",
+          "task_id",
+          "status",
+          "replayed",
+          "event_progress_at_commit",
+          "scope",
+          "carry_forward"
+        ],
+        "title": "DeclaredScopeMaterializationReceipt",
+        "type": "object"
+      },
+      "InspectScopedEvidencePackage": {
+        "additionalProperties": false,
+        "properties": {
+          "contract_version": {
+            "const": 2,
+            "default": 2,
+            "title": "Contract Version",
+            "type": "integer"
+          },
+          "operation": {
+            "const": "inspect",
+            "default": "inspect",
+            "title": "Operation",
+            "type": "string"
+          },
+          "package_id": {
+            "format": "uuid",
+            "title": "Package Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "package_id"
+        ],
+        "title": "InspectScopedEvidencePackage",
+        "type": "object"
+      },
+      "MaterializeDeclaredScope": {
+        "$defs": {
+          "DeclaredEvidenceScope": {
+            "additionalProperties": false,
+            "properties": {
+              "amendment_reason": {
+                "anyOf": [
+                  {
+                    "maxLength": 512,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Amendment Reason"
+              },
+              "amends_source_unit_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Amends Source Unit Id"
+              },
+              "boundary_basis": {
+                "maxLength": 512,
+                "minLength": 1,
+                "title": "Boundary Basis",
+                "type": "string"
+              },
+              "episode_completeness": {
+                "const": "unknown",
+                "default": "unknown",
+                "title": "Episode Completeness",
+                "type": "string"
+              },
+              "scope_id": {
+                "format": "uuid",
+                "title": "Scope Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "scope_id",
+              "boundary_basis"
+            ],
+            "title": "DeclaredEvidenceScope",
+            "type": "object"
+          },
+          "ScopeCarryForward": {
+            "additionalProperties": false,
+            "description": "Qualified producer assertion, not equivalence inferred from equal text.",
+            "properties": {
+              "correspondence_basis": {
+                "maxLength": 512,
+                "minLength": 1,
+                "title": "Correspondence Basis",
+                "type": "string"
+              },
+              "original_package_id": {
+                "format": "uuid",
+                "title": "Original Package Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "original_package_id",
+              "correspondence_basis"
+            ],
+            "title": "ScopeCarryForward",
+            "type": "object"
+          },
+          "SourceType": {
+            "enum": [
+              "transcript",
+              "document",
+              "media",
+              "relational",
+              "operational"
+            ],
+            "title": "SourceType",
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "carry_forward": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ScopeCarryForward"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "contract_version": {
+            "const": 3,
+            "default": 3,
+            "title": "Contract Version",
+            "type": "integer"
+          },
+          "expected_inventory_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Expected Inventory Sha256",
+            "type": "string"
+          },
+          "expected_schema_version": {
+            "const": 25,
+            "default": 25,
+            "title": "Expected Schema Version",
+            "type": "integer"
+          },
+          "expected_source_object_schema_version": {
+            "minimum": 1,
+            "title": "Expected Source Object Schema Version",
+            "type": "integer"
+          },
+          "idempotency_key": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Idempotency Key",
+            "type": "string"
+          },
+          "package_id": {
+            "format": "uuid",
+            "title": "Package Id",
+            "type": "string"
+          },
+          "producer_policy_id": {
+            "format": "uuid",
+            "title": "Producer Policy Id",
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/$defs/DeclaredEvidenceScope"
+          },
+          "source_type": {
+            "$ref": "#/$defs/SourceType"
+          }
+        },
+        "required": [
+          "idempotency_key",
+          "package_id",
+          "expected_inventory_sha256",
+          "producer_policy_id",
+          "expected_source_object_schema_version",
+          "source_type",
+          "scope"
+        ],
+        "title": "MaterializeDeclaredScope",
+        "type": "object"
+      },
+      "ScopedEvidencePackageStatus": {
+        "$defs": {
+          "DeclaredEvidenceScope": {
+            "additionalProperties": false,
+            "properties": {
+              "amendment_reason": {
+                "anyOf": [
+                  {
+                    "maxLength": 512,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Amendment Reason"
+              },
+              "amends_source_unit_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Amends Source Unit Id"
+              },
+              "boundary_basis": {
+                "maxLength": 512,
+                "minLength": 1,
+                "title": "Boundary Basis",
+                "type": "string"
+              },
+              "episode_completeness": {
+                "const": "unknown",
+                "default": "unknown",
+                "title": "Episode Completeness",
+                "type": "string"
+              },
+              "scope_id": {
+                "format": "uuid",
+                "title": "Scope Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "scope_id",
+              "boundary_basis"
+            ],
+            "title": "DeclaredEvidenceScope",
+            "type": "object"
+          },
+          "DeclaredScopeBinding": {
+            "additionalProperties": false,
+            "properties": {
+              "identity_basis": {
+                "const": "declared_scope",
+                "default": "declared_scope",
+                "title": "Identity Basis",
+                "type": "string"
+              },
+              "initial_materialization_receipt_id": {
+                "format": "uuid",
+                "title": "Initial Materialization Receipt Id",
+                "type": "string"
+              },
+              "original_package_id": {
+                "format": "uuid",
+                "title": "Original Package Id",
+                "type": "string"
+              },
+              "scope": {
+                "$ref": "#/$defs/DeclaredEvidenceScope"
+              },
+              "source_unit_id": {
+                "format": "uuid",
+                "title": "Source Unit Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "scope",
+              "original_package_id",
+              "source_unit_id",
+              "initial_materialization_receipt_id"
+            ],
+            "title": "DeclaredScopeBinding",
+            "type": "object"
+          },
+          "NativeFacts": {
+            "additionalProperties": false,
+            "description": "Null means unknown, never a fabricated native identifier.",
+            "properties": {
+              "branch_native_id": {
+                "anyOf": [
+                  {
+                    "maxLength": 256,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Branch Native Id"
+              },
+              "native_id": {
+                "anyOf": [
+                  {
+                    "maxLength": 256,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Native Id"
+              },
+              "occurred_at": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Occurred At"
+              },
+              "occurred_at_raw": {
+                "anyOf": [
+                  {
+                    "maxLength": 256,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Occurred At Raw"
+              },
+              "parent_native_id": {
+                "anyOf": [
+                  {
+                    "maxLength": 256,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Parent Native Id"
+              },
+              "participant_native_id": {
+                "anyOf": [
+                  {
+                    "maxLength": 256,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Participant Native Id"
+              },
+              "role": {
+                "anyOf": [
+                  {
+                    "maxLength": 128,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Role"
+              },
+              "session_native_id": {
+                "anyOf": [
+                  {
+                    "maxLength": 256,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Session Native Id"
+              },
+              "source_order": {
+                "anyOf": [
+                  {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Source Order"
+              },
+              "time_precision": {
+                "anyOf": [
+                  {
+                    "maxLength": 64,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Time Precision"
+              }
+            },
+            "title": "NativeFacts",
+            "type": "object"
+          },
+          "PackageDeclaration": {
+            "additionalProperties": false,
+            "properties": {
+              "expected_characters": {
+                "maximum": 16777216,
+                "minimum": 1,
+                "title": "Expected Characters",
+                "type": "integer"
+              },
+              "expected_inventory_sha256": {
+                "pattern": "^[a-f0-9]{64}$",
+                "title": "Expected Inventory Sha256",
+                "type": "string"
+              },
+              "expected_parts": {
+                "maximum": 256,
+                "minimum": 1,
+                "title": "Expected Parts",
+                "type": "integer"
+              },
+              "expected_utf8_bytes": {
+                "maximum": 16777216,
+                "minimum": 1,
+                "title": "Expected Utf8 Bytes",
+                "type": "integer"
+              },
+              "native": {
+                "$ref": "#/$defs/NativeFacts"
+              },
+              "normalization_policy_version": {
+                "maxLength": 128,
+                "minLength": 1,
+                "title": "Normalization Policy Version",
+                "type": "string"
+              },
+              "occurrence_identity_basis": {
+                "enum": [
+                  "native",
+                  "producer_assigned"
+                ],
+                "title": "Occurrence Identity Basis",
+                "type": "string"
+              },
+              "occurrence_key": {
+                "maxLength": 256,
+                "minLength": 1,
+                "title": "Occurrence Key",
+                "type": "string"
+              },
+              "package_revision": {
+                "default": 1,
+                "minimum": 1,
+                "title": "Package Revision",
+                "type": "integer"
+              },
+              "qualification": {
+                "$ref": "#/$defs/SourceQualification"
+              },
+              "source_object_id": {
+                "format": "uuid",
+                "title": "Source Object Id",
+                "type": "string"
+              },
+              "source_revision_key": {
+                "maxLength": 512,
+                "minLength": 1,
+                "title": "Source Revision Key",
+                "type": "string"
+              }
+            },
+            "required": [
+              "source_object_id",
+              "source_revision_key",
+              "occurrence_key",
+              "occurrence_identity_basis",
+              "normalization_policy_version",
+              "native",
+              "qualification",
+              "expected_parts",
+              "expected_characters",
+              "expected_utf8_bytes",
+              "expected_inventory_sha256"
+            ],
+            "title": "PackageDeclaration",
+            "type": "object"
+          },
+          "PackageStatus": {
+            "additionalProperties": false,
+            "properties": {
+              "appended_characters": {
+                "title": "Appended Characters",
+                "type": "integer"
+              },
+              "appended_parts": {
+                "title": "Appended Parts",
+                "type": "integer"
+              },
+              "appended_utf8_bytes": {
+                "title": "Appended Utf8 Bytes",
+                "type": "integer"
+              },
+              "currently_authorized": {
+                "const": true,
+                "default": true,
+                "title": "Currently Authorized",
+                "type": "boolean"
+              },
+              "declaration": {
+                "$ref": "#/$defs/PackageDeclaration"
+              },
+              "independently_proven_source_complete": {
+                "const": false,
+                "default": false,
+                "title": "Independently Proven Source Complete",
+                "type": "boolean"
+              },
+              "inventory_sha256": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Inventory Sha256"
+              },
+              "package_id": {
+                "format": "uuid",
+                "title": "Package Id",
+                "type": "string"
+              },
+              "producer_principal_id": {
+                "format": "uuid",
+                "title": "Producer Principal Id",
+                "type": "string"
+              },
+              "readiness": {
+                "enum": [
+                  "assembling",
+                  "pending_source_qualification",
+                  "ready_producer_attested"
+                ],
+                "title": "Readiness",
+                "type": "string"
+              },
+              "sealed": {
+                "title": "Sealed",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "package_id",
+              "declaration",
+              "producer_principal_id",
+              "appended_parts",
+              "appended_characters",
+              "appended_utf8_bytes",
+              "sealed",
+              "inventory_sha256",
+              "readiness"
+            ],
+            "title": "PackageStatus",
+            "type": "object"
+          },
+          "SourceQualification": {
+            "additionalProperties": false,
+            "description": "Producer assertions. Core does not qualify source formats or semantics.",
+            "properties": {
+              "boundary": {
+                "enum": [
+                  "qualified_native_unit",
+                  "unresolved"
+                ],
+                "title": "Boundary",
+                "type": "string"
+              },
+              "boundary_basis": {
+                "maxLength": 512,
+                "minLength": 1,
+                "title": "Boundary Basis",
+                "type": "string"
+              },
+              "exclusions": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 16,
+                "title": "Exclusions",
+                "type": "array"
+              },
+              "normalized_input": {
+                "enum": [
+                  "complete",
+                  "incomplete"
+                ],
+                "title": "Normalized Input",
+                "type": "string"
+              },
+              "physical_records": {
+                "enum": [
+                  "complete",
+                  "pending_tail"
+                ],
+                "title": "Physical Records",
+                "type": "string"
+              },
+              "qualification_ref": {
+                "maxLength": 256,
+                "minLength": 1,
+                "title": "Qualification Ref",
+                "type": "string"
+              },
+              "source_completeness": {
+                "enum": [
+                  "producer_attested",
+                  "unresolved"
+                ],
+                "title": "Source Completeness",
+                "type": "string"
+              },
+              "topology": {
+                "enum": [
+                  "known",
+                  "partially_known",
+                  "unknown"
+                ],
+                "title": "Topology",
+                "type": "string"
+              },
+              "unresolved_coverage": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 16,
+                "title": "Unresolved Coverage",
+                "type": "array"
+              }
+            },
+            "required": [
+              "qualification_ref",
+              "boundary",
+              "boundary_basis",
+              "physical_records",
+              "topology",
+              "normalized_input",
+              "source_completeness"
+            ],
+            "title": "SourceQualification",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "contract_version": {
+            "const": 2,
+            "default": 2,
+            "title": "Contract Version",
+            "type": "integer"
+          },
+          "package": {
+            "$ref": "#/$defs/PackageStatus"
+          },
+          "scope_binding": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/DeclaredScopeBinding"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "scope_readiness": {
+            "enum": [
+              "not_materialized",
+              "materialized_declared_scope"
+            ],
+            "title": "Scope Readiness",
+            "type": "string"
+          }
+        },
+        "required": [
+          "package",
+          "scope_binding",
+          "scope_readiness"
+        ],
+        "title": "ScopedEvidencePackageStatus",
+        "type": "object"
+      }
+    },
+    "semantic_sufficiency": "authored_not_mechanically_proven"
+  },
+  "id": "memoriesql.declared-evidence-scope.v1",
+  "kind": "json_schema",
+  "status": "available",
+  "summary": "Explicit authorized source-local evidence scopes with stable first bindings, truthful coverage and no invented native topology.",
+  "version": "1"
+}

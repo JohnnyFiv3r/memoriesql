@@ -101,10 +101,10 @@
     {
       "base_public_commit": "2ff951385405a45a1018a105f8a6641758ece78a",
       "base_public_sha256": "128ed9d1f283b82f82ab9bddc706286d10783a43a467f235c180998e4e398c0e",
-      "disposition": "adapt",
+      "disposition": "public-forward",
       "public_path": "src/memoriesql/infrastructure/postgres/migration_runner.py",
-      "public_sha256": "7d8dae23f87b9190acc4e9594563a96e231ff5c25b38e5f123ab47661a09d90f",
-      "reason": "Explicit schema-22 resource closure; preserve historical migration bytes.",
+      "public_sha256": "8a432e1afcaf6625b228bc1e4632aa1eb0d04af4b573694a63c0d6acf8a5775f",
+      "reason": "Explicit schema-25 packaged stream count; existing migration behavior preserved.",
       "source_sha256": "10841bd32cad98d969faf588c5eeff862a4b1dabefc12a4390f72341567c6b22"
     },
     {
@@ -175,6 +175,14 @@
       "public_sha256": "db242602f27174605386077307b7bce696e29cd760cc660f350ef61c1b22d604",
       "reason": "Q-owned bounded authorized stored-result inspection; no canonical writes.",
       "source_sha256": "182cf71fba7cdab3a2d5c8e89d33942346e3998b9ff83f4c1c117b15b741e1c6"
+    },
+    {
+      "disposition": "public",
+      "public_path": "migrations/0025_declared_evidence_scopes.sql",
+      "public_sha256": "1941a93253bec90c44597edae45e5028327ce51f303a54c6f91072be235ed71b",
+      "reason": "Public-authored declared-scope forward transition; no private extraction.",
+      "source_path": null,
+      "source_sha256": null
     }
   ],
   "scope": "Canonical migration substrate only",

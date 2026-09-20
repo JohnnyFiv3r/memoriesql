@@ -1,5 +1,8 @@
 # Complete-input evidence packages, version 1
 
+The unreleased [declared-evidence-scope extension](declared-evidence-scopes.md)
+adds an explicit non-native scope route while preserving this historical contract.
+
 This public-core path, included in the 0.0.5 candidate, stores and reads the complete normalized evidence
 inventory declared for one source-native logical unit. It creates no source event,
 source unit, observation, bead, semantic task, authoring run or accepted memory.

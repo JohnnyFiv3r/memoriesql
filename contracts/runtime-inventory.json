@@ -241,10 +241,13 @@
       "sha256": "7d66cf239483e54ae833c9b894ba847b5abf670a17a6ef8046b78149daec1400"
     },
     {
-      "disposition": "public",
+      "base_public_commit": "84008f68a2a842fc2bb472b3ed294dcd2ea36b6b",
+      "base_public_sha256": "382d507b0b7b5e495ff42a3f463d4344cc573ed505bf5e0436d29450199e362d",
+      "disposition": "public-forward",
       "path": "src/memoriesql/infrastructure/postgres/evidence_packages.py",
-      "reason": "Public-authored currently authorized short transactions for evidence package storage and reads; no semantic execution.",
-      "sha256": "382d507b0b7b5e495ff42a3f463d4344cc573ed505bf5e0436d29450199e362d"
+      "reason": "Forward declared-scope method; existing public methods preserved.",
+      "sha256": "12db5dca38f037501e99fe8312cfbf4fe084a9087399dc58876117585d00624d",
+      "source_sha256": "382d507b0b7b5e495ff42a3f463d4344cc573ed505bf5e0436d29450199e362d"
     },
     {
       "disposition": "public",
@@ -253,10 +256,13 @@
       "sha256": "53a2e23c3567adfdfd9f4ae691a2d7ef33a7fac9d26d69de6abab84f2626ade9"
     },
     {
-      "disposition": "public",
+      "base_public_commit": "84008f68a2a842fc2bb472b3ed294dcd2ea36b6b",
+      "base_public_sha256": "ceee40bf0b787c4dc3cdc4a101fc545f7b8abf0dd77f2c7ed14cea95a6c72bf2",
+      "disposition": "public-forward",
       "path": "src/memoriesql/infrastructure/postgres/logical_unit_materialization.py",
-      "reason": "Public-authored canonical logical-unit materialization and unavailable task binding.",
-      "sha256": "ceee40bf0b787c4dc3cdc4a101fc545f7b8abf0dd77f2c7ed14cea95a6c72bf2"
+      "reason": "Forward declared-scope method; existing public methods preserved.",
+      "sha256": "fa64448d3fbb7aa361b767828578bfa41c73317f06cad9aff2accbe39dbfadcd",
+      "source_sha256": "ceee40bf0b787c4dc3cdc4a101fc545f7b8abf0dd77f2c7ed14cea95a6c72bf2"
     },
     {
       "disposition": "public",
@@ -335,6 +341,22 @@
       "reason": "Q-owned bounded authorized stored-result inspection; no canonical writes.",
       "sha256": "73a44f68e631af9d2a4f4a02aea034281a5a282e7930f495170a479ca3acc412",
       "source_sha256": "211283d6cc3c15219250bc9fbbfcfb91a6b1c19d30ef692683692a60c2a53a0d"
+    },
+    {
+      "disposition": "public",
+      "path": "src/memoriesql/application/declared_evidence_scope.py",
+      "reason": "Public-authored explicit declared evidence scopes.",
+      "sha256": "75f7492e3ef206f01429fc2192e7b660a368550909b8af2e930c27ad4ea5a71f",
+      "source_sha256": "75f7492e3ef206f01429fc2192e7b660a368550909b8af2e930c27ad4ea5a71f"
+    },
+    {
+      "base_public_commit": "84008f68a2a842fc2bb472b3ed294dcd2ea36b6b",
+      "base_public_sha256": "7d8dae23f87b9190acc4e9594563a96e231ff5c25b38e5f123ab47661a09d90f",
+      "disposition": "public-forward",
+      "path": "src/memoriesql/infrastructure/postgres/migration_runner.py",
+      "reason": "Forward declared-scope method; existing public methods preserved.",
+      "sha256": "8a432e1afcaf6625b228bc1e4632aa1eb0d04af4b573694a63c0d6acf8a5775f",
+      "source_sha256": "faf9067782e468fedc60ddf0a2d41fe98111e77d8542c872be9531cf14702521"
     }
   ]
 }

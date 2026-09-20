@@ -97,6 +97,10 @@
     {
       "filename": "0024_bounded_stored_bead_inspection.sql",
       "sha256": "db242602f27174605386077307b7bce696e29cd760cc660f350ef61c1b22d604"
+    },
+    {
+      "filename": "0025_declared_evidence_scopes.sql",
+      "sha256": "1941a93253bec90c44597edae45e5028327ce51f303a54c6f91072be235ed71b"
     }
   ]
 }

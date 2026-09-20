@@ -24,7 +24,7 @@
     },
     {
       "disposition": "include",
-      "expected_record_count": 53,
+      "expected_record_count": 54,
       "filename": "json-schema.json",
       "kind": "json_schema",
       "note": "Provider-neutral capture, host, source-range, transcript-fold, and harness-lifecycle schemas."
@@ -198,6 +198,16 @@
       "path": "contracts/records/memoriesql-complete-input-execution-v1.json",
       "public_sha256": "34a7d0d91a6c4ea5d78435fd1f9dab2a677df02320376914692dd0202ffdf899",
       "reason": "Public-authored forward complete-input execution and bounded reader contracts.",
+      "version": "1"
+    },
+    {
+      "catalog": "json_schema",
+      "classification": "proposed_open_core",
+      "id": "memoriesql.declared-evidence-scope.v1",
+      "package_disposition": "include",
+      "path": "contracts/records/memoriesql-declared-evidence-scope-v1.json",
+      "public_sha256": "1e3d765927c79e1522d048212ec3dd55f063abf92d4314d9d5ea302a0fb207d0",
+      "reason": "Public-authored scoped materialization and inspection; no private export.",
       "version": "1"
     },
     {

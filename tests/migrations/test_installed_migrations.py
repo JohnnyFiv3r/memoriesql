@@ -64,7 +64,7 @@ class InstalledMigrations(unittest.TestCase):
         }
         self.assertIn(Path(runner.__file__).resolve(), owned)
         stream = runner.discover_migrations()
-        self.assertEqual(len(stream), 24)
+        self.assertEqual(len(stream), 25)
         for migration in stream:
             self.assertIn(Path(str(migration.path)).resolve(), owned)
             self.assertEqual(
@@ -100,7 +100,7 @@ class InstalledMigrations(unittest.TestCase):
         self.assertEqual(output.getvalue().strip(), __version__)
         registry = json.loads(Path("public-registry.json").read_text())
         entries = {entry["id"]: entry for entry in iter_contracts()}
-        self.assertEqual(len(entries), 59)
+        self.assertEqual(len(entries), 60)
         for row in registry["records"]:
             payload = json.dumps(
                 entries[row["id"]],
