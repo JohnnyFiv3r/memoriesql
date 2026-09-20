@@ -74,10 +74,11 @@ class PublicBootstrapTests(unittest.TestCase):
     def test_public_docs_state_scope_and_compatibility(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         package_readme = (ROOT / "PYPI_README.md").read_text(encoding="utf-8")
-        combined = readme + "\n" + package_readme
+        combined = " ".join((readme + "\n" + package_readme).split())
         for expected in (
-            "49 provider-neutral",
-            "12 experimental",
+            "local-first memory foundation",
+            "PostgreSQL",
+            "structured observations",
             "no general compatibility guarantee",
             "new contract version",
             "new distribution version",

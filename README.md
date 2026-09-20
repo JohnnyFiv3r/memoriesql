@@ -1,188 +1,193 @@
-![memoriesQL — observe, process, store, recall](assets/trademarks/memoriesql-readme-banner.png)
+![memoriesQL](assets/trademarks/memoriesql-readme-banner.png)
 
-Unreleased development: [explicit declared evidence scopes](docs/declared-evidence-scopes.md)
-add non-native scope qualification on the existing canonical path. This change is
-not included in published 0.0.8; release and downstream consumption remain gated.
+# memoriesQL
 
-# memoriesQL catalogs and provider-neutral runtime
+**Build memories with meaning.**
 
-This public repository preserves the original 49 provider-neutral contract records
-and provides 59 records through eight generated catalogs and 12 experimental
-catalog Python/CLI APIs. Public `memoriesql` owns the canonical PostgreSQL schema,
-authorization, capture/range/fold mechanics, queue, worker, executor and accounting.
-It is not the memoriesQL desktop product, a running background service, a recall
-engine or a provider integration. Catalog reads do not access external services.
+memoriesQL is an open-source, local-first memory foundation for AI agents.
+It preserves authorized evidence in PostgreSQL, supports agent-authored structured
+observations, and keeps those observations connected to the source that supports
+them. Applications can build inspectable memory without making a summary, model
+response or external vector store the source of truth.
 
-Published `0.0.2` introduced the canonical migration/runtime substrate; `0.0.3`
-retains cleanup ownership independently of a blocked heartbeat. Published `0.0.4`
-adds schema 15: immutable accepted observations and explicit version-2
-initial-authoring/correction commands. Corrections create distinct beads with pinned
-supersession. Those releases, tags and inventories remain immutable.
+This repository contains the **provider-neutral open core**: canonical SQL,
+versioned contracts and a Python runtime. It is not the memoriesQL desktop product.
+It is for developers composing their own applications, services and agent hosts.
 
-## Prepared 0.0.8 scope
+> **Status:** experimental, pre-alpha software. The published package includes
+> the ledger, evidence handling and semantic execution mechanics, qualified with
+> fictional installed-package tests. Installing it does not deliver a configured
+> memory service, a qualified live-provider integration or production recall.
 
-Published 0.0.7 includes schemas 16–21. The 0.0.8 candidate packages the already merged public prerequisites:
+## What the core does
 
-- **Bounded model admission:** exact caller-supplied model/profile/target qualification,
-  pre-dispatch request/token reservation and attributable usage through the existing
-  executor. No production transport or provider entitlement is supplied.
-- **Schema 22:** atomic authored local mentions, including explicit authored-empty
-  and unresolved/ambiguous local state, without inventing global entity resolution.
-- **Schema 23:** a bounded evidence-backed classification packet, registered
-  vocabulary revisions, explicit abstention/disagreement and one attributable
-  accepted contribution. Mechanical acceptance does not prove semantic quality.
-- **Schema 24:** currently authorized stored bead/result and exact-evidence reads;
-  legacy, missing, hidden and authored-empty remain distinct. Reads do not run inference.
-- **Accounting cancellation repair:** already-started database writes and late usage
-  remain owned through repeated cancellation; callers still retain the worker/event
-  loop until cleanup finishes.
+| Capability | What a builder can use |
+|---|---|
+| **Preserve evidence** | Durable authorized byte ranges, receipts, checkpoints and retained fold outcomes. Unknown transcript topology does not block raw capture. |
+| **Keep identity and history** | Source-local identities, replay-safe canonical writes, immutable evidence pins and explicit distinct-bead corrections. Equal text alone is not identity. |
+| **Author structured observations** | A durable task queue and fenced worker/executor path for statements, short human-readable renders, local entity mentions and attributable classification. |
+| **Revisit source** | Exact evidence packages, bounded authorized readers and author-controlled rereads of retained target and explicitly supplied context. |
+| **Inspect stored memory** | Authorized reads of stored meaning, mentions, classification provenance and source evidence, without running inference. |
+| **Enforce operational boundaries** | Scoped authority, row-level security, attempt and cancellation fences, accounting intents, usage records and owned cleanup. |
 
-The candidate preserves the earlier paths:
+These are composable mechanisms, not an automatically running product. Source
+qualification, model admission, disclosure permission and semantic quality are
+separate responsibilities; a passing schema or receipt proves none of them alone.
 
-- **Schema 16:** immutable evidence packages retain exact inventory and raw/fold
-  lineage for one source-native unit. Bounded authorized reads do not create meaning.
-- **Schema 17:** a qualified sealed package atomically materializes its stable unit,
-  initial thin bead, exact-package task binding, outbox effects and shared receipts.
-  Original tasks remain explicitly unavailable, with immutable binding-time snapshots.
-- **Schema 18:** explicit activation creates one revision-2 successor in the existing
-  queue. Authorized reader v2 supplies bounded batches independently of model
-  interaction sizes. Trusted attempt-bound exposure and current authorization are
-  required before fenced initial semantic application through the existing sink.
+## From evidence to an observation
 
-- **Schema 19:** authorized recovery of retained fold outcomes and raw derivation.
-- **Schema 20:** explicit author-controlled source revisiting with trusted delivery
-  and unique mandatory exposure; details below.
+1. **Capture first.** Retain authorized evidence before parsing or model work.
+2. **Establish the scope.** Bind source identity, exact evidence and what is known
+   about its completeness. Never invent a turn from role alternation or a read
+   window.
+3. **Author meaning.** An agent inspects the required evidence and produces
+   structured observations through a typed task. It can revisit authorized source
+   when a qualification or identity needs checking.
+4. **Accept with provenance.** Canonical application checks authorization,
+   attempt fences and trusted evidence exposure before storing accepted meaning.
+5. **Inspect and reuse.** Read the observation and its support; higher-level
+   applications compose the user experience and eventual recall strategy.
 
-An owner cancellation that wins activation's waits prevents successor creation.
-Every successful activation key, including a natural duplicate, is bound to its
-request in the shared ledger; replay preserves the original successor and package
-pin. These are the completed PR #13 repairs, not new runtime changes in this PR.
+A **bead** is a source-anchored observation, not necessarily one sentence or one
+model call. Its statements carry substantive meaning, attribution, conditions and
+uncertainty. Titles and short summaries help people scan that meaning; they do not
+replace it or the underlying evidence. Accepted meaning is immutable. Supported
+correction commands create a new linked bead instead of rewriting the old one.
 
-Exposure establishes exact mechanical supply at a trusted dispatch boundary, not
-model comprehension, correctness or independent source completeness. Producer
-attestation and arbitrary qualification strings are not independent certification.
-Rolling-note quality and execution ceilings remain experimental; excess input stays
-retained with a thin bead and explicit failure. Complete-input correction and
-reauthoring are not delivered. See [evidence packages](docs/evidence-packages.md),
-[materialization](docs/logical-unit-materialization.md) and
-[complete-input execution](docs/complete-input-execution.md).
+A supplied evidence scope is not proof of a complete conversation, and mechanical
+exposure is not proof of comprehension. If required evidence cannot be inspected,
+the authoring path must report incomplete work rather than invent an answer.
 
-## Installation and caller opt-in
+## Start with the published package
 
-Python `>=3.13,<3.15` is required; 3.13 and 3.14 are qualified by fictional installed
-acceptance. Use a reviewed local candidate until publication is separately verified:
+Use **Python 3.13 or 3.14** (`>=3.13,<3.15`). Create an environment and pin the
+current published runtime:
 
 ```console
-python3.13 -m pip install ./memoriesql-0.0.8-py3-none-any.whl
+python3.13 -m venv .venv
+. .venv/bin/activate
+python -m pip install memoriesql==0.0.8
+memoriesql --version
 memoriesql contracts --json
 memoriesql contract memoriesql.capture.connector-cursor --json
 ```
 
-After separately authorized and verified publication, pin `memoriesql==0.0.8`.
-Older Python can explicitly pin the immutable catalog-only `0.0.1a1`; it is not a
-runtime fallback. The dependencies remain `psycopg[binary]==3.3.3`,
-`pydantic==2.13.3` and `pydantic-ai-slim==2.27.0`, without provider extras.
+Those commands inspect bundled contracts. They need no database or provider
+credentials and do not capture data, start a worker or call a model.
 
 ```python
 from memoriesql.contracts import get_contract, load_catalog
 
 schemas = load_catalog("json_schema")
-cursor = get_contract("memoriesql.capture.connector-cursor")
+cursor_contract = get_contract("memoriesql.capture.connector-cursor")
 ```
 
-Installing/upgrading the package does not migrate a database, provision production
-trust, activate tasks, start a worker or configure a provider. An authorized consumer
-must explicitly choose a forward migration and supply credentials/workspace,
-source/producer qualification, dispatch and worker-claim policies, task/module and
-agent/model registries, the worker and separately trusted exposure recorder. Schema
-18 activation is a separate command; it never silently resumes schema-17 bindings
-or routes them through legacy preview input. Production provider integration and
-trust provisioning remain deferred. Current executor qualification uses fictional
-`TestModel`/`FunctionModel` callbacks, not real provider calls.
+The CLI currently exposes contract inspection, not a one-command running memory
+service. The immutable `0.0.1a1` package is a historical catalog-only preview, not
+a runtime fallback for unsupported Python versions.
 
-Worker integrations must retain a worker reporting `cleanup_pending`, its event
-loop and owned cleanup, and observe `wait_for_cleanup()`. Cancellation does not
-prove termination, rollback or reconciled usage. See [migration operations](docs/migrations.md),
-[caller composition](docs/releasing.md#caller-composition-and-explicit-opt-in) and
-[cleanup ownership](docs/runtime.md#cancellation-cleanup-ownership).
+### Compose a runtime deliberately
 
-## Authority, compatibility and release status
+A running integration needs a compatible PostgreSQL database, explicit migration
+selection and caller-owned composition:
 
-[`contracts/public-registry.json`](contracts/public-registry.json) is the sole export
-and generation authority; unlisted files are denied. All APIs remain experimental
-throughout 0.x, with no general compatibility guarantee. A published contract ID
-and version payload is immutable. Breaking payload changes require a new contract
-version; correcting an uploaded distribution requires a new distribution version.
-See [compatibility](docs/architecture/compatibility.md) and [repository ownership](docs/architecture/repository-boundary.md).
+- Authorized principals, workspace/source scopes and credentials.
+- Qualified evidence producers and explicitly approved policies.
+- Task/agent/model bindings, a worker host and trusted dispatch exposure.
+- A separately qualified provider transport before any real model use.
 
-This preparation records exact `v0.0.8` controls and fresh candidate hashes.
-The owner has authorized preparation and, after the required checks, merge and
-exact tag creation. Protected upload approval remains owner-only. The PR head is not automatically the release SHA; successful exact-main
-push CI and independent archive comparison must establish that identity. See [release controls](docs/releasing.md).
-Private P/Q composition and proof, PR-02O and CP-2 remain incomplete. The six historical Desktop queue-test failures
-remain unresolved evidence; this preparation does not rerun or label them fixed.
+Installing or upgrading the package provisions none of those. It does not migrate
+a database, activate existing tasks, grant source access or select a model.
+Provider-specific adapters and subscription credentials are not bundled.
 
-## Licensing and contribution
+Start with [migration operations](docs/migrations.md),
+[caller composition](docs/releasing.md#caller-composition-and-explicit-opt-in),
+[model admission](docs/real-model-admission.md) and
+[complete-input execution](docs/complete-input-execution.md).
+Worker hosts must keep their event loop and owned cleanup alive through
+`wait_for_cleanup()`: cancellation is not proof of remote termination, database
+rollback or final usage reconciliation.
 
-Source and designated materials use [Apache License 2.0](LICENSE). The memoriesQL
-name and banner remain subject to [trademark guidance](TRADEMARKS.md). Contributions
-use the [Developer Certificate of Origin](CONTRIBUTING.md), not a contributor
-license agreement.
+## Published, implemented and planned
 
-## Recovery and revisiting retained from 0.0.6
+- **Published:** [0.0.8](https://pypi.org/project/memoriesql/0.0.8/) contains the
+  canonical runtime, evidence recovery/revisiting, local mentions, classification,
+  stored-result inspection and hard-bounded model-admission interface.
+- **Implemented on main, not yet published:** [declared evidence scopes](docs/declared-evidence-scopes.md)
+  let a qualified producer bind complete retained records without claiming a
+  native turn or complete episode. This is not included in the installation above.
+- **Not yet qualified as an end-to-end product:** live-provider composition,
+  real-model observation quality, production source/trust provisioning and recall.
 
-Schema 19 supplies explicitly authorized retained-fold recovery through bounded
-window discovery, outcome, lineage and exact-byte operations. It recovers stored
-facts, including unknown topology and pending tails, without qualifying producers,
-inventing units or creating semantic work. Recovery requires explicit scoped service
-access; installation creates no grant.
+Complete-input correction/reauthoring is not yet delivered; the existing explicit
+correction commands do not imply support for that execution path.
 
-Schema 20 adds explicit `ActivateSourceRevisiting` activation of an untouched
-schema-17 binding into a revision-3 task. The single author can revisit exact
-normalized or raw evidence from the pinned target and explicitly supplied optional
-context, including after forward coverage completes. Existing revision-2 activations
-cannot silently switch. Compose `load_source_revisiting_task_registry`, the existing
-worker/executor and a separately qualified revision-3 dispatch attestor. Production
-trust provisioning and actual provider qualification remain deferred; the public
-bounded-admission interface is included in this candidate.
+Development archives may retain the previous version number while their bytes
+change. They are not replacements for a published release. Release identity and
+artifact verification live in [release guidance](docs/releasing.md), not in this
+introduction.
 
-Complete-context delivery is preferred when it fits the existing 65,536-character /
-131,072-JSON-byte window; otherwise delivery and typed rereads stay bounded. The
-131,072-character target, 12 interactions and 262,144 repeated-delivery-unit ceilings
-are unchanged and experimental. Actual trusted dispatch establishes exposure;
-reads, notes and repeated delivery cannot inflate unique mandatory target coverage.
-Current authorization, lease/cancellation fences, immutable accepted meaning and
-cleanup ownership remain required. Mechanical exposure does not prove comprehension
-or source completeness. Complete-input correction/reauthoring is not delivered.
+The next product proof connects real authorship to visible, authorized source
+inspection. Agent-led recall and richer relationship/maintenance behavior remain
+development goals, not capabilities provided by the current catalog CLI.
 
-See [retained-fold recovery](https://github.com/JohnnyFiv3r/memoriesql/blob/main/docs/transcript-fold-recovery.md)
-and [source revisiting](https://github.com/JohnnyFiv3r/memoriesql/blob/main/docs/source-revisiting.md).
+## Architectural commitments
 
-## Schema 21: explicit qualified source-stable identity
+- **PostgreSQL is canonical.** Evidence, observations, receipts and lifecycle
+  history have one relational authority.
+- **Evidence precedes inference.** Unknown topology cannot prevent authorized raw
+  durability or justify fabricated identities.
+- **Meaning is authored.** Agents or humans determine meaning and proposition
+  boundaries. Code validates structure, authorization and persistence.
+- **History is preserved.** Replay does not silently reauthor; correction does not
+  erase the evidence or accepted interpretation it replaces.
+- **Access stays explicit.** Source capture permission does not imply permission
+  to disclose that source to a model, hosted service or another user.
+- **Providers are bindings.** Public contracts remain provider-neutral.
+  Operational limits and accounting must describe what a transport actually
+  enforces and observes.
+- **Uncertainty stays visible.** Unknown identity, missing evidence, incomplete
+  work and unavailable usage are not successful results in disguise.
 
-`MaterializeSourceStableUnit` and
-`PostgresLogicalUnitMaterialization.materialize_source_stable` provide an explicit
-version-2 materialization path under an administrator-approved immutable producer
-identity namespace. Qualified event/occurrence keys are scoped to tenant, source
-and namespace; native IDs are not assumed globally unique, and equal content is
-not identity proof. Unknown or unapproved identity cannot opt in.
+## Open core and product boundary
 
-The same qualified occurrence across retained revisions and package representations
-retains one initial event/unit/bead/task binding, its original inputs, exact evidence
-pin and first receipts. Successful fresh operation keys use the shared receipt
-ledger. Each package's raw/fold lineage still names its actual retained revisions;
-repackaging never switches an existing task to newer evidence. Contradictory native
-facts, event declarations, parent identity or ordered content fail explicitly.
-Adjacent storage fragments may vary; component interleaving remains significant.
+This Apache-2.0 core is independently usable by applications that provide the
+required composition. The separate private Desktop product consumes released,
+pinned core packages; the core never imports private product code.
 
-Existing canonical events prohibit source opt-in, returning an explicit unsupported
-transition. Raw/fold evidence alone does not prohibit opt-in. After opt-in, legacy
-capture/materialization cannot establish a second identity mode on that source.
-Revision-sensitive v1 behavior remains available elsewhere. No existing binding is
-adopted, no equivalence is inferred, and no historical duplicate repair or
-complete-input correction/reauthoring is added.
+Desktop UI, installers, provider-specific acquisition/parsing, Connections setup,
+hosted services and sync are outside this repository. Their absence does not
+change who owns the canonical schema: this public package owns it. See the
+[repository boundary](docs/architecture/repository-boundary.md).
 
-Installation does not migrate a database, provision trust, activate tasks or configure
-a provider. Producer qualification and identity-policy approval are separate from
-mechanical consistency checks. Existing explicit activation, authorized readers,
-trusted exposure and canonical-apply fences continue to use the original exact pin.
+## Explore the contracts
+
+- **Evidence:** [raw/fold recovery](docs/transcript-fold-recovery.md),
+  [packages](docs/evidence-packages.md), [materialization](docs/logical-unit-materialization.md),
+  [declared scopes](docs/declared-evidence-scopes.md).
+- **Authorship:** [immutable observations](docs/immutable-observations.md),
+  [source revisiting](docs/source-revisiting.md),
+  [local mentions](docs/local-entity-mentions.md),
+  [classification](docs/bead-classification.md).
+- **Consumption:** [stored-memory inspection](docs/stored-bead-inspection.md),
+  [public API inventory](docs/architecture/public-api-inventory.md),
+  [runtime and cleanup](docs/runtime.md).
+
+## Compatibility, verification and contribution
+
+All 0.x APIs are experimental, with no general compatibility guarantee. Published
+contract payloads remain immutable: a breaking payload change requires a new
+contract version; replacing published package bytes requires a new distribution
+version. Use exact release pins and explicit migration targets. See
+[compatibility](docs/architecture/compatibility.md).
+
+CI checks the explicit export inventories, historical contract/migration bytes,
+deterministic archives and installed wheel/sdist behavior on Python 3.13/3.14.
+Fictional acceptance proves the tested mechanics, not production readiness or
+real-model semantic quality.
+
+Contributions require a [Developer Certificate of Origin sign-off](CONTRIBUTING.md).
+See [contributor guidance](AGENTS.md) and the
+[security policy](SECURITY.md). Source is licensed under [Apache-2.0](LICENSE);
+the memoriesQL name, elephant logo and banner belong to John Inniger and are
+covered separately by the [trademark policy](TRADEMARKS.md).
