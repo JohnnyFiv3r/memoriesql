@@ -715,7 +715,7 @@
       "classification": "public_release_configuration",
       "license": "Apache-2.0",
       "public_path": "tests/unit/test_release_controls.py",
-      "public_sha256": "38f88094b093a5bb86eaa1f762f7abb8418cf39a4ec2d3e985b906b720229ff5",
+      "public_sha256": "1cc4238c161b039a7669582851dd8cac18cc6695b6a697a1c9d8d101a2450f49",
       "reason": "Synthetic focused regression tests for release identity, CI status, and artifact integrity."
     },
     {

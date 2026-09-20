@@ -327,13 +327,14 @@ class ReleaseControlTests(unittest.TestCase):
         # Runtime freeze is release-reproduction evidence, not a development gate.
         verify_source_bytes(root, frozen)
 
-    def test_release_preparation_preserves_009_accepted_implementation(self) -> None:
+    def test_development_preserves_009_baseline_historical_payloads(self) -> None:
         root = Path(__file__).resolve().parents[2]
         baseline = root / "tests/fixtures/release-0.0.9-baseline-integrity.json"
         frozen = json.loads(baseline.read_bytes())
         self.assertEqual(frozen["base_public_commit"], "aff4270a549f7618d99db3735020ccb2785f32f1")
         self.assertEqual(hashlib.sha256(baseline.read_bytes()).hexdigest(), "ea499ed99bf60b9f432c288ba43b5673afadc8e1b983049a4f15a182741c748d")
-        verify_source_bytes(root, frozen, release_reproduction=True, metadata_version="0.0.9")
+        # Preserve published payloads without freezing future development runtime.
+        verify_source_bytes(root, frozen)
 
     def test_development_inventory_rejects_wrong_commit(self) -> None:
         with patch(
