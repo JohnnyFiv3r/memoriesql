@@ -974,7 +974,7 @@
       "classification": "public-authored",
       "license": "Apache-2.0",
       "public_path": "contracts/runtime-inventory.json",
-      "public_sha256": "eacf22a6ffd045f60e744f8cd55c293dc8061359a876040f4ad9be1e10aad3fb",
+      "public_sha256": "0f64b2a466d3ba88e9363b4001dbc7b87c6f34c49877736a904497e628730029",
       "reason": "Public N2 dependency inventory and fictional runtime acceptance."
     },
     {
@@ -1009,7 +1009,7 @@
       "classification": "public-authored",
       "license": "Apache-2.0",
       "public_path": "docs/runtime.md",
-      "public_sha256": "b207cc05ac6cb48bacd61652a3a986296f8a0e6bdefd927975fc234c92a380a3",
+      "public_sha256": "6954b4f09abe4d03d4de4d16313b2c39324da29d59ba1847d3154b4dcc77cf88",
       "reason": "Public fictional N2 acceptance and runtime scope documentation."
     },
     {
@@ -1023,7 +1023,7 @@
       "classification": "public-authored",
       "license": "Apache-2.0",
       "public_path": "tests/runtime/test_cancellation_drain.py",
-      "public_sha256": "ba6f6a3949d82d5dc779ecba4f29339c6b0e02cef1419c8509de0cc246106be6",
+      "public_sha256": "d8cb9226d78218c945e4f503c2f3bde2f338078af62652aecfb09bf280b63724",
       "reason": "Fictional public cancellation cleanup and forward-provenance verification."
     },
     {
@@ -1639,7 +1639,7 @@
       "classification": "public_authored",
       "license": "Apache-2.0",
       "public_path": "tests/runtime/test_bead_classification.py",
-      "public_sha256": "81e89df9f3736d344c797cdbc3eaa2f50df33cc1d65a23adba3038b0f3c6e413",
+      "public_sha256": "e44165735f4978e2ef0e28e2990ed2f8bcaecb7d76a7040572bdee41d36bc803",
       "reason": "Explicit owner-authorized provider-neutral classified authorship forward slice."
     },
     {
@@ -1802,6 +1802,13 @@
       "public_path": "docs/supervised-dispatch.md",
       "public_sha256": "75058814569eb44d7067bb70f85105ecafaf8a5d4a097f349d1888d0f9ef4fbb",
       "reason": "Public-authored supervised qualification mechanics and fictional evidence; no private export."
+    },
+    {
+      "classification": "public_bootstrap",
+      "license": "Apache-2.0",
+      "public_path": "tests/runtime/test_terminal_settlement.py",
+      "public_sha256": "2886778ba823ca5a190e6f06c61dd473a58a4c7ad6ae84b0d450de66a1dfe0c9",
+      "reason": "Public-authored terminal settlement regressions with fictional event sinks; no private export."
     }
   ],
   "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
@@ -2105,7 +2112,7 @@
       "classification": "public-forward",
       "license": "Apache-2.0",
       "public_path": "src/memoriesql/infrastructure/models/pydanticai_executor.py",
-      "public_sha256": "b0f17c5e0bd92809e755f955f0bd33473f94ff7f3d23cea1feea22a2cd59dd22",
+      "public_sha256": "fd631af6b57b8679d4518216309d66d43db53340b2a695028d1b8a4db829b8d2",
       "reason": "Public-authored cancellation cleanup ownership and post-intent dispatch gate; original N2 extraction hash retained as historical provenance.",
       "source_sha256": "07d4c861ce40062c227352f6fd240b7445500776ba6216fdd739027020da3b1c"
     },

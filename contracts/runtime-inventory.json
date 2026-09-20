@@ -160,7 +160,7 @@
       "disposition": "public-forward",
       "path": "src/memoriesql/infrastructure/models/pydanticai_executor.py",
       "reason": "Explicit managed dispatch opt-in through existing runtime/accounting; default hard-bound behavior preserved.",
-      "sha256": "b0f17c5e0bd92809e755f955f0bd33473f94ff7f3d23cea1feea22a2cd59dd22",
+      "sha256": "fd631af6b57b8679d4518216309d66d43db53340b2a695028d1b8a4db829b8d2",
       "source_sha256": "07d4c861ce40062c227352f6fd240b7445500776ba6216fdd739027020da3b1c"
     },
     {

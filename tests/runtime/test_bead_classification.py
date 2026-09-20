@@ -424,6 +424,47 @@ class BeadClassification(fixtures.LocalMentions):
             self.row("SELECT count(*) FROM memoriesql.model_usage_events"), (2,)
         )
 
+    def test_failed_classifier_after_revocation_settles_rejected_terminal_events(self) -> None:
+        self.setup_classification()
+        original = self.classify
+
+        def revoke_and_fail(*args: Any) -> Any:
+            original(*args)
+            self.db.execute(
+                "UPDATE memoriesql.evidence_producer_policies SET status='revoked' WHERE producer_policy_id=%s",
+                (self.policy,),
+            )
+            raise RuntimeError("fictional classifier failed after revocation")
+
+        self.classify = revoke_and_fail  # type: ignore[method-assign, assignment]
+        worker = self.worker()
+        record = worker._record_run_event
+        rejected = []
+
+        def observe(*args: Any, **kwargs: Any) -> bool:
+            accepted = bool(record(*args, **kwargs))
+            if not accepted:
+                rejected.append(args[1].event_kind)
+            return accepted
+
+        worker._record_run_event = observe
+
+        async def execute() -> Any:
+            receipt = await asyncio.wait_for(worker.run_once(), 5)
+            if worker.cleanup_pending:
+                receipt = await asyncio.wait_for(worker.wait_for_cleanup(), 5)
+            self.assertFalse(worker._event_writes)
+            self.assertIsNone(worker._cleanup_heartbeat)
+            return receipt
+
+        result = asyncio.run(execute())
+        self.assertNotEqual(result.task_status, "succeeded", result)
+        self.assertIn("run.failed", rejected)
+        self.assert_no_meaning()
+        self.assertEqual(self.classifier_calls, 1)
+        self.assertEqual(self.row("SELECT count(*) FROM memoriesql.model_usage_events"), (2,))
+        self.assertEqual(self.row("SELECT count(*) FROM memoriesql.model_provider_request_intents"), (2,))
+
     def test_authored_empty_mentions_and_classification_are_distinct(self) -> None:
         self.mentions = []
         self.setup_classification()

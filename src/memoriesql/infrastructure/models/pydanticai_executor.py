@@ -543,6 +543,24 @@ class _TreeFailureError(RuntimeError):
 
 
 @dataclass
+class _TerminalCompletion:
+    """Local settlement, never an acknowledgement of durable persistence."""
+
+    settled: asyncio.Event = field(default_factory=asyncio.Event)
+    error: BaseException | None = None
+
+    def finish(self, error: BaseException | None = None) -> None:
+        if not self.settled.is_set():
+            self.error = error
+            self.settled.set()
+
+    async def wait(self) -> None:
+        await self.settled.wait()
+        if self.error is not None:
+            raise self.error
+
+
+@dataclass
 class _TreeState:
     executor: PydanticAISemanticExecutor
     task: ResolvedSemanticTask[BaseModel, BaseModel]
@@ -567,6 +585,9 @@ class _TreeState:
     run_refs: list[str] = field(default_factory=list)
     started_run_ids: set[str] = field(default_factory=set)
     run_terminal_events: dict[str, asyncio.Event] = field(default_factory=dict)
+    run_completions: dict[str, _TerminalCompletion] = field(default_factory=dict)
+    delegation_errors: list[BaseException] = field(default_factory=list)
+    terminal_event_errors: list[BaseException] = field(default_factory=list)
     evidence_cache: dict[str, str] = field(default_factory=dict)
     terminal_failure: _Failure | None = None
     success_closed: bool = False
@@ -593,6 +614,7 @@ class _TreeState:
         async with self.run_lock:
             self.run_refs.append(run_id)
             self.run_terminal_events[run_id] = asyncio.Event()
+            self.run_completions[run_id] = _TerminalCompletion()
 
     async def next_provider_request_sequence(
         self, bounds: ProviderRequestBounds | None = None
@@ -2184,6 +2206,7 @@ class PydanticAISemanticExecutor:
                 pass
             raise
         except EventSinkError:
+            await self._emit_delegation_finished(state, correlation)
             raise
         except (_TreeFailureError, UsageLimitExceeded, RunCancelled):
             await self._emit_delegation_finished(state, correlation)
@@ -2453,7 +2476,11 @@ class PydanticAISemanticExecutor:
                 "runtime.event_sink_failed",
             )
             await state.set_terminal(failure)
-            raise EventSinkError from error
+            sink_error = EventSinkError()
+            completion = state.run_completions.get(correlation.run_id)
+            if completion is not None:
+                completion.finish(sink_error)
+            raise sink_error from error
 
     async def _emit_run_failed(
         self,
@@ -2488,23 +2515,41 @@ class PydanticAISemanticExecutor:
                 correlation, SemanticRootRunCorrelation
             ):
                 await state.delegations_closed.wait()
+                if state.delegation_errors:
+                    raise state.delegation_errors[0]
             if event_kind is SemanticRunEventKind.DELEGATION_FINISHED:
-                terminal = state.run_terminal_events.get(correlation.run_id)
-                if correlation.run_id in state.started_run_ids and terminal is not None:
-                    await terminal.wait()
-            await self._emit(
-                state,
-                event_kind,
-                correlation,
-            )
+                completion = state.run_completions.get(correlation.run_id)
+                if completion is not None and (
+                    correlation.run_id in state.started_run_ids
+                    or completion.settled.is_set()
+                ):
+                    await completion.wait()
+            await self._emit(state, event_kind, correlation)
+
+        def retire_terminal_event(task: asyncio.Task[None]) -> None:
+            # Retrieve and retain the outcome before retiring ownership, including
+            # cancellation before the coroutine starts or after its caller leaves.
+            error: BaseException | None = None
+            try:
+                task.result()
+            except BaseException as caught:
+                error = caught
+                state.terminal_event_errors.append(caught)
             if event_kind is SemanticRunEventKind.DELEGATION_FINISHED:
+                if error is not None:
+                    state.delegation_errors.append(error)
                 state.open_delegations -= 1
                 if state.open_delegations == 0:
                     state.delegations_closed.set()
+            else:
+                completion = state.run_completions.get(correlation.run_id)
+                if completion is not None:
+                    completion.finish(error)
+            state.pending_terminal_event_tasks.discard(task)
 
         event_task = asyncio.create_task(append_terminal_event())
         state.pending_terminal_event_tasks.add(event_task)
-        event_task.add_done_callback(state.pending_terminal_event_tasks.discard)
+        event_task.add_done_callback(retire_terminal_event)
         try:
             await asyncio.shield(event_task)
         except asyncio.CancelledError:

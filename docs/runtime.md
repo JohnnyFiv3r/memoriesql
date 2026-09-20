@@ -83,6 +83,14 @@ loop/process shutdown is not a durable cleanup handoff and can still wait for
 cancellation-resistant work. This repair does not promise immediate durable
 settlement, continued throughput, or hard termination of arbitrary callbacks.
 
+Local terminal completion is separate from durable event persistence. A rejected
+child terminal event completes its local dependency with the error; dependent
+delegation/root cleanup observes that failure rather than waiting for an event
+that cannot be persisted. Successful events retain child → delegation → root
+ordering. Failed terminal-task outcomes are retrieved and retained before the task
+leaves the pending set, including after caller cancellation. These signals neither
+acknowledge a rejected write nor release ownership of an operation still settling.
+
 Started accounting writes finish before cancellation propagates. Late responses
 remain accountable against their original durable intent, but cannot authorize
 semantic success or another dispatch. Late usage persistence failure is surfaced by
