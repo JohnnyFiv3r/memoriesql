@@ -291,6 +291,70 @@ class ManagedDispatchTests(DeclaredScopes):
         )
         self.assert_no_meaning()
 
+    def test_existing_unsupervised_path_survives_schema26(self) -> None:
+        result = asyncio.run(self.worker().run_once())
+        self.assertEqual(result.task_status, "succeeded", result)
+        self.assertEqual(
+            self.row(
+                "SELECT dispatch_boundary,supervised_qualification_id FROM memoriesql.model_provider_request_intents"
+            ),
+            ("single_inference", None),
+        )
+        self.assertEqual(
+            self.row("SELECT count(*) FROM memoriesql.model_request_usage_fold"), (1,)
+        )
+        self.assertEqual(
+            self.row("SELECT count(*) FROM memoriesql.bead_versions"), (1,)
+        )
+
+    def test_runtime_roles_cannot_provision_approval(self) -> None:
+        for role in ("memoriesql_application", "memoriesql_worker"):
+            with (
+                self.subTest(role=role),
+                self.assertRaises(psycopg.errors.InsufficientPrivilege),
+                self.db.transaction(),
+            ):
+                self.db.execute("SET LOCAL ROLE " + role)
+                self.install()
+        self.assertEqual(
+            self.row("SELECT count(*) FROM memoriesql.model_supervised_qualifications"),
+            (0,),
+        )
+
+    def test_nonexistent_or_cross_tenant_approver_cannot_authorize(self) -> None:
+        absent = uuid.uuid4()
+        other_tenant = uuid.uuid4()
+        self.db.execute(
+            "INSERT INTO memoriesql.users SELECT %s,user_id,status,display_name,created_at,revoked_at FROM memoriesql.users WHERE tenant_id=%s AND user_id=%s",
+            (other_tenant, self.tenant, self.user),
+        )
+        self.db.execute(
+            "INSERT INTO memoriesql.principals SELECT %s,%s,principal_kind,user_id,owner_user_id,status,created_at,revoked_at FROM memoriesql.principals WHERE tenant_id=%s AND principal_id=%s",
+            (other_tenant, absent, self.tenant, self.principal),
+        )
+        for approver in (uuid.uuid4(), absent):
+            with (
+                self.subTest(approver=approver),
+                self.assertRaises(psycopg.errors.ForeignKeyViolation),
+            ):
+                self.db.execute(
+                    "INSERT INTO memoriesql.model_supervised_qualifications(tenant_id,workspace_id,access_scope_id,qualification_id,task_id,origin_principal_id,configuration,approved_by_principal_id) VALUES(%s,%s,%s,%s,%s,%s,%s,%s)",
+                    (
+                        self.tenant,
+                        self.workspace,
+                        self.scope,
+                        self.approval.qualification_id,
+                        self.approval.semantic_task_id,
+                        self.principal,
+                        Jsonb(self.approval.model_dump(mode="json")),
+                        approver,
+                    ),
+                )
+        worker = self.managed_worker()
+        self.assertNotEqual(asyncio.run(worker.run_once()).task_status, "succeeded")
+        self.assertEqual(worker.fictional_model.calls, 0)
+        self.assert_no_meaning()
+
     def test_approval_cannot_refresh_or_change_identity(self) -> None:
         self.install()
         with self.assertRaises(psycopg.Error):

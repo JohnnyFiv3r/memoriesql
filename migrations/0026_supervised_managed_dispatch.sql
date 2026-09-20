@@ -7,6 +7,8 @@ CREATE TABLE memoriesql.model_supervised_qualifications (
  created_at timestamptz NOT NULL DEFAULT clock_timestamp(), status text NOT NULL DEFAULT 'active',
  PRIMARY KEY(tenant_id,qualification_id), UNIQUE(tenant_id,task_id),
  FOREIGN KEY(tenant_id,task_id) REFERENCES memoriesql.semantic_tasks(tenant_id,task_id),
+ FOREIGN KEY(tenant_id,origin_principal_id) REFERENCES memoriesql.principals(tenant_id,principal_id),
+ FOREIGN KEY(tenant_id,approved_by_principal_id) REFERENCES memoriesql.principals(tenant_id,principal_id),
  CHECK(status IN ('active','revoked')),
  CHECK(COALESCE(jsonb_typeof(configuration)='object' AND octet_length(configuration::text)<=8192
    AND configuration->>'qualification_id'=qualification_id::text

@@ -187,7 +187,7 @@
     {
       "disposition": "public",
       "public_path": "migrations/0026_supervised_managed_dispatch.sql",
-      "public_sha256": "a7f5c24e50a581daae112025d7d9a96fef4738387e0f860a3584ee9b8018fd51",
+      "public_sha256": "0479a1e5ef462250e1b4f3652a7755ae4ff638b82b805a3a9d185ea107ebe000",
       "reason": "Public-authored supervised qualification and truthful dispatch accounting; no private extraction.",
       "source_path": null,
       "source_sha256": null

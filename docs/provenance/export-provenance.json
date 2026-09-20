@@ -890,14 +890,14 @@
       "classification": "approved_migration_substrate",
       "license": "Apache-2.0",
       "public_path": "contracts/migration-inventory.json",
-      "public_sha256": "5280fe3db915582959a2096701c6e4839fdbeb244a7c58b95edb67f334d3203b",
+      "public_sha256": "1cbae90703fc3e2cf6ccbff2e2c174cf475c6ea98572eedbe3a614b5279878ff",
       "reason": "Public-owned N1 inventory; audited copy/adapt details in migration-extraction.json where applicable."
     },
     {
       "classification": "approved_migration_substrate",
       "license": "Apache-2.0",
       "public_path": "docs/provenance/migration-extraction.json",
-      "public_sha256": "3bc2f4f42976784ea3682f61941aacd09b46815d48c3bd3f9c545a34665f4a49",
+      "public_sha256": "12dcca6fa9b11713d33fc16a66c33a97f3d3918b6725dcfa4f70aacc2b94e0c3",
       "reason": "Public-owned N1 inventory; audited copy/adapt details in migration-extraction.json where applicable."
     },
     {
@@ -1786,21 +1786,21 @@
       "classification": "public_bootstrap",
       "license": "Apache-2.0",
       "public_path": "migrations/0026_supervised_managed_dispatch.sql",
-      "public_sha256": "a7f5c24e50a581daae112025d7d9a96fef4738387e0f860a3584ee9b8018fd51",
+      "public_sha256": "0479a1e5ef462250e1b4f3652a7755ae4ff638b82b805a3a9d185ea107ebe000",
       "reason": "Public-authored supervised qualification mechanics and fictional evidence; no private export."
     },
     {
       "classification": "public_bootstrap",
       "license": "Apache-2.0",
       "public_path": "tests/runtime/test_managed_dispatch.py",
-      "public_sha256": "8dbc04c903b0bd05ff76d3898265071061722ea65bcc288a4a04442525686400",
+      "public_sha256": "b757150855a92db277f62429af14d85ee45800e92ad006281a56da9f79d1fea7",
       "reason": "Public-authored supervised qualification mechanics and fictional evidence; no private export."
     },
     {
       "classification": "public_bootstrap",
       "license": "Apache-2.0",
       "public_path": "docs/supervised-dispatch.md",
-      "public_sha256": "d613f7da1a5761eff30a8c6cbe5205939827f3ef43efec01a9954d409e47782b",
+      "public_sha256": "75058814569eb44d7067bb70f85105ecafaf8a5d4a097f349d1888d0f9ef4fbb",
       "reason": "Public-authored supervised qualification mechanics and fictional evidence; no private export."
     }
   ],

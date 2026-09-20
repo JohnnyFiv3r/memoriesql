@@ -13,7 +13,11 @@ A separately authorized administrator provisions one immutable
 task. Its exact `SupervisedQualification` pins the route/profile, model, credential
 identity, billing and quality policy, transport qualification revision, absolute
 deadline and reported-usage stop triggers. The database also binds tenant,
-workspace, access scope and origin principal. Worker/application roles cannot
+workspace, access scope and origin principal; both origin and recorded approver
+must exist in that tenant. The approver field is the trusted administrator's
+record of external approval, as in the existing producer/dispatch policy tables,
+not an authenticated runtime caller or a new permission grant. The administrator
+is responsible for verifying that approval before provisioning. Worker/application roles cannot
 provision or change it. Only revocation is permitted; the task cannot receive a
 replacement approval. No policies are installed by migration.
 
