@@ -1,5 +1,8 @@
 # Author-controlled source revisiting (schema 20, included in the 0.0.6 candidate)
 
+The unreleased [declared-evidence-scope extension](declared-evidence-scopes.md)
+adds an explicit non-native scope route while preserving this historical contract.
+
 An explicitly activated revision-3 complete-unit author can return to exact earlier
 source evidence during the same attempt, including after forward coverage ends.
 One author selects typed navigation actions; there is no navigator, reviewer,

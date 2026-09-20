@@ -1,5 +1,9 @@
 ![memoriesQL — observe, process, store, recall](assets/trademarks/memoriesql-readme-banner.png)
 
+Unreleased development: [explicit declared evidence scopes](docs/declared-evidence-scopes.md)
+add non-native scope qualification on the existing canonical path. This change is
+not included in published 0.0.8; release and downstream consumption remain gated.
+
 # memoriesQL catalogs and provider-neutral runtime
 
 This public repository preserves the original 49 provider-neutral contract records

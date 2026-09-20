@@ -1,5 +1,8 @@
 # Canonical logical-unit materialization
 
+The unreleased [declared-evidence-scope extension](declared-evidence-scopes.md)
+adds an explicit non-native scope route while preserving this historical contract.
+
 Schema 17 adds `memoriesql.logical-unit-materialization.v1`. A qualified, sealed
 [evidence package](evidence-packages.md) can create or replay one genuine
 source-native unit, its initial thin bead, an exact-package authoring task,

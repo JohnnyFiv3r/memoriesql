@@ -10,6 +10,10 @@ from psycopg.pq import TransactionStatus
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel
 
+from memoriesql.application.declared_evidence_scope import (
+    InspectScopedEvidencePackage,
+    ScopedEvidencePackageStatus,
+)
 from memoriesql.application.evidence_packages import (
     COMMAND_MAX_JSON_BYTES,
     LOCK_TIMEOUT_MS,
@@ -52,6 +56,11 @@ class PostgresEvidencePackages:
     def inspect(self, request: InspectEvidencePackage) -> PackageStatus:
         return self._call(request, "read", PackageStatus)
 
+    def inspect_scope(
+        self, request: InspectScopedEvidencePackage
+    ) -> ScopedEvidencePackageStatus:
+        return self._call(request, "inspect_scope", ScopedEvidencePackageStatus)
+
     def inventory(self, request: PageEvidenceInventory) -> InventoryPage:
         return self._call(request, "read", InventoryPage)
 
@@ -76,6 +85,7 @@ class PostgresEvidencePackages:
         query = {
             "write": "SELECT memoriesql.write_evidence_package_v1(%s)",
             "read": "SELECT memoriesql.read_evidence_package_v1(%s)",
+            "inspect_scope": "SELECT memoriesql.inspect_scoped_evidence_package_v2(%s)",
         }[operation]
         with self._connection.transaction():
             self._connection.execute(
