@@ -638,7 +638,7 @@
       "classification": "proposed_open_core",
       "license": "Apache-2.0",
       "public_path": "src/memoriesql/contracts/_catalogs/json-schema.json",
-      "public_sha256": "40afaab7c32a8e73a0e69312f40e640b0c7f2337f54cce1bd6bd868d7f860614",
+      "public_sha256": "a9dc5330bfe5cb7de5d16dd979b8d7460ff9b8454cc5c8405c0ea403e5d4d411",
       "reason": "Approved record payloads regenerated with public-owned catalog metadata.",
       "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
       "reviewed_spike_source_sha256": "765f8dd3d4b5e594980ba38f6e1ac11f29d3198746299217361e1c56b360cf26"
@@ -792,7 +792,7 @@
       "classification": "public_bootstrap",
       "license": "Apache-2.0",
       "public_path": "contracts/public-registry.json",
-      "public_sha256": "2f7b7943ae537c5c011e6ccf5e76de35ab0cadc7ca7a3ff2bb198ea6b3dfa4c9",
+      "public_sha256": "938aeaf333752f9ebcb3fc85a27b320b178ca4dafe4773dd1fd3a407a6e5aaf6",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {
@@ -890,14 +890,14 @@
       "classification": "approved_migration_substrate",
       "license": "Apache-2.0",
       "public_path": "contracts/migration-inventory.json",
-      "public_sha256": "5124a096061ef50c0d3337d69937b3eab2a7807072f97563b1cb78fa0bcb25bb",
+      "public_sha256": "b7f982a55241d14ddc664549acdc80343f9ff2d92594bebd68807f5dc3061973",
       "reason": "Public-owned N1 inventory; audited copy/adapt details in migration-extraction.json where applicable."
     },
     {
       "classification": "approved_migration_substrate",
       "license": "Apache-2.0",
       "public_path": "docs/provenance/migration-extraction.json",
-      "public_sha256": "3a9ce0b0b34dd68de02738f33a2159a68167206447c124d2a60b6a38fd503c1f",
+      "public_sha256": "c97f16bcfa8f0eafce653ce78b58755529824efd17fe82a29bc16c6ae2b87a6f",
       "reason": "Public-owned N1 inventory; audited copy/adapt details in migration-extraction.json where applicable."
     },
     {
@@ -1723,21 +1723,21 @@
       "classification": "public_authored",
       "license": "Apache-2.0",
       "public_path": "contracts/records/memoriesql-declared-evidence-scope-v1.json",
-      "public_sha256": "1e3d765927c79e1522d048212ec3dd55f063abf92d4314d9d5ea302a0fb207d0",
+      "public_sha256": "41408ef175658947c296a0b39dde44c4ee962c39aad83917f2d67f08572f9cfd",
       "reason": "Explicit public declared-evidence-scope slice; provider-neutral, no private export."
     },
     {
       "classification": "public_authored",
       "license": "Apache-2.0",
       "public_path": "migrations/0025_declared_evidence_scopes.sql",
-      "public_sha256": "1941a93253bec90c44597edae45e5028327ce51f303a54c6f91072be235ed71b",
+      "public_sha256": "04d4ca7bc5f91871a2b6b37299b3f0d2323cda059b9530eecfcee9b27206879c",
       "reason": "Explicit public declared-evidence-scope slice; provider-neutral, no private export."
     },
     {
       "classification": "public_authored",
       "license": "Apache-2.0",
       "public_path": "scripts/generate_declared_scope_contract.py",
-      "public_sha256": "9c95ff86da5781d75f7af6470ea66f48f42c1fe7c5150d88f3f818290807e6a1",
+      "public_sha256": "e23cd287a019a3a2c0b690f2d3b49c5f701297cba965e7df5c9e08792f1a4ff3",
       "reason": "Explicit public declared-evidence-scope slice; provider-neutral, no private export."
     },
     {
@@ -1751,14 +1751,14 @@
       "classification": "public_authored",
       "license": "Apache-2.0",
       "public_path": "tests/runtime/test_declared_evidence_scope.py",
-      "public_sha256": "e3b65846df1ca6dcfd5346c52997d850af59a5e5fc90fea79fdd619620d0a8fc",
+      "public_sha256": "16127d47479e4681bb9e684036cba995ff7ec96f361b435cea8a03f9bb7ed084",
       "reason": "Explicit public declared-evidence-scope slice; provider-neutral, no private export."
     },
     {
       "classification": "public_authored",
       "license": "Apache-2.0",
       "public_path": "docs/declared-evidence-scopes.md",
-      "public_sha256": "bedc88bb8c11ff9f345301d615b0eb8b93fdb95954b1e6d324c458b6abbe4c47",
+      "public_sha256": "b57075725da6a680b2967cf60e4b30921e795aa0311eaa1f19b27a39fa9007cf",
       "reason": "Explicit public declared-evidence-scope slice; provider-neutral, no private export."
     }
   ],

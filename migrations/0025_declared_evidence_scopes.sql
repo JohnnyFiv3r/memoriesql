@@ -25,7 +25,8 @@ ALTER TABLE memoriesql.logical_unit_materializations ADD CONSTRAINT declared_sco
 CREATE FUNCTION memoriesql.declared_scope_package_ready(d jsonb) RETURNS boolean
 LANGUAGE sql IMMUTABLE SET search_path=pg_catalog AS $$
  SELECT COALESCE(d->>'occurrence_identity_basis'='producer_assigned'
- AND d#>'{native,native_id}'='null'::jsonb AND d#>'{native,parent_native_id}'='null'::jsonb
+ AND jsonb_strip_nulls(d->'native')='{}'::jsonb
+ AND d#>>'{qualification,topology}'='unknown'
  AND d#>>'{qualification,boundary}'='unresolved'
  AND d#>>'{qualification,source_completeness}'='unresolved'
  AND d#>>'{qualification,physical_records}'='complete'

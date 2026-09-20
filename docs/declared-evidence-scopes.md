@@ -13,8 +13,11 @@ metadata. A separately authorized release must precede downstream consumption.
 The caller persists a `DeclaredEvidenceScope.scope_id` and reuses it on retry.
 Create a normal v1 evidence package with `occurrence_key=scope.occurrence_key`,
 `occurrence_identity_basis=producer_assigned`, and the same `boundary_basis`.
-The native boundary and `source_completeness` remain `unresolved`; unknown native
-facts remain null. No native unit/parent ID can be assigned to this scoped unit.
+The native boundary and `source_completeness` remain `unresolved`, topology is
+`unknown`, and every declaration-level native fact is null. A declared selection
+is not a native event: session, branch, participant, role, ordering and timestamps
+must not be promoted onto its canonical event. Known facts on individual evidence
+parts remain preserved; they do not become facts about the scope as a whole.
 Complete physical records, complete normalized scope input and no unresolved
 **required scope coverage** are necessary. A physically pending package may still
 be retained/sealed, but cannot be materialized by this route. Core verifies the

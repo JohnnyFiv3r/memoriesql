@@ -70,6 +70,9 @@ class DeclaredScopes(SourceRevisiting):
         fragments: int = 1,
         chunk_size: int = 65536,
         physical: Literal["complete", "pending_tail"] = "complete",
+        topology: Literal["known", "partially_known", "unknown"] = "unknown",
+        native: NativeFacts | None = None,
+        part_native: NativeFacts | None = None,
         start: int = 0,
         package_revision: int = 1,
     ) -> Any:
@@ -128,7 +131,7 @@ class DeclaredScopes(SourceRevisiting):
                     component_key="declared.records",
                     component_offset=left,
                     kind="records",
-                    native=NativeFacts(),
+                    native=part_native or NativeFacts(),
                     derivation="identity_utf8",
                     lineage=tuple(
                         RawEvidenceSlice(
@@ -157,14 +160,14 @@ class DeclaredScopes(SourceRevisiting):
             source_revision_key=revision,
             occurrence_key=selected.occurrence_key,
             occurrence_identity_basis="producer_assigned",
-            native=NativeFacts(),
+            native=native or NativeFacts(),
             package_revision=package_revision,
             qualification=SourceQualification(
                 qualification_ref="orchard.fictional-qualification.v1",
                 boundary="unresolved",
                 boundary_basis=selected.boundary_basis,
                 physical_records=physical,
-                topology="unknown",
+                topology=topology,
                 normalized_input="complete",
                 source_completeness="unresolved",
             ),
@@ -340,6 +343,59 @@ class DeclaredScopes(SourceRevisiting):
                 boundary_basis="scope",
                 amends_source_unit_id=uuid.uuid4(),
             )
+
+    def test_scope_cannot_promote_native_facts_from_its_selection(self) -> None:
+        claims: dict[str, Any] = {
+            "native_id": "native.turn",
+            "parent_native_id": "native.parent",
+            "session_native_id": "native.session",
+            "branch_native_id": "native.branch",
+            "participant_native_id": "native.participant",
+            "role": "user",
+            "source_order": 7,
+            "occurred_at": datetime(2026, 1, 1, tzinfo=UTC),
+            "occurred_at_raw": "2026-01-01",
+            "time_precision": "day",
+        }
+        before = self.counts()
+        for field, value in claims.items():
+            with self.subTest(native_field=field):
+                package = self.scope_package(
+                    native=NativeFacts.model_validate({field: value}),
+                    revision="orchard.invalid-native." + field,
+                )
+                with self.assertRaisesRegex(psycopg.Error, "input_pending_or_conflicting"):
+                    self.bind_scope(package)
+                self.assertEqual(self.counts(), before)
+        for topology in ("known", "partially_known"):
+            with self.subTest(topology=topology):
+                package = self.scope_package(
+                    topology=topology, revision="orchard.invalid-topology." + topology
+                )
+                with self.assertRaisesRegex(psycopg.Error, "input_pending_or_conflicting"):
+                    self.bind_scope(package)
+                self.assertEqual(self.counts(), before)
+        # Source-record facts survive on evidence; they do not describe the scope.
+        package = self.scope_package(
+            text="User: A fictional source-record fact.\n",
+            revision="orchard.part-facts",
+            part_native=NativeFacts(role="user", participant_native_id="fictional.user"),
+        )
+        bound = self.bind_scope(package)
+        self.assertEqual(
+            self.row(
+                "SELECT actor_id,actor_kind,session_id,source_sequence,source_occurred_at FROM memoriesql.source_events WHERE event_id=%s",
+                (bound.event_id,),
+            ),
+            (None, None, None, None, None),
+        )
+        self.assertEqual(
+            self.row(
+                "SELECT inventory#>>'{native,participant_native_id}' FROM memoriesql.evidence_package_parts WHERE package_id=%s",
+                (package.package_id,),
+            ),
+            ("fictional.user",),
+        )
 
     def test_pending_physical_records_never_materialize(self) -> None:
         package = self.scope_package(

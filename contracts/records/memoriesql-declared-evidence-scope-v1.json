@@ -1,7 +1,9 @@
 {
   "contract": {
     "cross_revision": "explicit_qualified_carry_forward_and_unchanged_content_required",
+    "declaration_native_facts": "all_null",
     "episode_completeness": "unknown",
+    "evidence_part_native_facts": "preserved",
     "identity_scope": [
       "tenant",
       "source_object",
@@ -9,6 +11,7 @@
       "scope_id"
     ],
     "native_boundary": "unresolved",
+    "native_topology": "unknown",
     "overlap": "not_identity_or_automatic_supersession",
     "package_contract": "memoriesql.evidence-package.v1",
     "replay": "reuse_persisted_scope_declaration_and_original_pins",

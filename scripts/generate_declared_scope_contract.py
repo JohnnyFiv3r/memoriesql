@@ -38,6 +38,9 @@ def main() -> None:
             },
             "package_contract": "memoriesql.evidence-package.v1",
             "native_boundary": "unresolved",
+            "native_topology": "unknown",
+            "declaration_native_facts": "all_null",
+            "evidence_part_native_facts": "preserved",
             "episode_completeness": "unknown",
             "semantic_sufficiency": "authored_not_mechanically_proven",
             "identity_scope": [

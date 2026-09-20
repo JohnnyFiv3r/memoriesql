@@ -201,13 +201,13 @@
       "version": "1"
     },
     {
-      "canonical_payload_sha256": "4831ff2e75b7c21b0e22914f9dd6359526809eb289fd1590a1ad738b22405347",
+      "canonical_payload_sha256": "5b295dfad5f6bfbbded3fd6bc83b10a8c634c554d2ff517b8d2efec48ef36af7",
       "catalog": "json_schema",
       "classification": "proposed_open_core",
       "id": "memoriesql.declared-evidence-scope.v1",
       "package_disposition": "include",
       "path": "contracts/records/memoriesql-declared-evidence-scope-v1.json",
-      "public_sha256": "1e3d765927c79e1522d048212ec3dd55f063abf92d4314d9d5ea302a0fb207d0",
+      "public_sha256": "41408ef175658947c296a0b39dde44c4ee962c39aad83917f2d67f08572f9cfd",
       "reason": "Public-authored scoped materialization and inspection; no private export.",
       "version": "1"
     },
