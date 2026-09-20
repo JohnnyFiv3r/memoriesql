@@ -14,9 +14,9 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY = "JohnnyFiv3r/memoriesql"
 REPOSITORY_ID = 1357510758
-APPROVED_VERSION = "0.0.8"
+APPROVED_VERSION = "0.0.9"
 RELEASE_INVENTORY = (
-    ROOT / "docs/verification/runtime-0.0.8-package-artifact-inventory.json"
+    ROOT / "docs/verification/runtime-0.0.9-package-artifact-inventory.json"
 )
 
 
