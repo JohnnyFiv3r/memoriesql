@@ -201,6 +201,7 @@
       "version": "1"
     },
     {
+      "canonical_payload_sha256": "4831ff2e75b7c21b0e22914f9dd6359526809eb289fd1590a1ad738b22405347",
       "catalog": "json_schema",
       "classification": "proposed_open_core",
       "id": "memoriesql.declared-evidence-scope.v1",

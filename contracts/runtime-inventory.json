@@ -348,15 +348,6 @@
       "reason": "Public-authored explicit declared evidence scopes.",
       "sha256": "75f7492e3ef206f01429fc2192e7b660a368550909b8af2e930c27ad4ea5a71f",
       "source_sha256": "75f7492e3ef206f01429fc2192e7b660a368550909b8af2e930c27ad4ea5a71f"
-    },
-    {
-      "base_public_commit": "84008f68a2a842fc2bb472b3ed294dcd2ea36b6b",
-      "base_public_sha256": "7d8dae23f87b9190acc4e9594563a96e231ff5c25b38e5f123ab47661a09d90f",
-      "disposition": "public-forward",
-      "path": "src/memoriesql/infrastructure/postgres/migration_runner.py",
-      "reason": "Forward declared-scope method; existing public methods preserved.",
-      "sha256": "8a432e1afcaf6625b228bc1e4632aa1eb0d04af4b573694a63c0d6acf8a5775f",
-      "source_sha256": "faf9067782e468fedc60ddf0a2d41fe98111e77d8542c872be9531cf14702521"
     }
   ]
 }

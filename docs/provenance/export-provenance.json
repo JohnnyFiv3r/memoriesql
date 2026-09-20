@@ -792,7 +792,7 @@
       "classification": "public_bootstrap",
       "license": "Apache-2.0",
       "public_path": "contracts/public-registry.json",
-      "public_sha256": "4df15419089c56d0bcc73124baee5b9e23ac19840037e7362a55021839b92bd3",
+      "public_sha256": "2f7b7943ae537c5c011e6ccf5e76de35ab0cadc7ca7a3ff2bb198ea6b3dfa4c9",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {
@@ -939,7 +939,7 @@
       "classification": "approved_migration_substrate",
       "license": "Apache-2.0",
       "public_path": "tests/migrations/test_installed_migrations.py",
-      "public_sha256": "dbde11290763529e1ba4cabb4411b44d0c42b532d474e74ba1377f90f3c48505",
+      "public_sha256": "d296c8e750c779186ea541dafeb10fddafe0bcab3134dbb8bf5b7f52096b1c83",
       "reason": "Public-owned N1 inventory; audited copy/adapt details in migration-extraction.json where applicable."
     },
     {
@@ -974,7 +974,7 @@
       "classification": "public-authored",
       "license": "Apache-2.0",
       "public_path": "contracts/runtime-inventory.json",
-      "public_sha256": "211649ff6765d97183036d1afa4522247f4f193009a21ef7e1b0370f05439f09",
+      "public_sha256": "f6bf0b90841a10d98cecefd3277a344d949d0b082e101eb62ace3f02ab4d8791",
       "reason": "Public N2 dependency inventory and fictional runtime acceptance."
     },
     {
@@ -1016,7 +1016,7 @@
       "classification": "public-authored",
       "license": "Apache-2.0",
       "public_path": "tests/runtime/test_runtime_ownership.py",
-      "public_sha256": "cd7ea7b877313cd4d7bae4649a627352ec678a8bde7367d10dd3f9bb83f513c7",
+      "public_sha256": "bff1692ec35c82a6c2786746b108e62b9c25da1175a107c1bfb7d7049a4f56e9",
       "reason": "Installed runtime origin and frozen contract parity checks."
     },
     {
