@@ -116,6 +116,10 @@ rollback or final usage reconciliation.
 - **Implemented on main, not yet published:** [declared evidence scopes](docs/declared-evidence-scopes.md)
   let a qualified producer bind complete retained records without claiming a
   native turn or complete episode. This is not included in the installation above.
+- **Unreleased opt-in:** [supervised managed dispatch](docs/supervised-dispatch.md)
+  distinguishes an observable turn from unknown hidden inference requests, consumes
+  approval before dispatch and retains reported or unavailable usage truthfully.
+  It supplies no provider adapter or live-call authorization.
 - **Not yet qualified as an end-to-end product:** live-provider composition,
   real-model observation quality, production source/trust provisioning and recall.
 

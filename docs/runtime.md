@@ -1,9 +1,10 @@
 # Experimental provider-neutral runtime
 
-The 0.0.6 candidate preserves schemas 16–18 and includes schemas 19–20 and the complete-input path described
-below. Release preparation changes no runtime behavior or dependencies. Installing
-or upgrading does not provision production trust, activate tasks or configure a
-provider. See [explicit caller composition](releasing.md#caller-composition-and-explicit-opt-in).
+Published 0.0.8 includes schemas 1–24, stored-result inspection and the explicit
+hard-bounded model-admission interface. Development adds declared evidence scopes
+(schema 25) and [supervised managed dispatch](supervised-dispatch.md) (schema 26).
+Those changes are unreleased. Installing or upgrading does not provision trust,
+activate tasks or configure a provider. See [explicit caller composition](releasing.md#caller-composition-and-explicit-opt-in).
 
 ## Historical N2 extraction scope
 
@@ -12,12 +13,12 @@ migration substrate. Python 3.13 is the support floor; 3.13 and 3.14 are the
 initial qualification matrix (`>=3.13,<3.15`). Install an exact reviewed runtime
 wheel. Older Python requires an explicit `memoriesql==0.0.1a1` pin or `--pre`
 for the immutable catalog-only fallback; an unpinned request may fail.
-The historical catalog package is not a runtime installation. No release is authorized by this PR.
+The historical catalog package is not a runtime installation. Release authorization remains separate.
 
-The runtime includes authorization, historical canonical writes and receipts,
+At N2, the extracted runtime included authorization, historical canonical writes and receipts,
 neutral capture/range/fold ports, semantic task resolution, PostgreSQL queue and
-worker fencing, bounded synthetic execution and accounting. The executor still
-accepts only `TestModel` and `FunctionModel`. It preserves conductor support,
+worker fencing, bounded synthetic execution and accounting. That historical executor
+accepted only `TestModel` and `FunctionModel`. It preserves conductor support,
 authoring limits, task hashes, transaction boundaries and cancellation settlement.
 It does not assemble or start a product service.
 

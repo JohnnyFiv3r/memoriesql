@@ -1,12 +1,10 @@
 # Canonical migrations
 
-Published `0.0.2` introduced the canonical migration substrate; `0.0.4` added
-schema 15. Published 0.0.5 packages schemas 16–18. The 0.0.6 candidate also includes
-already merged schemas 19–20: authorized retained-fold recovery and source revisiting. This
-release preparation adds or rewrites no SQL. All 20 migration bytes are preserved.
-**Python 3.13+ is required; the initial qualification matrix is 3.13 and 3.14
-(`>=3.13,<3.15`).** It is not a complete capture, authoring, or recall runtime.
-No release or upload is authorized by this change.
+Published 0.0.8 contains schemas 1–24. Development adds declared evidence scopes
+(schema 25) and supervised managed dispatch (schema 26), both unreleased. All
+historical SQL bytes are preserved. Python 3.13+ is required; qualification covers
+3.13 and 3.14 (`>=3.13,<3.15`). Package installation does not apply migrations or
+provision production trust. Upgrade and release authorization remain separate.
 
 The published `0.0.1a1` remains an immutable catalog-only preview supporting
 Python 3.11–3.14. On older Python, pin `memoriesql==0.0.1a1` for catalogs.
@@ -17,8 +15,8 @@ as a runtime setup instruction:
 
 ```console
 python3.13 -m venv migration-env
-migration-env/bin/python -m pip install ./memoriesql-0.0.6-py3-none-any.whl
-migration-env/bin/python -c "from importlib.metadata import version; assert version('memoriesql') == '0.0.6'; from memoriesql.infrastructure.postgres.migration_runner import discover_migrations; assert len(discover_migrations()) == 20"
+migration-env/bin/python -m pip install ./memoriesql-0.0.8-py3-none-any.whl
+migration-env/bin/python -c "from importlib.metadata import version; assert version('memoriesql') == '0.0.8'; from memoriesql.infrastructure.postgres.migration_runner import discover_migrations; assert len(discover_migrations()) == 24"
 ```
 
 The installer rejects this artifact on unsupported interpreters. Publication and
@@ -31,7 +29,7 @@ With an explicitly supplied, idle `psycopg` connection to the intended database:
 
 ```python
 from memoriesql.infrastructure.postgres.migration_runner import migrate
-receipt = migrate(connection, expected_current_version=18, target_version=20)
+receipt = migrate(connection, expected_current_version=21, target_version=24)
 ```
 
 The expected version is mandatory. The runner takes the existing advisory lock,
@@ -48,7 +46,7 @@ is a bounded test hook; `migrate()` always uses installed resources.
 
 ## Authority, history, and recovery
 
-`contracts/migration-inventory.json` explicitly owns all 18 filenames and hashes. Root `migrations/` is the sole authored stream. Setuptools
+`contracts/migration-inventory.json` explicitly owns the development stream of 26 filenames and hashes (24 in published 0.0.8). Root `migrations/` is the sole authored stream. Setuptools
 stages those exact bytes into the wheel; the sdist retains root SQL and rebuilds
 the same resources. There is no editable second stream or fallback discovery.
 The public provenance inventory records copy/adapt decisions and opaque content
@@ -144,7 +142,7 @@ only new ordering metadata and preserves original receipt fields. Plan the norma
 exclusive migration window; no real database upgrade is authorized by the PR.
 See [ordering and compatibility](transcript-fold-recovery.md#discovery-semantics-and-migration).
 
-Schema 20, included in the 0.0.6 candidate, adds an explicit revision-3 complete-unit task with typed
+Schema 20, included in the 0.0.8 candidate, adds an explicit revision-3 complete-unit task with typed
 source rereads and unique mandatory exposure through the existing execution path.
 Historical task revisions and SQL 0001–0019 remain unchanged. See the
 [source-revisiting contract](source-revisiting.md). No production trust/provider composition

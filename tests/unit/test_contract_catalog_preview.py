@@ -31,7 +31,7 @@ class ContractCatalogPreviewTests(unittest.TestCase):
         schema_entries = schemas.get("entries")
         self.assertIsInstance(schema_entries, list)
         assert isinstance(schema_entries, list)
-        self.assertEqual(len(schema_entries), 54)
+        self.assertEqual(len(schema_entries), 55)
 
         cursor = get_contract("memoriesql.capture.connector-cursor")
         self.assertEqual(cursor["version"], "1")
@@ -45,7 +45,7 @@ class ContractCatalogPreviewTests(unittest.TestCase):
         self.assertEqual(unavailable["status"], "not_implemented")
         self.assertEqual(unavailable["entries"], [])
 
-        self.assertEqual(len(iter_contracts()), 60)
+        self.assertEqual(len(iter_contracts()), 61)
         with self.assertRaises(ContractNotFoundError):
             get_contract("memoriesql.unlisted-provider")
 

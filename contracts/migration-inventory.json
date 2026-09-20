@@ -101,6 +101,10 @@
     {
       "filename": "0025_declared_evidence_scopes.sql",
       "sha256": "04d4ca7bc5f91871a2b6b37299b3f0d2323cda059b9530eecfcee9b27206879c"
+    },
+    {
+      "filename": "0026_supervised_managed_dispatch.sql",
+      "sha256": "a7f5c24e50a581daae112025d7d9a96fef4738387e0f860a3584ee9b8018fd51"
     }
   ]
 }

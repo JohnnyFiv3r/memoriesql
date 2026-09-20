@@ -24,7 +24,7 @@
     },
     {
       "disposition": "include",
-      "expected_record_count": 54,
+      "expected_record_count": 55,
       "filename": "json-schema.json",
       "kind": "json_schema",
       "note": "Provider-neutral capture, host, source-range, transcript-fold, and harness-lifecycle schemas."
@@ -586,6 +586,17 @@
       "path": "contracts/records/memoriesql-stored-bead-inspection-v1.json",
       "public_sha256": "ffe6441a0590a2d1fd91583df1a7e14ff0582995e10d342c8c863d40108f2c4a",
       "reason": "Owner-authorized Q public stored-result reads stacked on P handoff b98d5cc.",
+      "version": "1"
+    },
+    {
+      "canonical_payload_sha256": "3d946f9d5d5509ce7520d224259d71b2d134df3d3ee40a2b32aa678c8b141534",
+      "catalog": "json_schema",
+      "classification": "proposed_open_core",
+      "id": "memoriesql.supervised-dispatch.v1",
+      "package_disposition": "include",
+      "path": "contracts/records/memoriesql-supervised-dispatch-v1.json",
+      "public_sha256": "5abfd0b21e2adf649af9a34c86c477894a142699d995620abeb43317be286608",
+      "reason": "Public-authored forward supervised qualification; no transport or production trust.",
       "version": "1"
     },
     {

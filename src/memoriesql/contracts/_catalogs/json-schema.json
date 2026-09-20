@@ -30768,6 +30768,1904 @@
     },
     {
       "contract": {
+        "allowance": "durable_pre_dispatch_serial_nonrefundable_across_attempts",
+        "counting": "observable_turn_not_underlying_inference",
+        "default_admission": "unchanged_hard_bounded_single_inference",
+        "exposure": "host_visible_supply_only",
+        "managed_usage": "reported_total_else_complete_request_observations_else_estimate_else_unavailable",
+        "qualification": "separate_explicit_task_route_model_authority_deadline_approval",
+        "schemas": {
+          "ManagedDispatchIntent": {
+            "$defs": {
+              "AllowanceState": {
+                "enum": [
+                  "covered",
+                  "available",
+                  "exhausted",
+                  "unknown",
+                  "not_applicable"
+                ],
+                "title": "AllowanceState",
+                "type": "string"
+              },
+              "BillingBasis": {
+                "enum": [
+                  "metered",
+                  "subscription",
+                  "local",
+                  "discounted",
+                  "credited",
+                  "indeterminate"
+                ],
+                "title": "BillingBasis",
+                "type": "string"
+              },
+              "ManagedDispatchTarget": {
+                "additionalProperties": false,
+                "properties": {
+                  "allowance_state": {
+                    "$ref": "#/$defs/AllowanceState"
+                  },
+                  "billing_basis": {
+                    "$ref": "#/$defs/BillingBasis"
+                  },
+                  "boundary_kind": {
+                    "const": "managed_turn",
+                    "default": "managed_turn",
+                    "title": "Boundary Kind",
+                    "type": "string"
+                  },
+                  "credential_id": {
+                    "format": "uuid",
+                    "title": "Credential Id",
+                    "type": "string"
+                  },
+                  "hidden_requests": {
+                    "const": "not_independently_observed_or_bounded",
+                    "default": "not_independently_observed_or_bounded",
+                    "title": "Hidden Requests",
+                    "type": "string"
+                  },
+                  "host_retries_disabled": {
+                    "const": true,
+                    "default": true,
+                    "title": "Host Retries Disabled",
+                    "type": "boolean"
+                  },
+                  "model_id": {
+                    "maxLength": 255,
+                    "minLength": 1,
+                    "title": "Model Id",
+                    "type": "string"
+                  },
+                  "pricing_revision_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Pricing Revision Id"
+                  },
+                  "provider_key": {
+                    "maxLength": 128,
+                    "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                    "title": "Provider Key",
+                    "type": "string"
+                  },
+                  "quality_policy_revision_id": {
+                    "format": "uuid",
+                    "title": "Quality Policy Revision Id",
+                    "type": "string"
+                  },
+                  "quality_tier": {
+                    "$ref": "#/$defs/QualityTier",
+                    "default": "frontier"
+                  },
+                  "request_boundary_revision": {
+                    "maxLength": 128,
+                    "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                    "title": "Request Boundary Revision",
+                    "type": "string"
+                  },
+                  "usage_provenance": {
+                    "$ref": "#/$defs/UsageProvenance"
+                  }
+                },
+                "required": [
+                  "provider_key",
+                  "credential_id",
+                  "model_id",
+                  "billing_basis",
+                  "allowance_state",
+                  "quality_policy_revision_id",
+                  "request_boundary_revision",
+                  "usage_provenance"
+                ],
+                "title": "ManagedDispatchTarget",
+                "type": "object"
+              },
+              "ModelProfileReference": {
+                "additionalProperties": false,
+                "description": "Provider-neutral deployment-resolved model capability reference.",
+                "properties": {
+                  "effort_key": {
+                    "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                    "title": "Effort Key",
+                    "type": "string"
+                  },
+                  "profile_key": {
+                    "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                    "title": "Profile Key",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "profile_key",
+                  "revision",
+                  "effort_key"
+                ],
+                "title": "ModelProfileReference",
+                "type": "object"
+              },
+              "ProviderRequestTarget": {
+                "additionalProperties": false,
+                "description": "The exact provider, credential and billing snapshot used for one request.",
+                "properties": {
+                  "allowance_state": {
+                    "$ref": "#/$defs/AllowanceState"
+                  },
+                  "billing_basis": {
+                    "$ref": "#/$defs/BillingBasis"
+                  },
+                  "credential_id": {
+                    "format": "uuid",
+                    "title": "Credential Id",
+                    "type": "string"
+                  },
+                  "max_input_tokens_per_request": {
+                    "minimum": 1,
+                    "title": "Max Input Tokens Per Request",
+                    "type": "integer"
+                  },
+                  "max_output_tokens_per_request": {
+                    "minimum": 1,
+                    "title": "Max Output Tokens Per Request",
+                    "type": "integer"
+                  },
+                  "model_id": {
+                    "maxLength": 255,
+                    "minLength": 1,
+                    "title": "Model Id",
+                    "type": "string"
+                  },
+                  "pricing_revision_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Pricing Revision Id"
+                  },
+                  "provider_key": {
+                    "maxLength": 128,
+                    "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                    "title": "Provider Key",
+                    "type": "string"
+                  },
+                  "quality_policy_revision_id": {
+                    "format": "uuid",
+                    "title": "Quality Policy Revision Id",
+                    "type": "string"
+                  },
+                  "quality_tier": {
+                    "$ref": "#/$defs/QualityTier",
+                    "default": "frontier"
+                  },
+                  "request_boundary_revision": {
+                    "maxLength": 128,
+                    "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                    "title": "Request Boundary Revision",
+                    "type": "string"
+                  },
+                  "transport_retries_disabled": {
+                    "title": "Transport Retries Disabled",
+                    "type": "boolean"
+                  },
+                  "usage_provenance": {
+                    "$ref": "#/$defs/UsageProvenance"
+                  }
+                },
+                "required": [
+                  "provider_key",
+                  "credential_id",
+                  "model_id",
+                  "max_input_tokens_per_request",
+                  "max_output_tokens_per_request",
+                  "billing_basis",
+                  "allowance_state",
+                  "quality_policy_revision_id",
+                  "request_boundary_revision",
+                  "transport_retries_disabled",
+                  "usage_provenance"
+                ],
+                "title": "ProviderRequestTarget",
+                "type": "object"
+              },
+              "QualityTier": {
+                "enum": [
+                  "frontier",
+                  "qualified_lower"
+                ],
+                "title": "QualityTier",
+                "type": "string"
+              },
+              "SupervisedQualification": {
+                "additionalProperties": false,
+                "description": "Exact task-scoped approval, provisioned separately from worker execution.",
+                "properties": {
+                  "contract_version": {
+                    "const": 1,
+                    "default": 1,
+                    "title": "Contract Version",
+                    "type": "integer"
+                  },
+                  "deadline": {
+                    "format": "date-time",
+                    "title": "Deadline",
+                    "type": "string"
+                  },
+                  "qualification_id": {
+                    "format": "uuid",
+                    "title": "Qualification Id",
+                    "type": "string"
+                  },
+                  "reported_cash_stop_microunits": {
+                    "anyOf": [
+                      {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Reported Cash Stop Microunits"
+                  },
+                  "reported_generated_token_stop": {
+                    "minimum": 1,
+                    "title": "Reported Generated Token Stop",
+                    "type": "integer"
+                  },
+                  "reported_input_token_stop": {
+                    "minimum": 1,
+                    "title": "Reported Input Token Stop",
+                    "type": "integer"
+                  },
+                  "routes": {
+                    "items": {
+                      "$ref": "#/$defs/SupervisedRoute"
+                    },
+                    "maxItems": 2,
+                    "minItems": 1,
+                    "title": "Routes",
+                    "type": "array"
+                  },
+                  "semantic_task_id": {
+                    "format": "uuid",
+                    "title": "Semantic Task Id",
+                    "type": "string"
+                  },
+                  "serial": {
+                    "const": true,
+                    "default": true,
+                    "title": "Serial",
+                    "type": "boolean"
+                  },
+                  "usage_limits": {
+                    "const": "reported_stop_triggers_not_remote_ceilings",
+                    "default": "reported_stop_triggers_not_remote_ceilings",
+                    "title": "Usage Limits",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "qualification_id",
+                  "semantic_task_id",
+                  "routes",
+                  "deadline",
+                  "reported_input_token_stop",
+                  "reported_generated_token_stop"
+                ],
+                "title": "SupervisedQualification",
+                "type": "object"
+              },
+              "SupervisedRoute": {
+                "additionalProperties": false,
+                "properties": {
+                  "observable_dispatch_allowance": {
+                    "const": 1,
+                    "default": 1,
+                    "title": "Observable Dispatch Allowance",
+                    "type": "integer"
+                  },
+                  "qualification_revision": {
+                    "maxLength": 128,
+                    "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                    "title": "Qualification Revision",
+                    "type": "string"
+                  },
+                  "reference": {
+                    "$ref": "#/$defs/ModelProfileReference"
+                  },
+                  "target": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/ManagedDispatchTarget"
+                      },
+                      {
+                        "$ref": "#/$defs/ProviderRequestTarget"
+                      }
+                    ],
+                    "title": "Target"
+                  }
+                },
+                "required": [
+                  "reference",
+                  "target",
+                  "qualification_revision"
+                ],
+                "title": "SupervisedRoute",
+                "type": "object"
+              },
+              "UsageProvenance": {
+                "enum": [
+                  "provider_reported",
+                  "framework_estimated",
+                  "unavailable"
+                ],
+                "title": "UsageProvenance",
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "description": "One observable turn. Null bounds explicitly deny hard token/cash claims.",
+            "properties": {
+              "access_scope_id": {
+                "maxLength": 128,
+                "minLength": 1,
+                "title": "Access Scope Id",
+                "type": "string"
+              },
+              "conservative_reservation_microunits": {
+                "const": 0,
+                "default": 0,
+                "title": "Conservative Reservation Microunits",
+                "type": "integer"
+              },
+              "dispatch_boundary": {
+                "const": "managed_turn",
+                "default": "managed_turn",
+                "title": "Dispatch Boundary",
+                "type": "string"
+              },
+              "max_input_tokens": {
+                "default": null,
+                "title": "Max Input Tokens",
+                "type": "null"
+              },
+              "max_output_tokens": {
+                "default": null,
+                "title": "Max Output Tokens",
+                "type": "null"
+              },
+              "model_profile_key": {
+                "maxLength": 128,
+                "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                "title": "Model Profile Key",
+                "type": "string"
+              },
+              "model_profile_revision": {
+                "minimum": 1,
+                "title": "Model Profile Revision",
+                "type": "integer"
+              },
+              "module_key": {
+                "maxLength": 128,
+                "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                "title": "Module Key",
+                "type": "string"
+              },
+              "operation_key": {
+                "maxLength": 128,
+                "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                "title": "Operation Key",
+                "type": "string"
+              },
+              "origin_delegation_id": {
+                "anyOf": [
+                  {
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Origin Delegation Id"
+              },
+              "origin_principal_id": {
+                "maxLength": 128,
+                "minLength": 1,
+                "title": "Origin Principal Id",
+                "type": "string"
+              },
+              "parent_run_id": {
+                "anyOf": [
+                  {
+                    "maxLength": 128,
+                    "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Parent Run Id"
+              },
+              "policy_revision": {
+                "minimum": 1,
+                "title": "Policy Revision",
+                "type": "integer"
+              },
+              "qualification_revision": {
+                "maxLength": 128,
+                "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                "title": "Qualification Revision",
+                "type": "string"
+              },
+              "request_id": {
+                "format": "uuid",
+                "title": "Request Id",
+                "type": "string"
+              },
+              "request_payload_hash": {
+                "pattern": "^[a-f0-9]{64}$",
+                "title": "Request Payload Hash",
+                "type": "string"
+              },
+              "request_sequence": {
+                "minimum": 1,
+                "title": "Request Sequence",
+                "type": "integer"
+              },
+              "retrieval_execution_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Retrieval Execution Id"
+              },
+              "run_id": {
+                "maxLength": 128,
+                "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                "title": "Run Id",
+                "type": "string"
+              },
+              "run_role": {
+                "maxLength": 64,
+                "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                "title": "Run Role",
+                "type": "string"
+              },
+              "safety_ceiling_microunits": {
+                "default": null,
+                "title": "Safety Ceiling Microunits",
+                "type": "null"
+              },
+              "semantic_attempt_id": {
+                "anyOf": [
+                  {
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Semantic Attempt Id"
+              },
+              "semantic_task_id": {
+                "anyOf": [
+                  {
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Semantic Task Id"
+              },
+              "supervision": {
+                "$ref": "#/$defs/SupervisedQualification"
+              },
+              "supply_attestation": {
+                "const": "host_visible_only",
+                "default": "host_visible_only",
+                "title": "Supply Attestation",
+                "type": "string"
+              },
+              "target": {
+                "$ref": "#/$defs/ManagedDispatchTarget"
+              },
+              "task_contract_revision": {
+                "minimum": 1,
+                "title": "Task Contract Revision",
+                "type": "integer"
+              },
+              "task_kind": {
+                "maxLength": 128,
+                "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                "title": "Task Kind",
+                "type": "string"
+              },
+              "tenant_id": {
+                "maxLength": 128,
+                "minLength": 1,
+                "title": "Tenant Id",
+                "type": "string"
+              },
+              "workspace_id": {
+                "maxLength": 128,
+                "minLength": 1,
+                "title": "Workspace Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "request_id",
+              "tenant_id",
+              "workspace_id",
+              "access_scope_id",
+              "run_id",
+              "run_role",
+              "module_key",
+              "operation_key",
+              "task_kind",
+              "task_contract_revision",
+              "origin_principal_id",
+              "policy_revision",
+              "model_profile_key",
+              "model_profile_revision",
+              "request_sequence",
+              "target",
+              "request_payload_hash",
+              "supervision",
+              "qualification_revision"
+            ],
+            "title": "ManagedDispatchIntent",
+            "type": "object"
+          },
+          "ManagedUsageEvent": {
+            "$defs": {
+              "InferenceUsageObservation": {
+                "additionalProperties": false,
+                "properties": {
+                  "provenance": {
+                    "$ref": "#/$defs/UsageProvenance"
+                  },
+                  "request_id_hash": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "title": "Request Id Hash",
+                    "type": "string"
+                  },
+                  "usage": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/NormalizedUsage"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "request_id_hash",
+                  "usage",
+                  "provenance"
+                ],
+                "title": "InferenceUsageObservation",
+                "type": "object"
+              },
+              "ManagedUsageObservation": {
+                "additionalProperties": false,
+                "description": "Totals and parts are alternatives, never additive accounting dimensions.",
+                "properties": {
+                  "estimated_total": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/NormalizedUsage"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "inference_count_basis": {
+                    "default": "unknown",
+                    "enum": [
+                      "provider_reported",
+                      "host_observed",
+                      "unknown"
+                    ],
+                    "title": "Inference Count Basis",
+                    "type": "string"
+                  },
+                  "reported_total": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/NormalizedUsage"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "request_observations": {
+                    "default": [],
+                    "items": {
+                      "$ref": "#/$defs/InferenceUsageObservation"
+                    },
+                    "maxItems": 64,
+                    "title": "Request Observations",
+                    "type": "array"
+                  },
+                  "request_observations_complete": {
+                    "default": false,
+                    "title": "Request Observations Complete",
+                    "type": "boolean"
+                  },
+                  "turn_completion": {
+                    "default": "ambiguous",
+                    "enum": [
+                      "completed",
+                      "ambiguous"
+                    ],
+                    "title": "Turn Completion",
+                    "type": "string"
+                  },
+                  "underlying_inference_count": {
+                    "anyOf": [
+                      {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Underlying Inference Count"
+                  }
+                },
+                "title": "ManagedUsageObservation",
+                "type": "object"
+              },
+              "NormalizedUsage": {
+                "additionalProperties": false,
+                "properties": {
+                  "cache_write_tokens": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Cache Write Tokens",
+                    "type": "integer"
+                  },
+                  "cached_input_tokens": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Cached Input Tokens",
+                    "type": "integer"
+                  },
+                  "input_tokens": {
+                    "minimum": 0,
+                    "title": "Input Tokens",
+                    "type": "integer"
+                  },
+                  "output_tokens": {
+                    "minimum": 0,
+                    "title": "Output Tokens",
+                    "type": "integer"
+                  },
+                  "reasoning_tokens": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Reasoning Tokens",
+                    "type": "integer"
+                  },
+                  "tool_calls": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Tool Calls",
+                    "type": "integer"
+                  },
+                  "total_tokens": {
+                    "minimum": 0,
+                    "title": "Total Tokens",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "input_tokens",
+                  "output_tokens",
+                  "total_tokens"
+                ],
+                "title": "NormalizedUsage",
+                "type": "object"
+              },
+              "RequestOutcome": {
+                "enum": [
+                  "succeeded",
+                  "failed",
+                  "cancelled",
+                  "lease_lost",
+                  "unknown"
+                ],
+                "title": "RequestOutcome",
+                "type": "string"
+              },
+              "UsageEventKind": {
+                "enum": [
+                  "usage_reported",
+                  "usage_unavailable",
+                  "request_failed",
+                  "request_cancelled",
+                  "lease_lost_return"
+                ],
+                "title": "UsageEventKind",
+                "type": "string"
+              },
+              "UsageProvenance": {
+                "enum": [
+                  "provider_reported",
+                  "framework_estimated",
+                  "unavailable"
+                ],
+                "title": "UsageProvenance",
+                "type": "string"
+              },
+              "UsageState": {
+                "enum": [
+                  "reported",
+                  "unavailable"
+                ],
+                "title": "UsageState",
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "dedupe_key": {
+                "pattern": "^[a-f0-9]{64}$",
+                "title": "Dedupe Key",
+                "type": "string"
+              },
+              "diagnostic_code": {
+                "anyOf": [
+                  {
+                    "maxLength": 128,
+                    "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Diagnostic Code"
+              },
+              "event_id": {
+                "format": "uuid",
+                "title": "Event Id",
+                "type": "string"
+              },
+              "event_kind": {
+                "$ref": "#/$defs/UsageEventKind"
+              },
+              "observation": {
+                "$ref": "#/$defs/ManagedUsageObservation"
+              },
+              "outcome": {
+                "$ref": "#/$defs/RequestOutcome"
+              },
+              "provider_reported_cost_microunits": {
+                "anyOf": [
+                  {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Provider Reported Cost Microunits"
+              },
+              "provider_reported_currency": {
+                "anyOf": [
+                  {
+                    "pattern": "^USD$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Provider Reported Currency"
+              },
+              "provider_request_id_hash": {
+                "anyOf": [
+                  {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Provider Request Id Hash"
+              },
+              "request_id": {
+                "format": "uuid",
+                "title": "Request Id",
+                "type": "string"
+              },
+              "usage": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/NormalizedUsage"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "usage_provenance": {
+                "$ref": "#/$defs/UsageProvenance"
+              },
+              "usage_state": {
+                "$ref": "#/$defs/UsageState"
+              }
+            },
+            "required": [
+              "event_id",
+              "request_id",
+              "dedupe_key",
+              "event_kind",
+              "outcome",
+              "usage_state",
+              "usage_provenance",
+              "observation"
+            ],
+            "title": "ManagedUsageEvent",
+            "type": "object"
+          },
+          "SupervisedQualification": {
+            "$defs": {
+              "AllowanceState": {
+                "enum": [
+                  "covered",
+                  "available",
+                  "exhausted",
+                  "unknown",
+                  "not_applicable"
+                ],
+                "title": "AllowanceState",
+                "type": "string"
+              },
+              "BillingBasis": {
+                "enum": [
+                  "metered",
+                  "subscription",
+                  "local",
+                  "discounted",
+                  "credited",
+                  "indeterminate"
+                ],
+                "title": "BillingBasis",
+                "type": "string"
+              },
+              "ManagedDispatchTarget": {
+                "additionalProperties": false,
+                "properties": {
+                  "allowance_state": {
+                    "$ref": "#/$defs/AllowanceState"
+                  },
+                  "billing_basis": {
+                    "$ref": "#/$defs/BillingBasis"
+                  },
+                  "boundary_kind": {
+                    "const": "managed_turn",
+                    "default": "managed_turn",
+                    "title": "Boundary Kind",
+                    "type": "string"
+                  },
+                  "credential_id": {
+                    "format": "uuid",
+                    "title": "Credential Id",
+                    "type": "string"
+                  },
+                  "hidden_requests": {
+                    "const": "not_independently_observed_or_bounded",
+                    "default": "not_independently_observed_or_bounded",
+                    "title": "Hidden Requests",
+                    "type": "string"
+                  },
+                  "host_retries_disabled": {
+                    "const": true,
+                    "default": true,
+                    "title": "Host Retries Disabled",
+                    "type": "boolean"
+                  },
+                  "model_id": {
+                    "maxLength": 255,
+                    "minLength": 1,
+                    "title": "Model Id",
+                    "type": "string"
+                  },
+                  "pricing_revision_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Pricing Revision Id"
+                  },
+                  "provider_key": {
+                    "maxLength": 128,
+                    "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                    "title": "Provider Key",
+                    "type": "string"
+                  },
+                  "quality_policy_revision_id": {
+                    "format": "uuid",
+                    "title": "Quality Policy Revision Id",
+                    "type": "string"
+                  },
+                  "quality_tier": {
+                    "$ref": "#/$defs/QualityTier",
+                    "default": "frontier"
+                  },
+                  "request_boundary_revision": {
+                    "maxLength": 128,
+                    "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                    "title": "Request Boundary Revision",
+                    "type": "string"
+                  },
+                  "usage_provenance": {
+                    "$ref": "#/$defs/UsageProvenance"
+                  }
+                },
+                "required": [
+                  "provider_key",
+                  "credential_id",
+                  "model_id",
+                  "billing_basis",
+                  "allowance_state",
+                  "quality_policy_revision_id",
+                  "request_boundary_revision",
+                  "usage_provenance"
+                ],
+                "title": "ManagedDispatchTarget",
+                "type": "object"
+              },
+              "ModelProfileReference": {
+                "additionalProperties": false,
+                "description": "Provider-neutral deployment-resolved model capability reference.",
+                "properties": {
+                  "effort_key": {
+                    "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                    "title": "Effort Key",
+                    "type": "string"
+                  },
+                  "profile_key": {
+                    "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                    "title": "Profile Key",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "profile_key",
+                  "revision",
+                  "effort_key"
+                ],
+                "title": "ModelProfileReference",
+                "type": "object"
+              },
+              "ProviderRequestTarget": {
+                "additionalProperties": false,
+                "description": "The exact provider, credential and billing snapshot used for one request.",
+                "properties": {
+                  "allowance_state": {
+                    "$ref": "#/$defs/AllowanceState"
+                  },
+                  "billing_basis": {
+                    "$ref": "#/$defs/BillingBasis"
+                  },
+                  "credential_id": {
+                    "format": "uuid",
+                    "title": "Credential Id",
+                    "type": "string"
+                  },
+                  "max_input_tokens_per_request": {
+                    "minimum": 1,
+                    "title": "Max Input Tokens Per Request",
+                    "type": "integer"
+                  },
+                  "max_output_tokens_per_request": {
+                    "minimum": 1,
+                    "title": "Max Output Tokens Per Request",
+                    "type": "integer"
+                  },
+                  "model_id": {
+                    "maxLength": 255,
+                    "minLength": 1,
+                    "title": "Model Id",
+                    "type": "string"
+                  },
+                  "pricing_revision_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Pricing Revision Id"
+                  },
+                  "provider_key": {
+                    "maxLength": 128,
+                    "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                    "title": "Provider Key",
+                    "type": "string"
+                  },
+                  "quality_policy_revision_id": {
+                    "format": "uuid",
+                    "title": "Quality Policy Revision Id",
+                    "type": "string"
+                  },
+                  "quality_tier": {
+                    "$ref": "#/$defs/QualityTier",
+                    "default": "frontier"
+                  },
+                  "request_boundary_revision": {
+                    "maxLength": 128,
+                    "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                    "title": "Request Boundary Revision",
+                    "type": "string"
+                  },
+                  "transport_retries_disabled": {
+                    "title": "Transport Retries Disabled",
+                    "type": "boolean"
+                  },
+                  "usage_provenance": {
+                    "$ref": "#/$defs/UsageProvenance"
+                  }
+                },
+                "required": [
+                  "provider_key",
+                  "credential_id",
+                  "model_id",
+                  "max_input_tokens_per_request",
+                  "max_output_tokens_per_request",
+                  "billing_basis",
+                  "allowance_state",
+                  "quality_policy_revision_id",
+                  "request_boundary_revision",
+                  "transport_retries_disabled",
+                  "usage_provenance"
+                ],
+                "title": "ProviderRequestTarget",
+                "type": "object"
+              },
+              "QualityTier": {
+                "enum": [
+                  "frontier",
+                  "qualified_lower"
+                ],
+                "title": "QualityTier",
+                "type": "string"
+              },
+              "SupervisedRoute": {
+                "additionalProperties": false,
+                "properties": {
+                  "observable_dispatch_allowance": {
+                    "const": 1,
+                    "default": 1,
+                    "title": "Observable Dispatch Allowance",
+                    "type": "integer"
+                  },
+                  "qualification_revision": {
+                    "maxLength": 128,
+                    "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                    "title": "Qualification Revision",
+                    "type": "string"
+                  },
+                  "reference": {
+                    "$ref": "#/$defs/ModelProfileReference"
+                  },
+                  "target": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/ManagedDispatchTarget"
+                      },
+                      {
+                        "$ref": "#/$defs/ProviderRequestTarget"
+                      }
+                    ],
+                    "title": "Target"
+                  }
+                },
+                "required": [
+                  "reference",
+                  "target",
+                  "qualification_revision"
+                ],
+                "title": "SupervisedRoute",
+                "type": "object"
+              },
+              "UsageProvenance": {
+                "enum": [
+                  "provider_reported",
+                  "framework_estimated",
+                  "unavailable"
+                ],
+                "title": "UsageProvenance",
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "description": "Exact task-scoped approval, provisioned separately from worker execution.",
+            "properties": {
+              "contract_version": {
+                "const": 1,
+                "default": 1,
+                "title": "Contract Version",
+                "type": "integer"
+              },
+              "deadline": {
+                "format": "date-time",
+                "title": "Deadline",
+                "type": "string"
+              },
+              "qualification_id": {
+                "format": "uuid",
+                "title": "Qualification Id",
+                "type": "string"
+              },
+              "reported_cash_stop_microunits": {
+                "anyOf": [
+                  {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Reported Cash Stop Microunits"
+              },
+              "reported_generated_token_stop": {
+                "minimum": 1,
+                "title": "Reported Generated Token Stop",
+                "type": "integer"
+              },
+              "reported_input_token_stop": {
+                "minimum": 1,
+                "title": "Reported Input Token Stop",
+                "type": "integer"
+              },
+              "routes": {
+                "items": {
+                  "$ref": "#/$defs/SupervisedRoute"
+                },
+                "maxItems": 2,
+                "minItems": 1,
+                "title": "Routes",
+                "type": "array"
+              },
+              "semantic_task_id": {
+                "format": "uuid",
+                "title": "Semantic Task Id",
+                "type": "string"
+              },
+              "serial": {
+                "const": true,
+                "default": true,
+                "title": "Serial",
+                "type": "boolean"
+              },
+              "usage_limits": {
+                "const": "reported_stop_triggers_not_remote_ceilings",
+                "default": "reported_stop_triggers_not_remote_ceilings",
+                "title": "Usage Limits",
+                "type": "string"
+              }
+            },
+            "required": [
+              "qualification_id",
+              "semantic_task_id",
+              "routes",
+              "deadline",
+              "reported_input_token_stop",
+              "reported_generated_token_stop"
+            ],
+            "title": "SupervisedQualification",
+            "type": "object"
+          },
+          "SupervisedRequestIntent": {
+            "$defs": {
+              "AllowanceState": {
+                "enum": [
+                  "covered",
+                  "available",
+                  "exhausted",
+                  "unknown",
+                  "not_applicable"
+                ],
+                "title": "AllowanceState",
+                "type": "string"
+              },
+              "BillingBasis": {
+                "enum": [
+                  "metered",
+                  "subscription",
+                  "local",
+                  "discounted",
+                  "credited",
+                  "indeterminate"
+                ],
+                "title": "BillingBasis",
+                "type": "string"
+              },
+              "ManagedDispatchTarget": {
+                "additionalProperties": false,
+                "properties": {
+                  "allowance_state": {
+                    "$ref": "#/$defs/AllowanceState"
+                  },
+                  "billing_basis": {
+                    "$ref": "#/$defs/BillingBasis"
+                  },
+                  "boundary_kind": {
+                    "const": "managed_turn",
+                    "default": "managed_turn",
+                    "title": "Boundary Kind",
+                    "type": "string"
+                  },
+                  "credential_id": {
+                    "format": "uuid",
+                    "title": "Credential Id",
+                    "type": "string"
+                  },
+                  "hidden_requests": {
+                    "const": "not_independently_observed_or_bounded",
+                    "default": "not_independently_observed_or_bounded",
+                    "title": "Hidden Requests",
+                    "type": "string"
+                  },
+                  "host_retries_disabled": {
+                    "const": true,
+                    "default": true,
+                    "title": "Host Retries Disabled",
+                    "type": "boolean"
+                  },
+                  "model_id": {
+                    "maxLength": 255,
+                    "minLength": 1,
+                    "title": "Model Id",
+                    "type": "string"
+                  },
+                  "pricing_revision_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Pricing Revision Id"
+                  },
+                  "provider_key": {
+                    "maxLength": 128,
+                    "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                    "title": "Provider Key",
+                    "type": "string"
+                  },
+                  "quality_policy_revision_id": {
+                    "format": "uuid",
+                    "title": "Quality Policy Revision Id",
+                    "type": "string"
+                  },
+                  "quality_tier": {
+                    "$ref": "#/$defs/QualityTier",
+                    "default": "frontier"
+                  },
+                  "request_boundary_revision": {
+                    "maxLength": 128,
+                    "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                    "title": "Request Boundary Revision",
+                    "type": "string"
+                  },
+                  "usage_provenance": {
+                    "$ref": "#/$defs/UsageProvenance"
+                  }
+                },
+                "required": [
+                  "provider_key",
+                  "credential_id",
+                  "model_id",
+                  "billing_basis",
+                  "allowance_state",
+                  "quality_policy_revision_id",
+                  "request_boundary_revision",
+                  "usage_provenance"
+                ],
+                "title": "ManagedDispatchTarget",
+                "type": "object"
+              },
+              "ModelProfileReference": {
+                "additionalProperties": false,
+                "description": "Provider-neutral deployment-resolved model capability reference.",
+                "properties": {
+                  "effort_key": {
+                    "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                    "title": "Effort Key",
+                    "type": "string"
+                  },
+                  "profile_key": {
+                    "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                    "title": "Profile Key",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "profile_key",
+                  "revision",
+                  "effort_key"
+                ],
+                "title": "ModelProfileReference",
+                "type": "object"
+              },
+              "ProviderRequestTarget": {
+                "additionalProperties": false,
+                "description": "The exact provider, credential and billing snapshot used for one request.",
+                "properties": {
+                  "allowance_state": {
+                    "$ref": "#/$defs/AllowanceState"
+                  },
+                  "billing_basis": {
+                    "$ref": "#/$defs/BillingBasis"
+                  },
+                  "credential_id": {
+                    "format": "uuid",
+                    "title": "Credential Id",
+                    "type": "string"
+                  },
+                  "max_input_tokens_per_request": {
+                    "minimum": 1,
+                    "title": "Max Input Tokens Per Request",
+                    "type": "integer"
+                  },
+                  "max_output_tokens_per_request": {
+                    "minimum": 1,
+                    "title": "Max Output Tokens Per Request",
+                    "type": "integer"
+                  },
+                  "model_id": {
+                    "maxLength": 255,
+                    "minLength": 1,
+                    "title": "Model Id",
+                    "type": "string"
+                  },
+                  "pricing_revision_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Pricing Revision Id"
+                  },
+                  "provider_key": {
+                    "maxLength": 128,
+                    "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                    "title": "Provider Key",
+                    "type": "string"
+                  },
+                  "quality_policy_revision_id": {
+                    "format": "uuid",
+                    "title": "Quality Policy Revision Id",
+                    "type": "string"
+                  },
+                  "quality_tier": {
+                    "$ref": "#/$defs/QualityTier",
+                    "default": "frontier"
+                  },
+                  "request_boundary_revision": {
+                    "maxLength": 128,
+                    "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                    "title": "Request Boundary Revision",
+                    "type": "string"
+                  },
+                  "transport_retries_disabled": {
+                    "title": "Transport Retries Disabled",
+                    "type": "boolean"
+                  },
+                  "usage_provenance": {
+                    "$ref": "#/$defs/UsageProvenance"
+                  }
+                },
+                "required": [
+                  "provider_key",
+                  "credential_id",
+                  "model_id",
+                  "max_input_tokens_per_request",
+                  "max_output_tokens_per_request",
+                  "billing_basis",
+                  "allowance_state",
+                  "quality_policy_revision_id",
+                  "request_boundary_revision",
+                  "transport_retries_disabled",
+                  "usage_provenance"
+                ],
+                "title": "ProviderRequestTarget",
+                "type": "object"
+              },
+              "QualityTier": {
+                "enum": [
+                  "frontier",
+                  "qualified_lower"
+                ],
+                "title": "QualityTier",
+                "type": "string"
+              },
+              "SupervisedQualification": {
+                "additionalProperties": false,
+                "description": "Exact task-scoped approval, provisioned separately from worker execution.",
+                "properties": {
+                  "contract_version": {
+                    "const": 1,
+                    "default": 1,
+                    "title": "Contract Version",
+                    "type": "integer"
+                  },
+                  "deadline": {
+                    "format": "date-time",
+                    "title": "Deadline",
+                    "type": "string"
+                  },
+                  "qualification_id": {
+                    "format": "uuid",
+                    "title": "Qualification Id",
+                    "type": "string"
+                  },
+                  "reported_cash_stop_microunits": {
+                    "anyOf": [
+                      {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Reported Cash Stop Microunits"
+                  },
+                  "reported_generated_token_stop": {
+                    "minimum": 1,
+                    "title": "Reported Generated Token Stop",
+                    "type": "integer"
+                  },
+                  "reported_input_token_stop": {
+                    "minimum": 1,
+                    "title": "Reported Input Token Stop",
+                    "type": "integer"
+                  },
+                  "routes": {
+                    "items": {
+                      "$ref": "#/$defs/SupervisedRoute"
+                    },
+                    "maxItems": 2,
+                    "minItems": 1,
+                    "title": "Routes",
+                    "type": "array"
+                  },
+                  "semantic_task_id": {
+                    "format": "uuid",
+                    "title": "Semantic Task Id",
+                    "type": "string"
+                  },
+                  "serial": {
+                    "const": true,
+                    "default": true,
+                    "title": "Serial",
+                    "type": "boolean"
+                  },
+                  "usage_limits": {
+                    "const": "reported_stop_triggers_not_remote_ceilings",
+                    "default": "reported_stop_triggers_not_remote_ceilings",
+                    "title": "Usage Limits",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "qualification_id",
+                  "semantic_task_id",
+                  "routes",
+                  "deadline",
+                  "reported_input_token_stop",
+                  "reported_generated_token_stop"
+                ],
+                "title": "SupervisedQualification",
+                "type": "object"
+              },
+              "SupervisedRoute": {
+                "additionalProperties": false,
+                "properties": {
+                  "observable_dispatch_allowance": {
+                    "const": 1,
+                    "default": 1,
+                    "title": "Observable Dispatch Allowance",
+                    "type": "integer"
+                  },
+                  "qualification_revision": {
+                    "maxLength": 128,
+                    "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                    "title": "Qualification Revision",
+                    "type": "string"
+                  },
+                  "reference": {
+                    "$ref": "#/$defs/ModelProfileReference"
+                  },
+                  "target": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/ManagedDispatchTarget"
+                      },
+                      {
+                        "$ref": "#/$defs/ProviderRequestTarget"
+                      }
+                    ],
+                    "title": "Target"
+                  }
+                },
+                "required": [
+                  "reference",
+                  "target",
+                  "qualification_revision"
+                ],
+                "title": "SupervisedRoute",
+                "type": "object"
+              },
+              "UsageProvenance": {
+                "enum": [
+                  "provider_reported",
+                  "framework_estimated",
+                  "unavailable"
+                ],
+                "title": "UsageProvenance",
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "description": "Hard-bounded follow-up plus durable supervised dispatch allowance.",
+            "properties": {
+              "access_scope_id": {
+                "maxLength": 128,
+                "minLength": 1,
+                "title": "Access Scope Id",
+                "type": "string"
+              },
+              "conservative_reservation_microunits": {
+                "minimum": 0,
+                "title": "Conservative Reservation Microunits",
+                "type": "integer"
+              },
+              "dispatch_boundary": {
+                "const": "single_inference",
+                "default": "single_inference",
+                "title": "Dispatch Boundary",
+                "type": "string"
+              },
+              "max_input_tokens": {
+                "minimum": 1,
+                "title": "Max Input Tokens",
+                "type": "integer"
+              },
+              "max_output_tokens": {
+                "minimum": 1,
+                "title": "Max Output Tokens",
+                "type": "integer"
+              },
+              "model_profile_key": {
+                "maxLength": 128,
+                "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                "title": "Model Profile Key",
+                "type": "string"
+              },
+              "model_profile_revision": {
+                "minimum": 1,
+                "title": "Model Profile Revision",
+                "type": "integer"
+              },
+              "module_key": {
+                "maxLength": 128,
+                "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                "title": "Module Key",
+                "type": "string"
+              },
+              "operation_key": {
+                "maxLength": 128,
+                "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                "title": "Operation Key",
+                "type": "string"
+              },
+              "origin_delegation_id": {
+                "anyOf": [
+                  {
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Origin Delegation Id"
+              },
+              "origin_principal_id": {
+                "maxLength": 128,
+                "minLength": 1,
+                "title": "Origin Principal Id",
+                "type": "string"
+              },
+              "parent_run_id": {
+                "anyOf": [
+                  {
+                    "maxLength": 128,
+                    "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Parent Run Id"
+              },
+              "policy_revision": {
+                "minimum": 1,
+                "title": "Policy Revision",
+                "type": "integer"
+              },
+              "qualification_revision": {
+                "maxLength": 128,
+                "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                "title": "Qualification Revision",
+                "type": "string"
+              },
+              "request_id": {
+                "format": "uuid",
+                "title": "Request Id",
+                "type": "string"
+              },
+              "request_payload_hash": {
+                "pattern": "^[a-f0-9]{64}$",
+                "title": "Request Payload Hash",
+                "type": "string"
+              },
+              "request_sequence": {
+                "minimum": 1,
+                "title": "Request Sequence",
+                "type": "integer"
+              },
+              "retrieval_execution_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Retrieval Execution Id"
+              },
+              "run_id": {
+                "maxLength": 128,
+                "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                "title": "Run Id",
+                "type": "string"
+              },
+              "run_role": {
+                "maxLength": 64,
+                "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                "title": "Run Role",
+                "type": "string"
+              },
+              "safety_ceiling_microunits": {
+                "anyOf": [
+                  {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Safety Ceiling Microunits"
+              },
+              "semantic_attempt_id": {
+                "anyOf": [
+                  {
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Semantic Attempt Id"
+              },
+              "semantic_task_id": {
+                "anyOf": [
+                  {
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Semantic Task Id"
+              },
+              "supervision": {
+                "$ref": "#/$defs/SupervisedQualification"
+              },
+              "target": {
+                "$ref": "#/$defs/ProviderRequestTarget"
+              },
+              "task_contract_revision": {
+                "minimum": 1,
+                "title": "Task Contract Revision",
+                "type": "integer"
+              },
+              "task_kind": {
+                "maxLength": 128,
+                "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                "title": "Task Kind",
+                "type": "string"
+              },
+              "tenant_id": {
+                "maxLength": 128,
+                "minLength": 1,
+                "title": "Tenant Id",
+                "type": "string"
+              },
+              "workspace_id": {
+                "maxLength": 128,
+                "minLength": 1,
+                "title": "Workspace Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "request_id",
+              "tenant_id",
+              "workspace_id",
+              "access_scope_id",
+              "run_id",
+              "run_role",
+              "module_key",
+              "operation_key",
+              "task_kind",
+              "task_contract_revision",
+              "origin_principal_id",
+              "policy_revision",
+              "model_profile_key",
+              "model_profile_revision",
+              "request_sequence",
+              "target",
+              "conservative_reservation_microunits",
+              "max_input_tokens",
+              "max_output_tokens",
+              "request_payload_hash",
+              "supervision",
+              "qualification_revision"
+            ],
+            "title": "SupervisedRequestIntent",
+            "type": "object"
+          }
+        },
+        "stop_triggers": "reported_usage_not_hard_remote_token_cash_or_termination_guarantees"
+      },
+      "id": "memoriesql.supervised-dispatch.v1",
+      "kind": "json_schema",
+      "status": "available",
+      "summary": "Explicit task-bound supervised qualification of one observable managed turn and an optional hard-bounded follow-up; no hidden-inference or remote-ceiling claims.",
+      "version": "1"
+    },
+    {
+      "contract": {
         "additionalProperties": false,
         "properties": {
           "authority_principal_id": {

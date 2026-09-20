@@ -55,7 +55,9 @@ deterministic code validates and persists it.
 
 Version 0.0.8 includes the hard-bounded model-admission interface but no qualified
 provider adapter. Declared evidence scopes are implemented in development source,
-not this published version. No live-provider semantic-quality, production recall
+not this published version. Development also adds an explicit supervised managed
+dispatch interface with durable allowances and truthful usage accounting; it
+includes no provider adapter or live-call permission. No live-provider semantic-quality, production recall
 or complete-input correction/reauthoring capability is claimed.
 
 ## Explicit composition, not automatic setup
