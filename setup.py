@@ -17,7 +17,7 @@ class BuildMigrations(build_py):
         rows = json.loads(inventory.read_text())["migrations"]
         source = root / "migrations"
         names = [row["filename"] for row in rows]
-        if len(names) != 25 or len(set(names)) != 25:
+        if len(names) != 26 or len(set(names)) != 26:
             raise ValueError("invalid migration inventory")
         if {p.name for p in source.iterdir()} != set(names):
             raise ValueError("unregistered migration source")

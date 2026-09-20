@@ -155,12 +155,12 @@
       "source_sha256": "c15f60eace446302ce7dddfc69010c173a714791a92e3765edef87777da4ccc4"
     },
     {
-      "base_public_commit": "1e611c2a426684a6ede479e06e21a123a964a818",
-      "base_public_sha256": "42edabb02a4bd814c858f0558ace03d5981426f1fe4b66d9ed8e264098e2281e",
-      "disposition": "adapt",
+      "base_public_commit": "29dab24e9b45ec1cbce7dacd78720894d40c4594",
+      "base_public_sha256": "6c671d1b47b898d921be1885ec3866a82caa2d2e5c259f6c6d77fedd9bd8c915",
+      "disposition": "public-forward",
       "path": "src/memoriesql/infrastructure/models/pydanticai_executor.py",
-      "reason": "Integration of reviewed bounded model admission and classified authorship; existing authorization, accounting and cleanup fences retained.",
-      "sha256": "6c671d1b47b898d921be1885ec3866a82caa2d2e5c259f6c6d77fedd9bd8c915",
+      "reason": "Explicit managed dispatch opt-in through existing runtime/accounting; default hard-bound behavior preserved.",
+      "sha256": "fd631af6b57b8679d4518216309d66d43db53340b2a695028d1b8a4db829b8d2",
       "source_sha256": "07d4c861ce40062c227352f6fd240b7445500776ba6216fdd739027020da3b1c"
     },
     {
@@ -187,12 +187,12 @@
       "source_sha256": "ff404106d39e90bb5c9bc146ba5fa371adfe5e4813c0c5cd3cbbafd76e71b5a1"
     },
     {
-      "base_public_commit": "910cdd9d182f612f6bd72174c32363b1e1c87ed7",
-      "base_public_sha256": "ac7f826b3a3625401683e8828ea2f553d203f5e6b36cf9c3a7f0dc5db3a583ac",
+      "base_public_commit": "29dab24e9b45ec1cbce7dacd78720894d40c4594",
+      "base_public_sha256": "9371fc5b8781fa3916ea5af0d09376ebc06d450b50d119c922f3eb4be09666a5",
       "disposition": "public-forward",
       "path": "src/memoriesql/infrastructure/postgres/model_accounting.py",
-      "reason": "Own started accounting writes through loop shutdown; preserve cancellation propagation and ledger-write failure cause.",
-      "sha256": "9371fc5b8781fa3916ea5af0d09376ebc06d450b50d119c922f3eb4be09666a5",
+      "reason": "Explicit managed dispatch opt-in through existing runtime/accounting; default hard-bound behavior preserved.",
+      "sha256": "c30013af85c0cfa1b16cd1b2273bd6a2c2568fd0de138dfccd481a81c171a819",
       "source_sha256": "ac7f826b3a3625401683e8828ea2f553d203f5e6b36cf9c3a7f0dc5db3a583ac"
     },
     {
@@ -348,6 +348,13 @@
       "reason": "Public-authored explicit declared evidence scopes.",
       "sha256": "75f7492e3ef206f01429fc2192e7b660a368550909b8af2e930c27ad4ea5a71f",
       "source_sha256": "75f7492e3ef206f01429fc2192e7b660a368550909b8af2e930c27ad4ea5a71f"
+    },
+    {
+      "disposition": "public",
+      "path": "src/memoriesql/application/managed_dispatch.py",
+      "reason": "Public-authored supervised-dispatch contracts; no provider binding.",
+      "sha256": "7f83eaab86bf46c620e413820eb67839d7991ba9b889dc1aa24358ca066efb64",
+      "source_sha256": "7f83eaab86bf46c620e413820eb67839d7991ba9b889dc1aa24358ca066efb64"
     }
   ]
 }

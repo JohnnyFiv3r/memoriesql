@@ -9,6 +9,7 @@ from uuid import UUID
 from psycopg import Connection
 from psycopg.types.json import Jsonb
 
+from memoriesql.application.managed_dispatch import SupervisedDispatchUnavailable
 from memoriesql.application.model_accounting import (
     AccountingPersistenceError,
     CostSafetyCeilingExceeded,
@@ -120,6 +121,12 @@ async def _finish_database_write[T](operation: Callable[[T], None], value: T) ->
 
 def _raise_accounting_error(error: Exception) -> None:
     detail = str(error)
+    if any(marker in detail for marker in (
+        "supervised_qualification_unavailable", "supervised_route_mismatch",
+        "supervised_dispatch_allowance_consumed", "supervised_prior_dispatch_unsettled_or_stop_reached",
+        "supervised_prior_dispatch_outside_approval", "supervised_followup_exceeds_remaining_allowance",
+    )):
+        raise SupervisedDispatchUnavailable(detail) from error
     if "accounting.cost_safety_ceiling" in detail:
         raise CostSafetyCeilingExceeded(detail) from error
     if "accounting.required_model_allowance_unavailable" in detail:

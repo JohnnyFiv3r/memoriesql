@@ -8,6 +8,7 @@ import time
 from abc import abstractmethod
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from importlib.metadata import version as distribution_version
 from types import MappingProxyType
 from typing import Any, Literal, cast
@@ -37,7 +38,7 @@ from pydantic_ai.models.function import FunctionModel
 from pydantic_ai.models.test import TestModel
 from pydantic_ai.models.wrapper import WrapperModel
 from pydantic_ai.settings import ModelSettings
-from pydantic_ai.usage import RunUsage, UsageLimits
+from pydantic_ai.usage import RequestUsage, RunUsage, UsageLimits
 
 from memoriesql.application.bead_classification import (
     CLASSIFIER_INPUT,
@@ -64,6 +65,14 @@ from memoriesql.application.complete_input_execution import (
 from memoriesql.application.local_entity_mentions import (
     MentionAuthorStep,
     MentionExecutionInput,
+)
+from memoriesql.application.managed_dispatch import (
+    ManagedDispatchIntent,
+    ManagedDispatchTarget,
+    ManagedUsageEvent,
+    ManagedUsageObservation,
+    SupervisedQualification,
+    SupervisedRequestIntent,
 )
 from memoriesql.application.model_accounting import (
     AccountingPersistenceError,
@@ -268,6 +277,43 @@ class RealModelAdmission:
 
 
 @dataclass(frozen=True)
+class ManagedTurnResult:
+    response: ModelResponse
+    observation: ManagedUsageObservation
+
+
+class ManagedProviderModel(Model):
+    """Qualified host-visible turn interface; hidden inferences are not bounded.
+
+    A private adapter must start one fresh turn with the exact supplied frame,
+    disable host retries/fallback, and retain cancellation/late-settlement ownership.
+    It reports only observed or provider-reported facts. No bundled transport exists.
+    """
+
+    async def request(self, messages: list[ModelMessage], model_settings: ModelSettings | None,
+                      model_request_parameters: ModelRequestParameters) -> ModelResponse:
+        raise RuntimeError("managed models require explicit supervised dispatch")
+
+    @abstractmethod
+    async def request_managed(self, messages: list[ModelMessage], model_settings: ModelSettings,
+                              model_request_parameters: ModelRequestParameters,
+                              qualification: SupervisedQualification) -> ManagedTurnResult:
+        raise NotImplementedError
+
+
+@dataclass(frozen=True)
+class ManagedModelAdmission:
+    model: ManagedProviderModel
+    reference: ModelProfileReference
+    request_target: ManagedDispatchTarget
+    qualification_revision: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.model, ManagedProviderModel) or not IDENTIFIER_PATTERN.fullmatch(self.qualification_revision):
+            raise ValueError("managed admission requires exact interface and qualification")
+
+
+@dataclass(frozen=True)
 class ModelProfileBinding:
     """One exact profile bound to a characterized or explicitly admitted model."""
 
@@ -275,9 +321,10 @@ class ModelProfileBinding:
     model: Model
     max_running: int = 4
     max_queued: int = 16
-    request_target: ProviderRequestTarget = CHARACTERIZED_TEST_REQUEST_TARGET
+    request_target: ProviderRequestTarget | ManagedDispatchTarget = CHARACTERIZED_TEST_REQUEST_TARGET
     conservative_reservation_microunits: int = 0
-    real_model_admission: RealModelAdmission | None = None
+    real_model_admission: RealModelAdmission | ManagedModelAdmission | None = None
+    supervision: SupervisedQualification | None = None
 
     def __post_init__(self) -> None:
         if self.max_running < 1 or self.max_queued < 0:
@@ -294,10 +341,23 @@ class ModelProfileBinding:
             or admission.request_target != self.request_target
         ):
             raise ValueError("real-model admission does not match the exact binding")
+        managed = isinstance(admission, ManagedModelAdmission)
+        if isinstance(self.request_target, ManagedDispatchTarget) != managed:
+            raise ValueError("managed target requires exact managed admission")
+        if managed and (self.supervision is None or self.conservative_reservation_microunits != 0):
+            raise ValueError("managed admission requires explicit supervision, not a hard cash reservation")
+        if self.supervision is not None:
+            if admission is None or not any(
+                r.reference == self.reference and r.target == self.request_target
+                and r.qualification_revision == admission.qualification_revision
+                for r in self.supervision.routes
+            ):
+                raise ValueError("supervision does not approve this exact route and qualification")
         if self.conservative_reservation_microunits < 0:
             raise ValueError("provider cost reservation cannot be negative")
         if (
-            self.request_target.billing_basis == BillingBasis.METERED
+            not managed
+            and self.request_target.billing_basis == BillingBasis.METERED
             and self.request_target.pricing_revision_id is not None
             and self.conservative_reservation_microunits <= 0
         ):
@@ -322,6 +382,9 @@ class PydanticAIModelProfileRegistry:
     def __init__(self, bindings: tuple[ModelProfileBinding, ...]) -> None:
         if len({b.real_model_admission is not None for b in bindings}) > 1:
             raise ValueError("real and characterized profiles cannot share a registry")
+        supervised = [b.supervision for b in bindings if b.supervision is not None]
+        if supervised and (len(supervised) != len(bindings) or any(q != supervised[0] for q in supervised)):
+            raise ValueError("supervised registry requires one exact task qualification for all routes")
         resolved: dict[tuple[str, int], _ResolvedModelProfile] = {}
         for binding in bindings:
             key = binding.reference.profile_key, binding.reference.revision
@@ -480,6 +543,24 @@ class _TreeFailureError(RuntimeError):
 
 
 @dataclass
+class _TerminalCompletion:
+    """Local settlement, never an acknowledgement of durable persistence."""
+
+    settled: asyncio.Event = field(default_factory=asyncio.Event)
+    error: BaseException | None = None
+
+    def finish(self, error: BaseException | None = None) -> None:
+        if not self.settled.is_set():
+            self.error = error
+            self.settled.set()
+
+    async def wait(self) -> None:
+        await self.settled.wait()
+        if self.error is not None:
+            raise self.error
+
+
+@dataclass
 class _TreeState:
     executor: PydanticAISemanticExecutor
     task: ResolvedSemanticTask[BaseModel, BaseModel]
@@ -504,6 +585,9 @@ class _TreeState:
     run_refs: list[str] = field(default_factory=list)
     started_run_ids: set[str] = field(default_factory=set)
     run_terminal_events: dict[str, asyncio.Event] = field(default_factory=dict)
+    run_completions: dict[str, _TerminalCompletion] = field(default_factory=dict)
+    delegation_errors: list[BaseException] = field(default_factory=list)
+    terminal_event_errors: list[BaseException] = field(default_factory=list)
     evidence_cache: dict[str, str] = field(default_factory=dict)
     terminal_failure: _Failure | None = None
     success_closed: bool = False
@@ -530,6 +614,7 @@ class _TreeState:
         async with self.run_lock:
             self.run_refs.append(run_id)
             self.run_terminal_events[run_id] = asyncio.Event()
+            self.run_completions[run_id] = _TerminalCompletion()
 
     async def next_provider_request_sequence(
         self, bounds: ProviderRequestBounds | None = None
@@ -769,15 +854,24 @@ class _DispatchGuardedModel(WrapperModel):
             )
         binding = self._run_deps.model_profile.binding
         if (
-            binding.request_target.billing_basis == BillingBasis.METERED
+            isinstance(binding.request_target, ProviderRequestTarget)
+            and binding.request_target.billing_basis == BillingBasis.METERED
             and binding.request_target.pricing_revision_id is None
             and state.task.effective_budget.cost_safety_limit_microusd is not None
         ):
             raise CostSafetyCeilingExceeded(
                 "a dollar ceiling cannot be enforced for an unpriced target"
             )
+        managed = isinstance(binding.real_model_admission, ManagedModelAdmission)
+        if binding.supervision is not None:
+            if str(binding.supervision.semantic_task_id) != state.task.task_input.task_id:
+                raise AccountingPersistenceError("supervision names another task")
+            if datetime.now(UTC) >= binding.supervision.deadline:
+                raise UsageLimitExceeded("supervised dispatch deadline elapsed")
         maximum_output_tokens = min(
-            binding.request_target.max_output_tokens_per_request,
+            binding.request_target.max_output_tokens_per_request
+            if isinstance(binding.request_target, ProviderRequestTarget)
+            else cast(SupervisedQualification, binding.supervision).reported_generated_token_stop,
             state.task.effective_budget.output_token_limit,
         )
         bounded_model_settings = cast(ModelSettings, dict(model_settings or {}))
@@ -787,17 +881,18 @@ class _DispatchGuardedModel(WrapperModel):
                 maximum_output_tokens,
                 configured_max_tokens,
             )
-        bounded_model_settings["max_tokens"] = maximum_output_tokens
+        if not managed:
+            bounded_model_settings["max_tokens"] = maximum_output_tokens
         bounds = (
             ProviderRequestBounds(
-                input_tokens=binding.request_target.max_input_tokens_per_request,
+                input_tokens=cast(ProviderRequestTarget, binding.request_target).max_input_tokens_per_request,
                 output_tokens=maximum_output_tokens,
             )
-            if binding.real_model_admission is not None
+            if isinstance(binding.real_model_admission, RealModelAdmission)
             else None
         )
         sequence = await state.next_provider_request_sequence(bounds)
-        intent = ProviderRequestIntent(
+        intent_values: dict[str, Any] = dict(
             request_id=request_id,
             tenant_id=authorization.tenant_id,
             workspace_id=authorization.workspace_id,
@@ -824,14 +919,26 @@ class _DispatchGuardedModel(WrapperModel):
             conservative_reservation_microunits=(
                 binding.conservative_reservation_microunits
             ),
-            max_input_tokens=(binding.request_target.max_input_tokens_per_request),
-            max_output_tokens=maximum_output_tokens,
+            max_input_tokens=(binding.request_target.max_input_tokens_per_request if isinstance(binding.request_target, ProviderRequestTarget) else None),
+            max_output_tokens=maximum_output_tokens if not managed else None,
             request_payload_hash=_provider_request_payload_hash(
                 messages,
                 bounded_model_settings,
                 model_request_parameters,
             ),
         )
+        if managed:
+            # Null bounds deny any claim of enforcing hidden token/cash ceilings.
+            intent_values.update(safety_ceiling_microunits=None,
+                                 supervision=binding.supervision,
+                                 qualification_revision=cast(ManagedModelAdmission, binding.real_model_admission).qualification_revision)
+            intent: ProviderRequestIntent = ManagedDispatchIntent(**intent_values)
+        elif binding.supervision is not None:
+            intent_values.update(supervision=binding.supervision,
+                                 qualification_revision=cast(RealModelAdmission, binding.real_model_admission).qualification_revision)
+            intent = SupervisedRequestIntent(**intent_values)
+        else:
+            intent = ProviderRequestIntent(**intent_values)
         await state.deps.model_accounting.record_intent(intent)
         # Cancellation may arrive while the durable intent is being committed.
         # Keep that intent accountable, but do not start another model call.
@@ -852,9 +959,28 @@ class _DispatchGuardedModel(WrapperModel):
                     package=cast(ClassificationExecutionInput, state.task.task_input).payload.package, read=evidence))
             await state.require_dispatch_open()
             state.classification_request = (request_id, intent.request_payload_hash)
+        observation: ManagedUsageObservation | None = None
         try:
-            if bounds is not None:
-                assert binding.real_model_admission is not None
+            if managed:
+                admission = cast(ManagedModelAdmission, binding.real_model_admission)
+                turn = await admission.model.request_managed(
+                    messages, bounded_model_settings, model_request_parameters,
+                    cast(SupervisedQualification, binding.supervision),
+                )
+                observation = turn.observation
+                response = turn.response
+                total, _ = observation.accounted_total()
+                # PydanticAI's scratch counters track observable model calls only.
+                # The durable observation retains unknowns and inference-count basis.
+                response.usage = RequestUsage(
+                    input_tokens=total.input_tokens if total else 0,
+                    output_tokens=total.output_tokens if total else 0,
+                    cache_read_tokens=total.cached_input_tokens if total else 0,
+                    cache_write_tokens=total.cache_write_tokens if total else 0,
+                    details={"reasoning_tokens": total.reasoning_tokens} if total else {},
+                )
+            elif bounds is not None:
+                assert isinstance(binding.real_model_admission, RealModelAdmission)
                 response = await binding.real_model_admission.model.request_bounded(
                     messages, bounded_model_settings, model_request_parameters, bounds
                 )
@@ -866,8 +992,8 @@ class _DispatchGuardedModel(WrapperModel):
                 )
         except asyncio.CancelledError:
             await state.deps.model_accounting.append_usage(
-                _request_usage_event(
-                    request_id,
+                _dispatch_usage_event(
+                    request_id, managed=managed, observation=observation,
                     event_kind=UsageEventKind.REQUEST_CANCELLED,
                     outcome=RequestOutcome.CANCELLED,
                     response=None,
@@ -877,8 +1003,8 @@ class _DispatchGuardedModel(WrapperModel):
             raise
         except Exception:
             await state.deps.model_accounting.append_usage(
-                _request_usage_event(
-                    request_id,
+                _dispatch_usage_event(
+                    request_id, managed=managed, observation=observation,
                     event_kind=UsageEventKind.REQUEST_FAILED,
                     outcome=RequestOutcome.FAILED,
                     response=None,
@@ -893,8 +1019,8 @@ class _DispatchGuardedModel(WrapperModel):
             state.deps.cancellation.is_cancelled() and not late_lease_return
         )
         await state.deps.model_accounting.append_usage(
-            _request_usage_event(
-                request_id,
+            _dispatch_usage_event(
+                request_id, managed=managed, observation=observation,
                 event_kind=(
                     UsageEventKind.LEASE_LOST_RETURN
                     if late_lease_return
@@ -935,6 +1061,19 @@ class _DispatchGuardedModel(WrapperModel):
             state.usage.requests += 1
             state.usage.incr(response.usage)
             raise UsageLimitExceeded("provider exceeded admitted request bounds")
+        if managed:
+            assert observation is not None and binding.supervision is not None
+            total, provenance = observation.accounted_total()
+            if (observation.turn_completion != "completed" or total is None
+                or provenance != UsageProvenance.PROVIDER_REPORTED
+                or total.input_tokens >= binding.supervision.reported_input_token_stop
+                or total.output_tokens >= binding.supervision.reported_generated_token_stop):
+                state.usage.requests += 1
+                state.usage.incr(response.usage)
+                raise UsageLimitExceeded("managed turn incomplete, usage unavailable or reported stop reached")
+            state.reserved_requests += 1
+            state.reserved_input_tokens += total.input_tokens
+            state.reserved_output_tokens += total.output_tokens
         if exposed_window is not None:
             await state.require_dispatch_open()
             assert state.deps.exposure_recorder is not None
@@ -1195,6 +1334,10 @@ class PydanticAISemanticExecutor:
             self._validate_resolved_task(erased_task, deps, composition)
             binding, model_profile = self._resolve_root_binding(erased_task)
             self._validate_safety_ceiling(task.effective_budget)
+            supervision = model_profile.binding.supervision
+            if supervision is not None:
+                effective_deadline_ns = min(effective_deadline_ns, time.monotonic_ns() + int(
+                    (supervision.deadline - datetime.now(UTC)).total_seconds() * 1_000_000_000))
             state = _TreeState(
                 executor=self,
                 task=erased_task,
@@ -2063,6 +2206,7 @@ class PydanticAISemanticExecutor:
                 pass
             raise
         except EventSinkError:
+            await self._emit_delegation_finished(state, correlation)
             raise
         except (_TreeFailureError, UsageLimitExceeded, RunCancelled):
             await self._emit_delegation_finished(state, correlation)
@@ -2332,7 +2476,11 @@ class PydanticAISemanticExecutor:
                 "runtime.event_sink_failed",
             )
             await state.set_terminal(failure)
-            raise EventSinkError from error
+            sink_error = EventSinkError()
+            completion = state.run_completions.get(correlation.run_id)
+            if completion is not None:
+                completion.finish(sink_error)
+            raise sink_error from error
 
     async def _emit_run_failed(
         self,
@@ -2367,23 +2515,41 @@ class PydanticAISemanticExecutor:
                 correlation, SemanticRootRunCorrelation
             ):
                 await state.delegations_closed.wait()
+                if state.delegation_errors:
+                    raise state.delegation_errors[0]
             if event_kind is SemanticRunEventKind.DELEGATION_FINISHED:
-                terminal = state.run_terminal_events.get(correlation.run_id)
-                if correlation.run_id in state.started_run_ids and terminal is not None:
-                    await terminal.wait()
-            await self._emit(
-                state,
-                event_kind,
-                correlation,
-            )
+                completion = state.run_completions.get(correlation.run_id)
+                if completion is not None and (
+                    correlation.run_id in state.started_run_ids
+                    or completion.settled.is_set()
+                ):
+                    await completion.wait()
+            await self._emit(state, event_kind, correlation)
+
+        def retire_terminal_event(task: asyncio.Task[None]) -> None:
+            # Retrieve and retain the outcome before retiring ownership, including
+            # cancellation before the coroutine starts or after its caller leaves.
+            error: BaseException | None = None
+            try:
+                task.result()
+            except BaseException as caught:
+                error = caught
+                state.terminal_event_errors.append(caught)
             if event_kind is SemanticRunEventKind.DELEGATION_FINISHED:
+                if error is not None:
+                    state.delegation_errors.append(error)
                 state.open_delegations -= 1
                 if state.open_delegations == 0:
                     state.delegations_closed.set()
+            else:
+                completion = state.run_completions.get(correlation.run_id)
+                if completion is not None:
+                    completion.finish(error)
+            state.pending_terminal_event_tasks.discard(task)
 
         event_task = asyncio.create_task(append_terminal_event())
         state.pending_terminal_event_tasks.add(event_task)
-        event_task.add_done_callback(state.pending_terminal_event_tasks.discard)
+        event_task.add_done_callback(retire_terminal_event)
         try:
             await asyncio.shield(event_task)
         except asyncio.CancelledError:
@@ -2711,6 +2877,30 @@ def _request_usage_event(
     )
 
 
+def _dispatch_usage_event(
+    request_id: UUID, *, managed: bool, observation: ManagedUsageObservation | None,
+    event_kind: UsageEventKind, outcome: RequestOutcome, response: ModelResponse | None,
+    diagnostic_code: str | None, usage_provenance: UsageProvenance = UsageProvenance.UNAVAILABLE,
+) -> ModelUsageEvent:
+    if not managed:
+        return _request_usage_event(request_id, event_kind=event_kind, outcome=outcome,
+                                    response=response, diagnostic_code=diagnostic_code,
+                                    usage_provenance=usage_provenance)
+    observed = observation or ManagedUsageObservation()
+    total, provenance = observed.accounted_total()
+    if outcome == RequestOutcome.SUCCEEDED:
+        event_kind = UsageEventKind.USAGE_REPORTED if total is not None else UsageEventKind.USAGE_UNAVAILABLE
+    event_id = uuid4()
+    return ManagedUsageEvent(
+        event_id=event_id, request_id=request_id,
+        dedupe_key=hashlib.sha256(f"{request_id}:{event_kind}:{event_id}".encode()).hexdigest(),
+        event_kind=event_kind, outcome=outcome,
+        usage_state=UsageState.REPORTED if total is not None else UsageState.UNAVAILABLE,
+        usage_provenance=provenance, usage=total, observation=observed,
+        diagnostic_code=diagnostic_code,
+    )
+
+
 def _consume_detached_task(task: asyncio.Task[Any]) -> None:
     try:
         task.result()
@@ -2889,6 +3079,9 @@ __all__ = (
     "EvidenceToolResult",
     "LeafAgentSpec",
     "ModelProfileBinding",
+    "ManagedModelAdmission",
+    "ManagedProviderModel",
+    "ManagedTurnResult",
     "ProviderRequestBounds",
     "RealModelAdmission",
     "PydanticAIAgentRegistry",

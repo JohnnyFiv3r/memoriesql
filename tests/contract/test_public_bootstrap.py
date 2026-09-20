@@ -47,8 +47,8 @@ class PublicBootstrapTests(unittest.TestCase):
 
     def test_registry_is_explicit_complete_and_default_deny(self) -> None:
         records = load_registry()
-        self.assertEqual(len(records), 60)
-        self.assertEqual(len({record["id"] for record in records}), 60)
+        self.assertEqual(len(records), 61)
+        self.assertEqual(len({record["id"] for record in records}), 61)
         catalogs = load_catalog_definitions()
         self.assertEqual(tuple(item.kind for item in catalogs), CATALOG_KINDS)
         counts = {item.kind: 0 for item in catalogs}
@@ -56,10 +56,10 @@ class PublicBootstrapTests(unittest.TestCase):
             counts[str(record["catalog"])] += 1
             self.assertEqual(record["classification"], "proposed_open_core")
             self.assertEqual(record["package_disposition"], "include")
-        self.assertEqual(counts["json_schema"], 54)
+        self.assertEqual(counts["json_schema"], 55)
         self.assertEqual(counts["python"], 5)
         self.assertEqual(counts["connector"], 1)
-        self.assertEqual(sum(counts.values()), 60)
+        self.assertEqual(sum(counts.values()), 61)
 
     def test_generated_catalogs_have_no_drift(self) -> None:
         for path, expected in expected_outputs().items():
@@ -67,17 +67,18 @@ class PublicBootstrapTests(unittest.TestCase):
 
     def test_boundary_scan_is_clean(self) -> None:
         result = verify()
-        self.assertEqual(result["record_count"], 60)
+        self.assertEqual(result["record_count"], 61)
         self.assertEqual(result["default_policy"], "deny")
         self.assertEqual(result["private_boundary_leaks"], [])
 
     def test_public_docs_state_scope_and_compatibility(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         package_readme = (ROOT / "PYPI_README.md").read_text(encoding="utf-8")
-        combined = readme + "\n" + package_readme
+        combined = " ".join((readme + "\n" + package_readme).split())
         for expected in (
-            "49 provider-neutral",
-            "12 experimental",
+            "local-first memory foundation",
+            "PostgreSQL",
+            "structured observations",
             "no general compatibility guarantee",
             "new contract version",
             "new distribution version",
@@ -182,6 +183,7 @@ class PublicBootstrapTests(unittest.TestCase):
                 "contracts/records/memoriesql-source-revisiting-v1.json",
                 "contracts/records/memoriesql-source-stable-identity-v1.json",
                 "contracts/records/memoriesql-declared-evidence-scope-v1.json",
+                "contracts/records/memoriesql-supervised-dispatch-v1.json",
                 "contracts/records/memoriesql-local-entity-mentions-v1.json",
                 "contracts/records/memoriesql-bead-classification-v1.json",
                 "contracts/records/memoriesql-stored-bead-inspection-v1.json",

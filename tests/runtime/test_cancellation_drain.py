@@ -337,6 +337,48 @@ class CancellationDrain(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.worker._event_writes, set())
         self.assertIsNone(self.worker._cleanup_heartbeat)
 
+    async def test_rejected_started_terminal_write_keeps_cleanup_and_late_usage(self) -> None:
+        entered = threading.Event()
+        release = threading.Event()
+
+        def write(*args: Any, **kwargs: Any) -> bool:
+            if args[1].event_kind == "run.failed":
+                entered.set()
+                if not release.wait(3):
+                    raise AssertionError("test did not release rejected write")
+                return False  # The real worker sink rejects this durable fence.
+            return True
+
+        self.worker._record_run_event = Mock(side_effect=write)
+        try:
+            await self.cancel_foreground()
+            self.release.set()
+            self.assertTrue(await asyncio.to_thread(entered.wait, 2))
+            for _ in range(2):
+                observer = asyncio.create_task(self.worker.wait_for_cleanup())
+                await asyncio.sleep(0)
+                observer.cancel()
+                with self.assertRaises(asyncio.CancelledError):
+                    await observer
+            pending = await self.worker.run_once()
+            self.assertEqual(pending.cycle_status, "cleanup_pending")
+            self.assertEqual(self.worker._claim.call_count, 1)
+            self.assertTrue(self.worker._event_writes)
+            self.assertFalse(self.worker._cleanup_heartbeat.done())
+            self.assertEqual(self.worker._persist_result.call_count, 0)
+        finally:
+            release.set()
+        receipt = await asyncio.wait_for(self.worker.wait_for_cleanup(), 2)
+        self.assertNotEqual(receipt.task_status, "succeeded")
+        self.assertEqual(self.worker._event_writes, set())
+        self.assertIsNone(self.worker._cleanup_heartbeat)
+        self.assertEqual(self.worker._persist_result.call_count, 1)
+        self.assertEqual(self.model_returns, 1)
+        self.assertEqual(len(self.ports.intents), 1)
+        self.assertEqual(len(self.ports.usages), 1)
+        self.assertEqual(self.ports.usages[0].usage.input_tokens, 11)
+        self.assertEqual(self.ports.usages[0].usage.output_tokens, 7)
+
     async def test_settlement_failure_is_observable_and_not_retried(self) -> None:
         self.settlement_error = True
         await self.cancel_foreground()

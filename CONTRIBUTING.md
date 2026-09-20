@@ -1,6 +1,10 @@
 # Contributing
 
-The current repository is a private review stage for a proposed public open-core project. Contributions should remain inside the provider-neutral contract-catalog boundary described in [Repository boundary](docs/architecture/repository-boundary.md).
+This is the public memoriesQL open-core repository. Contributions may extend its
+provider-neutral contracts, canonical PostgreSQL schema and runtime within the
+explicit [repository boundary](docs/architecture/repository-boundary.md). Desktop
+product code, source-specific acquisition/parsing and provider bindings belong
+outside this repository. Read [AGENTS.md](AGENTS.md) before making changes.
 
 ## Developer Certificate of Origin
 

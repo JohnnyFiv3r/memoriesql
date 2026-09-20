@@ -103,8 +103,8 @@
       "base_public_sha256": "128ed9d1f283b82f82ab9bddc706286d10783a43a467f235c180998e4e398c0e",
       "disposition": "public-forward",
       "public_path": "src/memoriesql/infrastructure/postgres/migration_runner.py",
-      "public_sha256": "8a432e1afcaf6625b228bc1e4632aa1eb0d04af4b573694a63c0d6acf8a5775f",
-      "reason": "Explicit schema-25 packaged stream count; existing migration behavior preserved.",
+      "public_sha256": "aa270bb375b0c03baf217adf2bca27a36b4eafb6227c4041202e54aa89c13725",
+      "reason": "Explicit schema-26 packaged stream count; existing migration behavior preserved.",
       "source_sha256": "10841bd32cad98d969faf588c5eeff862a4b1dabefc12a4390f72341567c6b22"
     },
     {
@@ -181,6 +181,14 @@
       "public_path": "migrations/0025_declared_evidence_scopes.sql",
       "public_sha256": "04d4ca7bc5f91871a2b6b37299b3f0d2323cda059b9530eecfcee9b27206879c",
       "reason": "Public-authored declared-scope forward transition; no private extraction.",
+      "source_path": null,
+      "source_sha256": null
+    },
+    {
+      "disposition": "public",
+      "public_path": "migrations/0026_supervised_managed_dispatch.sql",
+      "public_sha256": "0479a1e5ef462250e1b4f3652a7755ae4ff638b82b805a3a9d185ea107ebe000",
+      "reason": "Public-authored supervised qualification and truthful dispatch accounting; no private extraction.",
       "source_path": null,
       "source_sha256": null
     }
