@@ -1,6 +1,6 @@
 # Stored bead inspection v1
 
-The prepared 0.0.8 candidate includes the merged Q schema-24 read slice and P's
+Published 0.0.8 includes the merged Q schema-24 read slice and P's
 schema-22/23 mention/classification writes. This read slice adds no canonical
 writes, model calls, classification decisions, provider binding or private
 consumption. Release preparation does not publish or establish Desktop readiness.

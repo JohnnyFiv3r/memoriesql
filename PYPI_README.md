@@ -16,12 +16,13 @@ qualification, authority, worker composition and qualified model bindings.
 
 ## Install and explore
 
-Use Python **3.13 or 3.14** (`>=3.13,<3.15`). The published runtime is pinned here;
-features described only on the repository's development branch may require a
-later release.
+Use Python **3.13 or 3.14** (`>=3.13,<3.15`). This page describes the 0.0.9 distribution.
+Until its publication is independently verified, use the reviewed local wheel;
+after publication, install the exact pin below. Published 0.0.8 remains available
+without the new schema 25/26 capabilities.
 
 ```console
-python3.13 -m pip install memoriesql==0.0.8
+python3.13 -m pip install memoriesql==0.0.9
 memoriesql --version
 memoriesql contracts --json
 memoriesql contract memoriesql.capture.connector-cursor --json
@@ -53,12 +54,13 @@ attribution, conditions and uncertainty. Its short title and summary are human
 navigation, not replacement evidence. Meaning is authored by an agent or human;
 deterministic code validates and persists it.
 
-Version 0.0.8 includes the hard-bounded model-admission interface but no qualified
-provider adapter. Declared evidence scopes are implemented in development source,
-not this published version. Development also adds an explicit supervised managed
-dispatch interface with durable allowances and truthful usage accounting; it
-includes no provider adapter or live-call permission. No live-provider semantic-quality, production recall
-or complete-input correction/reauthoring capability is claimed.
+Version 0.0.9 combines declared evidence scopes (schema 25), explicit supervised
+managed dispatch (schema 26), and terminal-failure cleanup that retains errors
+without claiming a failed write persisted. Hard-bounded model admission remains
+the default; supervised managed dispatch requires separate exact approval and
+records its allowances and reported or unavailable usage truthfully. The package
+supplies no provider adapter or live-call permission. No live-provider semantic
+quality, production recall or complete-input correction/reauthoring is claimed.
 
 ## Explicit composition, not automatic setup
 

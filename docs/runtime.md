@@ -3,7 +3,8 @@
 Published 0.0.8 includes schemas 1–24, stored-result inspection and the explicit
 hard-bounded model-admission interface. Development adds declared evidence scopes
 (schema 25) and [supervised managed dispatch](supervised-dispatch.md) (schema 26).
-Those changes are unreleased. Installing or upgrading does not provision trust,
+Those changes and the terminal-settlement repair are included in the prepared
+0.0.9 candidate; publication remains gated. Installing or upgrading does not provision trust,
 activate tasks or configure a provider. See [explicit caller composition](releasing.md#caller-composition-and-explicit-opt-in).
 
 ## Historical N2 extraction scope

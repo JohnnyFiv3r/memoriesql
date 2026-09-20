@@ -49,7 +49,7 @@ def main() -> None:
         )
 
         installed = distribution("memoriesql")
-        assert installed.version == __version__ == "0.0.8"
+        assert installed.version == __version__ == "0.0.9"
         owned = {
             Path(str(installed.locate_file(p))).resolve() for p in installed.files or ()
         }
@@ -105,7 +105,7 @@ def main() -> None:
                 cli(["--version"])
             except SystemExit as result:
                 assert result.code == 0
-        assert output.getvalue().strip() == "0.0.8"
+        assert output.getvalue().strip() == "0.0.9"
     print(
         json.dumps(
             {

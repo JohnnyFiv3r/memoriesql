@@ -1,4 +1,4 @@
-# Supervised managed dispatch (unreleased)
+# Supervised managed dispatch (prepared for 0.0.9)
 
 Schema 26 and `memoriesql.supervised-dispatch.v1` add an explicit qualification
 profile for a host-visible managed turn whose underlying inference requests cannot

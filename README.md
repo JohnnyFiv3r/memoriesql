@@ -113,13 +113,15 @@ rollback or final usage reconciliation.
 - **Published:** [0.0.8](https://pypi.org/project/memoriesql/0.0.8/) contains the
   canonical runtime, evidence recovery/revisiting, local mentions, classification,
   stored-result inspection and hard-bounded model-admission interface.
-- **Implemented on main, not yet published:** [declared evidence scopes](docs/declared-evidence-scopes.md)
+- **Prepared for 0.0.9, not yet published:** [declared evidence scopes](docs/declared-evidence-scopes.md)
   let a qualified producer bind complete retained records without claiming a
   native turn or complete episode. This is not included in the installation above.
-- **Unreleased opt-in:** [supervised managed dispatch](docs/supervised-dispatch.md)
+- **Prepared 0.0.9 opt-in:** [supervised managed dispatch](docs/supervised-dispatch.md)
   distinguishes an observable turn from unknown hidden inference requests, consumes
   approval before dispatch and retains reported or unavailable usage truthfully.
   It supplies no provider adapter or live-call authorization.
+- **Also prepared for 0.0.9:** terminal-write failures settle dependent cleanup
+  with retained errors, while started writes and late usage remain owned.
 - **Not yet qualified as an end-to-end product:** live-provider composition,
   real-model observation quality, production source/trust provisioning and recall.
 

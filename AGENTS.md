@@ -43,3 +43,13 @@ truthful guidance may change. Preserve runtime behavior, all SQL 0001–0024,
 PR and creating/pushing v0.0.8 once at verified release main after all required
 checks. Stop at the protected approval gate; never approve upload. Publication
 protected approval and private consumption remain separate.
+
+The owner-authorized 0.0.9 preparation starts from merged main
+`aff4270a549f7618d99db3735020ccb2785f32f1`. Preserve runtime behavior, all 26
+migrations, 61 contracts, dependencies and historical release inventories. Release
+metadata, exact publication controls, a new immutable inventory, focused tests and
+truthful guidance may change. The owner authorizes the qualified release-PR merge
+and one v0.0.9 tag push at subsequently verified release main, after current
+publisher/protection checks. Stop at actual owner-only protected publish approval;
+never approve or bypass upload. This does not authorize private adoption, provider
+calls, migration, deployment or checkpoint execution.
