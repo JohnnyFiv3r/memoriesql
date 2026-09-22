@@ -83,8 +83,9 @@ with measured 0.010/0.009-ms execution on the small fictional fixture. Correctio
 affect only the new migration; published SQL and records are unchanged. Final-head hosted
 CI is pending at this writing. The separate candidate inventory was retired from the repository on 2026-09-22; its
 unchanged 0.0.6 development metadata never authorized replacing the published release. Publication workflow,
-release verification controls, published archives and historical inventories remain
-unchanged. CI compares the unreleased candidate to its own inventory.
+release verification controls and published archives remained unchanged; at the time
+CI compared the unreleased candidate to its own inventory, which has since been
+retired.
 
 No private provider code, fixtures or evidence is exported. No real provider,
 owner data, production policy, deployment, checkpoints, P/Q, release-version
