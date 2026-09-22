@@ -12,6 +12,7 @@ from typing import Any, Never, Protocol, cast
 from uuid import UUID
 
 from psycopg import Connection
+from psycopg import errors as psycopg_errors
 from pydantic import BaseModel, ValidationError
 
 from memoriesql.application.complete_input_execution import (
@@ -1035,6 +1036,23 @@ class IntegratedSemanticWorker:
         if persist_cancellation is not None:
             raise persist_cancellation
         if persist_outcome.error is not None:
+            if result.status == SemanticResultStatus.SUCCEEDED and isinstance(
+                persist_outcome.error, psycopg_errors.DataError
+            ):
+                # Canonical apply refused the authored output with a data error
+                # (the contract functions raise class 22, such as
+                # `semantic statement run is unavailable`). That refusal is
+                # deterministic and never retried, so settle the attempt as
+                # invalid output now instead of leaving it running for the
+                # reaper. Privilege and transport errors keep the existing path:
+                # they are authorization or infrastructure failures, not output.
+                return await self._settle_preflight_failure_off_loop(
+                    claimed,
+                    readiness,
+                    error_code="worker.canonical_apply_refused",
+                    output_contract_hash=definition.output_contract.schema_hash,
+                    status=SemanticResultStatus.INVALID_OUTPUT,
+                )
             raise persist_outcome.error
         assert persist_outcome.value is not None
         persisted = persist_outcome.value

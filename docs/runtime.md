@@ -202,3 +202,22 @@ source rereads and unique mandatory exposure through the existing execution path
 Historical task revisions and SQL 0001–0019 remain unchanged. See the
 [source-revisiting contract](source-revisiting.md). No production trust/provider composition
 or implicit migration of existing execution bindings is supplied.
+
+## Run references and canonical-apply refusals
+
+A statement's `model_run_ref` is provenance the executor mints for the run
+that authored it, never an identifier present in the source, so a model
+cannot reliably reproduce it. For single-run trees the executor binds every
+authored statement to its own run reference before the output is hashed and
+records `runtime.run_reference` (`stamped` when an authored value differed,
+`authored` otherwise). Multi-run trees keep authored references and the apply
+command still verifies membership.
+
+When canonical apply refuses a succeeded result with a database data error
+(SQLSTATE class 22, which the contract functions raise for validation
+refusals such as `semantic statement run is unavailable`), the worker settles
+the attempt as `invalid_output` with error code
+`worker.canonical_apply_refused` and returns a settled receipt. The refusal is
+deterministic and never retried; the attempt no longer stays `running` for the
+reaper, and callers see the outcome in canonical rows. Privilege and transport
+errors are not output refusals and keep their existing handling.

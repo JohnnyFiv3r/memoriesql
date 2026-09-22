@@ -165,19 +165,19 @@ class RetryClass(StrEnum):
     STALE = "stale"
 
 
-RESULT_STATUS_RETRY_POLICY: Mapping[
-    SemanticResultStatus, RetryClass | None
-] = MappingProxyType(
-    {
-        SemanticResultStatus.SUCCEEDED: None,
-        SemanticResultStatus.UNAVAILABLE: RetryClass.TRANSIENT,
-        SemanticResultStatus.BUDGET_EXHAUSTED: RetryClass.NEVER,
-        SemanticResultStatus.CANCELLED: RetryClass.NEVER,
-        SemanticResultStatus.INVALID_OUTPUT: RetryClass.NEVER,
-        SemanticResultStatus.STALE_INPUT: RetryClass.STALE,
-        SemanticResultStatus.POLICY_PAUSED: RetryClass.POLICY,
-        SemanticResultStatus.FAILED: RetryClass.NEVER,
-    }
+RESULT_STATUS_RETRY_POLICY: Mapping[SemanticResultStatus, RetryClass | None] = (
+    MappingProxyType(
+        {
+            SemanticResultStatus.SUCCEEDED: None,
+            SemanticResultStatus.UNAVAILABLE: RetryClass.TRANSIENT,
+            SemanticResultStatus.BUDGET_EXHAUSTED: RetryClass.NEVER,
+            SemanticResultStatus.CANCELLED: RetryClass.NEVER,
+            SemanticResultStatus.INVALID_OUTPUT: RetryClass.NEVER,
+            SemanticResultStatus.STALE_INPUT: RetryClass.STALE,
+            SemanticResultStatus.POLICY_PAUSED: RetryClass.POLICY,
+            SemanticResultStatus.FAILED: RetryClass.NEVER,
+        }
+    )
 )
 
 
@@ -304,6 +304,48 @@ class ValidationResult(FrozenContractModel):
     code: str = Field(pattern=IDENTIFIER_PATTERN.pattern)
 
 
+def stamp_statement_run_reference[OutputT: BaseModel](
+    output: OutputT, run_ref: str
+) -> tuple[OutputT, bool]:
+    """Bind every authored statement to the host-assigned run reference.
+
+    A run reference is provenance minted by the executor, never an identifier
+    present in the source, so a model cannot reliably reproduce it. Outputs
+    shaped as ``annotations[*].statements[*].model_run_ref`` are rebound before
+    hashing and persistence; other outputs are returned unchanged. The second
+    value reports whether any authored value differed.
+    """
+    annotations = getattr(output, "annotations", None)
+    if not isinstance(annotations, tuple):
+        return output, False
+    changed = False
+    rebuilt: list[Any] = []
+    for annotation in annotations:
+        statements = getattr(annotation, "statements", None)
+        if not isinstance(statements, tuple):
+            rebuilt.append(annotation)
+            continue
+        replaced: list[Any] = []
+        annotation_changed = False
+        for statement in statements:
+            current = getattr(statement, "model_run_ref", None)
+            if isinstance(current, str) and current != run_ref:
+                replaced.append(statement.model_copy(update={"model_run_ref": run_ref}))
+                annotation_changed = True
+            else:
+                replaced.append(statement)
+        if annotation_changed:
+            changed = True
+            rebuilt.append(
+                annotation.model_copy(update={"statements": tuple(replaced)})
+            )
+        else:
+            rebuilt.append(annotation)
+    if not changed:
+        return output, False
+    return output.model_copy(update={"annotations": tuple(rebuilt)}), True
+
+
 class SemanticTaskResult[OutputT: BaseModel](FrozenContractModel):
     status: SemanticResultStatus
     task_id: str = Field(min_length=1)
@@ -345,8 +387,7 @@ class SemanticTaskResult[OutputT: BaseModel](FrozenContractModel):
                 raise ValueError("non-success results require error_code")
             if self.retry_class != expected_retry_class:
                 raise ValueError(
-                    f"{self.status} results require retry_class="
-                    f"{expected_retry_class}"
+                    f"{self.status} results require retry_class={expected_retry_class}"
                 )
         if len(self.used_evidence_refs) != len(set(self.used_evidence_refs)):
             raise ValueError("used evidence references must be unique")
@@ -633,9 +674,7 @@ class SemanticTaskResultAcceptanceError(ValueError):
         super().__init__(f"{code.value}: {detail}")
 
 
-def _validate_semantic_task_dependencies[
-    InputT: BaseModel, OutputT: BaseModel
-](
+def _validate_semantic_task_dependencies[InputT: BaseModel, OutputT: BaseModel](
     task: ResolvedSemanticTask[InputT, OutputT],
     deps: SemanticRunDeps,
 ) -> None:
