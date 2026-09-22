@@ -4,7 +4,7 @@
       "classification": "proposed_open_core",
       "license": "Apache-2.0",
       "public_path": ".github/workflows/python-package.yml",
-      "public_sha256": "66142339664b9535c577b4d980b7bdc70019c7aba741cd953e38377e958a9f0a",
+      "public_sha256": "442a94bb1a4fb87a197a5da4ad717021c11970a0c3680ab178d189cd29cfffe6",
       "reason": "Reviewed packaging-spike input ported or adapted for the public bootstrap.",
       "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
       "reviewed_spike_source_sha256": "e1aea0a0ef2e13647d18eacdfb3753b8ee5ea93956724a23d1617496db722b1b"
@@ -876,7 +876,7 @@
       "classification": "public_bootstrap",
       "license": "Apache-2.0",
       "public_path": "tests/contract/test_public_bootstrap.py",
-      "public_sha256": "021c7dbac6da4f4097b70364e30ef270ced4458a8709515aecaf41e5050edc39",
+      "public_sha256": "ff15b16fcb0d84abbd1127ece2f39c1d7d9fa1f3751ae60ca8a502704f34d1d0",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {

@@ -136,26 +136,25 @@ class PublicBootstrapTests(unittest.TestCase):
         workflow = (ROOT / ".github/workflows/python-package.yml").read_text()
         publishing = (ROOT / ".github/workflows/publish-pypi.yml").read_text()
         self.assertIn("inspect_python_distribution.py build/dist-a", workflow)
-        self.assertIn("verify_release.py source build/published-0.0.7", workflow)
-        self.assertIn("ref: 1e611c2a426684a6ede479e06e21a123a964a818", workflow)
+        # Only the current release is verified in CI; historical baselines are
+        # reproduced manually with `verify_release.py source` when needed.
+        self.assertNotIn("published-0.0.7", workflow)
+        self.assertNotIn("verify_release.py source", workflow)
         self.assertIn("--check-inventory", workflow)
         self.assertIn("--source-commit", workflow)
         self.assertNotIn("verify_release.py artifacts build/dist-a", workflow)
         self.assertIn("verify_release.py artifacts", publishing)
         self.assertIn('tags: ["v0.0.9"]', publishing)
 
-    def test_older_python_fallback_keeps_historical_prerelease_eligible(self) -> None:
+    def test_ci_verifies_only_current_release_and_supported_interpreters(self) -> None:
         workflow = (ROOT / ".github/workflows/python-package.yml").read_text()
-        older_python = workflow.split("  older-python:")[1]
-        self.assertIn(
-            "pip install --pre --no-index --find-links candidates memoriesql",
-            older_python,
-        )
-        self.assertIn("memoriesql==0.0.1a1", older_python)
-        self.assertIn(
-            "pip install --no-deps candidates/memoriesql-0.0.9-py3-none-any.whl",
-            older_python,
-        )
+        # No historical lanes: the unsupported-interpreter catalog fallback and
+        # the frozen-source reproduction were retired on 2026-09-22.
+        self.assertNotIn("older-python", workflow)
+        self.assertNotIn("0.0.1a1", workflow)
+        self.assertNotIn("published-0.0.7", workflow)
+        compatibility = workflow.split("  compatibility:")[1]
+        self.assertIn('python-version: ["3.13", "3.14"]', compatibility)
 
     def test_export_provenance_hashes_are_current(self) -> None:
         manifest = json.loads(
