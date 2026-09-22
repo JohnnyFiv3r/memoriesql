@@ -974,7 +974,7 @@
       "classification": "public-authored",
       "license": "Apache-2.0",
       "public_path": "contracts/runtime-inventory.json",
-      "public_sha256": "0f64b2a466d3ba88e9363b4001dbc7b87c6f34c49877736a904497e628730029",
+      "public_sha256": "b142b7f7536033968de9a98e6f6e77af74f1b85435357a7c03de971e817b12fd",
       "reason": "Public N2 dependency inventory and fictional runtime acceptance."
     },
     {
@@ -1009,7 +1009,7 @@
       "classification": "public-authored",
       "license": "Apache-2.0",
       "public_path": "docs/runtime.md",
-      "public_sha256": "c3351ffa67dfcd9f1e955289680ca5ca8a00bf04a2e0a462e1202b7042640bca",
+      "public_sha256": "b4904e23110240d4c0ae3a28cb1974832a12ca28057b62ce7649bf5789bba212",
       "reason": "Public fictional N2 acceptance and runtime scope documentation."
     },
     {
@@ -1597,7 +1597,7 @@
       "classification": "public_authored",
       "license": "Apache-2.0",
       "public_path": "tests/runtime/test_local_entity_mentions.py",
-      "public_sha256": "832da84d8cea8755bd6a3ca53e2d8bd1a9a62677677c6891e07f199a551b1c33",
+      "public_sha256": "4651671402c6fe6013567b562ead31453eafcc1a20bc2a598df71ae6d96a457b",
       "reason": "Public-authored forward bounded local mention acceptance and fictional verification; no private/provider data."
     },
     {
@@ -1823,6 +1823,13 @@
       "public_path": "tests/fixtures/release-0.0.9-baseline-integrity.json",
       "public_sha256": "ea499ed99bf60b9f432c288ba43b5673afadc8e1b983049a4f15a182741c748d",
       "reason": "Owner-authorized 0.0.9 release inventory and accepted-main integrity baseline; no private export."
+    },
+    {
+      "classification": "public-authored",
+      "license": "Apache-2.0",
+      "public_path": "tests/unit/test_run_reference_stamping.py",
+      "public_sha256": "0fabb0595f261fa4ef3a63083b5135cd24144e8f101a8a88e575480ea292cf93",
+      "reason": "Fictional unit coverage for binding authored statements to the executor's run reference."
     }
   ],
   "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
@@ -2042,7 +2049,7 @@
       "classification": "copy",
       "license": "Apache-2.0",
       "public_path": "src/memoriesql/application/semantic_task_contracts.py",
-      "public_sha256": "c59dae8b094057dc7acbd460c96941b8749b1aec02a2aef4b126b928918e4569",
+      "public_sha256": "8f0376dc206012f061272cf0b6c49555f72ea491b1d5430522f9f36daff4ecbc",
       "reason": "Approved provider-neutral runtime closure; existing behavior unchanged.",
       "source_sha256": "fb3705d479663d1f0703b5c1a87839a5ec42997ad0ddfe86739adb6f587c1fbe"
     },
@@ -2100,7 +2107,7 @@
       "classification": "public-forward",
       "license": "Apache-2.0",
       "public_path": "src/memoriesql/infrastructure/jobs/integrated_semantic_worker.py",
-      "public_sha256": "2af4dcf297014385b89b5a986a098bd5c530ab71d537f66366fb7644c88c8e99",
+      "public_sha256": "ac281b8f848163e3e25d74ccce5db5afba781c332535d48b93b2f34aead37041",
       "reason": "Public-authored cancellation cleanup ownership and post-intent dispatch gate; original N2 extraction hash retained as historical provenance.",
       "source_sha256": "a6b990a6a74461f34e7e757a3e6f7426020f8cef8df4cdbaad2a95f2fcd10398"
     },
@@ -2126,7 +2133,7 @@
       "classification": "public-forward",
       "license": "Apache-2.0",
       "public_path": "src/memoriesql/infrastructure/models/pydanticai_executor.py",
-      "public_sha256": "fd631af6b57b8679d4518216309d66d43db53340b2a695028d1b8a4db829b8d2",
+      "public_sha256": "78d3575d3791ddc2025203319d26e1802ff6d8ba9f1b2f5cd25fe74e99bb9e73",
       "reason": "Public-authored cancellation cleanup ownership and post-intent dispatch gate; original N2 extraction hash retained as historical provenance.",
       "source_sha256": "07d4c861ce40062c227352f6fd240b7445500776ba6216fdd739027020da3b1c"
     },

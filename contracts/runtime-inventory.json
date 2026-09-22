@@ -84,7 +84,7 @@
       "disposition": "public-forward",
       "path": "src/memoriesql/application/semantic_task_contracts.py",
       "reason": "Public forward complete-input execution through the existing worker, executor and canonical sink; legacy contracts retained.",
-      "sha256": "c59dae8b094057dc7acbd460c96941b8749b1aec02a2aef4b126b928918e4569",
+      "sha256": "8f0376dc206012f061272cf0b6c49555f72ea491b1d5430522f9f36daff4ecbc",
       "source_sha256": "fb3705d479663d1f0703b5c1a87839a5ec42997ad0ddfe86739adb6f587c1fbe"
     },
     {
@@ -135,7 +135,7 @@
       "disposition": "adapt",
       "path": "src/memoriesql/infrastructure/jobs/integrated_semantic_worker.py",
       "reason": "Owner-authorized forward classified authorship using existing runtime and fences.",
-      "sha256": "2af4dcf297014385b89b5a986a098bd5c530ab71d537f66366fb7644c88c8e99",
+      "sha256": "ac281b8f848163e3e25d74ccce5db5afba781c332535d48b93b2f34aead37041",
       "source_sha256": "a6b990a6a74461f34e7e757a3e6f7426020f8cef8df4cdbaad2a95f2fcd10398"
     },
     {
@@ -160,7 +160,7 @@
       "disposition": "public-forward",
       "path": "src/memoriesql/infrastructure/models/pydanticai_executor.py",
       "reason": "Explicit managed dispatch opt-in through existing runtime/accounting; default hard-bound behavior preserved.",
-      "sha256": "fd631af6b57b8679d4518216309d66d43db53340b2a695028d1b8a4db829b8d2",
+      "sha256": "78d3575d3791ddc2025203319d26e1802ff6d8ba9f1b2f5cd25fe74e99bb9e73",
       "source_sha256": "07d4c861ce40062c227352f6fd240b7445500776ba6216fdd739027020da3b1c"
     },
     {
