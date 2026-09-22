@@ -1,8 +1,7 @@
-"""Installed-runtime bytes and module ownership are independently checked."""
+"""Installed-runtime module ownership is independently checked."""
 
 from __future__ import annotations
 
-import hashlib
 import importlib
 import importlib.metadata
 import json
@@ -30,9 +29,6 @@ class RuntimeOwnership(unittest.TestCase):
             assert module.__file__ is not None
             origin = Path(module.__file__).resolve()
             self.assertIn(origin, owned)
-            self.assertEqual(
-                hashlib.sha256(origin.read_bytes()).hexdigest(), row["sha256"]
-            )
         self.assertEqual(len(rows), 50)
         self.assertEqual(
             distribution.requires,

@@ -40,7 +40,6 @@ jobs:
           python scripts/verify_public_boundary.py
           python scripts/verify_migration_export.py
           python scripts/verify_runtime_export.py
-          python scripts/verify_export_provenance.py
           python -m unittest discover -v
           python -m compileall -q src scripts tests
       - name: Lint and type-check

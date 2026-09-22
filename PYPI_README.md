@@ -36,8 +36,7 @@ cursor_contract = get_contract("memoriesql.capture.connector-cursor")
 ```
 
 Catalog inspection uses bundled resources without a database, provider credentials
-or external service access. The CLI does not start a memory service. The historical
-`0.0.1a1` catalog-only preview is not a runtime fallback.
+or external service access. The CLI does not start a memory service.
 
 ## What you can build on
 

@@ -24,7 +24,6 @@ from scripts.verify_release import (
     REPOSITORY_ID,
     select_ci_run,
     verify_artifacts,
-    verify_source_bytes,
 )
 
 SHA = "a" * 40
@@ -61,31 +60,14 @@ class ReleaseControlTests(unittest.TestCase):
         for field, wrong in (
             ("sha", "malformed"),
             ("main_sha", "b" * 40),
-            ("tag", "v0.0.1"),
-            ("version", "0.0.1a1"),
-            ("version", "0.0.2"),
-            ("version", "0.0.3"),
-            ("version", "0.0.4"),
-            ("version", "0.0.5"),
-            ("version", "0.0.6"),
-            ("version", "0.0.7"),
-            ("tag", "v0.0.7"),
-            ("tag", "v0.0.6"),
-            ("tag", "v0.0.5"),
-            ("tag", "v0.0.4"),
-            ("tag", "v0.0.3"),
-            ("tag", "v0.0.2"),
+            ("tag", "v0.0.9"),
+            ("tag", "v0.0.11"),
+            ("tag", "v0.0.10rc1"),
             ("version", "0.0.9"),
             ("version", "0.0.11"),
             ("version", "0.0.10a1"),
             ("version", "0.0.10b1"),
             ("version", "0.0.10rc1"),
-            ("tag", "v0.0.10a1"),
-            ("tag", "v0.0.10b1"),
-            ("tag", "v0.0.10rc1"),
-            ("tag", "v0.0.1a1"),
-            ("tag", "v0.0.9"),
-            ("tag", "v0.0.11"),
         ):
             with self.subTest(field=field), self.assertRaises(ValueError):
                 select_ci_run([good_run()], **(arguments | {field: wrong}))
@@ -124,25 +106,11 @@ class ReleaseControlTests(unittest.TestCase):
             (directory / "python-package-artifacts.json").write_text("{}")
             self.assertEqual(len(verify_artifacts(directory, inventory)), 2)
 
-    def test_rejects_historical_and_future_inventory_versions(self) -> None:
+    def test_rejects_other_inventory_versions(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
             inventory = self.make_artifacts(directory)
-            for version in (
-                None,
-                "0.0.1a1",
-                "0.0.2",
-                "0.0.3",
-                "0.0.4",
-                "0.0.5",
-                "0.0.6",
-                "0.0.7",
-                "0.0.10a1",
-                "0.0.10b1",
-                "0.0.10rc1",
-                "0.0.9",
-                "0.0.11",
-            ):
+            for version in (None, "0.0.9", "0.0.11", "0.0.10a1", "0.0.10rc1"):
                 with self.subTest(version=version), self.assertRaises(ValueError):
                     verify_artifacts(directory, inventory | {"version": version})
 
@@ -177,16 +145,7 @@ class ReleaseControlTests(unittest.TestCase):
                     verify_artifacts(directory, altered)
 
     def test_only_current_version_is_eligible_even_with_matching_tag(self) -> None:
-        for version in (
-            "0.0.3",
-            "0.0.4",
-            "0.0.5",
-            "0.0.6",
-            "0.0.7",
-            "0.0.10rc1",
-            "0.0.9",
-            "0.0.11",
-        ):
+        for version in ("0.0.9", "0.0.10rc1", "0.0.11"):
             with self.subTest(version=version), self.assertRaises(ValueError):
                 select_ci_run(
                     [good_run()],
@@ -196,7 +155,7 @@ class ReleaseControlTests(unittest.TestCase):
                     version=version,
                 )
 
-    def test_candidate_identity_and_historical_inventories(self) -> None:
+    def test_candidate_identity(self) -> None:
         root = Path(__file__).resolve().parents[2]
         verification = root / "docs/verification"
         self.assertEqual(
@@ -212,79 +171,6 @@ class ReleaseControlTests(unittest.TestCase):
         )
         project = tomllib.loads((root / "pyproject.toml").read_text())["project"]
         self.assertEqual(project["version"], APPROVED_VERSION)
-        # These entire published/historical inventory files are immutable.
-        historical = {
-            "runtime-0.0.9-package-artifact-inventory.json": "a1636b946aef50e8f5e7dba1ce96e74b7157d0db2acf57eeaae96c20e9339999",
-            "runtime-0.0.8-package-artifact-inventory.json": "afae4b2469c753d93e54c8ecd0d4e13192a3de9c865847e5fb16d395e536661b",
-            "runtime-0.0.7-package-artifact-inventory.json": "d874d237b198f7bd6637b10c248a6aa474f94b412adf4284392a84ee633a3335",
-            "source-stable-identity-candidate-artifacts.json": "89386eb2813fdb3e2c7b7c7a75a7f1b0e8006630d822d24cb8a75e8bdf0a54cd",
-            "runtime-0.0.6-package-artifact-inventory.json": "aff0e87586233cd50dd1bc08a2512ac85160923034f100c42d6544dae64d1db0",
-            "runtime-0.0.5-package-artifact-inventory.json": "3b065ca784c82b47cfaf6e06ed99c180da856d8d31ed31f61026c5b76afa6d2e",
-            "fold-recovery-candidate-artifacts.json": "77618b5d0c7ca57c4c14e7b70dfb3c9ae84f00023285c16556906c1d95119f9f",
-            "source-revisiting-candidate-artifacts.json": "8d3270d63f35f76e0adfa754f7634a34e10bc4efaad9bea2d4ea91c7b3b0901e",
-            "immutable-observations-candidate-artifacts.json": "b56d1cc43a01d1b4b48e9b3bf2411635546626367a8bdff0b99ddc0cfde49f16",
-            "package-artifact-inventory.json": "9b0adadbea208fe539d09eeb98f87110805edbaf643c074ceb9517d317709477",
-            "runtime-0.0.2-package-artifact-inventory.json": "1a329f4e545971c7485f667b9aabb426b250e6c8550a9c25dd9302a74a2afd14",
-            "runtime-0.0.3-package-artifact-inventory.json": "e4f359f3c3bc159b16687c44cb8111f2815e7e8b31cd92e2663cea0c7b94c401",
-            "runtime-package-artifact-inventory.json": "980a0b77f0943f190419761d0d2965d5985ce7ddb1af5bb85ac57af77784af5f",
-        }
-        for name, expected in historical.items():
-            with self.subTest(inventory=name):
-                self.assertEqual(
-                    hashlib.sha256((verification / name).read_bytes()).hexdigest(),
-                    expected,
-                )
-
-    def test_development_preserves_published_historical_bytes(self) -> None:
-        root = Path(__file__).resolve().parents[2]
-        frozen = json.loads(
-            (root / "tests/fixtures/release-0.0.7-baseline-integrity.json").read_text()
-        )
-        self.assertEqual(
-            frozen["base_public_commit"], "d82f5baf3eff92ac68cdbcda922415a33f2cb0c1"
-        )
-        self.assertEqual(
-            hashlib.sha256(
-                (
-                    root / "tests/fixtures/release-0.0.7-baseline-integrity.json"
-                ).read_bytes()
-            ).hexdigest(),
-            "a996aa1a3b10e5aca820e391f9581a17880f494ae036adc5dccddf1cd4ddd5e9",
-        )
-        verify_source_bytes(root, frozen)
-
-    def test_historical_tampering_fails_and_runtime_freeze_is_release_scoped(
-        self,
-    ) -> None:
-        names = (
-            "migrations/0001.sql",
-            "contracts/records/published.json",
-            "docs/verification/published.json",
-            "src/runtime.py",
-        )
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            for name in names:
-                path = root / name
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_bytes(b"original")
-            frozen = {
-                "files": {
-                    name: hashlib.sha256(b"original").hexdigest() for name in names
-                },
-                "metadata": {},
-            }
-            verify_source_bytes(root, frozen, release_reproduction=True)
-            (root / "src/runtime.py").write_bytes(b"forward development")
-            verify_source_bytes(root, frozen)
-            with self.assertRaisesRegex(ValueError, "src/runtime.py"):
-                verify_source_bytes(root, frozen, release_reproduction=True)
-            for name in names[:-1]:
-                (root / name).write_bytes(b"tampered")
-                with self.subTest(path=name), self.assertRaises(ValueError):
-                    verify_source_bytes(root, frozen)
-                (root / name).write_bytes(b"original")
-
     def test_development_receipt_cannot_authorize_release_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
@@ -294,57 +180,6 @@ class ReleaseControlTests(unittest.TestCase):
             )
             with self.assertRaises(ValueError):
                 verify_artifacts(directory, json.loads(RELEASE_INVENTORY.read_text()))
-
-    def test_frozen_release_metadata_uses_its_historical_version(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            metadata = root / "pyproject.toml"
-            metadata.write_bytes(b'version = "0.0.7"\n')
-            frozen = {
-                "files": {},
-                "metadata": {
-                    "pyproject.toml": hashlib.sha256(
-                        b'version = "APPROVED_VERSION"\n'
-                    ).hexdigest()
-                },
-            }
-            self.assertEqual(APPROVED_VERSION, "0.0.10")
-            verify_source_bytes(root, frozen, release_reproduction=True)
-            metadata.write_bytes(b'version = "0.0.10"\n')
-            with self.assertRaisesRegex(ValueError, "frozen release metadata drift"):
-                verify_source_bytes(root, frozen, release_reproduction=True)
-
-    def test_development_preserves_008_baseline_historical_payloads(self) -> None:
-        root = Path(__file__).resolve().parents[2]
-        baseline = root / "tests/fixtures/release-0.0.8-baseline-integrity.json"
-        frozen = json.loads(baseline.read_text())
-        self.assertEqual(
-            frozen["base_public_commit"], "8dfa5a2ef6bb4ef52b62e4405ee8a26ccfa36e6b"
-        )
-        self.assertEqual(
-            hashlib.sha256(baseline.read_bytes()).hexdigest(),
-            "344565a0ea79ad369fab582472f9329c5777f9a70f9a4d8d9b9efe6869f56536",
-        )
-        # Runtime freeze is release-reproduction evidence, not a development gate.
-        verify_source_bytes(root, frozen)
-
-    def test_development_preserves_0010_baseline_historical_payloads(self) -> None:
-        root = Path(__file__).resolve().parents[2]
-        baseline = root / "tests/fixtures/release-0.0.10-baseline-integrity.json"
-        frozen = json.loads(baseline.read_bytes())
-        self.assertEqual(frozen["base_public_commit"], "f6f649eed5c5908f21a1bf2f4e365582e51ae6e6")
-        self.assertEqual(hashlib.sha256(baseline.read_bytes()).hexdigest(), "097249d425cc111511de60a141884f8be1676f5bfbe02ee65b8e8eeb7da95340")
-        # Preserve published payloads without freezing future development runtime.
-        verify_source_bytes(root, frozen)
-
-    def test_development_preserves_009_baseline_historical_payloads(self) -> None:
-        root = Path(__file__).resolve().parents[2]
-        baseline = root / "tests/fixtures/release-0.0.9-baseline-integrity.json"
-        frozen = json.loads(baseline.read_bytes())
-        self.assertEqual(frozen["base_public_commit"], "aff4270a549f7618d99db3735020ccb2785f32f1")
-        self.assertEqual(hashlib.sha256(baseline.read_bytes()).hexdigest(), "ea499ed99bf60b9f432c288ba43b5673afadc8e1b983049a4f15a182741c748d")
-        # Preserve published payloads without freezing future development runtime.
-        verify_source_bytes(root, frozen)
 
     def test_development_inventory_rejects_wrong_commit(self) -> None:
         with patch(

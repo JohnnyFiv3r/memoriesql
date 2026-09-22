@@ -31,7 +31,7 @@ jobs:
           python scripts/generate_catalogs.py --check
           export SOURCE_DATE_EPOCH=315532800
           python -m build --outdir dist
-          python scripts/normalize_python_sdist.py dist/memoriesql-0.0.1a1.tar.gz
+          python scripts/normalize_python_sdist.py dist/memoriesql-FINAL_VERSION.tar.gz
           python -m twine check --strict dist/*
           python scripts/inspect_python_distribution.py dist
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

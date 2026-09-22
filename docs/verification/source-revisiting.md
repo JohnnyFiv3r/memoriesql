@@ -79,8 +79,7 @@ Migrations 0001–0019, all 54 prior record payloads and historical release/cand
 inventories are compared byte-for-byte with base. Registry/catalog/resource closure
 uses the existing generators and verifiers. The package remains 0.0.5 only because
 no next version is selected; schema-20 archives are unreleased and are not the
-published 0.0.5 distribution. They have their own
-[candidate inventory](source-revisiting-candidate-artifacts.json).
+published 0.0.5 distribution. Their candidate inventory was retired from the repository on 2026-09-22.
 
 The single installed local Python 3.13 convergence ran 188 tests: all 187 runtime
 and other cases passed; the new registry entry had a stale canonical-payload hash.

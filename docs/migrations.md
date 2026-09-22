@@ -6,12 +6,8 @@ historical SQL bytes are preserved. Python 3.13+ is required; qualification cove
 3.13 and 3.14 (`>=3.13,<3.15`). Package installation does not apply migrations or
 provision production trust. Upgrade and release authorization remain separate.
 
-The published `0.0.1a1` remains an immutable catalog-only preview supporting
-Python 3.11–3.14. On older Python, pin `memoriesql==0.0.1a1` for catalogs.
-An unpinned request may fail because pip excludes prereleases by default;
-`--pre` permits the historical fallback, which has no migration capabilities. Use the
-exact reviewed artifact and version, never an unbounded `pip install memoriesql`
-as a runtime setup instruction:
+Use the exact reviewed artifact and version, never an unbounded
+`pip install memoriesql` as a runtime setup instruction:
 
 ```console
 python3.13 -m venv migration-env

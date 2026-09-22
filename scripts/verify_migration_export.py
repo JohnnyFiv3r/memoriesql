@@ -1,4 +1,4 @@
-"""Check the explicit public migration export without consulting other sources."""
+"""Check the explicit public migration inventory without consulting other sources."""
 
 from __future__ import annotations
 
@@ -24,28 +24,6 @@ def verify() -> None:
             or hashlib.sha256(path.read_bytes()).hexdigest() != row["sha256"]
         ):
             raise ValueError("historical migration drift")
-    provenance = json.loads(
-        (ROOT / "docs/provenance/migration-extraction.json").read_text()
-    )
-    expected = {"migrations/" + row["filename"] for row in rows} | {
-        "src/memoriesql/infrastructure/postgres/migration_runner.py",
-        "src/memoriesql/infrastructure/postgres/schema_inspection.py",
-    }
-    exports = provenance["exports"]
-    if {row["public_path"] for row in exports} != expected or len(exports) != len(
-        expected
-    ):
-        raise ValueError("migration extraction inventory mismatch")
-    for row in exports:
-        digest = hashlib.sha256((ROOT / row["public_path"]).read_bytes()).hexdigest()
-        if digest != row["public_sha256"]:
-            raise ValueError("migration export drift")
-        if row["disposition"] == "copy" and digest != row["source_sha256"]:
-            raise ValueError("historical source drift")
-    for row in provenance["test_material"]:
-        digest = hashlib.sha256((ROOT / row["public_path"]).read_bytes()).hexdigest()
-        if digest != row["source_sha256"] or digest != row["public_sha256"]:
-            raise ValueError("historical schema fixture drift")
     # Initializers are deliberately inert; no eager N2 dependency closure.
     for path in (
         "src/memoriesql/infrastructure/__init__.py",
@@ -55,9 +33,7 @@ def verify() -> None:
             ROOT / path
         ).read_text() != '"""Canonical PostgreSQL migration substrate."""\n':
             raise ValueError("unexpected initializer dependency")
-    print(
-        "Migration export: 14 unchanged historical SQL, 12 public forward migrations, 2 audited modules."
-    )
+    print(f"Migration export: {len(rows)} inventoried SQL resources, 2 audited modules.")
 
 
 if __name__ == "__main__":

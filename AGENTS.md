@@ -60,6 +60,15 @@ verified current release main. The owner updated the environment tag rule for
 performs no PyPI sign-in. Protected upload approval remains the owner's action;
 stop when the publishing workflow waits for it. See `docs/releasing.md`.
 
+On 2026-09-22, after `v0.0.10` was tagged, the owner decided that with no external
+forks or consumers the repository owes no backwards compatibility until that
+changes, and authorized retiring the historical release bookkeeping: historical
+package and candidate inventories, release baseline/integrity fixtures and the
+`verify_release.py source` reproduction, the export-provenance manifests and
+per-file runtime provenance hashes, historical migration-prefix tests and `0.0.1a1`
+references. The current release inventory, the byte-exact migration inventory,
+the default-deny runtime closure and the publication gates remain.
+
 The owner-authorized 0.0.9 preparation starts from merged main
 `aff4270a549f7618d99db3735020ccb2785f32f1`. Preserve runtime behavior, all 26
 migrations, 61 contracts, dependencies and historical release inventories. Release

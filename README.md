@@ -83,8 +83,7 @@ cursor_contract = get_contract("memoriesql.capture.connector-cursor")
 ```
 
 The CLI currently exposes contract inspection, not a one-command running memory
-service. The immutable `0.0.1a1` package is a historical catalog-only preview, not
-a runtime fallback for unsupported Python versions.
+service.
 
 ### Compose a runtime deliberately
 

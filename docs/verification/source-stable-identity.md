@@ -81,9 +81,8 @@ while permitting adjacent refragmentation. All seventeen final identity cases pa
 seconds). The final first/last plans touch four shared blocks for either source,
 with measured 0.010/0.009-ms execution on the small fictional fixture. Corrections
 affect only the new migration; published SQL and records are unchanged. Final-head hosted
-CI is pending at this writing. The separate candidate inventory is
-`source-stable-identity-candidate-artifacts.json`. Its unchanged 0.0.6 development
-metadata does not authorize replacing the published release. Publication workflow,
+CI is pending at this writing. The separate candidate inventory was retired from the repository on 2026-09-22; its
+unchanged 0.0.6 development metadata never authorized replacing the published release. Publication workflow,
 release verification controls, published archives and historical inventories remain
 unchanged. CI compares the unreleased candidate to its own inventory.
 

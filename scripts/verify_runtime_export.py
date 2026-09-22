@@ -1,14 +1,19 @@
-"""Verify the explicit runtime closure, exact bytes and public-only imports."""
+"""Verify the explicit runtime closure and its public-only imports."""
 
 from __future__ import annotations
 
 import ast
-import hashlib
 import json
-import re
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+SHIPPED_NON_RUNTIME = {
+    "src/memoriesql/__init__.py",
+    "src/memoriesql/cli.py",
+    "src/memoriesql/contracts/__init__.py",
+}
+ALLOWED_EXTERNAL = {"psycopg", "pydantic", "pydantic_ai"}
 
 
 def verify(root: Path = ROOT) -> dict[str, int]:
@@ -19,47 +24,19 @@ def verify(root: Path = ROOT) -> dict[str, int]:
     paths = [row["path"] for row in rows]
     if len(paths) != len(set(paths)):
         raise ValueError("duplicate runtime path")
-    # Every first-party dependency must resolve to a reviewed public source file.
-    provenance = json.loads(
-        (root / "docs/provenance/export-provenance.json").read_text()
-    )
-    approved = {
-        r["public_path"]
-        for key in ("exports", "public_only", "substrate_exports")
-        for r in provenance.get(key, [])
-    }
-    approved.update(paths)
-    allowed_external = {"psycopg", "pydantic", "pydantic_ai"}
-    import sys
-
-    for row in rows:
-        if row["disposition"] not in {"copy", "adapt", "public", "public-forward"}:
-            raise ValueError("unknown runtime disposition")
-        if row["disposition"] == "public-forward":
-            if (
-                not re.fullmatch(r"[0-9a-f]{40}", row.get("base_public_commit", ""))
-                or not all(
-                    re.fullmatch(r"[0-9a-f]{64}", row.get(key, ""))
-                    for key in ("source_sha256", "base_public_sha256")
-                )
-                or not row.get("reason")
-            ):
-                raise ValueError("forward runtime change lacks public provenance")
-        name = row["path"]
+    # Every first-party import must resolve to a shipped package module.
+    approved = set(paths) | SHIPPED_NON_RUNTIME
+    for name in paths:
         path = root / name
         if (
             not name.startswith("src/memoriesql/")
             or ".." in Path(name).parts
             or path.is_symlink()
+            or not path.is_file()
             or path.resolve() != root.resolve() / name
         ):
-            raise ValueError("unsafe runtime path")
-        content = path.read_bytes()
-        if hashlib.sha256(content).hexdigest() != row["sha256"]:
-            raise ValueError(f"runtime content drift: {name}")
-        if row["disposition"] == "copy" and row["source_sha256"] != row["sha256"]:
-            raise ValueError("unchanged export differs from approved source")
-        for node in ast.walk(ast.parse(content)):
+            raise ValueError(f"unsafe runtime path: {name}")
+        for node in ast.walk(ast.parse(path.read_bytes())):
             modules = []
             if isinstance(node, ast.Import):
                 modules = [alias.name for alias in node.names]
@@ -77,7 +54,7 @@ def verify(root: Path = ROOT) -> dict[str, int]:
                         raise ValueError(f"unclosed runtime import: {module}")
                 elif (
                     module.split(".")[0]
-                    not in sys.stdlib_module_names | allowed_external
+                    not in sys.stdlib_module_names | ALLOWED_EXTERNAL
                 ):
                     raise ValueError(f"unapproved runtime dependency: {module}")
     return {"runtime_files": len(rows)}

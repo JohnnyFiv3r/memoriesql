@@ -50,9 +50,8 @@ Wheel SHA-256:
 Sdist SHA-256:
 `7f798002e5ac099b67ad686a4b7172bd48cbe0a290d46b6aed19909b2846f3ce`
 
-The authoritative candidate member/size/hash inventory is
-[immutable-observations-candidate-artifacts.json](immutable-observations-candidate-artifacts.json).
-The original published 0.0.3 inventory remains unchanged.
+The candidate member/size/hash inventory recorded at qualification time was
+retired from the repository on 2026-09-22.
 
 Complete installed log SHA-256:
 `11497501f80ee3929fe6cdbf0132cb60a065aff76f6283400bcfa8267da325e5`.

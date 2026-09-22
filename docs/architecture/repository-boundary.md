@@ -2,7 +2,7 @@
 
 The canonical public repository, `JohnnyFiv3r/memoriesql`, is the authority for provider-neutral memoriesQL contracts and, after separate audits, the open-core ledger, authorization, idempotency, capture protocol, typed retrieval, and canonical schema migrations. The owner authorized public visibility on 2026-09-08. This does not expand the audited package or runtime boundary.
 
-The initial `0.0.1a1` preview contains only the explicit contract registry, 49 approved records, generated catalogs, the read-only Python/CLI facade, focused verification, and minimal project governance. It intentionally contains no runtime implementation candidates or migrations.
+The repository began as a catalog-only preview (the explicit contract registry, generated catalogs and the read-only Python/CLI facade); the runtime and migrations were added by later audited slices.
 
 Private product material stays outside this repository: desktop surfaces and supervision, installers, signing, updates, hosted services, sync, provider-specific discovery/parsing/acquisition/support profiles, Connections product behavior, product module manifests, private evidence, and user data.
 
@@ -12,7 +12,7 @@ The eventual product repository may depend only on released, pinned public-core 
 
 `contracts/public-registry.json` is the only catalog-generation authority. The generator reads only its explicit entries, validates record hashes and dispositions, rejects unregistered record files, and never scans another repository. The prior classification-by-prefix spike is evidence, not authority.
 
-The approved migration substrate cut includes only SQL 0001–0014, migration runner, schema inspection, and minimal resource/initializer closure. `contracts/migration-inventory.json` and `docs/provenance/migration-extraction.json` enumerate that public-owned scope. The N2 runtime is limited to `contracts/runtime-inventory.json`: provider-neutral runtime and internal static mechanics with caller-owned composition. All other runtime candidates remain deferred. See [runtime scope](../runtime.md). See [migration guidance](../migrations.md).
+The approved migration substrate cut includes only SQL 0001–0014, migration runner, schema inspection, and minimal resource/initializer closure. `contracts/migration-inventory.json` enumerates that public-owned scope. The N2 runtime is limited to `contracts/runtime-inventory.json`: provider-neutral runtime and internal static mechanics with caller-owned composition. All other runtime candidates remain deferred. See [runtime scope](../runtime.md). See [migration guidance](../migrations.md).
 
 ## Public-authored immutable observations
 

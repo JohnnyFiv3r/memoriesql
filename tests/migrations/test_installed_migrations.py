@@ -133,47 +133,6 @@ class InstalledMigrations(unittest.TestCase):
         self.assertEqual(noop.schema_snapshot_sha256, receipt.schema_snapshot_sha256)
         self.assertEqual(self.history(), before)
 
-    def test_representative_historical_prefixes(self) -> None:
-        # Each prefix is applied directly from frozen SQL, independently of migrate().
-        stream = runner.discover_migrations()
-        for version in (4, 11, 13):
-            with self.subTest(prefix=version):
-                with self.connection.transaction():
-                    self.connection.execute("DROP SCHEMA IF EXISTS memoriesql CASCADE")
-                    self.connection.execute("SET LOCAL search_path = pg_catalog")
-                    for migration in stream[:version]:
-                        self.connection.execute(migration.sql, prepare=False)
-                        self.connection.execute(
-                            "INSERT INTO memoriesql.schema_migrations (version,name,sha256,runner_contract_version) VALUES (%s,%s,%s,1)",
-                            (migration.version, migration.name, migration.sha256),
-                        )
-                before = self.history()
-                receipt = self.migrate(version, 14)
-                self.assertEqual(self.history()[:version], before)
-                self.assertEqual(
-                    [row.version for row in receipt.applied_migrations],
-                    list(range(version + 1, 15)),
-                )
-                self.assertEqual(
-                    inspect_schema(self.connection),
-                    json.loads(Path("schema_snapshot.json").read_text()),
-                )
-                self.assertEqual(
-                    self.grants(), json.loads(Path("schema_grants.json").read_text())
-                )
-
-    def grants(self) -> list[Any]:
-        # ACLs are independently checked because snapshot contract 2 omits them.
-        return [
-            list(row)
-            for row in self.connection.execute("""
-            SELECT 'relation', c.relname, coalesce(c.relacl::text, '') FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='memoriesql'
-            UNION ALL SELECT 'function', p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')', coalesce(p.proacl::text, '') FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='memoriesql'
-            UNION ALL SELECT 'schema', nspname, coalesce(nspacl::text, '') FROM pg_namespace WHERE nspname='memoriesql'
-            ORDER BY 1,2
-        """).fetchall()
-        ]
-
     def test_wrong_bound_downgrade_and_out_of_range_are_atomic(self) -> None:
         self.migrate(0, 14)
         before = self.history()

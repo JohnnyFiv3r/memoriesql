@@ -77,7 +77,7 @@ the regression and [contract](../transcript-fold-recovery.md).
 
 ## Artifact and compatibility evidence
 
-[The candidate inventory](fold-recovery-candidate-artifacts.json) records the new
+The candidate inventory (retired from the repository on 2026-09-22) recorded the new
 wheel/sdist hashes, sizes, members and 54 contract IDs. These are **unreleased**
 archives retaining 0.0.5 metadata because no next version was selected. They must
 not be confused with the published archives above. Two deterministic builds
