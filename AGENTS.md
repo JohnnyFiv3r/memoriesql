@@ -44,6 +44,14 @@ PR and creating/pushing v0.0.8 once at verified release main after all required
 checks. Stop at the protected approval gate; never approve upload. Publication
 protected approval and private consumption remain separate.
 
+On 2026-09-22 the owner separately authorized one forward runtime change on top of
+released 0.0.9, for resiliency before the next supervised live proof: the executor
+binds authored statements to its own run reference before hashing, and the worker
+settles data-error canonical-apply refusals as invalid output (PR #31). It targets
+the next release, changes no migration, contract payload or dependency, and does
+not alter the published 0.0.9 archives. The 0.0.9 preparation paragraph below is
+historical.
+
 The owner-authorized 0.0.9 preparation starts from merged main
 `aff4270a549f7618d99db3735020ccb2785f32f1`. Preserve runtime behavior, all 26
 migrations, 61 contracts, dependencies and historical release inventories. Release

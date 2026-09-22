@@ -743,7 +743,7 @@
       "classification": "public_bootstrap",
       "license": "Apache-2.0",
       "public_path": "AGENTS.md",
-      "public_sha256": "c4d923ba46d88f8e02d663e0b3d7280029c384dfab068a649320da7ff6b70ee1",
+      "public_sha256": "5d6eed5b58c96da55a2d5a0462e2fa26b7bf0375294a51be7f7c509056b60ca5",
       "reason": "Public-repository-owned governance, authority, verification, or evidence created for this bootstrap."
     },
     {
