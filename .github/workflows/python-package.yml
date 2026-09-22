@@ -112,11 +112,14 @@ jobs:
           export SOURCE_DATE_EPOCH=315532800
           python -m pip wheel --no-deps --no-build-isolation build/reviewed-package/*.tar.gz --wheel-dir build/from-sdist
           cmp build/reviewed-package/*.whl build/from-sdist/*.whl
-      - name: Prove wheel and sdist installations with checkout access denied
+      - name: Prove the reviewed installation with checkout access denied
+        # The step above proves the wheel rebuilt from the sdist is byte-identical
+        # to the reviewed wheel, so the installed acceptance runs once per
+        # interpreter; a second run on the identical wheel proves nothing.
         run: |
           unset PYTHONPATH
           export PYTHONNOUSERSITE=1
-          for artifact in build/reviewed-package/*.whl build/from-sdist/*.whl; do
+          for artifact in build/reviewed-package/*.whl; do
             test_root="$(mktemp -d)"
             python -m venv "$test_root/venv"
             "$test_root/venv/bin/python" -m pip install --no-index --find-links build/dependencies "$artifact"
