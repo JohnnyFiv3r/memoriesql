@@ -213,9 +213,11 @@ records `runtime.run_reference` (`stamped` when an authored value differed,
 `authored` otherwise). Multi-run trees keep authored references and the apply
 command still verifies membership.
 
-When canonical apply refuses a succeeded result (a data or privilege error
-from the database, such as `semantic statement run is unavailable`), the
-worker settles the attempt as `invalid_output` with error code
+When canonical apply refuses a succeeded result with a database data error
+(SQLSTATE class 22, which the contract functions raise for validation
+refusals such as `semantic statement run is unavailable`), the worker settles
+the attempt as `invalid_output` with error code
 `worker.canonical_apply_refused` and returns a settled receipt. The refusal is
 deterministic and never retried; the attempt no longer stays `running` for the
-reaper, and callers see the outcome in canonical rows.
+reaper, and callers see the outcome in canonical rows. Privilege and transport
+errors are not output refusals and keep their existing handling.

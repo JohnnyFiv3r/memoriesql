@@ -1037,12 +1037,15 @@ class IntegratedSemanticWorker:
             raise persist_cancellation
         if persist_outcome.error is not None:
             if result.status == SemanticResultStatus.SUCCEEDED and isinstance(
-                persist_outcome.error,
-                psycopg_errors.DataError | psycopg_errors.InsufficientPrivilege,
+                persist_outcome.error, psycopg_errors.DataError
             ):
-                # Canonical apply refused the authored output. The refusal is
-                # deterministic and never retried: settle the attempt as invalid
-                # output now instead of leaving it running for the reaper.
+                # Canonical apply refused the authored output with a data error
+                # (the contract functions raise class 22, such as
+                # `semantic statement run is unavailable`). That refusal is
+                # deterministic and never retried, so settle the attempt as
+                # invalid output now instead of leaving it running for the
+                # reaper. Privilege and transport errors keep the existing path:
+                # they are authorization or infrastructure failures, not output.
                 return await self._settle_preflight_failure_off_loop(
                     claimed,
                     readiness,

@@ -135,7 +135,7 @@
       "disposition": "adapt",
       "path": "src/memoriesql/infrastructure/jobs/integrated_semantic_worker.py",
       "reason": "Owner-authorized forward classified authorship using existing runtime and fences.",
-      "sha256": "ac281b8f848163e3e25d74ccce5db5afba781c332535d48b93b2f34aead37041",
+      "sha256": "0f8b31e88c705c50475882c38181b1573a9bf793e39983bb4aa45dd4449e0825",
       "source_sha256": "a6b990a6a74461f34e7e757a3e6f7426020f8cef8df4cdbaad2a95f2fcd10398"
     },
     {

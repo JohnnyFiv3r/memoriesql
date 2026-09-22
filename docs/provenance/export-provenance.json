@@ -974,7 +974,7 @@
       "classification": "public-authored",
       "license": "Apache-2.0",
       "public_path": "contracts/runtime-inventory.json",
-      "public_sha256": "b142b7f7536033968de9a98e6f6e77af74f1b85435357a7c03de971e817b12fd",
+      "public_sha256": "78f34d668ee645cdc0432b6ced5ed874bbf643bde34a31b3f67d9fc075786b49",
       "reason": "Public N2 dependency inventory and fictional runtime acceptance."
     },
     {
@@ -1009,7 +1009,7 @@
       "classification": "public-authored",
       "license": "Apache-2.0",
       "public_path": "docs/runtime.md",
-      "public_sha256": "b4904e23110240d4c0ae3a28cb1974832a12ca28057b62ce7649bf5789bba212",
+      "public_sha256": "623871e763b42223beec76ab32e0984afd11743edc8d6b03b06eadabfbcf0bea",
       "reason": "Public fictional N2 acceptance and runtime scope documentation."
     },
     {
@@ -2107,7 +2107,7 @@
       "classification": "public-forward",
       "license": "Apache-2.0",
       "public_path": "src/memoriesql/infrastructure/jobs/integrated_semantic_worker.py",
-      "public_sha256": "ac281b8f848163e3e25d74ccce5db5afba781c332535d48b93b2f34aead37041",
+      "public_sha256": "0f8b31e88c705c50475882c38181b1573a9bf793e39983bb4aa45dd4449e0825",
       "reason": "Public-authored cancellation cleanup ownership and post-intent dispatch gate; original N2 extraction hash retained as historical provenance.",
       "source_sha256": "a6b990a6a74461f34e7e757a3e6f7426020f8cef8df4cdbaad2a95f2fcd10398"
     },
