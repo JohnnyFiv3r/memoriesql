@@ -113,6 +113,7 @@ from memoriesql.application.semantic_task_contracts import (
     canonical_json_bytes,
     canonical_sha256,
     retry_class_for_status,
+    stamp_statement_run_reference,
 )
 from memoriesql.application.semantic_task_registry import (
     SemanticTaskRegistry,
@@ -290,14 +291,22 @@ class ManagedProviderModel(Model):
     It reports only observed or provider-reported facts. No bundled transport exists.
     """
 
-    async def request(self, messages: list[ModelMessage], model_settings: ModelSettings | None,
-                      model_request_parameters: ModelRequestParameters) -> ModelResponse:
+    async def request(
+        self,
+        messages: list[ModelMessage],
+        model_settings: ModelSettings | None,
+        model_request_parameters: ModelRequestParameters,
+    ) -> ModelResponse:
         raise RuntimeError("managed models require explicit supervised dispatch")
 
     @abstractmethod
-    async def request_managed(self, messages: list[ModelMessage], model_settings: ModelSettings,
-                              model_request_parameters: ModelRequestParameters,
-                              qualification: SupervisedQualification) -> ManagedTurnResult:
+    async def request_managed(
+        self,
+        messages: list[ModelMessage],
+        model_settings: ModelSettings,
+        model_request_parameters: ModelRequestParameters,
+        qualification: SupervisedQualification,
+    ) -> ManagedTurnResult:
         raise NotImplementedError
 
 
@@ -309,8 +318,12 @@ class ManagedModelAdmission:
     qualification_revision: str
 
     def __post_init__(self) -> None:
-        if not isinstance(self.model, ManagedProviderModel) or not IDENTIFIER_PATTERN.fullmatch(self.qualification_revision):
-            raise ValueError("managed admission requires exact interface and qualification")
+        if not isinstance(
+            self.model, ManagedProviderModel
+        ) or not IDENTIFIER_PATTERN.fullmatch(self.qualification_revision):
+            raise ValueError(
+                "managed admission requires exact interface and qualification"
+            )
 
 
 @dataclass(frozen=True)
@@ -321,7 +334,9 @@ class ModelProfileBinding:
     model: Model
     max_running: int = 4
     max_queued: int = 16
-    request_target: ProviderRequestTarget | ManagedDispatchTarget = CHARACTERIZED_TEST_REQUEST_TARGET
+    request_target: ProviderRequestTarget | ManagedDispatchTarget = (
+        CHARACTERIZED_TEST_REQUEST_TARGET
+    )
     conservative_reservation_microunits: int = 0
     real_model_admission: RealModelAdmission | ManagedModelAdmission | None = None
     supervision: SupervisedQualification | None = None
@@ -344,15 +359,22 @@ class ModelProfileBinding:
         managed = isinstance(admission, ManagedModelAdmission)
         if isinstance(self.request_target, ManagedDispatchTarget) != managed:
             raise ValueError("managed target requires exact managed admission")
-        if managed and (self.supervision is None or self.conservative_reservation_microunits != 0):
-            raise ValueError("managed admission requires explicit supervision, not a hard cash reservation")
+        if managed and (
+            self.supervision is None or self.conservative_reservation_microunits != 0
+        ):
+            raise ValueError(
+                "managed admission requires explicit supervision, not a hard cash reservation"
+            )
         if self.supervision is not None:
             if admission is None or not any(
-                r.reference == self.reference and r.target == self.request_target
+                r.reference == self.reference
+                and r.target == self.request_target
                 and r.qualification_revision == admission.qualification_revision
                 for r in self.supervision.routes
             ):
-                raise ValueError("supervision does not approve this exact route and qualification")
+                raise ValueError(
+                    "supervision does not approve this exact route and qualification"
+                )
         if self.conservative_reservation_microunits < 0:
             raise ValueError("provider cost reservation cannot be negative")
         if (
@@ -383,8 +405,13 @@ class PydanticAIModelProfileRegistry:
         if len({b.real_model_admission is not None for b in bindings}) > 1:
             raise ValueError("real and characterized profiles cannot share a registry")
         supervised = [b.supervision for b in bindings if b.supervision is not None]
-        if supervised and (len(supervised) != len(bindings) or any(q != supervised[0] for q in supervised)):
-            raise ValueError("supervised registry requires one exact task qualification for all routes")
+        if supervised and (
+            len(supervised) != len(bindings)
+            or any(q != supervised[0] for q in supervised)
+        ):
+            raise ValueError(
+                "supervised registry requires one exact task qualification for all routes"
+            )
         resolved: dict[tuple[str, int], _ResolvedModelProfile] = {}
         for binding in bindings:
             key = binding.reference.profile_key, binding.reference.revision
@@ -630,7 +657,9 @@ class _TreeState:
                     or outputs > budget.output_token_limit
                     or inputs + outputs > budget.total_token_limit
                 ):
-                    raise UsageLimitExceeded("next provider request exceeds reserved budget")
+                    raise UsageLimitExceeded(
+                        "next provider request exceeds reserved budget"
+                    )
                 # Never refund unknown, failed, cancelled or cached usage. This
                 # deliberately conservative allowance is shared by the run tree.
                 self.reserved_requests += 1
@@ -753,7 +782,10 @@ class _DispatchGuardedModel(WrapperModel):
         await state.require_dispatch_open()
         exposed_window: EvidenceExecutionWindow | None = None
         source_delivery: SourceDelivery | None = None
-        if isinstance(state.task.task_input, RevisitingExecutionInput) and self._run_deps.parent_run_id is None:
+        if (
+            isinstance(state.task.task_input, RevisitingExecutionInput)
+            and self._run_deps.parent_run_id is None
+        ):
             if (
                 state.deps.source_revisiting is None
                 or state.deps.source_delivery_recorder is None
@@ -835,15 +867,41 @@ class _DispatchGuardedModel(WrapperModel):
         classification_packet = None
         if self._run_deps.binding.agent_key == CLASSIFIER_KEY:
             classification_packet = state.classification_packet
-            if classification_packet is None or state.classification_request is not None:
-                raise EvidenceGuardError("classification.dispatch_invalid", "exactly one classification dispatch required")
-            supplied = [p.content for m in messages if isinstance(m, ModelRequest)
-                        for p in m.parts if isinstance(p, UserPromptPart)]
-            if len(supplied) != 1 or not isinstance(supplied[0], str) or ClassificationPacket.model_validate_json(supplied[0]) != classification_packet:
-                raise EvidenceGuardError("classification.packet_mismatch", "actual classifier packet differs")
-            delivered = sum(len(e.content) if e.content is not None else len(bytes.fromhex(e.bytes_hex or "")) for e in classification_packet.evidence)
+            if (
+                classification_packet is None
+                or state.classification_request is not None
+            ):
+                raise EvidenceGuardError(
+                    "classification.dispatch_invalid",
+                    "exactly one classification dispatch required",
+                )
+            supplied = [
+                p.content
+                for m in messages
+                if isinstance(m, ModelRequest)
+                for p in m.parts
+                if isinstance(p, UserPromptPart)
+            ]
+            if (
+                len(supplied) != 1
+                or not isinstance(supplied[0], str)
+                or ClassificationPacket.model_validate_json(supplied[0])
+                != classification_packet
+            ):
+                raise EvidenceGuardError(
+                    "classification.packet_mismatch", "actual classifier packet differs"
+                )
+            delivered = sum(
+                len(e.content)
+                if e.content is not None
+                else len(bytes.fromhex(e.bytes_hex or ""))
+                for e in classification_packet.evidence
+            )
             if state.delivered_source_units + delivered > DELIVERY_UNITS:
-                raise CompleteInputError(SemanticResultStatus.BUDGET_EXHAUSTED, "classification.delivery_budget")
+                raise CompleteInputError(
+                    SemanticResultStatus.BUDGET_EXHAUSTED,
+                    "classification.delivery_budget",
+                )
             state.delivered_source_units += delivered
         request_id = uuid4()
         authorization = state.deps.authorization
@@ -864,14 +922,19 @@ class _DispatchGuardedModel(WrapperModel):
             )
         managed = isinstance(binding.real_model_admission, ManagedModelAdmission)
         if binding.supervision is not None:
-            if str(binding.supervision.semantic_task_id) != state.task.task_input.task_id:
+            if (
+                str(binding.supervision.semantic_task_id)
+                != state.task.task_input.task_id
+            ):
                 raise AccountingPersistenceError("supervision names another task")
             if datetime.now(UTC) >= binding.supervision.deadline:
                 raise UsageLimitExceeded("supervised dispatch deadline elapsed")
         maximum_output_tokens = min(
             binding.request_target.max_output_tokens_per_request
             if isinstance(binding.request_target, ProviderRequestTarget)
-            else cast(SupervisedQualification, binding.supervision).reported_generated_token_stop,
+            else cast(
+                SupervisedQualification, binding.supervision
+            ).reported_generated_token_stop,
             state.task.effective_budget.output_token_limit,
         )
         bounded_model_settings = cast(ModelSettings, dict(model_settings or {}))
@@ -885,7 +948,9 @@ class _DispatchGuardedModel(WrapperModel):
             bounded_model_settings["max_tokens"] = maximum_output_tokens
         bounds = (
             ProviderRequestBounds(
-                input_tokens=cast(ProviderRequestTarget, binding.request_target).max_input_tokens_per_request,
+                input_tokens=cast(
+                    ProviderRequestTarget, binding.request_target
+                ).max_input_tokens_per_request,
                 output_tokens=maximum_output_tokens,
             )
             if isinstance(binding.real_model_admission, RealModelAdmission)
@@ -919,7 +984,11 @@ class _DispatchGuardedModel(WrapperModel):
             conservative_reservation_microunits=(
                 binding.conservative_reservation_microunits
             ),
-            max_input_tokens=(binding.request_target.max_input_tokens_per_request if isinstance(binding.request_target, ProviderRequestTarget) else None),
+            max_input_tokens=(
+                binding.request_target.max_input_tokens_per_request
+                if isinstance(binding.request_target, ProviderRequestTarget)
+                else None
+            ),
             max_output_tokens=maximum_output_tokens if not managed else None,
             request_payload_hash=_provider_request_payload_hash(
                 messages,
@@ -929,13 +998,21 @@ class _DispatchGuardedModel(WrapperModel):
         )
         if managed:
             # Null bounds deny any claim of enforcing hidden token/cash ceilings.
-            intent_values.update(safety_ceiling_microunits=None,
-                                 supervision=binding.supervision,
-                                 qualification_revision=cast(ManagedModelAdmission, binding.real_model_admission).qualification_revision)
+            intent_values.update(
+                safety_ceiling_microunits=None,
+                supervision=binding.supervision,
+                qualification_revision=cast(
+                    ManagedModelAdmission, binding.real_model_admission
+                ).qualification_revision,
+            )
             intent: ProviderRequestIntent = ManagedDispatchIntent(**intent_values)
         elif binding.supervision is not None:
-            intent_values.update(supervision=binding.supervision,
-                                 qualification_revision=cast(RealModelAdmission, binding.real_model_admission).qualification_revision)
+            intent_values.update(
+                supervision=binding.supervision,
+                qualification_revision=cast(
+                    RealModelAdmission, binding.real_model_admission
+                ).qualification_revision,
+            )
             intent = SupervisedRequestIntent(**intent_values)
         else:
             intent = ProviderRequestIntent(**intent_values)
@@ -954,9 +1031,16 @@ class _DispatchGuardedModel(WrapperModel):
         if classification_packet is not None:
             assert state.deps.source_revisiting is not None
             for evidence in classification_packet.evidence:
-                await state.deps.source_revisiting.authorize_delivery(SourceDelivery(
-                    task_id=classification_packet.task_id, attempt_id=classification_packet.attempt_id,
-                    package=cast(ClassificationExecutionInput, state.task.task_input).payload.package, read=evidence))
+                await state.deps.source_revisiting.authorize_delivery(
+                    SourceDelivery(
+                        task_id=classification_packet.task_id,
+                        attempt_id=classification_packet.attempt_id,
+                        package=cast(
+                            ClassificationExecutionInput, state.task.task_input
+                        ).payload.package,
+                        read=evidence,
+                    )
+                )
             await state.require_dispatch_open()
             state.classification_request = (request_id, intent.request_payload_hash)
         observation: ManagedUsageObservation | None = None
@@ -964,7 +1048,9 @@ class _DispatchGuardedModel(WrapperModel):
             if managed:
                 admission = cast(ManagedModelAdmission, binding.real_model_admission)
                 turn = await admission.model.request_managed(
-                    messages, bounded_model_settings, model_request_parameters,
+                    messages,
+                    bounded_model_settings,
+                    model_request_parameters,
                     cast(SupervisedQualification, binding.supervision),
                 )
                 observation = turn.observation
@@ -977,7 +1063,9 @@ class _DispatchGuardedModel(WrapperModel):
                     output_tokens=total.output_tokens if total else 0,
                     cache_read_tokens=total.cached_input_tokens if total else 0,
                     cache_write_tokens=total.cache_write_tokens if total else 0,
-                    details={"reasoning_tokens": total.reasoning_tokens} if total else {},
+                    details={"reasoning_tokens": total.reasoning_tokens}
+                    if total
+                    else {},
                 )
             elif bounds is not None:
                 assert isinstance(binding.real_model_admission, RealModelAdmission)
@@ -993,7 +1081,9 @@ class _DispatchGuardedModel(WrapperModel):
         except asyncio.CancelledError:
             await state.deps.model_accounting.append_usage(
                 _dispatch_usage_event(
-                    request_id, managed=managed, observation=observation,
+                    request_id,
+                    managed=managed,
+                    observation=observation,
                     event_kind=UsageEventKind.REQUEST_CANCELLED,
                     outcome=RequestOutcome.CANCELLED,
                     response=None,
@@ -1004,7 +1094,9 @@ class _DispatchGuardedModel(WrapperModel):
         except Exception:
             await state.deps.model_accounting.append_usage(
                 _dispatch_usage_event(
-                    request_id, managed=managed, observation=observation,
+                    request_id,
+                    managed=managed,
+                    observation=observation,
                     event_kind=UsageEventKind.REQUEST_FAILED,
                     outcome=RequestOutcome.FAILED,
                     response=None,
@@ -1020,7 +1112,9 @@ class _DispatchGuardedModel(WrapperModel):
         )
         await state.deps.model_accounting.append_usage(
             _dispatch_usage_event(
-                request_id, managed=managed, observation=observation,
+                request_id,
+                managed=managed,
+                observation=observation,
                 event_kind=(
                     UsageEventKind.LEASE_LOST_RETURN
                     if late_lease_return
@@ -1064,13 +1158,19 @@ class _DispatchGuardedModel(WrapperModel):
         if managed:
             assert observation is not None and binding.supervision is not None
             total, provenance = observation.accounted_total()
-            if (observation.turn_completion != "completed" or total is None
+            if (
+                observation.turn_completion != "completed"
+                or total is None
                 or provenance != UsageProvenance.PROVIDER_REPORTED
                 or total.input_tokens >= binding.supervision.reported_input_token_stop
-                or total.output_tokens >= binding.supervision.reported_generated_token_stop):
+                or total.output_tokens
+                >= binding.supervision.reported_generated_token_stop
+            ):
                 state.usage.requests += 1
                 state.usage.incr(response.usage)
-                raise UsageLimitExceeded("managed turn incomplete, usage unavailable or reported stop reached")
+                raise UsageLimitExceeded(
+                    "managed turn incomplete, usage unavailable or reported stop reached"
+                )
             state.reserved_requests += 1
             state.reserved_input_tokens += total.input_tokens
             state.reserved_output_tokens += total.output_tokens
@@ -1336,8 +1436,14 @@ class PydanticAISemanticExecutor:
             self._validate_safety_ceiling(task.effective_budget)
             supervision = model_profile.binding.supervision
             if supervision is not None:
-                effective_deadline_ns = min(effective_deadline_ns, time.monotonic_ns() + int(
-                    (supervision.deadline - datetime.now(UTC)).total_seconds() * 1_000_000_000))
+                effective_deadline_ns = min(
+                    effective_deadline_ns,
+                    time.monotonic_ns()
+                    + int(
+                        (supervision.deadline - datetime.now(UTC)).total_seconds()
+                        * 1_000_000_000
+                    ),
+                )
             state = _TreeState(
                 executor=self,
                 task=erased_task,
@@ -1513,8 +1619,16 @@ class PydanticAISemanticExecutor:
             if isinstance(task.task_input, ClassificationExecutionInput):
                 classifier = self.agent_registry.leaf(CLASSIFIER_KEY)
                 self._validate_leaf_binding(classifier)
-                if classifier.input_contract != CLASSIFIER_INPUT.reference or classifier.output_contract != CLASSIFIER_OUTPUT.reference or classifier.profile_by_effort.get("standard") != CLASSIFIER_PROFILE:
-                    raise RuntimeContractError("classification.binding_invalid", "exact registered specialist binding required")
+                if (
+                    classifier.input_contract != CLASSIFIER_INPUT.reference
+                    or classifier.output_contract != CLASSIFIER_OUTPUT.reference
+                    or classifier.profile_by_effort.get("standard")
+                    != CLASSIFIER_PROFILE
+                ):
+                    raise RuntimeContractError(
+                        "classification.binding_invalid",
+                        "exact registered specialist binding required",
+                    )
                 self.model_profiles.resolve(CLASSIFIER_PROFILE)
             reference = binding.profile_by_effort.get(task.effective_effort.key)
             if reference is None:
@@ -1805,13 +1919,41 @@ class PydanticAISemanticExecutor:
                     packet = state.classification_packet
                     receipt = state.classification_request
                     recorder = state.deps.source_delivery_recorder
-                    if packet is None or receipt is None or not isinstance(recorder, ClassificationRecorder):
-                        raise EvidenceGuardError("classification.attestation_missing", "trusted classifier receipt required")
-                    pins = {BeadTypePin(key=d.key, revision=d.revision).model_dump_json() for d in packet.vocabulary}
-                    if (decision.selected_type is not None and decision.selected_type.model_dump_json() not in pins) or any(not isinstance(d.type, str) and d.type.model_dump_json() not in pins for d in decision.distribution):
-                        raise RuntimeContractError("classification.unregistered_label", "classifier may not invent vocabulary")
-                    await recorder.record_classification(request_id=receipt[0], request_payload_hash=receipt[1], packet=packet, decision=decision)
-                    result_output = AuthoredSemanticOutput[BaseModel](typed_output=decision, used_evidence_refs=tuple(allowed_evidence_refs))
+                    if (
+                        packet is None
+                        or receipt is None
+                        or not isinstance(recorder, ClassificationRecorder)
+                    ):
+                        raise EvidenceGuardError(
+                            "classification.attestation_missing",
+                            "trusted classifier receipt required",
+                        )
+                    pins = {
+                        BeadTypePin(key=d.key, revision=d.revision).model_dump_json()
+                        for d in packet.vocabulary
+                    }
+                    if (
+                        decision.selected_type is not None
+                        and decision.selected_type.model_dump_json() not in pins
+                    ) or any(
+                        not isinstance(d.type, str)
+                        and d.type.model_dump_json() not in pins
+                        for d in decision.distribution
+                    ):
+                        raise RuntimeContractError(
+                            "classification.unregistered_label",
+                            "classifier may not invent vocabulary",
+                        )
+                    await recorder.record_classification(
+                        request_id=receipt[0],
+                        request_payload_hash=receipt[1],
+                        packet=packet,
+                        decision=decision,
+                    )
+                    result_output = AuthoredSemanticOutput[BaseModel](
+                        typed_output=decision,
+                        used_evidence_refs=tuple(allowed_evidence_refs),
+                    )
                 elif isinstance(state.task.task_input, RevisitingExecutionInput):
                     access = state.deps.source_revisiting
                     if access is None or state.deps.source_delivery_recorder is None:
@@ -1850,11 +1992,15 @@ class PydanticAISemanticExecutor:
                             ensure_ascii=True,
                             separators=(",", ":"),
                         )
-                        step_type = (ClassificationAuthorStep if isinstance(
-                            state.task.task_input, ClassificationExecutionInput
-                        ) else MentionAuthorStep if isinstance(
-                            state.task.task_input, MentionExecutionInput
-                        ) else SourceAuthorStep)
+                        step_type = (
+                            ClassificationAuthorStep
+                            if isinstance(
+                                state.task.task_input, ClassificationExecutionInput
+                            )
+                            else MentionAuthorStep
+                            if isinstance(state.task.task_input, MentionExecutionInput)
+                            else SourceAuthorStep
+                        )
                         result = await invoke(current_prompt, step_type)
                         step = step_type.model_validate(result.output)
                         notes = step.notes
@@ -1863,8 +2009,13 @@ class PydanticAISemanticExecutor:
                             final_output: BaseModel = step.typed_output
                             if isinstance(step, ClassificationAuthorStep):
                                 if not forward_complete:
-                                    raise EvidenceGuardError("classification.primary_incomplete", "primary must finish all mandatory exposure before classification")
-                                final_output = await self._classify_proposal(run_deps, step)
+                                    raise EvidenceGuardError(
+                                        "classification.primary_incomplete",
+                                        "primary must finish all mandatory exposure before classification",
+                                    )
+                                final_output = await self._classify_proposal(
+                                    run_deps, step
+                                )
                             authored_step = AuthoredSemanticOutput[BaseModel](
                                 typed_output=final_output,
                                 used_evidence_refs=step.used_evidence_refs,
@@ -2034,48 +2185,102 @@ class PydanticAISemanticExecutor:
                 ", ".join(sorted(not_visible)),
             )
 
-    async def _classify_proposal(self, parent: _AgentRunDeps, step: ClassificationAuthorStep) -> ClassifiedExecutionOutput:
+    async def _classify_proposal(
+        self, parent: _AgentRunDeps, step: ClassificationAuthorStep
+    ) -> ClassifiedExecutionOutput:
         state = parent.state
         task_input = cast(ClassificationExecutionInput, state.task.task_input)
         access = state.deps.source_revisiting
-        if access is None or not isinstance(state.deps.source_delivery_recorder, ClassificationRecorder):
-            raise EvidenceGuardError("classification.unavailable", "trusted classifier composition required")
+        if access is None or not isinstance(
+            state.deps.source_delivery_recorder, ClassificationRecorder
+        ):
+            raise EvidenceGuardError(
+                "classification.unavailable", "trusted classifier composition required"
+            )
         assert step.typed_output is not None
         # Author-selected exact intervals, including material qualifications.
         # The trusted SQL recorder also checks actual primary exposure.
-        evidence = tuple([await access.revisit(selection) for selection in step.supporting_selections])
-        packet = ClassificationPacket(task_id=UUID(task_input.task_id), attempt_id=UUID(state.deps.attempt_id),
-            author_run_id=parent.run_id, proposal=step.typed_output,
-            vocabulary=task_input.payload.classification_vocabulary, evidence=evidence)
+        evidence = tuple(
+            [
+                await access.revisit(selection)
+                for selection in step.supporting_selections
+            ]
+        )
+        packet = ClassificationPacket(
+            task_id=UUID(task_input.task_id),
+            attempt_id=UUID(state.deps.attempt_id),
+            author_run_id=parent.run_id,
+            proposal=step.typed_output,
+            vocabulary=task_input.payload.classification_vocabulary,
+            evidence=evidence,
+        )
         await state.reserve_delegate()
         binding = self.agent_registry.leaf(CLASSIFIER_KEY)
         child_id = self._run_id_factory("delegate")
         delegation_id = f"{child_id}.delegation"
-        correlation = SemanticDelegatedRunCorrelation(run_id=child_id, parent_run_id=parent.run_id,
-            agent_contract=SemanticAgentContractIdentity(agent_key=CLASSIFIER_KEY, input_contract=binding.input_contract, output_contract=binding.output_contract),
-            model_profile=CLASSIFIER_PROFILE, delegation_id=delegation_id)
+        correlation = SemanticDelegatedRunCorrelation(
+            run_id=child_id,
+            parent_run_id=parent.run_id,
+            agent_contract=SemanticAgentContractIdentity(
+                agent_key=CLASSIFIER_KEY,
+                input_contract=binding.input_contract,
+                output_contract=binding.output_contract,
+            ),
+            model_profile=CLASSIFIER_PROFILE,
+            delegation_id=delegation_id,
+        )
         await self._emit(state, SemanticRunEventKind.DELEGATION_STARTED, correlation)
         state.open_delegations += 1
         state.delegations_closed.clear()
         state.classification_packet = packet
         try:
             async with state.delegate_semaphore:
-                result = await self._run_registered_agent(state, binding, run_role="delegate", parent_run_id=parent.run_id,
-                    prompt=packet.model_dump_json(), allowed_evidence_refs=parent.allowed_evidence_refs,
+                result = await self._run_registered_agent(
+                    state,
+                    binding,
+                    run_role="delegate",
+                    parent_run_id=parent.run_id,
+                    prompt=packet.model_dump_json(),
+                    allowed_evidence_refs=parent.allowed_evidence_refs,
                     initially_visible_evidence_refs=parent.allowed_evidence_refs,
-                    model_profile=self.model_profiles.resolve(CLASSIFIER_PROFILE), run_id=child_id, delegation_id=delegation_id)
+                    model_profile=self.model_profiles.resolve(CLASSIFIER_PROFILE),
+                    run_id=child_id,
+                    delegation_id=delegation_id,
+                )
         finally:
             await self._emit_delegation_finished(state, correlation)
         decision = ClassificationDecision.model_validate(result.typed_output)
         bead = step.typed_output.annotations[0]
-        if decision.outcome != "selected" or decision.proposal_alignment != "consistent" or decision.selected_type != BeadTypePin(key=bead.bead_type_key, revision=bead.bead_type_revision):
-            raise CompleteInputError(SemanticResultStatus.INVALID_OUTPUT, "classification.non_acceptance")
+        if (
+            decision.outcome != "selected"
+            or decision.proposal_alignment != "consistent"
+            or decision.selected_type
+            != BeadTypePin(key=bead.bead_type_key, revision=bead.bead_type_revision)
+        ):
+            raise CompleteInputError(
+                SemanticResultStatus.INVALID_OUTPUT, "classification.non_acceptance"
+            )
         assert state.classification_request is not None
-        contribution = ClassificationContribution(request_id=state.classification_request[0], model_run_ref=child_id,
-            author_run_ref=parent.run_id, packet_sha256=digest(packet), proposal_sha256=digest(step.typed_output),
-            vocabulary_sha256=hashlib.sha256(canonical_json_bytes([d.model_dump(mode="json") for d in packet.vocabulary])).hexdigest(),
-            evidence=tuple(ClassificationEvidenceReference(selection=e.request, sha256=e.sha256) for e in evidence), decision=decision)
-        return ClassifiedExecutionOutput(annotations=step.typed_output.annotations, classification=contribution)
+        contribution = ClassificationContribution(
+            request_id=state.classification_request[0],
+            model_run_ref=child_id,
+            author_run_ref=parent.run_id,
+            packet_sha256=digest(packet),
+            proposal_sha256=digest(step.typed_output),
+            vocabulary_sha256=hashlib.sha256(
+                canonical_json_bytes(
+                    [d.model_dump(mode="json") for d in packet.vocabulary]
+                )
+            ).hexdigest(),
+            evidence=tuple(
+                ClassificationEvidenceReference(selection=e.request, sha256=e.sha256)
+                for e in evidence
+            ),
+            decision=decision,
+        )
+        return ClassifiedExecutionOutput(
+            annotations=step.typed_output.annotations, classification=contribution
+        )
 
     async def _delegate(
         self,
@@ -2585,6 +2790,13 @@ class PydanticAISemanticExecutor:
     ) -> SemanticTaskResult[BaseModel]:
         usage = self._synchronize_usage(state)
         output = authored.typed_output
+        run_reference_code = "authored"
+        if len(state.run_refs) == 1:
+            # The run reference is host provenance the model cannot know; bind
+            # the statements to this run before the output is hashed.
+            output, stamped = stamp_statement_run_reference(output, state.run_refs[0])
+            if stamped:
+                run_reference_code = "stamped"
         result_type = cast(
             type[BaseModel],
             SemanticTaskResult.__class_getitem__(binding.output_model_type),
@@ -2605,6 +2817,11 @@ class PydanticAISemanticExecutor:
                 used_evidence_refs=authored.used_evidence_refs,
                 model_run_refs=tuple(state.run_refs),
                 validation_results=(
+                    ValidationResult(
+                        validator_key="runtime.run_reference",
+                        passed=True,
+                        code=run_reference_code,
+                    ),
                     ValidationResult(
                         validator_key="runtime.output_contract",
                         passed=True,
@@ -2878,25 +3095,48 @@ def _request_usage_event(
 
 
 def _dispatch_usage_event(
-    request_id: UUID, *, managed: bool, observation: ManagedUsageObservation | None,
-    event_kind: UsageEventKind, outcome: RequestOutcome, response: ModelResponse | None,
-    diagnostic_code: str | None, usage_provenance: UsageProvenance = UsageProvenance.UNAVAILABLE,
+    request_id: UUID,
+    *,
+    managed: bool,
+    observation: ManagedUsageObservation | None,
+    event_kind: UsageEventKind,
+    outcome: RequestOutcome,
+    response: ModelResponse | None,
+    diagnostic_code: str | None,
+    usage_provenance: UsageProvenance = UsageProvenance.UNAVAILABLE,
 ) -> ModelUsageEvent:
     if not managed:
-        return _request_usage_event(request_id, event_kind=event_kind, outcome=outcome,
-                                    response=response, diagnostic_code=diagnostic_code,
-                                    usage_provenance=usage_provenance)
+        return _request_usage_event(
+            request_id,
+            event_kind=event_kind,
+            outcome=outcome,
+            response=response,
+            diagnostic_code=diagnostic_code,
+            usage_provenance=usage_provenance,
+        )
     observed = observation or ManagedUsageObservation()
     total, provenance = observed.accounted_total()
     if outcome == RequestOutcome.SUCCEEDED:
-        event_kind = UsageEventKind.USAGE_REPORTED if total is not None else UsageEventKind.USAGE_UNAVAILABLE
+        event_kind = (
+            UsageEventKind.USAGE_REPORTED
+            if total is not None
+            else UsageEventKind.USAGE_UNAVAILABLE
+        )
     event_id = uuid4()
     return ManagedUsageEvent(
-        event_id=event_id, request_id=request_id,
-        dedupe_key=hashlib.sha256(f"{request_id}:{event_kind}:{event_id}".encode()).hexdigest(),
-        event_kind=event_kind, outcome=outcome,
-        usage_state=UsageState.REPORTED if total is not None else UsageState.UNAVAILABLE,
-        usage_provenance=provenance, usage=total, observation=observed,
+        event_id=event_id,
+        request_id=request_id,
+        dedupe_key=hashlib.sha256(
+            f"{request_id}:{event_kind}:{event_id}".encode()
+        ).hexdigest(),
+        event_kind=event_kind,
+        outcome=outcome,
+        usage_state=UsageState.REPORTED
+        if total is not None
+        else UsageState.UNAVAILABLE,
+        usage_provenance=provenance,
+        usage=total,
+        observation=observed,
         diagnostic_code=diagnostic_code,
     )
 
