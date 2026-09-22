@@ -52,6 +52,14 @@ the next release, changes no migration, contract payload or dependency, and does
 not alter the published 0.0.9 archives. The 0.0.9 preparation paragraph below is
 historical.
 
+On 2026-09-22 the owner also authorized the 0.0.10 release: preparing it from
+accepted main `f6f649eed5c5908f21a1bf2f4e365582e51ae6e6` (after PR #32), merging its exact
+qualified release PR, and creating/pushing `v0.0.10` once at subsequently
+verified current release main. The owner updated the environment tag rule for
+`v0.0.10`; the existing PyPI Trusted Publisher needs no change and automation
+performs no PyPI sign-in. Protected upload approval remains the owner's action;
+stop when the publishing workflow waits for it. See `docs/releasing.md`.
+
 The owner-authorized 0.0.9 preparation starts from merged main
 `aff4270a549f7618d99db3735020ccb2785f32f1`. Preserve runtime behavior, all 26
 migrations, 61 contracts, dependencies and historical release inventories. Release

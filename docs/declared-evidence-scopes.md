@@ -1,11 +1,11 @@
-# Declared evidence scopes (schema 25, prepared for 0.0.9)
+# Declared evidence scopes (schema 25, published in 0.0.9)
 
 An explicitly authorized producer can materialize a source-local declared evidence
 scope without asserting a native turn, terminal, conversation, branch or parent.
 The new `memoriesql.declared-evidence-scope.v1` contract reuses evidence packages,
 canonical materialization, the existing semantic task and source-revisiting path,
 and immutable canonical apply. It adds no model, executor, queue or evidence store.
-This change is included in the prepared 0.0.9 candidate, not published 0.0.8.
+This change is published in 0.0.9.
 Verified publication must precede downstream consumption.
 
 ## Declaration and truthful completeness
