@@ -1,7 +1,7 @@
 # Canonical migrations
 
 Published 0.0.8 contains schemas 1–24. Development adds declared evidence scopes
-(schema 25) and supervised managed dispatch (schema 26), both included in the prepared 0.0.9 candidate, not yet published. All
+(schema 25) and supervised managed dispatch (schema 26), both published in 0.0.9. All
 historical SQL bytes are preserved. Python 3.13+ is required; qualification covers
 3.13 and 3.14 (`>=3.13,<3.15`). Package installation does not apply migrations or
 provision production trust. Upgrade and release authorization remain separate.
@@ -15,8 +15,8 @@ as a runtime setup instruction:
 
 ```console
 python3.13 -m venv migration-env
-migration-env/bin/python -m pip install ./memoriesql-0.0.9-py3-none-any.whl
-migration-env/bin/python -c "from importlib.metadata import version; assert version('memoriesql') == '0.0.9'; from memoriesql.infrastructure.postgres.migration_runner import discover_migrations; assert len(discover_migrations()) == 26"
+migration-env/bin/python -m pip install ./memoriesql-0.0.10-py3-none-any.whl
+migration-env/bin/python -c "from importlib.metadata import version; assert version('memoriesql') == '0.0.10'; from memoriesql.infrastructure.postgres.migration_runner import discover_migrations; assert len(discover_migrations()) == 26"
 ```
 
 The installer rejects this artifact on unsupported interpreters. Publication and

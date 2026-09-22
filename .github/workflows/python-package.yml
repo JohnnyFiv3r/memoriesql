@@ -51,7 +51,7 @@ jobs:
         run: |
           export SOURCE_DATE_EPOCH=315532800
           python -m build --sdist --wheel --outdir build/dist-a
-          python scripts/normalize_python_sdist.py build/dist-a/memoriesql-0.0.9.tar.gz
+          python scripts/normalize_python_sdist.py build/dist-a/memoriesql-0.0.10.tar.gz
           python -m twine check --strict build/dist-a/*
           # Development receipts never replace the immutable publication inventory.
           python scripts/inspect_python_distribution.py build/dist-a --source-commit "${{ github.event.pull_request.head.sha || github.sha }}" > build/dist-a/python-package-artifacts.json
@@ -60,9 +60,9 @@ jobs:
         run: |
           export SOURCE_DATE_EPOCH=315532800
           python -m build --sdist --wheel --outdir build/dist-b
-          python scripts/normalize_python_sdist.py build/dist-b/memoriesql-0.0.9.tar.gz
-          cmp build/dist-a/memoriesql-0.0.9-py3-none-any.whl build/dist-b/memoriesql-0.0.9-py3-none-any.whl
-          cmp build/dist-a/memoriesql-0.0.9.tar.gz build/dist-b/memoriesql-0.0.9.tar.gz
+          python scripts/normalize_python_sdist.py build/dist-b/memoriesql-0.0.10.tar.gz
+          cmp build/dist-a/memoriesql-0.0.10-py3-none-any.whl build/dist-b/memoriesql-0.0.10-py3-none-any.whl
+          cmp build/dist-a/memoriesql-0.0.10.tar.gz build/dist-b/memoriesql-0.0.10.tar.gz
       - name: Retain exact artifacts and inventory
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:

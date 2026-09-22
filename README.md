@@ -61,12 +61,12 @@ the authoring path must report incomplete work rather than invent an answer.
 ## Start with the published package
 
 Use **Python 3.13 or 3.14** (`>=3.13,<3.15`). Create an environment and pin the
-current published runtime:
+current published runtime, 0.0.9 (0.0.10 is prepared, not yet published):
 
 ```console
 python3.13 -m venv .venv
 . .venv/bin/activate
-python -m pip install memoriesql==0.0.8
+python -m pip install memoriesql==0.0.9
 memoriesql --version
 memoriesql contracts --json
 memoriesql contract memoriesql.capture.connector-cursor --json
@@ -113,15 +113,20 @@ rollback or final usage reconciliation.
 - **Published:** [0.0.8](https://pypi.org/project/memoriesql/0.0.8/) contains the
   canonical runtime, evidence recovery/revisiting, local mentions, classification,
   stored-result inspection and hard-bounded model-admission interface.
-- **Prepared for 0.0.9, not yet published:** [declared evidence scopes](docs/declared-evidence-scopes.md)
+- **Published in 0.0.9:** [declared evidence scopes](docs/declared-evidence-scopes.md)
   let a qualified producer bind complete retained records without claiming a
   native turn or complete episode. This is not included in the installation above.
-- **Prepared 0.0.9 opt-in:** [supervised managed dispatch](docs/supervised-dispatch.md)
+- **0.0.9 opt-in:** [supervised managed dispatch](docs/supervised-dispatch.md)
   distinguishes an observable turn from unknown hidden inference requests, consumes
   approval before dispatch and retains reported or unavailable usage truthfully.
   It supplies no provider adapter or live-call authorization.
-- **Also prepared for 0.0.9:** terminal-write failures settle dependent cleanup
+- **Also in 0.0.9:** terminal-write failures settle dependent cleanup
   with retained errors, while started writes and late usage remain owned.
+- **Prepared for 0.0.10, not yet published:** the executor binds authored
+  statements to its own run reference before hashing, and a data-error
+  canonical-apply refusal settles the attempt as invalid output instead of
+  leaving it running ([runtime](docs/runtime.md)). Schemas, contract payloads
+  and dependencies are unchanged from 0.0.9.
 - **Not yet qualified as an end-to-end product:** live-provider composition,
   real-model observation quality, production source/trust provisioning and recall.
 

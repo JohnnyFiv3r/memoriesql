@@ -2,11 +2,11 @@
 
 The `0.x` package line is experimental and provides no general API compatibility
 guarantee. Releases use plain numeric `X.Y.Z` with `vX.Y.Z` tags. This preparation
-selects genuine `0.0.9` metadata and exact `v0.0.9` repository controls; it does not
+selects genuine `0.0.10` metadata and exact `v0.0.10` repository controls; it does not
 itself publish or supply protected upload approval. Alpha/beta/rc suffixes require a separate owner decision.
 Published `0.0.1a1`, `0.0.2`, `0.0.3`, `0.0.4`, `0.0.5`, `0.0.6`, `0.0.7` and `0.0.8`, their tags and inventories remain
 immutable. The previous `runtime-package-artifact-inventory.json` still records
-published 0.0.4; the new versioned 0.0.9 candidate inventory is separate.
+published 0.0.4; the new versioned 0.0.10 candidate inventory is separate.
 
 Two narrower integrity rules apply after publication:
 
@@ -14,7 +14,7 @@ Two narrower integrity rules apply after publication:
 2. Breaking contract-payload changes require a new contract version. A defective
    uploaded wheel/sdist is corrected by a new distribution version, never replacement.
 
-The 0.0.9 preparation preserves all runtime behavior, dependencies, migrations
+The 0.0.10 preparation preserves dependencies, migrations
 0001–0026, 61 existing contract records and generated catalogs. Python support stays
 `>=3.13,<3.15`; 3.13 and 3.14 are tested. Older Python may explicitly pin catalog-only
 `0.0.1a1`; it cannot consume the runtime by falling back to that package.
@@ -75,7 +75,7 @@ unchanged and experimental. Repeated usage does not inflate unique target covera
 See [recovery](../transcript-fold-recovery.md) and [revisiting](../source-revisiting.md).
 
 All published inventories and historical development candidate inventories remain unchanged.
-Only the new 0.0.9 inventory is used by the prepared release gate. Production grants,
+Only the new 0.0.10 inventory is used by the prepared release gate. Production grants,
 providers, implicit migration or task activation are not supplied by installation.
 
 ## Schema 21 source-stable opt-in in 0.0.7
@@ -99,7 +99,14 @@ No historical equivalence, migration of bindings or duplicate repair is inferred
 Production identity-policy approval and a separately authorized release precede
 consumer adoption. PR-02O/CP-2 and the historical queue evidence remain incomplete.
 
-## Prepared 0.0.9 public composition
+## Prepared 0.0.10 public composition
+
+The 0.0.10 candidate adds two owner-authorized forward runtime changes on top of
+published 0.0.9: the executor binds authored statements to its own run reference
+before hashing (single-run trees), and the worker settles data-error canonical-apply
+refusals as invalid output. No migration, contract payload or dependency changes.
+
+### Published 0.0.9 composition
 
 The 0.0.9 candidate packages the already merged public prerequisites:
 
