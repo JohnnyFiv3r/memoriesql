@@ -1,7 +1,7 @@
 # Canonical migrations
 
-Published 0.0.8 contains schemas 1–24. Development adds declared evidence scopes
-(schema 25) and supervised managed dispatch (schema 26), both published in 0.0.9. All
+Published 0.0.10 contains schemas 1–26, including declared evidence scopes
+(schema 25) and supervised managed dispatch (schema 26). All
 historical SQL bytes are preserved. Python 3.13+ is required; qualification covers
 3.13 and 3.14 (`>=3.13,<3.15`). Package installation does not apply migrations or
 provision production trust. Upgrade and release authorization remain separate.
