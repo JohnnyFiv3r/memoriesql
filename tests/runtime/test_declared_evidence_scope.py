@@ -36,11 +36,12 @@ from memoriesql.application.evidence_packages import (
     digest,
 )
 from memoriesql.application.source_revisiting import ActivateSourceRevisiting
-from memoriesql.infrastructure.postgres.migration_runner import migrate
 
 if TYPE_CHECKING:
+    from tests.runtime.test_postgres_runtime import migrate
     from tests.runtime.test_source_revisiting import SourceRevisiting
 else:
+    from test_postgres_runtime import migrate
     from test_source_revisiting import SourceRevisiting
 
 

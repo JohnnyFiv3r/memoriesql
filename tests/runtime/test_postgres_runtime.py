@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import os
+import re
 import unittest
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -27,7 +31,88 @@ from memoriesql.infrastructure.postgres.authorization import PostgresAuthorizati
 from memoriesql.infrastructure.postgres.canonical_transactions import (
     PostgresCanonicalTransactions,
 )
-from memoriesql.infrastructure.postgres.migration_runner import migrate
+from memoriesql.infrastructure.postgres.migration_runner import (
+    MigrationReceipt,
+    discover_migrations,
+)
+from memoriesql.infrastructure.postgres.migration_runner import (
+    migrate as _released_migrate,
+)
+
+# Only the released migrations that issue cluster-wide role statements (0006
+# creates and alters the shared product roles) can collide across databases
+# with "tuple concurrently updated". Those steps run under one advisory lock
+# taken on the maintenance database (advisory locks are per database); every
+# other step runs unlocked, so parallel acceptance shards share one PostgreSQL
+# service without serializing whole migrations.
+CLUSTER_LOCK_KEY = int.from_bytes(b"mqlmigr8", "big")
+_ROLE_STATEMENT = re.compile(r"\b(?:CREATE|ALTER|DROP)\s+ROLE\b", re.IGNORECASE)
+ROLE_MIGRATION_VERSIONS = frozenset(
+    migration.version
+    for migration in discover_migrations()
+    if _ROLE_STATEMENT.search(migration.sql)
+)
+
+
+@contextmanager
+def _cluster_lock() -> Iterator[None]:
+    with psycopg.connect(os.environ["N1_TEST_DATABASE_URL"], autocommit=True) as gate:
+        gate.execute("SELECT pg_advisory_lock(%s)", (CLUSTER_LOCK_KEY,))
+        try:
+            yield
+        finally:
+            gate.execute("SELECT pg_advisory_unlock(%s)", (CLUSTER_LOCK_KEY,))
+
+
+def migrate(
+    connection: Any,
+    *,
+    expected_current_version: int,
+    target_version: int,
+) -> MigrationReceipt:
+    """Run the released migration runner, locking only the role-defining steps.
+
+    The range is applied in segments so that each role-defining migration runs
+    alone under the cluster lock; the receipt returned covers the whole range
+    exactly as one released call would report it.
+    """
+    boundaries = sorted(
+        version
+        for version in ROLE_MIGRATION_VERSIONS
+        if expected_current_version < version <= target_version
+    )
+    if not boundaries:
+        return _released_migrate(
+            connection,
+            expected_current_version=expected_current_version,
+            target_version=target_version,
+        )
+    receipts: list[MigrationReceipt] = []
+    current = expected_current_version
+
+    def step(to_version: int) -> None:
+        nonlocal current
+        receipts.append(
+            _released_migrate(
+                connection, expected_current_version=current, target_version=to_version
+            )
+        )
+        current = to_version
+
+    for boundary in boundaries:
+        if boundary - 1 > current:
+            step(boundary - 1)
+        with _cluster_lock():
+            step(boundary)
+    if current < target_version:
+        step(target_version)
+    return dataclasses.replace(
+        receipts[-1],
+        from_version=receipts[0].from_version,
+        applied_migrations=tuple(
+            applied for receipt in receipts for applied in receipt.applied_migrations
+        ),
+    )
 
 
 class PostgresRuntime(unittest.TestCase):

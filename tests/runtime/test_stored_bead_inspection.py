@@ -12,7 +12,6 @@ from memoriesql.application.stored_bead_inspection import (
     ReadStoredBeadEvidence,
     StoredEvidenceSelection,
 )
-from memoriesql.infrastructure.postgres.migration_runner import migrate
 from memoriesql.infrastructure.postgres.stored_bead_inspection import (
     PostgresStoredBeadInspection,
 )
@@ -20,10 +19,12 @@ from memoriesql.infrastructure.postgres.stored_bead_inspection import (
 if TYPE_CHECKING:
     from tests.runtime.test_bead_classification import BeadClassification
     from tests.runtime.test_local_entity_mentions import LocalMentions
+    from tests.runtime.test_postgres_runtime import migrate
     from tests.runtime.test_source_revisiting import SourceRevisiting
 else:
     from test_bead_classification import BeadClassification
     from test_local_entity_mentions import LocalMentions
+    from test_postgres_runtime import migrate
     from test_source_revisiting import SourceRevisiting
 
 

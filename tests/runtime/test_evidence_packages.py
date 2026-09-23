@@ -41,15 +41,14 @@ from memoriesql.application.semantic_task_contracts import canonical_json_bytes
 from memoriesql.infrastructure.postgres.evidence_packages import (
     PostgresEvidencePackages,
 )
-from memoriesql.infrastructure.postgres.migration_runner import migrate
 from memoriesql.infrastructure.postgres.source_range import (
     PostgresAuthorizedSourceRangeSession,
 )
 
 if TYPE_CHECKING:
-    from tests.runtime.test_postgres_runtime import PostgresRuntime
+    from tests.runtime.test_postgres_runtime import PostgresRuntime, migrate
 else:
-    from test_postgres_runtime import PostgresRuntime
+    from test_postgres_runtime import PostgresRuntime, migrate
 
 
 class EvidencePackages(PostgresRuntime):

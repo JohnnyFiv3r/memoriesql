@@ -25,12 +25,13 @@ from memoriesql.application.evidence_packages import (
     RawEvidenceSlice,
     digest,
 )
-from memoriesql.infrastructure.postgres.migration_runner import migrate
 
 if TYPE_CHECKING:
     from tests.runtime import test_logical_unit_materialization as fixtures
+    from tests.runtime.test_postgres_runtime import migrate
 else:
     import test_logical_unit_materialization as fixtures
+    from test_postgres_runtime import migrate
 
 
 class SourceStableIdentity(unittest.TestCase):

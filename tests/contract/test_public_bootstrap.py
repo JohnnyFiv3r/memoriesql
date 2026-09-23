@@ -146,6 +146,10 @@ class PublicBootstrapTests(unittest.TestCase):
         self.assertNotIn("older-python", workflow)
         compatibility = workflow.split("  compatibility:")[1]
         self.assertIn('python-version: ["3.13", "3.14"]', compatibility)
+        # The installed acceptance runs as parallel shards launched by the
+        # workflow shell; the script itself denies subprocesses.
+        self.assertIn('run_installed_acceptance.py --shard "$shard/$shards"', compatibility)
+        self.assertIn('test "$failed" -eq 0', compatibility)
 
 
 

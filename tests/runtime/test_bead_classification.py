@@ -32,14 +32,15 @@ from memoriesql.infrastructure.models.pydanticai_executor import (
     PydanticAIModelProfileRegistry,
     PydanticAISemanticExecutor,
 )
-from memoriesql.infrastructure.postgres.migration_runner import migrate
 
 if TYPE_CHECKING:
     from tests.runtime import test_local_entity_mentions as fixtures
     from tests.runtime import test_source_revisiting as source_fixtures
+    from tests.runtime.test_postgres_runtime import migrate
 else:
     import test_local_entity_mentions as fixtures
     import test_source_revisiting as source_fixtures
+    from test_postgres_runtime import migrate
 
 
 class BeadClassification(fixtures.LocalMentions):
