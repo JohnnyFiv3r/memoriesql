@@ -1,4 +1,22 @@
-# Prepared 0.0.11 release and owner gates
+# 0.0.11 release: preparation, owner gates and publication record
+
+## Publication record
+
+Under the owner's authorization, `v0.0.11` was pushed at release main
+`91e29c92ab61c3366c78f7f9fa9437d619771380` on 2026-09-23 (20:33Z), after the
+exact-main package run [35915656747](https://github.com/JohnnyFiv3r/memoriesql/actions/runs/35915656747)
+succeeded. The publishing run
+[35916803725](https://github.com/JohnnyFiv3r/memoriesql/actions/runs/35916803725)
+verified the two archived artifacts against the committed inventory and, after
+the owner's protected approval, uploaded them to PyPI at 20:44Z. Independent
+verification afterwards: the PyPI wheel (`9a3ec138…03ec7`, 633,122 bytes) and
+sdist (`80ac82ba…0eae2`, 563,555 bytes) are byte-identical to the archived CI
+artifacts and match the committed inventory; each carries a trusted-publishing
+attestation for `JohnnyFiv3r/memoriesql`, `publish-pypi.yml` and environment
+`pypi`; PyPI metadata reports version 0.0.11, `>=3.13,<3.15` and the three pinned
+dependencies; a fresh installation from the PyPI index reports version 0.0.11, 63
+contracts, 27 migrations and intact `RECORD` hashes. `memoriesql==0.0.11` may now
+be pinned. The preparation record below is retained as written.
 
 This preparation packages merged main
 `6b3ae977cfa499d35096fe244f5c6d6e30727d0e` (PR #37 merged 2026-09-23), whose
@@ -98,8 +116,8 @@ relations to explicitly pinned candidate beads, lifecycle judgments about those
 candidates' claims and an assessment of every pinned candidate, in the same
 acceptance as its statements. Claim and relation states derive from append-only
 authored and governed history as of a known time; derivation roots never count a
-transformation as independent corroboration. These are prepared candidate
-capabilities, not a claim of publication or real-provider quality.
+transformation as independent corroboration. These capabilities are published in
+0.0.11; publication is not a claim of real-provider quality.
 
 <a id="caller-composition-and-explicit-opt-in"></a>
 
