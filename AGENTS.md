@@ -69,6 +69,15 @@ verified current release main. The owner updated the environment tag rule for
 performs no PyPI sign-in. Protected upload approval remains the owner's action;
 stop when the publishing workflow waits for it. See `docs/releasing.md`.
 
+On 2026-09-23, after PR #37 merged schema 27, the owner authorized the 0.0.11
+release: preparing it from merged main `6b3ae977cfa499d35096fe244f5c6d6e30727d0e`,
+merging its exact qualified release PR, and creating/pushing `v0.0.11` once at
+subsequently verified current release main. The owner advanced the environment
+tag rule to `v0.0.11`; the existing PyPI Trusted Publisher needs no change and
+automation performs no PyPI sign-in. Protected upload approval remains the
+owner's action; stop when the publishing workflow waits for it. See
+`docs/releasing.md`.
+
 On 2026-09-22, after `v0.0.10` was tagged, the owner decided that with no external
 forks or consumers the repository owes no backwards compatibility until that
 changes, and authorized retiring the historical release bookkeeping: historical

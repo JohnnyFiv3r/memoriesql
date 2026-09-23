@@ -43,7 +43,7 @@ def good_run() -> dict[str, Any]:
 
 
 def select(runs: list[dict[str, Any]]) -> int:
-    return select_ci_run(runs, sha=SHA, main_sha=SHA, tag="v0.0.10", version="0.0.10")
+    return select_ci_run(runs, sha=SHA, main_sha=SHA, tag="v0.0.11", version="0.0.11")
 
 
 class ReleaseControlTests(unittest.TestCase):
@@ -54,20 +54,20 @@ class ReleaseControlTests(unittest.TestCase):
         arguments = {
             "sha": SHA,
             "main_sha": SHA,
-            "tag": "v0.0.10",
-            "version": "0.0.10",
+            "tag": "v0.0.11",
+            "version": "0.0.11",
         }
         for field, wrong in (
             ("sha", "malformed"),
             ("main_sha", "b" * 40),
-            ("tag", "v0.0.9"),
-            ("tag", "v0.0.11"),
-            ("tag", "v0.0.10rc1"),
-            ("version", "0.0.9"),
-            ("version", "0.0.11"),
-            ("version", "0.0.10a1"),
-            ("version", "0.0.10b1"),
-            ("version", "0.0.10rc1"),
+            ("tag", "v0.0.10"),
+            ("tag", "v0.0.12"),
+            ("tag", "v0.0.11rc1"),
+            ("version", "0.0.10"),
+            ("version", "0.0.12"),
+            ("version", "0.0.11a1"),
+            ("version", "0.0.11b1"),
+            ("version", "0.0.11rc1"),
         ):
             with self.subTest(field=field), self.assertRaises(ValueError):
                 select_ci_run([good_run()], **(arguments | {field: wrong}))
@@ -110,7 +110,7 @@ class ReleaseControlTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
             inventory = self.make_artifacts(directory)
-            for version in (None, "0.0.9", "0.0.11", "0.0.10a1", "0.0.10rc1"):
+            for version in (None, "0.0.10", "0.0.12", "0.0.11a1", "0.0.11rc1"):
                 with self.subTest(version=version), self.assertRaises(ValueError):
                     verify_artifacts(directory, inventory | {"version": version})
 
@@ -138,14 +138,14 @@ class ReleaseControlTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
             inventory = self.make_artifacts(directory)
-            for name in ("../outside.whl", "memoriesql-0.0.10.tar.gz"):
+            for name in ("../outside.whl", "memoriesql-0.0.11.tar.gz"):
                 altered = deepcopy(inventory)
                 altered["artifacts"][0]["filename"] = name
                 with self.subTest(name=name), self.assertRaises(ValueError):
                     verify_artifacts(directory, altered)
 
     def test_only_current_version_is_eligible_even_with_matching_tag(self) -> None:
-        for version in ("0.0.9", "0.0.10rc1", "0.0.11"):
+        for version in ("0.0.10", "0.0.11rc1", "0.0.12"):
             with self.subTest(version=version), self.assertRaises(ValueError):
                 select_ci_run(
                     [good_run()],
@@ -160,14 +160,14 @@ class ReleaseControlTests(unittest.TestCase):
         verification = root / "docs/verification"
         self.assertEqual(
             RELEASE_INVENTORY,
-            verification / "runtime-0.0.10-package-artifact-inventory.json",
+            verification / "runtime-0.0.11-package-artifact-inventory.json",
         )
         candidate = json.loads(RELEASE_INVENTORY.read_bytes())
         self.assertEqual(candidate["version"], APPROVED_VERSION)
-        self.assertEqual(candidate["records"]["count"], 61)
+        self.assertEqual(candidate["records"]["count"], 63)
         self.assertEqual(
             {r["filename"] for r in candidate["artifacts"]},
-            {"memoriesql-0.0.10-py3-none-any.whl", "memoriesql-0.0.10.tar.gz"},
+            {"memoriesql-0.0.11-py3-none-any.whl", "memoriesql-0.0.11.tar.gz"},
         )
         project = tomllib.loads((root / "pyproject.toml").read_text())["project"]
         self.assertEqual(project["version"], APPROVED_VERSION)
@@ -201,7 +201,7 @@ class ReleaseControlTests(unittest.TestCase):
                     content = (root / name).read_bytes()
                     if name == tampered:
                         content += b"\n# sdist-only tampering\n"
-                    member = tarfile.TarInfo(f"memoriesql-0.0.10/{name}")
+                    member = tarfile.TarInfo(f"memoriesql-0.0.11/{name}")
                     member.size = len(content)
                     archive.addfile(member, io.BytesIO(content))
             payload.seek(0)
@@ -219,8 +219,8 @@ class ReleaseControlTests(unittest.TestCase):
     def make_artifacts(directory: Path) -> dict[str, Any]:
         rows = []
         for filename in (
-            "memoriesql-0.0.10-py3-none-any.whl",
-            "memoriesql-0.0.10.tar.gz",
+            "memoriesql-0.0.11-py3-none-any.whl",
+            "memoriesql-0.0.11.tar.gz",
         ):
             payload = b"valid"
             (directory / filename).write_bytes(payload)
@@ -231,4 +231,4 @@ class ReleaseControlTests(unittest.TestCase):
                     "sha256": hashlib.sha256(payload).hexdigest(),
                 }
             )
-        return {"version": "0.0.10", "artifacts": rows}
+        return {"version": "0.0.11", "artifacts": rows}
