@@ -33,7 +33,9 @@ part of this public slice. See `docs/bead-classification.md`.
 The owner-authorized forward schema-27 slice (PR-03, authorized 2026-09-23) adds
 optional authored claims, relations to explicitly pinned candidates, candidate
 coverage, append-only claim/relation lifecycle history, governed relation vocabulary
-and a bounded relations read. Preserve migrations 0001–0026 and earlier records. No
+seeded with the owner-approved relation semantic profile revision 1 (with its packaged
+Semantic Spacetime family projection) and a bounded relations read. Preserve
+migrations 0001–0026 and earlier records. No
 specialist relation judgment, inferred edges, agent recall change, provider binding or
 release is part of this slice. See `docs/authored-claims-and-relations.md`.
 

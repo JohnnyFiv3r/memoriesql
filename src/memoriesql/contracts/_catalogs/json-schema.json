@@ -9,7 +9,7 @@
         "empty_set": "Relations, claims and claim updates may be empty. Every pinned candidate is assessed edge, no_edge or unassessed with a reason; unassessed never means unrelated. Only a revision-6 apply receipt proves the capability.",
         "evidence": "Each relation cites 1-8 statement-evidence pairs of its own named endpoint propositions; lifecycle judgments cite existing accepted pairs. Derivation roots are computed as of a known time and shared roots count once.",
         "lifecycle": "Claims derive current, superseded, disputed or retracted and relations derive active, disputed, superseded, retracted or reassessment_pending from append-only authored and governed events as known at a time.",
-        "registry_hash": "semantic-tasks-v1:490157cbf9802d8199a4615835df2905531e6aeaa152ccbfdaa17da69495c502",
+        "registry_hash": "semantic-tasks-v1:4caf4a3a8fe55ab9f56a73620e9e8839660bc8097cf6f6189230338d1ca88d40",
         "schemas": {
           "ActivateRelatedAuthorship": {
             "$defs": {
@@ -325,7 +325,7 @@
                   "basis": {
                     "enum": [
                       "source_stated",
-                      "inferred"
+                      "agent_inferred"
                     ],
                     "title": "Basis",
                     "type": "string"
@@ -362,6 +362,20 @@
                     "title": "Evidence",
                     "type": "array"
                   },
+                  "qualification": {
+                    "anyOf": [
+                      {
+                        "maxLength": 1024,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Qualification"
+                  },
                   "rationale": {
                     "maxLength": 1024,
                     "minLength": 1,
@@ -375,20 +389,6 @@
                   },
                   "relation_type": {
                     "$ref": "#/$defs/RelationTypePin"
-                  },
-                  "uncertainty": {
-                    "anyOf": [
-                      {
-                        "maxLength": 1024,
-                        "minLength": 1,
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "default": null,
-                    "title": "Uncertainty"
                   }
                 },
                 "required": [
@@ -1141,7 +1141,7 @@
               "basis": {
                 "enum": [
                   "source_stated",
-                  "inferred"
+                  "agent_inferred"
                 ],
                 "title": "Basis",
                 "type": "string"
@@ -1178,6 +1178,20 @@
                 "title": "Evidence",
                 "type": "array"
               },
+              "qualification": {
+                "anyOf": [
+                  {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Qualification"
+              },
               "rationale": {
                 "maxLength": 1024,
                 "minLength": 1,
@@ -1191,20 +1205,6 @@
               },
               "relation_type": {
                 "$ref": "#/$defs/RelationTypePin"
-              },
-              "uncertainty": {
-                "anyOf": [
-                  {
-                    "maxLength": 1024,
-                    "minLength": 1,
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "title": "Uncertainty"
               }
             },
             "required": [
@@ -1586,7 +1586,7 @@
                   "basis": {
                     "enum": [
                       "source_stated",
-                      "inferred"
+                      "agent_inferred"
                     ],
                     "title": "Basis",
                     "type": "string"
@@ -1625,6 +1625,17 @@
                     "minimum": 0,
                     "title": "Independent Root Count",
                     "type": "integer"
+                  },
+                  "qualification": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Qualification"
                   },
                   "rationale": {
                     "title": "Rationale",
@@ -1695,17 +1706,6 @@
                     },
                     "title": "Target Statements",
                     "type": "array"
-                  },
-                  "uncertainty": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "title": "Uncertainty"
                   }
                 },
                 "required": [
@@ -1719,7 +1719,7 @@
                   "authoring_bead_id",
                   "basis",
                   "rationale",
-                  "uncertainty",
+                  "qualification",
                   "author_confidence",
                   "source_statements",
                   "target_statements",
@@ -1737,6 +1737,18 @@
               "InspectedRelationType": {
                 "additionalProperties": false,
                 "properties": {
+                  "cycle_policy": {
+                    "enum": [
+                      "permitted",
+                      "forbidden"
+                    ],
+                    "title": "Cycle Policy",
+                    "type": "string"
+                  },
+                  "endpoint_rule": {
+                    "title": "Endpoint Rule",
+                    "type": "string"
+                  },
                   "forward_reading": {
                     "title": "Forward Reading",
                     "type": "string"
@@ -1777,6 +1789,8 @@
                   "revision",
                   "namespace",
                   "label",
+                  "endpoint_rule",
+                  "cycle_policy",
                   "forward_reading",
                   "inverse_reading",
                   "symmetric"
@@ -2252,11 +2266,67 @@
                 "title": "Contract Version",
                 "type": "integer"
               },
+              "counterexample": {
+                "anyOf": [
+                  {
+                    "maxLength": 2048,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Counterexample"
+              },
+              "cycle_policy": {
+                "enum": [
+                  "permitted",
+                  "forbidden"
+                ],
+                "title": "Cycle Policy",
+                "type": "string"
+              },
               "definition": {
                 "maxLength": 4096,
                 "minLength": 1,
                 "title": "Definition",
                 "type": "string"
+              },
+              "endpoint_rule": {
+                "maxLength": 256,
+                "minLength": 1,
+                "title": "Endpoint Rule",
+                "type": "string"
+              },
+              "evidence_expectation": {
+                "anyOf": [
+                  {
+                    "maxLength": 2048,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Evidence Expectation"
+              },
+              "example": {
+                "anyOf": [
+                  {
+                    "maxLength": 2048,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Example"
               },
               "expected_schema_version": {
                 "const": 27,
@@ -2319,9 +2389,11 @@
               "key",
               "label",
               "definition",
+              "endpoint_rule",
               "forward_reading",
               "inverse_reading",
               "symmetric",
+              "cycle_policy",
               "reason"
             ],
             "title": "ProposeRelationType",
@@ -2876,7 +2948,7 @@
                   "basis": {
                     "enum": [
                       "source_stated",
-                      "inferred"
+                      "agent_inferred"
                     ],
                     "title": "Basis",
                     "type": "string"
@@ -2913,6 +2985,20 @@
                     "title": "Evidence",
                     "type": "array"
                   },
+                  "qualification": {
+                    "anyOf": [
+                      {
+                        "maxLength": 1024,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Qualification"
+                  },
                   "rationale": {
                     "maxLength": 1024,
                     "minLength": 1,
@@ -2926,20 +3012,6 @@
                   },
                   "relation_type": {
                     "$ref": "#/$defs/RelationTypePin"
-                  },
-                  "uncertainty": {
-                    "anyOf": [
-                      {
-                        "maxLength": 1024,
-                        "minLength": 1,
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "default": null,
-                    "title": "Uncertainty"
                   }
                 },
                 "required": [
@@ -4305,13 +4377,69 @@
               },
               "RelationTypeDefinition": {
                 "additionalProperties": false,
-                "description": "An exact active vocabulary revision pinned at activation.",
+                "description": "An exact active vocabulary revision pinned at activation.\n\nBuilt-in revision 1 is the owner-approved relation semantic profile. The\nendpoint rule names what the source and target statements describe; an\ninverse reading is the same assertion, never a second one. Self-reference is\nalways refused, and a `forbidden` cycle policy also refuses cycles between\nstatements among the key's active assertions.",
                 "properties": {
+                  "counterexample": {
+                    "anyOf": [
+                      {
+                        "maxLength": 2048,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Counterexample"
+                  },
+                  "cycle_policy": {
+                    "enum": [
+                      "permitted",
+                      "forbidden"
+                    ],
+                    "title": "Cycle Policy",
+                    "type": "string"
+                  },
                   "definition": {
                     "maxLength": 4096,
                     "minLength": 1,
                     "title": "Definition",
                     "type": "string"
+                  },
+                  "endpoint_rule": {
+                    "maxLength": 256,
+                    "minLength": 1,
+                    "title": "Endpoint Rule",
+                    "type": "string"
+                  },
+                  "evidence_expectation": {
+                    "anyOf": [
+                      {
+                        "maxLength": 2048,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Evidence Expectation"
+                  },
+                  "example": {
+                    "anyOf": [
+                      {
+                        "maxLength": 2048,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Example"
                   },
                   "forward_reading": {
                     "maxLength": 128,
@@ -4360,9 +4488,11 @@
                   "namespace",
                   "label",
                   "definition",
+                  "endpoint_rule",
                   "forward_reading",
                   "inverse_reading",
-                  "symmetric"
+                  "symmetric",
+                  "cycle_policy"
                 ],
                 "title": "RelationTypeDefinition",
                 "type": "object"
@@ -4857,7 +4987,7 @@
                   "basis": {
                     "enum": [
                       "source_stated",
-                      "inferred"
+                      "agent_inferred"
                     ],
                     "title": "Basis",
                     "type": "string"
@@ -4894,6 +5024,20 @@
                     "title": "Evidence",
                     "type": "array"
                   },
+                  "qualification": {
+                    "anyOf": [
+                      {
+                        "maxLength": 1024,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Qualification"
+                  },
                   "rationale": {
                     "maxLength": 1024,
                     "minLength": 1,
@@ -4907,20 +5051,6 @@
                   },
                   "relation_type": {
                     "$ref": "#/$defs/RelationTypePin"
-                  },
-                  "uncertainty": {
-                    "anyOf": [
-                      {
-                        "maxLength": 1024,
-                        "minLength": 1,
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "default": null,
-                    "title": "Uncertainty"
                   }
                 },
                 "required": [
@@ -5956,13 +6086,69 @@
           },
           "RelationTypeDefinition": {
             "additionalProperties": false,
-            "description": "An exact active vocabulary revision pinned at activation.",
+            "description": "An exact active vocabulary revision pinned at activation.\n\nBuilt-in revision 1 is the owner-approved relation semantic profile. The\nendpoint rule names what the source and target statements describe; an\ninverse reading is the same assertion, never a second one. Self-reference is\nalways refused, and a `forbidden` cycle policy also refuses cycles between\nstatements among the key's active assertions.",
             "properties": {
+              "counterexample": {
+                "anyOf": [
+                  {
+                    "maxLength": 2048,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Counterexample"
+              },
+              "cycle_policy": {
+                "enum": [
+                  "permitted",
+                  "forbidden"
+                ],
+                "title": "Cycle Policy",
+                "type": "string"
+              },
               "definition": {
                 "maxLength": 4096,
                 "minLength": 1,
                 "title": "Definition",
                 "type": "string"
+              },
+              "endpoint_rule": {
+                "maxLength": 256,
+                "minLength": 1,
+                "title": "Endpoint Rule",
+                "type": "string"
+              },
+              "evidence_expectation": {
+                "anyOf": [
+                  {
+                    "maxLength": 2048,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Evidence Expectation"
+              },
+              "example": {
+                "anyOf": [
+                  {
+                    "maxLength": 2048,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Example"
               },
               "forward_reading": {
                 "maxLength": 128,
@@ -6011,9 +6197,11 @@
               "namespace",
               "label",
               "definition",
+              "endpoint_rule",
               "forward_reading",
               "inverse_reading",
-              "symmetric"
+              "symmetric",
+              "cycle_policy"
             ],
             "title": "RelationTypeDefinition",
             "type": "object"
@@ -6190,7 +6378,7 @@
             "type": "object"
           }
         },
-        "task_contract_hash": "1b544faaf1775aab29e29ff1447aba2c5e68b89059903d8da32543f4c45f08f9",
+        "task_contract_hash": "6308137bf480b96ac56fef5e93de23bcd1967077c8c6952209ded979c1b4ed6e",
         "task_definition": {
           "allowed_delegate_keys": [],
           "allowed_tool_keys": [],
@@ -6953,13 +7141,69 @@
                 },
                 "RelationTypeDefinition": {
                   "additionalProperties": false,
-                  "description": "An exact active vocabulary revision pinned at activation.",
+                  "description": "An exact active vocabulary revision pinned at activation.\n\nBuilt-in revision 1 is the owner-approved relation semantic profile. The\nendpoint rule names what the source and target statements describe; an\ninverse reading is the same assertion, never a second one. Self-reference is\nalways refused, and a `forbidden` cycle policy also refuses cycles between\nstatements among the key's active assertions.",
                   "properties": {
+                    "counterexample": {
+                      "anyOf": [
+                        {
+                          "maxLength": 2048,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "title": "Counterexample"
+                    },
+                    "cycle_policy": {
+                      "enum": [
+                        "permitted",
+                        "forbidden"
+                      ],
+                      "title": "Cycle Policy",
+                      "type": "string"
+                    },
                     "definition": {
                       "maxLength": 4096,
                       "minLength": 1,
                       "title": "Definition",
                       "type": "string"
+                    },
+                    "endpoint_rule": {
+                      "maxLength": 256,
+                      "minLength": 1,
+                      "title": "Endpoint Rule",
+                      "type": "string"
+                    },
+                    "evidence_expectation": {
+                      "anyOf": [
+                        {
+                          "maxLength": 2048,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "title": "Evidence Expectation"
+                    },
+                    "example": {
+                      "anyOf": [
+                        {
+                          "maxLength": 2048,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "title": "Example"
                     },
                     "forward_reading": {
                       "maxLength": 128,
@@ -7008,9 +7252,11 @@
                     "namespace",
                     "label",
                     "definition",
+                    "endpoint_rule",
                     "forward_reading",
                     "inverse_reading",
-                    "symmetric"
+                    "symmetric",
+                    "cycle_policy"
                   ],
                   "title": "RelationTypeDefinition",
                   "type": "object"
@@ -7364,7 +7610,7 @@
               "type": "object"
             },
             "revision": 1,
-            "schema_hash": "cea069835582f2ae6891c61d867fcf19f617d956fc4560c33f589933b9a023a3"
+            "schema_hash": "17655f3f398ffa76b56c0e7dbfb3e9099fb790073d0c6619289c9f1e46704203"
           },
           "leaf_agent_key": "memory.semantic.related-author",
           "maximum_effort_key": "standard",
@@ -7517,7 +7763,7 @@
                     "basis": {
                       "enum": [
                         "source_stated",
-                        "inferred"
+                        "agent_inferred"
                       ],
                       "title": "Basis",
                       "type": "string"
@@ -7554,6 +7800,20 @@
                       "title": "Evidence",
                       "type": "array"
                     },
+                    "qualification": {
+                      "anyOf": [
+                        {
+                          "maxLength": 1024,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "title": "Qualification"
+                    },
                     "rationale": {
                       "maxLength": 1024,
                       "minLength": 1,
@@ -7567,20 +7827,6 @@
                     },
                     "relation_type": {
                       "$ref": "#/$defs/RelationTypePin"
-                    },
-                    "uncertainty": {
-                      "anyOf": [
-                        {
-                          "maxLength": 1024,
-                          "minLength": 1,
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "default": null,
-                      "title": "Uncertainty"
                     }
                   },
                   "required": [
@@ -8072,7 +8318,7 @@
               "type": "object"
             },
             "revision": 1,
-            "schema_hash": "67e1260a739f6fc796d87f4f32b412d393420f483ea3562d6fbb950c94b6fa21"
+            "schema_hash": "7873968a84f6e7279040e45045a4948068c0cde6fcfdb68b417698ad330e0cfd"
           },
           "owning_module": "memoriesql.kernel",
           "run_budget": {
@@ -31646,6 +31892,441 @@
       "kind": "json_schema",
       "status": "available",
       "summary": "Atomic qualified occurrence materialization and exact sealed-package task binding; complete-input execution is unavailable.",
+      "version": "1"
+    },
+    {
+      "contract": {
+        "layers": "Predicate: the registered relation type revision with its exact meaning. Family: navigation and presentation only. Basis: each assertion's own propositions, evidence and qualification.",
+        "profile": {
+          "attribution": "The Semantic Spacetime family codes, readings and arrow aliases come from Mark Burgess's SSTorytime (Apache-2.0) at commit 039f61003c9b4a93fff88e5ef3be4071ac27db72, and from Burgess, Agent Semantics, Semantic Spacetime, and Graphical Reasoning, arXiv:2506.07756v2 sections 2.2-2.3. The upstream name of the third family is EXPRESS (configuration keyword properties). memoriesQL's definitions are its own; no SSTorytime code or configuration is copied or depended on.",
+          "definitions_revision": 1,
+          "families": [
+            {
+              "family": "NEAR",
+              "magnitude": 0
+            },
+            {
+              "family": "LEADSTO",
+              "magnitude": 1
+            },
+            {
+              "family": "CONTAINS",
+              "magnitude": 2
+            },
+            {
+              "family": "EXPRESS",
+              "magnitude": 3
+            }
+          ],
+          "mappings": [
+            {
+              "family": null,
+              "key": "supports",
+              "mapping_status": "native_unresolved",
+              "note": "Upstream's support arrow (LT-1:114) means operational service support and is not a mapping.",
+              "orientation": null,
+              "upstream_anchor": null
+            },
+            {
+              "family": null,
+              "key": "contradicts",
+              "mapping_status": "native_unresolved",
+              "note": "Upstream contrast and opposition arrows do not express incompatibility.",
+              "orientation": null,
+              "upstream_anchor": null
+            },
+            {
+              "family": "LEADSTO",
+              "key": "caused_by",
+              "mapping_status": "established",
+              "note": null,
+              "orientation": -1,
+              "upstream_anchor": "causes / cause-by, LT-1:51"
+            },
+            {
+              "family": "LEADSTO",
+              "key": "led_to",
+              "mapping_status": "provisional",
+              "note": "Upstream's generic leads-to also means plain sequence, so the anchor is results-in.",
+              "orientation": 1,
+              "upstream_anchor": "result / result-of, LT-1:60"
+            },
+            {
+              "family": "LEADSTO",
+              "key": "enables",
+              "mapping_status": "established",
+              "note": null,
+              "orientation": 1,
+              "upstream_anchor": "enables / enabled-by, LT-1:66"
+            },
+            {
+              "family": "CONTAINS",
+              "key": "part_of",
+              "mapping_status": "established",
+              "note": null,
+              "orientation": -2,
+              "upstream_anchor": "has-pt / pt-of, CN-2:18"
+            },
+            {
+              "family": "LEADSTO",
+              "key": "depends_on",
+              "mapping_status": "provisional",
+              "note": "Upstream's depends-on is the inverse of an operational sustains arrow, so it is not the anchor.",
+              "orientation": -1,
+              "upstream_anchor": "is prereq / has prereq, LT-1:79"
+            },
+            {
+              "family": "LEADSTO",
+              "key": "blocks",
+              "mapping_status": "provisional_local_extension",
+              "note": "No upstream equivalent; nearest constr, LT-1:96. Upstream models inhibition as negated arrows, so this is a local LEADSTO extension.",
+              "orientation": 1,
+              "upstream_anchor": null
+            },
+            {
+              "family": null,
+              "key": "derived_from",
+              "mapping_status": "unresolved",
+              "note": "Unresolved between a process derivation (derive-fr, LEADSTO -1) and a source attribution (source, EXPRESS +3); the choice depends on what the endpoints represent.",
+              "orientation": null,
+              "upstream_anchor": "derive-fr, LT-1:18; source, EP-3:47"
+            },
+            {
+              "family": null,
+              "key": "supersedes",
+              "mapping_status": "intentionally_native",
+              "note": "Upstream repl (LT-1:65) runs new to old inside LEADSTO, which is the flattening this profile avoids.",
+              "orientation": null,
+              "upstream_anchor": null
+            },
+            {
+              "family": "NEAR",
+              "key": "associated_with",
+              "mapping_status": "established",
+              "note": "Upstream clique-completes its NEAR arrows; memoriesQL does not.",
+              "orientation": 0,
+              "upstream_anchor": "ass, NR-0:47"
+            }
+          ],
+          "profile_revision": 1,
+          "rules": [
+            "An inverse reading is the same assertion, never a second assertion or independent corroboration. Separately authored assertions are never merged because their readings look inverse.",
+            "associated_with and contradicts are symmetric: one assertion covers both directions, and a second one in the other direction adds nothing.",
+            "memoriesQL never clique-completes or transitively infers relations. A path through several relations is an investigation route, not a new assertion, and a containment or provenance hop never extends a causal claim.",
+            "No temporal predicate exists; chronology stays in time and source-order facilities. No EXPRESS predicate is added only to fill that family.",
+            "LEADSTO predicates connect statements describing occurrences, actions, decisions or changing states. A report or hypothesis about a cause is not itself the cause.",
+            "An assertion that references itself is always refused. For a key whose cycles are forbidden (part_of, derived_from, supersedes), a write is refused when that key's active assertions, as they would stand once the write commits, would form a cycle between statements."
+          ],
+          "upstream_commit": "039f61003c9b4a93fff88e5ef3be4071ac27db72"
+        },
+        "schemas": {
+          "FamilyCode": {
+            "additionalProperties": false,
+            "properties": {
+              "family": {
+                "enum": [
+                  "NEAR",
+                  "LEADSTO",
+                  "CONTAINS",
+                  "EXPRESS"
+                ],
+                "title": "Family",
+                "type": "string"
+              },
+              "magnitude": {
+                "maximum": 3,
+                "minimum": 0,
+                "title": "Magnitude",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "family",
+              "magnitude"
+            ],
+            "title": "FamilyCode",
+            "type": "object"
+          },
+          "RelationFamilyMapping": {
+            "additionalProperties": false,
+            "description": "How one built-in predicate maps to a family; the predicate's meaning is unchanged.",
+            "properties": {
+              "family": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "NEAR",
+                      "LEADSTO",
+                      "CONTAINS",
+                      "EXPRESS"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Family"
+              },
+              "key": {
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "title": "Key",
+                "type": "string"
+              },
+              "mapping_status": {
+                "enum": [
+                  "established",
+                  "provisional",
+                  "provisional_local_extension",
+                  "unresolved",
+                  "native_unresolved",
+                  "intentionally_native"
+                ],
+                "title": "Mapping Status",
+                "type": "string"
+              },
+              "note": {
+                "anyOf": [
+                  {
+                    "maxLength": 1024,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Note"
+              },
+              "orientation": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      -3,
+                      -2,
+                      -1,
+                      0,
+                      1,
+                      2,
+                      3
+                    ],
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Orientation"
+              },
+              "upstream_anchor": {
+                "anyOf": [
+                  {
+                    "maxLength": 256,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Upstream Anchor"
+              }
+            },
+            "required": [
+              "key",
+              "family",
+              "orientation",
+              "mapping_status"
+            ],
+            "title": "RelationFamilyMapping",
+            "type": "object"
+          },
+          "RelationSemanticProfile": {
+            "$defs": {
+              "FamilyCode": {
+                "additionalProperties": false,
+                "properties": {
+                  "family": {
+                    "enum": [
+                      "NEAR",
+                      "LEADSTO",
+                      "CONTAINS",
+                      "EXPRESS"
+                    ],
+                    "title": "Family",
+                    "type": "string"
+                  },
+                  "magnitude": {
+                    "maximum": 3,
+                    "minimum": 0,
+                    "title": "Magnitude",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "family",
+                  "magnitude"
+                ],
+                "title": "FamilyCode",
+                "type": "object"
+              },
+              "RelationFamilyMapping": {
+                "additionalProperties": false,
+                "description": "How one built-in predicate maps to a family; the predicate's meaning is unchanged.",
+                "properties": {
+                  "family": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "NEAR",
+                          "LEADSTO",
+                          "CONTAINS",
+                          "EXPRESS"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Family"
+                  },
+                  "key": {
+                    "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                    "title": "Key",
+                    "type": "string"
+                  },
+                  "mapping_status": {
+                    "enum": [
+                      "established",
+                      "provisional",
+                      "provisional_local_extension",
+                      "unresolved",
+                      "native_unresolved",
+                      "intentionally_native"
+                    ],
+                    "title": "Mapping Status",
+                    "type": "string"
+                  },
+                  "note": {
+                    "anyOf": [
+                      {
+                        "maxLength": 1024,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Note"
+                  },
+                  "orientation": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          -3,
+                          -2,
+                          -1,
+                          0,
+                          1,
+                          2,
+                          3
+                        ],
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Orientation"
+                  },
+                  "upstream_anchor": {
+                    "anyOf": [
+                      {
+                        "maxLength": 256,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Upstream Anchor"
+                  }
+                },
+                "required": [
+                  "key",
+                  "family",
+                  "orientation",
+                  "mapping_status"
+                ],
+                "title": "RelationFamilyMapping",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "attribution": {
+                "title": "Attribution",
+                "type": "string"
+              },
+              "definitions_revision": {
+                "const": 1,
+                "default": 1,
+                "title": "Definitions Revision",
+                "type": "integer"
+              },
+              "families": {
+                "items": {
+                  "$ref": "#/$defs/FamilyCode"
+                },
+                "title": "Families",
+                "type": "array"
+              },
+              "mappings": {
+                "items": {
+                  "$ref": "#/$defs/RelationFamilyMapping"
+                },
+                "title": "Mappings",
+                "type": "array"
+              },
+              "profile_revision": {
+                "const": 1,
+                "default": 1,
+                "title": "Profile Revision",
+                "type": "integer"
+              },
+              "rules": {
+                "items": {
+                  "type": "string"
+                },
+                "title": "Rules",
+                "type": "array"
+              },
+              "upstream_commit": {
+                "pattern": "^[0-9a-f]{40}$",
+                "title": "Upstream Commit",
+                "type": "string"
+              }
+            },
+            "required": [
+              "upstream_commit",
+              "families",
+              "rules",
+              "mappings",
+              "attribution"
+            ],
+            "title": "RelationSemanticProfile",
+            "type": "object"
+          }
+        },
+        "versioning": "A mapping change is a new profile revision and never a meaning revision; stored assertions keep their relation type revision pins."
+      },
+      "id": "memoriesql.relation-profile.v1",
+      "kind": "json_schema",
+      "status": "available",
+      "summary": "Relation semantic profile revision 1: the Semantic Spacetime family projection over the eleven built-in relation predicates, with mapping status, upstream anchors and attribution; it never gates authoring, acceptance or truth.",
       "version": "1"
     },
     {

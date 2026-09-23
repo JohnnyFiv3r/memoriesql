@@ -29,6 +29,12 @@ CREATE TABLE memoriesql.relation_type_revisions (
     forward_reading text NOT NULL CHECK (btrim(forward_reading) <> '' AND char_length(forward_reading) <= 128),
     inverse_reading text NOT NULL CHECK (btrim(inverse_reading) <> '' AND char_length(inverse_reading) <= 128),
     is_symmetric boolean NOT NULL,
+    endpoint_rule text NOT NULL CHECK (btrim(endpoint_rule) <> '' AND char_length(endpoint_rule) <= 256),
+    evidence_expectation text CHECK (evidence_expectation IS NULL OR (btrim(evidence_expectation) <> '' AND char_length(evidence_expectation) <= 2048)),
+    example text CHECK (example IS NULL OR (btrim(example) <> '' AND char_length(example) <= 2048)),
+    counterexample text CHECK (counterexample IS NULL OR (btrim(counterexample) <> '' AND char_length(counterexample) <= 2048)),
+    -- Self-reference is always refused; 'forbidden' also refuses cycles between statements.
+    cycle_policy text NOT NULL CHECK (cycle_policy IN ('permitted', 'forbidden')),
     status text NOT NULL CHECK (status IN ('active', 'inactive')),
     decided_candidate_id uuid,
     recorded_at timestamp with time zone NOT NULL,
@@ -46,6 +52,12 @@ CREATE TABLE memoriesql.relation_type_candidates (
     forward_reading text NOT NULL CHECK (btrim(forward_reading) <> '' AND char_length(forward_reading) <= 128),
     inverse_reading text NOT NULL CHECK (btrim(inverse_reading) <> '' AND char_length(inverse_reading) <= 128),
     is_symmetric boolean NOT NULL,
+    endpoint_rule text NOT NULL CHECK (btrim(endpoint_rule) <> '' AND char_length(endpoint_rule) <= 256),
+    evidence_expectation text CHECK (evidence_expectation IS NULL OR (btrim(evidence_expectation) <> '' AND char_length(evidence_expectation) <= 2048)),
+    example text CHECK (example IS NULL OR (btrim(example) <> '' AND char_length(example) <= 2048)),
+    counterexample text CHECK (counterexample IS NULL OR (btrim(counterexample) <> '' AND char_length(counterexample) <= 2048)),
+    -- Self-reference is always refused; 'forbidden' also refuses cycles between statements.
+    cycle_policy text NOT NULL CHECK (cycle_policy IN ('permitted', 'forbidden')),
     status text NOT NULL CHECK (status IN ('active', 'inactive')),
     reason text NOT NULL CHECK (btrim(reason) <> '' AND char_length(reason) <= 1024),
     proposed_by_principal_id uuid NOT NULL,
@@ -86,40 +98,87 @@ INSERT INTO memoriesql.relation_types (relation_type_id, tenant_id, workspace_id
     ('30000000-0000-4000-8000-00000000000a', NULL, NULL, 'memoriesql', 'supersedes', 27, '2026-09-23T00:00:00Z'),
     ('30000000-0000-4000-8000-00000000000b', NULL, NULL, 'memoriesql', 'associated_with', 27, '2026-09-23T00:00:00Z');
 
-INSERT INTO memoriesql.relation_type_revisions (relation_type_revision_id, relation_type_id, revision, display_label, definition, forward_reading, inverse_reading, is_symmetric, status, decided_candidate_id, recorded_at) VALUES
+-- Revision 1 of the built-in definitions: the owner-approved relation semantic
+-- profile (ADR-0010). Family and upstream mapping ship separately in the packaged
+-- relation profile and never gate authoring or acceptance.
+INSERT INTO memoriesql.relation_type_revisions (relation_type_revision_id, relation_type_id, revision, display_label, definition, endpoint_rule, forward_reading, inverse_reading, is_symmetric, evidence_expectation, example, counterexample, cycle_policy, status, decided_candidate_id, recorded_at) VALUES
     ('31000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', 1, 'Supports',
-     'The source bead''s cited propositions provide evidence for the target bead''s cited propositions. Evidential support only: not causation, endorsement or independent corroboration.',
-     'supports', 'is supported by', false, 'active', NULL, '2026-09-23T00:00:00Z'),
+     'The source statement is evidence; the target is the proposition it supports. Evidential support only.',
+     'evidence → proposition', 'supports', 'is supported by', false,
+     NULL,
+     'Load-test results showing p99 latency under 200 ms support the claim that a cache fix resolved a regression.',
+     '"The platform team supports the billing service."',
+     'permitted', 'active', NULL, '2026-09-23T00:00:00Z'),
     ('31000000-0000-4000-8000-000000000002', '30000000-0000-4000-8000-000000000002', 1, 'Contradicts',
-     'The cited propositions of the two beads are incompatible for the same subject under compatible applicability. Evidential incompatibility; it selects no winner.',
-     'contradicts', 'is contradicted by', true, 'active', NULL, '2026-09-23T00:00:00Z'),
+     'Symmetric. The two statements are incompatible under a comparable, shared applicability: the same subject, scope, time or mode. Check proposition and applicability before declaring conflict; unknown applicability is not a wildcard. Self-contradiction refused.',
+     'symmetric', 'contradicts', 'contradicts', true,
+     NULL,
+     'Two reports give the same system''s capacity in the same mode at the same time as 50 and 80 units.',
+     '50 units in mode A and 80 units in mode B.',
+     'permitted', 'active', NULL, '2026-09-23T00:00:00Z'),
     ('31000000-0000-4000-8000-000000000003', '30000000-0000-4000-8000-000000000003', 1, 'Caused by',
-     'The source bead''s cited occurrence or state was caused by the target''s, as the source states or as inferred from cited evidence. Temporal order, co-occurrence or shared entities alone are not causation.',
-     'is caused by', 'causes', false, 'active', NULL, '2026-09-23T00:00:00Z'),
+     'The source statement describes an effect; the target describes the occurrence identified as its cause.',
+     'effect → cause', 'is caused by', 'causes', false,
+     'A source statement that identifies the cause, with its speaker and qualification preserved (source-stated), or inspectable evidence for an agent inference, recorded as inferred with its rationale. Temporal order alone never suffices.',
+     'An engineer reports that repeated rollback-and-reapply trials isolated a timeout regression to one configuration change under stated load.',
+     'A deployment at 10:02 and errors at 10:05 with no stated connection. A tentative "I suspect the deployment caused the outage" is recorded only as a qualified, attributed assertion, or not at all.',
+     'permitted', 'active', NULL, '2026-09-23T00:00:00Z'),
     ('31000000-0000-4000-8000-000000000004', '30000000-0000-4000-8000-000000000004', 1, 'Led to',
-     'The source bead''s cited occurrence or decision led to the target''s, per cited evidence. A consequential reading kept distinct from caused_by; not merely a later event.',
-     'led to', 'resulted from', false, 'active', NULL, '2026-09-23T00:00:00Z'),
+     'The source statement describes an antecedent occurrence, action or decision; the target describes a result it contributed to, possibly among other contributors. Unlike caused_by, it does not name the cause of an effect. Where evidence cannot distinguish the two, both are admissible and neither is merged into the other.',
+     'antecedent → result', 'led to', 'resulted from', false,
+     NULL,
+     'The source says the failed security review led to the launch postponement.',
+     'The launch was postponed a week after the review failed, with no stated connection.',
+     'permitted', 'active', NULL, '2026-09-23T00:00:00Z'),
     ('31000000-0000-4000-8000-000000000005', '30000000-0000-4000-8000-000000000005', 1, 'Enables',
-     'The source''s cited condition makes the target''s occurrence possible or easier without being required or necessarily an actual cause.',
-     'enables', 'is enabled by', false, 'active', NULL, '2026-09-23T00:00:00Z'),
+     'The source statement describes a condition, capability, permission or resource; the target describes an occurrence or action it makes possible. Facilitation only: it asserts neither that the enabled occurrence happened nor that the enabler caused it, and the target keeps its modality.',
+     'enabler → enabled', 'enables', 'is enabled by', false,
+     NULL,
+     'A new permission makes a migration possible, and the migration has not run.',
+     'A policy saying deployment cannot proceed without signoff describes a prerequisite, which is depends_on.',
+     'permitted', 'active', NULL, '2026-09-23T00:00:00Z'),
     ('31000000-0000-4000-8000-000000000006', '30000000-0000-4000-8000-000000000006', 1, 'Part of',
-     'The source''s cited element is a component of the target''s larger whole.',
-     'is part of', 'includes', false, 'active', NULL, '2026-09-23T00:00:00Z'),
+     'The source statement describes a part, member, step or component; the target describes the whole, set or episode. Composition or membership, never causal contribution.',
+     'part → whole', 'is part of', 'has part', false,
+     NULL,
+     'A rollback was one step of the release-17 recovery.',
+     '"The recovery required the rollback" is a requirement (depends_on), and a containment hop never carries causal support along a path.',
+     'forbidden', 'active', NULL, '2026-09-23T00:00:00Z'),
     ('31000000-0000-4000-8000-000000000007', '30000000-0000-4000-8000-000000000007', 1, 'Depends on',
-     'The source''s cited outcome requires the target''s cited condition; without it the source cannot proceed or hold.',
-     'depends on', 'is required by', false, 'active', NULL, '2026-09-23T00:00:00Z'),
+     'The source statement describes a dependent occurrence, action or state; the target describes a required prerequisite. It asserts necessity, not sufficiency and not observed causation, within the scope where the requirement applies.',
+     'dependent → prerequisite', 'depends on', 'is required by', false,
+     NULL,
+     'A release policy says deployment cannot proceed without security signoff.',
+     'Treating the signoff as having caused the deployment, or as proof that it happened.',
+     'permitted', 'active', NULL, '2026-09-23T00:00:00Z'),
     ('31000000-0000-4000-8000-000000000008', '30000000-0000-4000-8000-000000000008', 1, 'Blocks',
-     'The source''s cited condition is an evidenced impediment to the target''s cited occurrence or goal.',
-     'blocks', 'is blocked by', false, 'active', NULL, '2026-09-23T00:00:00Z'),
+     'The source statement describes an impediment; the target describes the occurrence or action it prevents or halts. It records an evidenced impediment, not every constraint or risk.',
+     'impediment → impeded', 'blocks', 'is blocked by', false,
+     NULL,
+     'A migration cannot proceed while a schema lock is held, and the lock is still held.',
+     'A style guide constrains release notes without stopping anything.',
+     'permitted', 'active', NULL, '2026-09-23T00:00:00Z'),
     ('31000000-0000-4000-8000-000000000009', '30000000-0000-4000-8000-000000000009', 1, 'Derived from',
-     'The source''s cited content was produced from the target''s cited content by copying, summarizing or transforming it. Provenance, never independent corroboration.',
-     'is derived from', 'is the source of', false, 'active', NULL, '2026-09-23T00:00:00Z'),
+     'The source statement is derived content, such as a summary, quotation, import or transformation output; the target is the content it was derived from. Its meaning is unchanged provenance: it feeds the canonical derivation roots, and a derivative never becomes independent corroboration.',
+     'derivative → source', 'is derived from', 'is the source of', false,
+     NULL,
+     'A weekly summary restates an engineer''s quote.',
+     'Two independent reports that reach the same conclusion.',
+     'forbidden', 'active', NULL, '2026-09-23T00:00:00Z'),
     ('31000000-0000-4000-8000-00000000000a', '30000000-0000-4000-8000-00000000000a', 1, 'Supersedes',
-     'The source''s cited policy, plan or state explicitly replaces the target''s. Domain replacement: it does not mark the target''s historical observation erroneous and is not the correction or claim-currentness authority.',
-     'supersedes', 'is superseded by', false, 'active', NULL, '2026-09-23T00:00:00Z'),
+     'The source statement records an evidenced, later replacement of a policy, plan or state; the target records the replaced one, and both stay historically accurate. Its inverse is a reading only. It never writes correction lineage, marks an observation erroneous or decides currentness.',
+     'replacement → replaced', 'supersedes', 'is superseded by', false,
+     NULL,
+     'A launch genuinely scheduled for Friday is moved to Monday by an authorized source.',
+     'News that the security review is complete supplements the schedule without replacing it; a misinterpreted earlier bead is corrected through canonical correction lineage, not this relation.',
+     'forbidden', 'active', NULL, '2026-09-23T00:00:00Z'),
     ('31000000-0000-4000-8000-00000000000b', '30000000-0000-4000-8000-00000000000b', 1, 'Associated with',
-     'A meaningful evidenced association not captured by a more specific type. It requires positive evidence and is never a label for ignorance or uncertain causality.',
-     'is associated with', 'is associated with', true, 'active', NULL, '2026-09-23T00:00:00Z');
+     'Symmetric. It connects two statements whose association the evidence positively establishes and no more specific type captures. It is never a label for ignorance, uncertain causality, similar wording, shared entities or co-occurrence. Self-association refused.',
+     'symmetric', 'is associated with', 'is associated with', true,
+     NULL,
+     'The source traces two incidents to the same shared-credential misconfiguration.',
+     'Two observations that only share similar wording, or identical messages from independent deployments.',
+     'permitted', 'active', NULL, '2026-09-23T00:00:00Z');
 
 -- Optional authored claims: tracked propositions bound to statements of their own
 -- accepted bead. Valid time is inherited from source clocks on read, never invented.
@@ -218,9 +277,10 @@ CREATE TABLE memoriesql.bead_relations (
     target_bead_id uuid NOT NULL,
     target_bead_version_id uuid NOT NULL,
     relation_type_revision_id uuid NOT NULL REFERENCES memoriesql.relation_type_revisions (relation_type_revision_id),
-    basis text NOT NULL CHECK (basis IN ('source_stated', 'inferred')),
+    basis text NOT NULL CHECK (basis IN ('source_stated', 'agent_inferred')),
     rationale_text text NOT NULL CHECK (btrim(rationale_text) <> '' AND char_length(rationale_text) <= 1024),
-    uncertainty_text text CHECK (uncertainty_text IS NULL OR (btrim(uncertainty_text) <> '' AND char_length(uncertainty_text) <= 1024)),
+    -- Material conditions, scope and hedging of the assertion.
+    qualification_text text CHECK (qualification_text IS NULL OR (btrim(qualification_text) <> '' AND char_length(qualification_text) <= 1024)),
     author_confidence numeric(3, 2) NOT NULL CHECK (author_confidence BETWEEN 0 AND 1),
     authoring_bead_id uuid NOT NULL,
     semantic_task_id uuid NOT NULL,
@@ -467,8 +527,9 @@ SET search_path = pg_catalog, memoriesql SET row_security = off AS $$
 $$;
 REVOKE ALL ON FUNCTION memoriesql.relation_type_active_revision(uuid, uuid, text, integer) FROM PUBLIC;
 
--- A relation's lifecycle as of a known time. Retraction is terminal; a supersession
--- counts while its replacement is not retracted; dispute stays open until confirmed.
+-- A relation's lifecycle as of a known time. Retraction and supersession are final: no
+-- event reinstates a relation, so the active set only shrinks. Dispute stays open until
+-- a later confirmation.
 CREATE FUNCTION memoriesql.bead_relation_state_v1(t uuid, relation uuid, known timestamp with time zone)
 RETURNS jsonb
 LANGUAGE sql STABLE SECURITY DEFINER
@@ -479,11 +540,7 @@ SET search_path = pg_catalog, memoriesql SET row_security = off AS $$
         SELECT e.* FROM memoriesql.bead_relation_events AS e
         WHERE e.tenant_id = t AND e.relation_id = relation AND e.recorded_at <= known
     ), replacements AS (
-        SELECT e.replacement_relation_id AS id FROM ev AS e
-        WHERE e.action = 'supersede' AND NOT EXISTS (
-            SELECT 1 FROM memoriesql.bead_relation_events AS x
-            WHERE x.tenant_id = t AND x.relation_id = e.replacement_relation_id
-              AND x.action = 'retract' AND x.recorded_at <= known)
+        SELECT e.replacement_relation_id AS id FROM ev AS e WHERE e.action = 'supersede'
     ), corrections AS (
         SELECT s.bead_id, v.authored_at FROM rel
         JOIN memoriesql.bead_supersessions AS s
@@ -574,8 +631,10 @@ $$;
 REVOKE ALL ON FUNCTION memoriesql.derived_from_targets(uuid, uuid, timestamp with time zone) FROM PUBLIC;
 
 -- Deterministic derivation roots of a bead as known at a time: the source objects of the
--- terminal beads of its active derived_from chains, or its own source object. A bounded or
--- cyclic chain falls back to every visited bead. Transformation never adds a root.
+-- terminal beads of its active derived_from chains, or its own source object. Beads can
+-- derive from each other through different statements; the walk terminates on such a
+-- bead-level cycle, and a chain with no terminal bead falls back to every visited bead, so
+-- every bead in the cycle gets the same roots. Transformation never adds a root.
 CREATE FUNCTION memoriesql.bead_derivation_roots(t uuid, bead uuid, known timestamp with time zone)
 RETURNS uuid[]
 LANGUAGE sql STABLE SECURITY DEFINER
@@ -585,7 +644,7 @@ SET search_path = pg_catalog, memoriesql SET row_security = off AS $$
         UNION ALL
         SELECT d.target, w.depth + 1, w.path || d.target
         FROM walk AS w CROSS JOIN LATERAL memoriesql.derived_from_targets(t, w.bead_id, known) AS d(target)
-        WHERE w.depth < 8 AND NOT d.target = ANY(w.path)
+        WHERE w.depth < 16 AND NOT d.target = ANY(w.path)
     ), visited AS (
         SELECT DISTINCT w.bead_id, e.source_object_id,
                NOT EXISTS (SELECT 1 FROM memoriesql.derived_from_targets(t, w.bead_id, known)) AS terminal
@@ -1025,7 +1084,15 @@ DECLARE
 BEGIN
     IF jsonb_typeof(request) IS DISTINCT FROM 'object'
        OR request - ARRAY['contract_version', 'expected_schema_version', 'idempotency_key', 'access_scope_id', 'key',
-            'label', 'definition', 'forward_reading', 'inverse_reading', 'symmetric', 'status', 'reason'] <> '{}'::jsonb
+            'label', 'definition', 'endpoint_rule', 'forward_reading', 'inverse_reading', 'symmetric',
+            'evidence_expectation', 'example', 'counterexample', 'cycle_policy', 'status', 'reason'] <> '{}'::jsonb
+       OR jsonb_typeof(request->'endpoint_rule') IS DISTINCT FROM 'string' OR btrim(request->>'endpoint_rule') = ''
+       OR char_length(request->>'endpoint_rule') > 256
+       OR COALESCE(request->>'cycle_policy', '') NOT IN ('permitted', 'forbidden')
+       OR EXISTS (SELECT 1 FROM unnest(ARRAY['evidence_expectation', 'example', 'counterexample']) AS f(name)
+                  WHERE request ? f.name AND (jsonb_typeof(request->f.name) NOT IN ('string', 'null')
+                     OR (jsonb_typeof(request->f.name) = 'string'
+                         AND (btrim(request->>f.name) = '' OR char_length(request->>f.name) > 2048))))
        OR request->>'contract_version' IS DISTINCT FROM '1'
        OR request->>'expected_schema_version' IS DISTINCT FROM '27'
        OR octet_length(request::text) > 16384
@@ -1076,12 +1143,15 @@ BEGIN
     );
     INSERT INTO memoriesql.relation_type_candidates (
         tenant_id, workspace_id, candidate_id, type_key, proposed_revision, display_label, definition,
-        forward_reading, inverse_reading, is_symmetric, status, reason,
+        endpoint_rule, forward_reading, inverse_reading, is_symmetric, evidence_expectation, example,
+        counterexample, cycle_policy, status, reason,
         proposed_by_principal_id, idempotency_receipt_id, proposed_at
     ) VALUES (
         c.tenant_id, c.workspace_id, cid, request->>'key', next_revision, request->>'label', request->>'definition',
-        request->>'forward_reading', request->>'inverse_reading', (request->>'symmetric')::boolean,
-        request->>'status', request->>'reason', c.principal_id, rid, started
+        request->>'endpoint_rule', request->>'forward_reading', request->>'inverse_reading',
+        (request->>'symmetric')::boolean, NULLIF(request->'evidence_expectation', 'null'::jsonb) #>> '{}',
+        NULLIF(request->'example', 'null'::jsonb) #>> '{}', NULLIF(request->'counterexample', 'null'::jsonb) #>> '{}',
+        request->>'cycle_policy', request->>'status', request->>'reason', c.principal_id, rid, started
     );
     response := jsonb_build_object('contract_version', 1, 'candidate_id', cid, 'key', request->>'key',
         'proposed_revision', next_revision, 'idempotency_receipt_id', rid);
@@ -1165,10 +1235,12 @@ BEGIN
         END IF;
         revision_id := pg_catalog.uuidv7();
         INSERT INTO memoriesql.relation_type_revisions (relation_type_revision_id, relation_type_id, revision,
-            display_label, definition, forward_reading, inverse_reading, is_symmetric, status,
+            display_label, definition, endpoint_rule, forward_reading, inverse_reading, is_symmetric,
+            evidence_expectation, example, counterexample, cycle_policy, status,
             decided_candidate_id, recorded_at)
         VALUES (revision_id, type_id, candidate.proposed_revision, candidate.display_label, candidate.definition,
-            candidate.forward_reading, candidate.inverse_reading, candidate.is_symmetric,
+            candidate.endpoint_rule, candidate.forward_reading, candidate.inverse_reading, candidate.is_symmetric,
+            candidate.evidence_expectation, candidate.example, candidate.counterexample, candidate.cycle_policy,
             candidate.status, candidate.candidate_id, started);
     END IF;
     INSERT INTO memoriesql.idempotency_receipts (
@@ -1402,10 +1474,12 @@ BEGIN
     FOR item IN SELECT value FROM jsonb_array_elements(request->'relation_vocabulary') ORDER BY value->>'key' LOOP
         resolved:=memoriesql.relation_type_active_revision(c.tenant_id,b.workspace_id,item->>'key',(item->>'revision')::integer);
         IF resolved.relation_type_revision_id IS NULL THEN
-            RAISE EXCEPTION 'relation_vocabulary_unavailable' USING ERRCODE='22023'; END IF;
+            RAISE EXCEPTION 'unknown_relation_type' USING ERRCODE='22023'; END IF;
         vocabulary:=vocabulary||jsonb_build_array(jsonb_build_object('key',item->>'key','revision',resolved.revision,
             'namespace',(SELECT ty.namespace FROM memoriesql.relation_types ty WHERE ty.relation_type_id=resolved.relation_type_id),
-            'label',resolved.display_label,'definition',resolved.definition,
+            'label',resolved.display_label,'definition',resolved.definition,'endpoint_rule',resolved.endpoint_rule,
+            'evidence_expectation',resolved.evidence_expectation,'example',resolved.example,
+            'counterexample',resolved.counterexample,'cycle_policy',resolved.cycle_policy,
             'forward_reading',resolved.forward_reading,'inverse_reading',resolved.inverse_reading,'symmetric',resolved.is_symmetric));
     END LOOP;
     IF octet_length(memoriesql.canonical_semantic_json_text(vocabulary))>32768 THEN
@@ -1452,7 +1526,7 @@ BEGIN
     input:=jsonb_build_object('task_id',tid,'task_kind','memory.semantic.author-complete-unit','contract_revision',6,'target_reference',b.source_unit_id,'expected_target_revision',0,'requested_effort_key',NULL,'requested_budget',NULL,
       'evidence_manifest',jsonb_build_object('manifest_id','complete-input.'||tid::text,'revision',1,'references',jsonb_build_array(jsonb_build_object('reference_id',b.source_unit_id,'content_hash',p.inventory_hash,'declared_characters',p.character_count))),
       'payload',jsonb_build_object('binding_task_id',b.task_id,'source_object_id',p.source_object_id,'event_id',b.event_id,'source_unit_ids',jsonb_build_array(b.source_unit_id),'bead_ids',jsonb_build_array(b.bead_id),'package',b.package_pin,'producer_policy_id',b.producer_policy_id,'dispatch_policy_id',request->>'dispatch_policy_id','declaration',p.declaration,'event_declaration',(SELECT declaration FROM memoriesql.source_event_materializations WHERE tenant_id=b.tenant_id AND event_id=b.event_id),'parent_source_unit_id',(SELECT parent_unit_id FROM memoriesql.source_units WHERE tenant_id=b.tenant_id AND source_unit_id=b.source_unit_id),'parent_resolution',(SELECT structure->'parent_resolution' FROM memoriesql.source_units WHERE tenant_id=b.tenant_id AND source_unit_id=b.source_unit_id),'required_execution','trusted_source_revisiting_v1','authorized_context',request->'authorized_context','relation_candidates',candidates,'relation_vocabulary',vocabulary));
-    SELECT q.idempotency_receipt_id INTO eid FROM memoriesql.enqueue_semantic_task(tid,'complete-input.v5:'||b.task_id::text,'memoriesql.kernel','memory.semantic.author-complete-unit',6,'1b544faaf1775aab29e29ff1447aba2c5e68b89059903d8da32543f4c45f08f9','semantic-tasks-v1:490157cbf9802d8199a4615835df2905531e6aeaa152ccbfdaa17da69495c502',b.source_unit_id::text,0,input,input#>>'{evidence_manifest,manifest_id}',b.access_scope_id,started,b.task_id,started) q;
+    SELECT q.idempotency_receipt_id INTO eid FROM memoriesql.enqueue_semantic_task(tid,'complete-input.v5:'||b.task_id::text,'memoriesql.kernel','memory.semantic.author-complete-unit',6,'6308137bf480b96ac56fef5e93de23bcd1967077c8c6952209ded979c1b4ed6e','semantic-tasks-v1:4caf4a3a8fe55ab9f56a73620e9e8839660bc8097cf6f6189230338d1ca88d40',b.source_unit_id::text,0,input,input#>>'{evidence_manifest,manifest_id}',b.access_scope_id,started,b.task_id,started) q;
     result:=jsonb_build_object('contract_version',5,'authorized_context',request->'authorized_context','binding_task_id',b.task_id,'execution_task_id',tid,'idempotency_receipt_id',rid,'enqueue_receipt_id',eid,'package',b.package_pin,'relation_candidates',request->'relation_candidates','replayed',false);
     PERFORM memoriesql.complete_input_authorize(c.tenant_id,b.task_id,(request->>'dispatch_policy_id')::uuid);
     PERFORM memoriesql.revisiting_source_authorize((SELECT source_object_id FROM memoriesql.evidence_packages WHERE tenant_id=c.tenant_id AND package_id=b.package_id));
@@ -1478,7 +1552,7 @@ DECLARE
     x memoriesql.complete_input_executions%ROWTYPE;
     rel jsonb; cand jsonb; item jsonb; claim jsonb; upd jsonb; ref jsonb;
     statement uuid; unit uuid; claim_event uuid; type_revision uuid; named uuid[];
-    candidate_scope uuid; candidate_version uuid;
+    candidate_scope uuid; candidate_version uuid; forbidden uuid;
     uuid_pattern constant text := '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
 BEGIN
     SELECT * INTO x FROM memoriesql.complete_input_executions WHERE tenant_id = t AND execution_task_id = task;
@@ -1532,6 +1606,21 @@ BEGIN
         RAISE EXCEPTION 'relation_candidate_coverage_incomplete' USING ERRCODE = '22023';
     END IF;
 
+    -- Cycle-forbidden keys are serialized per tenant and key before any write, so
+    -- concurrent bundles cannot close a cycle together (locks in a fixed order).
+    FOR forbidden IN
+        SELECT DISTINCT r.relation_type_id
+        FROM jsonb_array_elements(payload->'relations') AS p(v)
+        JOIN memoriesql.relation_types AS ty ON ty.type_key = p.v#>>'{relation_type,key}'
+         AND (ty.tenant_id IS NULL OR (ty.tenant_id = t AND ty.workspace_id = w))
+        JOIN memoriesql.relation_type_revisions AS r ON r.relation_type_id = ty.relation_type_id
+         AND r.revision = (p.v#>>'{relation_type,revision}')::integer AND r.cycle_policy = 'forbidden'
+        ORDER BY 1
+    LOOP
+        PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
+            t::text || ':relation-cycle:' || forbidden::text, 0));
+    END LOOP;
+
     FOR rel IN SELECT value FROM jsonb_array_elements(payload->'relations') ORDER BY value->>'relation_id' LOOP
         cand := (SELECT v FROM jsonb_array_elements(x.relation_candidates) AS c(v) WHERE v->>'bead_id' = rel->>'candidate_bead_id');
         IF cand IS NULL THEN
@@ -1542,17 +1631,17 @@ BEGIN
         IF jsonb_typeof(rel->'relation_type') IS DISTINCT FROM 'object'
            OR NOT EXISTS (SELECT 1 FROM jsonb_array_elements(x.relation_vocabulary) AS d(v)
                           WHERE v->>'key' = rel#>>'{relation_type,key}' AND v->'revision' = rel#>'{relation_type,revision}') THEN
-            RAISE EXCEPTION 'relation_type_not_pinned' USING ERRCODE = '22023';
+            RAISE EXCEPTION 'unknown_relation_type' USING ERRCODE = '22023';
         END IF;
         SELECT r.relation_type_revision_id INTO type_revision FROM memoriesql.relation_types AS ty
         JOIN memoriesql.relation_type_revisions AS r ON r.relation_type_id = ty.relation_type_id
         WHERE ty.type_key = rel#>>'{relation_type,key}' AND r.revision = (rel#>>'{relation_type,revision}')::integer
           AND (ty.tenant_id IS NULL OR (ty.tenant_id = t AND ty.workspace_id = w));
-        IF type_revision IS NULL OR rel->>'basis' IS NULL OR rel->>'basis' NOT IN ('source_stated', 'inferred')
+        IF type_revision IS NULL OR rel->>'basis' IS NULL OR rel->>'basis' NOT IN ('source_stated', 'agent_inferred')
            OR rel->>'direction' IS NULL OR rel->>'direction' NOT IN ('from_authored', 'to_authored')
            OR jsonb_typeof(rel->'rationale') IS DISTINCT FROM 'string' OR btrim(rel->>'rationale') = '' OR char_length(rel->>'rationale') > 1024
-           OR jsonb_typeof(rel->'uncertainty') NOT IN ('string', 'null')
-           OR (jsonb_typeof(rel->'uncertainty') = 'string' AND (btrim(rel->>'uncertainty') = '' OR char_length(rel->>'uncertainty') > 1024))
+           OR jsonb_typeof(rel->'qualification') NOT IN ('string', 'null')
+           OR (jsonb_typeof(rel->'qualification') = 'string' AND (btrim(rel->>'qualification') = '' OR char_length(rel->>'qualification') > 1024))
            OR jsonb_typeof(rel->'author_confidence') IS DISTINCT FROM 'number'
            OR (rel->>'author_confidence')::numeric NOT BETWEEN 0 AND 1
            OR round((rel->>'author_confidence')::numeric, 2) <> (rel->>'author_confidence')::numeric THEN
@@ -1590,7 +1679,7 @@ BEGIN
         INSERT INTO memoriesql.bead_relations (
             tenant_id, workspace_id, relation_id, source_access_scope_id, source_bead_id, source_bead_version_id,
             target_access_scope_id, target_bead_id, target_bead_version_id, relation_type_revision_id, basis,
-            rationale_text, uncertainty_text, author_confidence, authoring_bead_id, semantic_task_id,
+            rationale_text, qualification_text, author_confidence, authoring_bead_id, semantic_task_id,
             semantic_attempt_id, semantic_run_id, authored_by_principal_id, recorded_at
         ) SELECT
             t, w, (rel->>'relation_id')::uuid,
@@ -1600,7 +1689,7 @@ BEGIN
             CASE WHEN rel->>'direction' = 'from_authored' THEN candidate_scope ELSE scope END,
             CASE WHEN rel->>'direction' = 'from_authored' THEN (cand->>'bead_id')::uuid ELSE authored_bead END,
             CASE WHEN rel->>'direction' = 'from_authored' THEN candidate_version ELSE authored_version END,
-            type_revision, rel->>'basis', rel->>'rationale', NULLIF(rel->'uncertainty', 'null'::jsonb) #>> '{}',
+            type_revision, rel->>'basis', rel->>'rationale', NULLIF(rel->'qualification', 'null'::jsonb) #>> '{}',
             (rel->>'author_confidence')::numeric, authored_bead, task, attempt, run_ref, principal, at;
         INSERT INTO memoriesql.bead_relation_statements (tenant_id, relation_id, endpoint, workspace_id, access_scope_id, statement_id)
         SELECT t, (rel->>'relation_id')::uuid,
@@ -1623,6 +1712,51 @@ BEGIN
                 'supports', statement, unit, at);
         END LOOP;
     END LOOP;
+
+    -- An assertion never references itself, and no cycle-forbidden key forms a cycle
+    -- between statements among its active assertions once this write commits.
+    IF EXISTS (
+        SELECT 1 FROM jsonb_array_elements(payload->'relations') AS p(v)
+        JOIN memoriesql.bead_relation_statements AS source_side
+          ON source_side.tenant_id = t AND source_side.relation_id = (p.v->>'relation_id')::uuid AND source_side.endpoint = 'source'
+        JOIN memoriesql.bead_relation_statements AS target_side
+          ON target_side.tenant_id = t AND target_side.relation_id = source_side.relation_id AND target_side.endpoint = 'target'
+         AND target_side.statement_id = source_side.statement_id
+    ) THEN
+        RAISE EXCEPTION 'relation_self_reference' USING ERRCODE = '22023';
+    END IF;
+    IF EXISTS (
+        WITH RECURSIVE fresh AS (
+            SELECT r.relation_id, tr.relation_type_id FROM jsonb_array_elements(payload->'relations') AS p(v)
+            JOIN memoriesql.bead_relations AS r ON r.tenant_id = t AND r.relation_id = (p.v->>'relation_id')::uuid
+            JOIN memoriesql.relation_type_revisions AS tr ON tr.relation_type_revision_id = r.relation_type_revision_id
+            WHERE tr.cycle_policy = 'forbidden'
+        ), edges AS (
+            SELECT tr.relation_type_id, source_side.statement_id AS from_statement, target_side.statement_id AS to_statement
+            FROM memoriesql.bead_relations AS r
+            JOIN memoriesql.relation_type_revisions AS tr ON tr.relation_type_revision_id = r.relation_type_revision_id
+            JOIN memoriesql.bead_relation_statements AS source_side
+              ON source_side.tenant_id = r.tenant_id AND source_side.relation_id = r.relation_id AND source_side.endpoint = 'source'
+            JOIN memoriesql.bead_relation_statements AS target_side
+              ON target_side.tenant_id = r.tenant_id AND target_side.relation_id = r.relation_id AND target_side.endpoint = 'target'
+            WHERE r.tenant_id = t AND tr.relation_type_id IN (SELECT relation_type_id FROM fresh)
+              AND NOT EXISTS (SELECT 1 FROM memoriesql.bead_relation_events AS e
+                              WHERE e.tenant_id = t AND e.relation_id = r.relation_id AND e.action IN ('retract', 'supersede'))
+        ), reach(origin, relation_type_id, statement_id) AS (
+            SELECT f.relation_id, f.relation_type_id, target_side.statement_id FROM fresh AS f
+            JOIN memoriesql.bead_relation_statements AS target_side
+              ON target_side.tenant_id = t AND target_side.relation_id = f.relation_id AND target_side.endpoint = 'target'
+            UNION
+            SELECT reach.origin, reach.relation_type_id, e.to_statement FROM reach
+            JOIN edges AS e ON e.relation_type_id = reach.relation_type_id AND e.from_statement = reach.statement_id
+        )
+        SELECT 1 FROM reach
+        JOIN memoriesql.bead_relation_statements AS source_side
+          ON source_side.tenant_id = t AND source_side.relation_id = reach.origin AND source_side.endpoint = 'source'
+         AND source_side.statement_id = reach.statement_id
+    ) THEN
+        RAISE EXCEPTION 'relation_cycle_forbidden' USING ERRCODE = '22023';
+    END IF;
 
     FOR item IN SELECT value FROM jsonb_array_elements(payload->'candidate_assessments') ORDER BY value->>'candidate_bead_id' LOOP
         cand := (SELECT v FROM jsonb_array_elements(x.relation_candidates) AS c(v) WHERE v->>'bead_id' = item->>'candidate_bead_id');
@@ -2193,8 +2327,8 @@ BEGIN
     END IF;
     IF e.execution_task_id IS NULL OR b.task_id IS NULL OR t.task_id IS NULL OR t.input_payload IS DISTINCT FROM expected OR t.rerun_of_task_id IS DISTINCT FROM b.task_id OR
        t.origin_principal_id IS DISTINCT FROM p.producer_principal_id OR t.access_scope_id IS DISTINCT FROM b.access_scope_id OR t.workspace_id IS DISTINCT FROM b.workspace_id OR
-       t.task_contract_hash IS DISTINCT FROM (CASE WHEN e.execution_contract_revision=6 THEN '1b544faaf1775aab29e29ff1447aba2c5e68b89059903d8da32543f4c45f08f9' WHEN e.execution_contract_revision=5 THEN 'ff9fe274fc8f9fe4d2a7d5f4e3c0f53b58e0fec4158a525e3aca484ab347e493' WHEN e.execution_contract_revision=4 THEN '8488d4fddf19e65a2eb41203d6b26d7b400d73516c044700246ab3a7e75adce5' WHEN e.execution_contract_revision=3 THEN 'c8c172146c570bde75077745d7f00afa116b5db8f1b78bca4aebada561066e2d' ELSE '5288a780557724d7c5be81afd28f50a0cc5e5b86a3c8e89ae241033e12f3f3fe' END) OR
-       t.semantic_registry_hash IS DISTINCT FROM (CASE WHEN e.execution_contract_revision=6 THEN 'semantic-tasks-v1:490157cbf9802d8199a4615835df2905531e6aeaa152ccbfdaa17da69495c502' WHEN e.execution_contract_revision=5 THEN 'semantic-tasks-v1:a351bceba3c90d5e9edf2e5e3c4d98c20148fc061f635c3b23199bae4caf0e25' WHEN e.execution_contract_revision=4 THEN 'semantic-tasks-v1:0876addc48bcf62db405dff9d1a8b75eb497cbec739945d741d4db72aea4b6dd' WHEN e.execution_contract_revision=3 THEN 'semantic-tasks-v1:116ac71ae8ac94ad8abc3018a0577a60a5e5e543ddf3660ae7db467f09764aef' ELSE 'semantic-tasks-v1:7e8a296cf1143deb86715144ed06cceefcb28dcc9955892ba7df5a06ded8f71f' END) THEN
+       t.task_contract_hash IS DISTINCT FROM (CASE WHEN e.execution_contract_revision=6 THEN '6308137bf480b96ac56fef5e93de23bcd1967077c8c6952209ded979c1b4ed6e' WHEN e.execution_contract_revision=5 THEN 'ff9fe274fc8f9fe4d2a7d5f4e3c0f53b58e0fec4158a525e3aca484ab347e493' WHEN e.execution_contract_revision=4 THEN '8488d4fddf19e65a2eb41203d6b26d7b400d73516c044700246ab3a7e75adce5' WHEN e.execution_contract_revision=3 THEN 'c8c172146c570bde75077745d7f00afa116b5db8f1b78bca4aebada561066e2d' ELSE '5288a780557724d7c5be81afd28f50a0cc5e5b86a3c8e89ae241033e12f3f3fe' END) OR
+       t.semantic_registry_hash IS DISTINCT FROM (CASE WHEN e.execution_contract_revision=6 THEN 'semantic-tasks-v1:4caf4a3a8fe55ab9f56a73620e9e8839660bc8097cf6f6189230338d1ca88d40' WHEN e.execution_contract_revision=5 THEN 'semantic-tasks-v1:a351bceba3c90d5e9edf2e5e3c4d98c20148fc061f635c3b23199bae4caf0e25' WHEN e.execution_contract_revision=4 THEN 'semantic-tasks-v1:0876addc48bcf62db405dff9d1a8b75eb497cbec739945d741d4db72aea4b6dd' WHEN e.execution_contract_revision=3 THEN 'semantic-tasks-v1:116ac71ae8ac94ad8abc3018a0577a60a5e5e543ddf3660ae7db467f09764aef' ELSE 'semantic-tasks-v1:7e8a296cf1143deb86715144ed06cceefcb28dcc9955892ba7df5a06ded8f71f' END) THEN
         RAISE EXCEPTION 'complete_execution_binding_conflict' USING ERRCODE='23514'; END IF;
     RETURN NULL;
 END; $$;
@@ -2328,7 +2462,7 @@ BEGIN
                 AND requested_command->>'output_contract_hash'='2f54df896c41098f1d1e2eac525157f15c892e8690b277957793173a1c9039eb')
             OR (requested_command->>'contract_version'='7' AND requested_command->>'expected_schema_version'='27'
                 AND requested_command->>'task_kind'='memory.semantic.author-complete-unit' AND requested_command->>'contract_revision'='6'
-                AND requested_command->>'output_contract_hash'='67e1260a739f6fc796d87f4f32b412d393420f483ea3562d6fbb950c94b6fa21')
+                AND requested_command->>'output_contract_hash'='7873968a84f6e7279040e45045a4948068c0cde6fcfdb68b417698ad330e0cfd')
             OR (is_v2
              AND requested_command ->> 'expected_schema_version' IS NOT DISTINCT FROM '15'
              AND requested_command ->> 'contract_revision' IS NOT DISTINCT FROM '2'
@@ -3495,7 +3629,7 @@ EXCEPTION WHEN insufficient_privilege THEN RETURN unavailable;
 END;
 $$;
 
-INSERT INTO memoriesql.semantic_task_admission_policies (semantic_registry_hash,task_kind,contract_revision,owning_module,task_contract_hash,target_kind,required_capability,queue_name,base_priority,max_attempts,concurrency_key,concurrency_limit) VALUES ('semantic-tasks-v1:490157cbf9802d8199a4615835df2905531e6aeaa152ccbfdaa17da69495c502','memory.semantic.author-complete-unit',6,'memoriesql.kernel','1b544faaf1775aab29e29ff1447aba2c5e68b89059903d8da32543f4c45f08f9','canonical_semantics','memory.capture','capture',50,3,NULL,NULL);
+INSERT INTO memoriesql.semantic_task_admission_policies (semantic_registry_hash,task_kind,contract_revision,owning_module,task_contract_hash,target_kind,required_capability,queue_name,base_priority,max_attempts,concurrency_key,concurrency_limit) VALUES ('semantic-tasks-v1:4caf4a3a8fe55ab9f56a73620e9e8839660bc8097cf6f6189230338d1ca88d40','memory.semantic.author-complete-unit',6,'memoriesql.kernel','6308137bf480b96ac56fef5e93de23bcd1967077c8c6952209ded979c1b4ed6e','canonical_semantics','memory.capture','capture',50,3,NULL,NULL);
 
 -- Q-owned read of one bead's claims, relations, candidate coverage and authored claim
 -- judgments as known at a time. Read-only; states are derived, never stored; no inference.
@@ -3676,7 +3810,8 @@ BEGIN
                     'content_sha256', link.evidence_content_hash, 'derivation_root_ids', to_jsonb(roots)));
             END LOOP;
             SELECT jsonb_build_object('key', ty.type_key, 'revision', tr.revision, 'namespace', ty.namespace,
-                       'label', tr.display_label, 'forward_reading', tr.forward_reading,
+                       'label', tr.display_label, 'endpoint_rule', tr.endpoint_rule,
+                       'cycle_policy', tr.cycle_policy, 'forward_reading', tr.forward_reading,
                        'inverse_reading', tr.inverse_reading, 'symmetric', tr.is_symmetric)
             INTO rtype FROM memoriesql.relation_type_revisions AS tr
             JOIN memoriesql.relation_types AS ty ON ty.relation_type_id = tr.relation_type_id
@@ -3719,7 +3854,7 @@ BEGIN
                 'source_bead_id', rel.source_bead_id, 'source_bead_version_id', rel.source_bead_version_id,
                 'target_bead_id', rel.target_bead_id, 'target_bead_version_id', rel.target_bead_version_id,
                 'authoring_bead_id', rel.authoring_bead_id, 'basis', rel.basis, 'rationale', rel.rationale_text,
-                'uncertainty', rel.uncertainty_text, 'author_confidence', rel.author_confidence,
+                'qualification', rel.qualification_text, 'author_confidence', rel.author_confidence,
                 'source_statements', source_statements, 'target_statements', target_statements,
                 'evidence', evidence,
                 'independent_root_count', memoriesql.evidence_independent_root_count(rel.tenant_id, 'relation', rel.relation_id, known),

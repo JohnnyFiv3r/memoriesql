@@ -105,7 +105,7 @@ class InstalledMigrations(unittest.TestCase):
         self.assertEqual(output.getvalue().strip(), __version__)
         registry = json.loads(Path("public-registry.json").read_text())
         entries = {entry["id"]: entry for entry in iter_contracts()}
-        self.assertEqual(len(entries), 62)
+        self.assertEqual(len(entries), 63)
         for row in registry["records"]:
             payload = json.dumps(
                 entries[row["id"]],

@@ -2,8 +2,10 @@
 
 Schema 27. Lifecycle records are append-only authority-bearing judgments; state is
 derived from them, never stored as a mutable status, and neither recency nor write
-order selects a winner. Vocabulary revisions are immutable; a custom type enters
-only through an explicit proposal and an authorized decision.
+order selects a winner. A relation never returns to active once retracted or
+superseded, so a key's active assertions only shrink after they are written.
+Vocabulary revisions are immutable; a custom type enters only through an explicit
+proposal and an authorized decision.
 """
 
 from __future__ import annotations
@@ -15,6 +17,7 @@ from uuid import UUID
 from pydantic import Field, model_validator
 
 from memoriesql.application.authored_relations import (
+    CyclePolicy,
     RelationTypePin,
     SourceClock,
 )
@@ -125,15 +128,23 @@ class ProposeRelationType(FrozenContractModel):
     key: str = Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")
     label: str = Field(min_length=1, max_length=128)
     definition: str = Field(min_length=1, max_length=4096)
+    endpoint_rule: str = Field(min_length=1, max_length=256)
     forward_reading: str = Field(min_length=1, max_length=128)
     inverse_reading: str = Field(min_length=1, max_length=128)
     symmetric: bool
+    evidence_expectation: str | None = Field(default=None, min_length=1, max_length=2048)
+    example: str | None = Field(default=None, min_length=1, max_length=2048)
+    counterexample: str | None = Field(default=None, min_length=1, max_length=2048)
+    cycle_policy: CyclePolicy
     status: Literal["active", "inactive"] = "active"
     reason: str = Field(min_length=1, max_length=1024)
 
     @model_validator(mode="after")
     def shape(self) -> ProposeRelationType:
-        for field in ("label", "definition", "forward_reading", "inverse_reading", "reason"):
+        for field in (
+            "label", "definition", "endpoint_rule", "forward_reading", "inverse_reading",
+            "evidence_expectation", "example", "counterexample", "reason",
+        ):
             _nonblank(getattr(self, field), field)
         return self
 
@@ -237,6 +248,8 @@ class InspectedClaim(FrozenContractModel):
 class InspectedRelationType(RelationTypePin):
     namespace: Literal["memoriesql", "workspace"]
     label: str
+    endpoint_rule: str
+    cycle_policy: CyclePolicy
     forward_reading: str
     inverse_reading: str
     symmetric: bool
@@ -251,9 +264,9 @@ class InspectedRelation(FrozenContractModel):
     target_bead_id: UUID
     target_bead_version_id: UUID
     authoring_bead_id: UUID
-    basis: Literal["source_stated", "inferred"]
+    basis: Literal["source_stated", "agent_inferred"]
     rationale: str
-    uncertainty: str | None
+    qualification: str | None
     author_confidence: float
     source_statements: tuple[InspectedStatement, ...]
     target_statements: tuple[InspectedStatement, ...]

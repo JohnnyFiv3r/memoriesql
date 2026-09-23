@@ -69,15 +69,30 @@ class RelationTypePin(FrozenContractModel):
     revision: int = Field(ge=1)
 
 
+CyclePolicy = Literal["permitted", "forbidden"]
+
+
 class RelationTypeDefinition(RelationTypePin):
-    """An exact active vocabulary revision pinned at activation."""
+    """An exact active vocabulary revision pinned at activation.
+
+    Built-in revision 1 is the owner-approved relation semantic profile. The
+    endpoint rule names what the source and target statements describe; an
+    inverse reading is the same assertion, never a second one. Self-reference is
+    always refused, and a `forbidden` cycle policy also refuses cycles between
+    statements among the key's active assertions.
+    """
 
     namespace: Literal["memoriesql", "workspace"]
     label: str = Field(min_length=1, max_length=128)
     definition: str = Field(min_length=1, max_length=4096)
+    endpoint_rule: str = Field(min_length=1, max_length=256)
     forward_reading: str = Field(min_length=1, max_length=128)
     inverse_reading: str = Field(min_length=1, max_length=128)
     symmetric: bool
+    evidence_expectation: str | None = Field(default=None, min_length=1, max_length=2048)
+    example: str | None = Field(default=None, min_length=1, max_length=2048)
+    counterexample: str | None = Field(default=None, min_length=1, max_length=2048)
+    cycle_policy: CyclePolicy
 
 
 class BeadTypeReference(FrozenContractModel):
@@ -192,19 +207,20 @@ class AuthoredRelation(FrozenContractModel):
     # "source <forward_reading> target".
     direction: Literal["from_authored", "to_authored"]
     relation_type: RelationTypePin
-    basis: Literal["source_stated", "inferred"]
+    basis: Literal["source_stated", "agent_inferred"]
     authored_statement_ids: tuple[UUID, ...] = Field(min_length=1, max_length=8)
     candidate_statement_ids: tuple[UUID, ...] = Field(min_length=1, max_length=8)
     evidence: tuple[RelationEvidenceReference, ...] = Field(min_length=1, max_length=8)
     rationale: str = Field(min_length=1, max_length=1024)
-    uncertainty: str | None = Field(default=None, min_length=1, max_length=1024)
+    # Material conditions, scope and hedging of the assertion.
+    qualification: str | None = Field(default=None, min_length=1, max_length=1024)
     # Diagnostic 0-1 author confidence with at most two decimals; never authority.
     author_confidence: float = Field(ge=0, le=1, multiple_of=0.01, allow_inf_nan=False)
 
     @model_validator(mode="after")
     def shape(self) -> AuthoredRelation:
         _nonblank(self.rationale, "relation rationale")
-        _nonblank(self.uncertainty, "relation uncertainty")
+        _nonblank(self.qualification, "relation qualification")
         # Two decimals keep Python and PostgreSQL canonical JSON byte-identical.
         if round(self.author_confidence, 2) != self.author_confidence:
             raise ValueError("author confidence uses at most two decimal places")

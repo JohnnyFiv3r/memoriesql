@@ -24,7 +24,7 @@
     },
     {
       "disposition": "include",
-      "expected_record_count": 56,
+      "expected_record_count": 57,
       "filename": "json-schema.json",
       "kind": "json_schema",
       "note": "Provider-neutral capture, host, source-range, transcript-fold, and harness-lifecycle schemas."
@@ -62,13 +62,13 @@
   "default_policy": "deny",
   "records": [
     {
-      "canonical_payload_sha256": "f89952a29be48c6e613599f68e44a10141b694251d56bcd0a7549adfc9b722dd",
+      "canonical_payload_sha256": "945a4fd5b43ed650970f97cbf6f513c74d2ee6bbfc343cd01cdb7ac18e666961",
       "catalog": "json_schema",
       "classification": "proposed_open_core",
       "id": "memoriesql.authored-relations.v1",
       "package_disposition": "include",
       "path": "contracts/records/memoriesql-authored-relations-v1.json",
-      "public_sha256": "fe6ace3af628eea55f47e605d1901f9d3f8d0caf2d134616b7484f46c36c87d9",
+      "public_sha256": "519f2e7df09c37e6e988bd7c076efc9b5cf246ab95820a61a365b54a4ca3f32a",
       "reason": "Public-authored optional claims, pinned-candidate relations, coverage and append-only lifecycle contracts.",
       "version": "1"
     },
@@ -460,6 +460,17 @@
       "path": "contracts/records/memoriesql-logical-unit-materialization-v1.json",
       "public_sha256": "2d4ac51829c54bd3bc7f4a9294e25c9e089f0f128906181c0d97a17e968a66c8",
       "reason": "Public-authored canonical materialization and unavailable complete-input task binding.",
+      "version": "1"
+    },
+    {
+      "canonical_payload_sha256": "cc47541bab14a472a7cdcc2c238dfbb26c6a1121db4969df8dcd0c4895db2670",
+      "catalog": "json_schema",
+      "classification": "proposed_open_core",
+      "id": "memoriesql.relation-profile.v1",
+      "package_disposition": "include",
+      "path": "contracts/records/memoriesql-relation-profile-v1.json",
+      "public_sha256": "c4f464f3be01e5fe77c580c525efa84645adbec0e10c5bbc784b08a55de360c5",
+      "reason": "Owner-approved relation semantic profile revision 1 with Semantic Spacetime family mapping and attribution; never gates authoring.",
       "version": "1"
     },
     {

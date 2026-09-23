@@ -20,9 +20,10 @@ relation, a conflict, a dependency or a winner.
   (`source_unit_id`, `content_hash`) of one of the relation's named statements.
   Relations never cite free-floating source text.
 - **Type.** One `{key, revision}` from the vocabulary pinned at activation.
-- **Basis and uncertainty.** `source_stated` or `inferred`, a required rationale,
-  an optional uncertainty note and a 0–1 `author_confidence` with at most two
-  decimals. Confidence is a diagnostic, never authority.
+- **Basis and qualification.** `source_stated` or `agent_inferred`, a required
+  rationale, an optional qualification for material conditions, scope and
+  hedging, and a 0–1 `author_confidence` with at most two decimals. Confidence
+  is a diagnostic, never authority.
 - **Coverage.** Every pinned candidate is assessed `edge` (requires, and alone
   permits, relations to it), `no_edge`, or `unassessed` with a reason.
   Unassessed never means unrelated.
@@ -70,7 +71,10 @@ Lifecycle records are append-only. States are derived as of a known time:
 | Record | Derived states |
 | --- | --- |
 | Claim | `current`, `superseded` (by every unretracted replacement: competing branches stay visible), `disputed` (while a dispute with an unretracted claim is open), `retracted` (terminal) |
-| Relation | `active`, `disputed` (until a later confirmation), `superseded` (while the replacement is not retracted), `reassessment_pending` (an endpoint was corrected and no later confirm, retract or supersede exists), `retracted` (terminal) |
+| Relation | `active`, `disputed` (until a later confirmation), `superseded` (final), `reassessment_pending` (an endpoint was corrected and no later confirm, retract or supersede exists), `retracted` (final) |
+
+No event reinstates a relation, so a key's active assertions only shrink once
+written; retracting a replacement does not revive what it superseded.
 
 Governed commands record human judgments with their own receipts, optional exact
 evidence and an optional compare-and-swap on the latest event:
@@ -95,20 +99,41 @@ shared root counts once and a derivative of A and B adds no root of its own.
 
 ## Vocabulary governance
 
-Eleven immutable built-in revision-1 types: `supports`, `contradicts`, `caused_by`,
+Eleven immutable built-in types: `supports`, `contradicts`, `caused_by`,
 `led_to`, `enables`, `part_of`, `depends_on`, `blocks`, `derived_from`,
-`supersedes`, `associated_with`. `supersedes` is domain replacement, not the
-correction or claim-currentness authority. There is no `resolves` type and no
-selectable `superseded_by`.
+`supersedes`, `associated_with`. Revision 1 of their definitions is the
+owner-approved relation semantic profile. Each revision records its definition,
+endpoint rule (what the source and target statements describe), forward and
+inverse readings, symmetry, evidence expectation where the profile states one,
+an example, a counterexample and a cycle policy. An inverse reading is the same
+assertion, never a second one; `contradicts` and `associated_with` are
+symmetric. `supersedes` is domain replacement, not the correction or
+claim-currentness authority. There is no `resolves` type and no selectable
+`superseded_by`. Activation supplies these exact revisions to the author, and an
+unknown or inactive type fails with `unknown_relation_type`.
+
+An assertion never references itself. `part_of`, `derived_from` and
+`supersedes` forbid cycles: apply refuses a bundle when a key's active
+assertions, together with the bundle's new ones, would form a cycle between
+statements, and such writes are serialized per tenant and key. Every new
+assertion involves the authoring bead, which no concurrent bundle can pin, so
+concurrent bundles cannot close a cycle together. Beads can still derive from
+each other through different statements; derivation roots terminate on that
+bead-level cycle and give every bead in it the same roots.
 
 A workspace type or a new revision of one enters only through
 `propose_relation_type_v1` and a human `decide_relation_type_v1`, both requiring
-workspace management authority. Revisions are immutable; an accepted inactive
-revision retires the type for new activations while accepted relations keep their
-exact historical revision. Built-in keys cannot be proposed or shadowed.
+workspace management authority, and carries the same fields. Revisions are
+immutable; an accepted inactive revision retires the type for new activations
+while accepted relations keep their exact historical revision. Built-in keys
+cannot be proposed or shadowed.
 
-Core defines no relation family. Any grouping of types for navigation or display is a
-separately versioned projection that never gates authoring, acceptance or truth.
+The packaged relation profile (`memoriesql.relation-profile.v1`) maps each
+built-in predicate to a Semantic Spacetime family, orientation and mapping
+status with upstream anchors and attribution. It is a navigation and
+presentation projection only: it never gates authoring, acceptance, truth or
+eligibility, and a mapping change is a new profile revision, never a meaning
+revision.
 
 ## Inspection
 

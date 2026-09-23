@@ -159,6 +159,9 @@
     },
     {
       "path": "src/memoriesql/infrastructure/postgres/relation_lifecycle.py"
+    },
+    {
+      "path": "src/memoriesql/application/relation_profile.py"
     }
   ]
 }

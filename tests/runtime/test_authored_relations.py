@@ -288,7 +288,7 @@ class AuthoredRelations(fixtures.LocalMentions):
             "candidate_statement_ids": [candidate["statements"][0]["statement_id"]],
             "evidence": evidence,
             "rationale": "The fictional note states this connection.",
-            "uncertainty": None,
+            "qualification": None,
             "author_confidence": confidence,
         })
         for assessment in extras["candidate_assessments"]:
@@ -559,7 +559,7 @@ class AuthoredRelations(fixtures.LocalMentions):
             "Three fictional trees wilted.",
             "b",
             candidates=(a,),
-            plan=lambda extras, bead, c: ids.setdefault("first", self.relate(extras, bead, c[0], "caused_by", basis="inferred", confidence=0.4)),
+            plan=lambda extras, bead, c: ids.setdefault("first", self.relate(extras, bead, c[0], "caused_by", basis="agent_inferred", confidence=0.4)),
         )
         c = self.author(
             "The fictional pump failure led to wilting.",
@@ -602,8 +602,8 @@ class AuthoredRelations(fixtures.LocalMentions):
         self.assertEqual(state(a, first), ("superseded", (second,)))
         act("retract.second", second, "retract")
         self.assertEqual(state(c, second), ("retracted", ()))
-        # Supersession only counts while its replacement stands.
-        self.assertEqual(state(b, first), ("active", ()))
+        # Supersession is final: retracting the replacement never reinstates it.
+        self.assertEqual(state(b, first), ("superseded", (second,)))
         with self.assertRaises(psycopg.errors.ObjectNotInPrerequisiteState):
             act("confirm.second", second, "confirm")
         (inverse,) = [r for r in self.inspect(a).relations if r.relation_id == second]
@@ -614,6 +614,88 @@ class AuthoredRelations(fixtures.LocalMentions):
         )
         with self.assertRaises(psycopg.Error), self.db.transaction():
             self.db.execute("DELETE FROM memoriesql.bead_relation_events")
+
+    def test_forbidden_cycles_are_refused_and_permitted_keys_are_not(self) -> None:
+        a = self.author("Fictional release notes, first draft.", "a")
+        b = self.author(
+            "Fictional release notes, restated.",
+            "b",
+            candidates=(a,),
+            plan=lambda extras, bead, c: self.relate(extras, bead, c[0], "derived_from"),
+        )
+
+        def both_ways(key: str) -> Plan:
+            def plan(extras: dict[str, Any], bead: dict[str, Any], candidates: list[Any]) -> None:
+                self.relate(extras, bead, candidates[0], key)
+                self.relate(extras, bead, candidates[0], key, direction="to_authored")
+            return plan
+
+        def through_existing(key: str) -> Plan:
+            def plan(extras: dict[str, Any], bead: dict[str, Any], candidates: list[Any]) -> None:
+                by_id = {c["bead_id"]: c for c in candidates}
+                self.relate(extras, bead, by_id[str(b)], key)
+                self.relate(extras, bead, by_id[str(a)], key, direction="to_authored")
+            return plan
+
+        relations = self.row("SELECT count(*) FROM memoriesql.bead_relations")
+        # A reciprocal pair in one bundle, and a longer cycle through the existing
+        # b -> a assertion, are refused whole for a cycle-forbidden key.
+        reciprocal = self.author("Fictional notes, copied both ways.", "c", candidates=(a,),
+                                 plan=both_ways("derived_from"), expect=None)
+        longer = self.author("Fictional notes, a three-way copy.", "d", candidates=(a, b),
+                             plan=through_existing("derived_from"), expect=None)
+        self.assertEqual(self.row("SELECT count(*) FROM memoriesql.bead_relations"), relations)
+        for refused in (reciprocal, longer):
+            self.assertEqual(
+                self.row("SELECT count(*) FROM memoriesql.accepted_bead_semantics WHERE bead_id=%s", (refused,)),
+                (0,),
+            )
+        # The same shapes under a key whose cycles are permitted are accepted.
+        self.author("Fictional notes, mutual influence.", "e", candidates=(a,), plan=both_ways("led_to"))
+        self.author("Fictional notes, a three-way influence.", "f", candidates=(a, b),
+                    plan=through_existing("led_to"))
+        # An acyclic cycle-forbidden bundle is accepted.
+        self.author(
+            "Fictional notes, a second restatement.",
+            "g",
+            candidates=(a, b),
+            plan=lambda extras, bead, c: [self.relate(extras, bead, item, "derived_from") for item in c],
+        )
+
+    def test_built_in_vocabulary_is_profile_revision_one(self) -> None:
+        from memoriesql.application.relation_profile import RELATION_SEMANTIC_PROFILE
+
+        rows = self.db.execute(
+            "SELECT ty.type_key,r.revision,r.endpoint_rule,r.forward_reading,r.inverse_reading,r.is_symmetric,r.cycle_policy,r.status FROM memoriesql.relation_types ty JOIN memoriesql.relation_type_revisions r USING(relation_type_id) WHERE ty.namespace='memoriesql' ORDER BY ty.type_key"
+        ).fetchall()
+        self.assertEqual(
+            rows,
+            [
+                ("associated_with", 1, "symmetric", "is associated with", "is associated with", True, "permitted", "active"),
+                ("blocks", 1, "impediment → impeded", "blocks", "is blocked by", False, "permitted", "active"),
+                ("caused_by", 1, "effect → cause", "is caused by", "causes", False, "permitted", "active"),
+                ("contradicts", 1, "symmetric", "contradicts", "contradicts", True, "permitted", "active"),
+                ("depends_on", 1, "dependent → prerequisite", "depends on", "is required by", False, "permitted", "active"),
+                ("derived_from", 1, "derivative → source", "is derived from", "is the source of", False, "forbidden", "active"),
+                ("enables", 1, "enabler → enabled", "enables", "is enabled by", False, "permitted", "active"),
+                ("led_to", 1, "antecedent → result", "led to", "resulted from", False, "permitted", "active"),
+                ("part_of", 1, "part → whole", "is part of", "has part", False, "forbidden", "active"),
+                ("supersedes", 1, "replacement → replaced", "supersedes", "is superseded by", False, "forbidden", "active"),
+                ("supports", 1, "evidence → proposition", "supports", "is supported by", False, "permitted", "active"),
+            ],
+        )
+        self.assertEqual(
+            sorted(m.key for m in RELATION_SEMANTIC_PROFILE.mappings), [row[0] for row in rows]
+        )
+        activation = self.activate(self.unit("Fictional note for the pinned vocabulary.", "v"), "v")
+        pinned = self.row(
+            "SELECT input_payload->'payload'->'relation_vocabulary' FROM memoriesql.semantic_tasks WHERE task_id=%s",
+            (activation.execution_task_id,),
+        )[0]
+        caused = next(item for item in pinned if item["key"] == "caused_by")
+        self.assertEqual(caused["cycle_policy"], "permitted")
+        self.assertIn("Temporal order alone never suffices", caused["evidence_expectation"])
+        self.assertIsNotNone(caused["example"])
 
     def test_named_replacement_relations_must_stay_readable(self) -> None:
         a = self.author("The fictional pump failed on Monday.", "a")
@@ -655,9 +737,11 @@ class AuthoredRelations(fixtures.LocalMentions):
             key="mitigates",
             label="Mitigates",
             definition="The source's cited action reduces the target's cited fictional harm.",
+            endpoint_rule="action → harm",
             forward_reading="mitigates",
             inverse_reading="is mitigated by",
             symmetric=False,
+            cycle_policy="permitted",
             reason="Fictional orchard maintenance vocabulary.",
         )
         proposed = self.lifecycle.propose_relation_type(proposal)
@@ -780,7 +864,7 @@ class AuthoredRelations(fixtures.LocalMentions):
 
         def late_plan(extras: dict[str, Any], bead: dict[str, Any], candidates: list[Any]) -> None:
             ids["closed"] = self.add_claim(extras, bead, "orchard gate", "position", "closed")
-            self.relate(extras, bead, candidates[0], "contradicts", basis="inferred", confidence=0.55)
+            self.relate(extras, bead, candidates[0], "contradicts", basis="agent_inferred", confidence=0.55)
             (candidate,) = candidates
             self.assertEqual(candidate["source"]["time_basis"], "unit_source_time")
             self.assertEqual(candidate["source"]["occurred_at"], "2026-09-21T09:00:00Z")
