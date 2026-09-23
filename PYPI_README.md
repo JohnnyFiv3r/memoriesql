@@ -16,13 +16,13 @@ qualification, authority, worker composition and qualified model bindings.
 
 ## Install and explore
 
-Use Python **3.13 or 3.14** (`>=3.13,<3.15`). This page describes the 0.0.10 distribution.
+Use Python **3.13 or 3.14** (`>=3.13,<3.15`). This page describes the 0.0.11 distribution.
 Until its publication is independently verified, use the reviewed local wheel;
-after publication, install the exact pin below. Published 0.0.9 remains available
-without the run-reference binding and refusal-settlement changes.
+after publication, install the exact pin below. Published 0.0.10 remains available
+without authored claims and relations (schema 27).
 
 ```console
-python3.13 -m pip install memoriesql==0.0.10
+python3.13 -m pip install memoriesql==0.0.11
 memoriesql --version
 memoriesql contracts --json
 memoriesql contract memoriesql.capture.connector-cursor --json
@@ -53,9 +53,16 @@ attribution, conditions and uncertainty. Its short title and summary are human
 navigation, not replacement evidence. Meaning is authored by an agent or human;
 deterministic code validates and persists it.
 
-Version 0.0.10 binds authored statements to the executor's run reference before
-hashing and settles data-error canonical-apply refusals as invalid output;
-schemas, contract payloads and dependencies are unchanged from 0.0.9. Version
+Version 0.0.11 adds authored claims and relations (schema 27, author-complete-unit
+revision 6): the primary author of one complete unit may optionally propose
+tracked claims, evidence-backed relations to explicitly pinned candidate beads
+and lifecycle judgments about those candidates' claims, and assess every pinned
+candidate. Code validates identity, pins and evidence; it never infers a
+relation, conflict or winner. Claim and relation states are derived from
+append-only history as of a known time, and a derivative never counts as
+independent corroboration. Dependencies are unchanged from 0.0.10. Version
+0.0.10 binds authored statements to the executor's run reference before
+hashing and settles data-error canonical-apply refusals as invalid output. Version
 0.0.9 combined declared evidence scopes (schema 25), explicit supervised
 managed dispatch (schema 26), and terminal-failure cleanup that retains errors
 without claiming a failed write persisted. Hard-bounded model admission remains
