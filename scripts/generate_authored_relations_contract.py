@@ -39,7 +39,7 @@ def record() -> dict[str, object]:
             task_definition=ar.RELATED_EXECUTION_TASK.canonical_payload(),
             task_contract_hash=ar.RELATED_EXECUTION_TASK.contract_hash,
             registry_hash=registry.registry_hash,
-            evidence="Each relation cites 1-8 statement-evidence pairs of its own named endpoint propositions; lifecycle judgments cite existing accepted pairs. Derivation roots are computed as of a known time and shared roots count once.",
+            evidence="Each relation cites 1-8 statement-evidence pairs of its own named endpoint propositions; lifecycle judgments cite existing accepted pairs. Derivation roots are computed as of a known time from the whole active derived_from lineage: a derivative inherits its lineage's roots and adds none of its own, beads that derive only from one another share one root, shared roots count once, and a lineage past its limit is reported as budget exhausted, never truncated.",
             empty_set="Relations, claims and claim updates may be empty. Every pinned candidate is assessed edge, no_edge or unassessed with a reason; unassessed never means unrelated. Only a revision-6 apply receipt proves the capability.",
             uncertainty="Relation type, direction, basis and 0-1 author confidence are the author's diagnostic proposal, never authority. Competing supersessions and open disputes stay visible; neither recency nor occurrence order selects a winner.",
             lifecycle="Claims derive current, superseded, disputed or retracted and relations derive active, disputed, superseded, retracted or reassessment_pending from append-only authored and governed events as known at a time.",

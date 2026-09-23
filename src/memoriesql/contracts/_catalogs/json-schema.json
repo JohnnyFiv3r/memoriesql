@@ -7,7 +7,7 @@
     {
       "contract": {
         "empty_set": "Relations, claims and claim updates may be empty. Every pinned candidate is assessed edge, no_edge or unassessed with a reason; unassessed never means unrelated. Only a revision-6 apply receipt proves the capability.",
-        "evidence": "Each relation cites 1-8 statement-evidence pairs of its own named endpoint propositions; lifecycle judgments cite existing accepted pairs. Derivation roots are computed as of a known time and shared roots count once.",
+        "evidence": "Each relation cites 1-8 statement-evidence pairs of its own named endpoint propositions; lifecycle judgments cite existing accepted pairs. Derivation roots are computed as of a known time from the whole active derived_from lineage: a derivative inherits its lineage's roots and adds none of its own, beads that derive only from one another share one root, shared roots count once, and a lineage past its limit is reported as budget exhausted, never truncated.",
         "lifecycle": "Claims derive current, superseded, disputed or retracted and relations derive active, disputed, superseded, retracted or reassessment_pending from append-only authored and governed events as known at a time.",
         "registry_hash": "semantic-tasks-v1:4caf4a3a8fe55ab9f56a73620e9e8839660bc8097cf6f6189230338d1ca88d40",
         "schemas": {

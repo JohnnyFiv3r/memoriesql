@@ -91,11 +91,17 @@ observation beads today.
 
 ## Evidence independence
 
-Derivation roots are computed as of the known time. A bead's roots are the source
-objects of the terminal beads of its active `derived_from` chains, or its own source
-object. An evidence unit's roots are the union over the beads observing it. A
+Derivation roots are computed as of the known time from a bead's whole active
+`derived_from` lineage, at any depth. A bead with no active `derived_from` target is
+original, and its root is its own source object. A derivative inherits the roots of
+everything it derives from and never adds its own, so transformation never creates a
+corroborating root. Beads that derive only from one another (possible through
+different statements) are one lineage with one root: the source object of their
+earliest bead. An evidence unit's roots are the union over the beads observing it. A
 relation's `independent_root_count` is the size of the union over its evidence, so a
-shared root counts once and a derivative of A and B adds no root of its own.
+shared root counts once and a derivative of A and B adds no root of its own. Roots
+are never truncated: a lineage larger than 128 beads makes the read report
+`budget_exhausted`.
 
 ## Vocabulary governance
 
@@ -118,8 +124,8 @@ assertions, together with the bundle's new ones, would form a cycle between
 statements, and such writes are serialized per tenant and key. Every new
 assertion involves the authoring bead, which no concurrent bundle can pin, so
 concurrent bundles cannot close a cycle together. Beads can still derive from
-each other through different statements; derivation roots terminate on that
-bead-level cycle and give every bead in it the same roots.
+each other through different statements; [evidence
+independence](#evidence-independence) roots such a lineage once.
 
 A workspace type or a new revision of one enters only through
 `propose_relation_type_v1` and a human `decide_relation_type_v1`, both requiring
@@ -141,7 +147,8 @@ revision.
 relations, candidate assessments and authored claim judgments as of `known_at`.
 Every disclosed bead, statement, evidence event and derivation root must be
 currently readable; otherwise the whole response is `unavailable`. Responses are
-bounded at 262,144 canonical bytes.
+bounded at 262,144 canonical bytes and derivation lineages at 128 beads; past
+either bound the response is `budget_exhausted`, never truncated.
 
 ## Not included
 

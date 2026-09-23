@@ -630,31 +630,66 @@ SET search_path = pg_catalog, memoriesql SET row_security = off AS $$
 $$;
 REVOKE ALL ON FUNCTION memoriesql.derived_from_targets(uuid, uuid, timestamp with time zone) FROM PUBLIC;
 
--- Deterministic derivation roots of a bead as known at a time: the source objects of the
--- terminal beads of its active derived_from chains, or its own source object. Beads can
--- derive from each other through different statements; the walk terminates on such a
--- bead-level cycle, and a chain with no terminal bead falls back to every visited bead, so
--- every bead in the cycle gets the same roots. Transformation never adds a root.
+-- The largest derivation lineage a root computation walks. A larger lineage is refused
+-- with 54000, which reads report as budget exhaustion; roots are never truncated.
+CREATE FUNCTION memoriesql.derivation_lineage_limit()
+RETURNS integer
+LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$ SELECT 128 $$;
+REVOKE ALL ON FUNCTION memoriesql.derivation_lineage_limit() FROM PUBLIC;
+
+-- Deterministic derivation roots of a bead as known at a time, from its complete active
+-- derived_from lineage. A bead with no active derived_from target is original: its root
+-- is its own source object. A derivative inherits the roots of everything it derives
+-- from, at any depth, and never adds its own, so transformation never creates a
+-- corroborating root. Beads can derive from each other through different statements;
+-- beads that derive only from one another (a bottom cycle of the lineage) are one
+-- lineage with one root, the source object of its earliest bead.
 CREATE FUNCTION memoriesql.bead_derivation_roots(t uuid, bead uuid, known timestamp with time zone)
 RETURNS uuid[]
-LANGUAGE sql STABLE SECURITY DEFINER
+LANGUAGE plpgsql STABLE SECURITY DEFINER
 SET search_path = pg_catalog, memoriesql SET row_security = off AS $$
-    WITH RECURSIVE walk(bead_id, depth, path) AS (
-        SELECT bead, 0, ARRAY[bead]
-        UNION ALL
-        SELECT d.target, w.depth + 1, w.path || d.target
-        FROM walk AS w CROSS JOIN LATERAL memoriesql.derived_from_targets(t, w.bead_id, known) AS d(target)
-        WHERE w.depth < 16 AND NOT d.target = ANY(w.path)
-    ), visited AS (
-        SELECT DISTINCT w.bead_id, e.source_object_id,
-               NOT EXISTS (SELECT 1 FROM memoriesql.derived_from_targets(t, w.bead_id, known)) AS terminal
-        FROM walk AS w
-        JOIN memoriesql.beads AS b ON b.tenant_id = t AND b.bead_id = w.bead_id
-        JOIN memoriesql.source_events AS e ON e.tenant_id = t AND e.event_id = b.event_id
+DECLARE
+    lineage_limit constant integer := memoriesql.derivation_lineage_limit();
+    lineage uuid[];
+    roots uuid[];
+BEGIN
+    -- The walk stops pulling one bead past the limit, so it never runs unbounded.
+    WITH RECURSIVE walk(bead_id) AS (
+        SELECT bead
+        UNION
+        SELECT d.target FROM walk AS w
+        CROSS JOIN LATERAL memoriesql.derived_from_targets(t, w.bead_id, known) AS d(target)
     )
-    SELECT CASE WHEN EXISTS (SELECT 1 FROM visited WHERE terminal)
-        THEN ARRAY(SELECT DISTINCT source_object_id FROM visited WHERE terminal ORDER BY 1 LIMIT 64)
-        ELSE ARRAY(SELECT DISTINCT source_object_id FROM visited ORDER BY 1 LIMIT 64) END
+    SELECT array_agg(bounded.bead_id) INTO lineage
+    FROM (SELECT bead_id FROM walk LIMIT lineage_limit + 1) AS bounded;
+    IF cardinality(lineage) > lineage_limit THEN
+        RAISE EXCEPTION 'derivation_lineage_budget_exhausted' USING ERRCODE = '54000';
+    END IF;
+    WITH RECURSIVE edge(source_id, target_id) AS MATERIALIZED (
+        SELECT l.bead_id, d.target FROM unnest(lineage) AS l(bead_id)
+        CROSS JOIN LATERAL memoriesql.derived_from_targets(t, l.bead_id, known) AS d(target)
+    ), reach(from_id, to_id) AS (
+        SELECT l.bead_id, l.bead_id FROM unnest(lineage) AS l(bead_id)
+        UNION
+        SELECT r.from_id, e.target_id FROM reach AS r JOIN edge AS e ON e.source_id = r.to_id
+    ), bottom AS (
+        -- A bead is in a bottom component when everything it reaches reaches it back:
+        -- an original bead, or a cycle with no derivation leaving it.
+        SELECT r.from_id FROM reach AS r
+        LEFT JOIN reach AS back ON back.from_id = r.to_id AND back.to_id = r.from_id
+        GROUP BY r.from_id HAVING bool_and(back.from_id IS NOT NULL)
+    ), earliest AS (
+        SELECT DISTINCT ON (m.from_id) b.event_id
+        FROM bottom AS m
+        JOIN reach AS r ON r.from_id = m.from_id
+        JOIN memoriesql.beads AS b ON b.tenant_id = t AND b.bead_id = r.to_id
+        ORDER BY m.from_id, b.created_at, b.bead_id
+    )
+    SELECT array_agg(DISTINCT e.source_object_id ORDER BY e.source_object_id) INTO roots
+    FROM earliest AS x
+    JOIN memoriesql.source_events AS e ON e.tenant_id = t AND e.event_id = x.event_id;
+    RETURN COALESCE(roots, '{}'::uuid[]);
+END;
 $$;
 REVOKE ALL ON FUNCTION memoriesql.bead_derivation_roots(uuid, uuid, timestamp with time zone) FROM PUBLIC;
 
@@ -667,7 +702,7 @@ SET search_path = pg_catalog, memoriesql SET row_security = off AS $$
     SELECT COALESCE(NULLIF(ARRAY(
         SELECT DISTINCT root FROM memoriesql.beads AS b,
              unnest(memoriesql.bead_derivation_roots(t, b.bead_id, known)) AS root
-        WHERE b.tenant_id = t AND b.source_unit_id = unit AND b.created_at <= known ORDER BY 1 LIMIT 64
+        WHERE b.tenant_id = t AND b.source_unit_id = unit AND b.created_at <= known ORDER BY 1
     ), '{}'::uuid[]), ARRAY(
         SELECT e.source_object_id FROM memoriesql.source_units AS u
         JOIN memoriesql.source_events AS e ON e.tenant_id = u.tenant_id AND e.event_id = u.event_id
@@ -3904,7 +3939,10 @@ BEGIN
     END LOOP;
     IF pg_catalog.clock_timestamp() - started > interval '2 seconds' THEN RETURN budget; END IF;
     RETURN result;
-EXCEPTION WHEN insufficient_privilege THEN RETURN unavailable;
+EXCEPTION
+    WHEN insufficient_privilege THEN RETURN unavailable;
+    -- A derivation lineage over its limit is reported, never truncated.
+    WHEN program_limit_exceeded THEN RETURN budget;
 END;
 $$;
 REVOKE ALL ON FUNCTION memoriesql.inspect_bead_relations_v1(jsonb) FROM PUBLIC;

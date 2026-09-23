@@ -62,13 +62,13 @@
   "default_policy": "deny",
   "records": [
     {
-      "canonical_payload_sha256": "945a4fd5b43ed650970f97cbf6f513c74d2ee6bbfc343cd01cdb7ac18e666961",
+      "canonical_payload_sha256": "fcfea72dd05d7c32b74d0a5e6d26798f6ee7efc847f93851f33bc65dc82304ff",
       "catalog": "json_schema",
       "classification": "proposed_open_core",
       "id": "memoriesql.authored-relations.v1",
       "package_disposition": "include",
       "path": "contracts/records/memoriesql-authored-relations-v1.json",
-      "public_sha256": "519f2e7df09c37e6e988bd7c076efc9b5cf246ab95820a61a365b54a4ca3f32a",
+      "public_sha256": "e7b9a34d97a159c4a07d50005509bfb9ee03c5b0b034985864b9f53c985ec67a",
       "reason": "Public-authored optional claims, pinned-candidate relations, coverage and append-only lifecycle contracts.",
       "version": "1"
     },

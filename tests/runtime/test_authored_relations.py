@@ -850,6 +850,81 @@ class AuthoredRelations(fixtures.LocalMentions):
         # Own root plus north and south: the summary adds nothing of its own.
         self.assertEqual(counts, {summary: 3, a: 2})
 
+    def test_roots_follow_the_whole_lineage_and_are_never_truncated(self) -> None:
+        quarry, mill, depot = (self.add_source(name) for name in ("quarry", "mill", "depot"))
+        ledger = self.author("Fictional ledger: four crates left the orchard.", "ledger")
+
+        def cycle(extras: dict[str, Any], bead: dict[str, Any], candidates: list[Any]) -> None:
+            # Through different statements, each bead derives from the other.
+            restated = dict(
+                bead["statements"][0],
+                statement_id=str(uuid.uuid4()),
+                statement_text="Fictional quarry note: the ledger counted the crates.",
+            )
+            bead["statements"].append(restated)
+            bead["render"]["summary"].append(
+                {"text": restated["statement_text"], "statement_ids": [restated["statement_id"]]}
+            )
+            self.relate(extras, bead, candidates[0], "derived_from")
+            self.relate(extras, bead, candidates[0], "derived_from", direction="to_authored")
+            extras["relations"][1]["authored_statement_ids"] = [restated["statement_id"]]
+
+        note = self.author(
+            "Fictional quarry note: four crates left the orchard.",
+            "quarry",
+            source=quarry,
+            candidates=(ledger,),
+            plan=cycle,
+        )
+        summary = self.author(
+            "Fictional mill summary: four crates.",
+            "mill",
+            source=mill,
+            candidates=(note,),
+            plan=lambda extras, bead, c: self.relate(extras, bead, c[0], "derived_from"),
+        )
+
+        def roots(bead: uuid.UUID, known_at: datetime | None = None) -> set[tuple[uuid.UUID, ...]]:
+            inspection = self.inspect(bead, known_at)
+            self.assertEqual(inspection.outcome, "available")
+            for relation in inspection.relations:
+                self.assertEqual(relation.independent_root_count, 1)
+            return {tuple(e.derivation_root_ids) for r in inspection.relations for e in r.evidence}
+
+        # Beads that derive only from one another are one lineage with one root, the
+        # source of its earliest bead; nothing derived from it adds a root of its own.
+        for bead in (ledger, note, summary):
+            self.assertEqual(roots(bead), {(self.source,)})
+        before = datetime.now(UTC)
+        manifest = self.author(
+            "Fictional depot manifest: four crates.",
+            "depot",
+            source=depot,
+            candidates=(note,),
+            plan=lambda extras, bead, c: self.relate(
+                extras, bead, c[0], "derived_from", direction="to_authored"
+            ),
+        )
+        # A late original ends the lineage: every derivative now roots there alone, at
+        # any depth, while reads as of an earlier time keep the earlier root.
+        for bead in (ledger, note, summary, manifest):
+            self.assertEqual(roots(bead), {(depot,)})
+        for bead in (ledger, note, summary):
+            self.assertEqual(roots(bead, before), {(self.source,)})
+
+        # A lineage past its limit is refused visibly, never truncated. Lowering the
+        # limit in this disposable database stands in for a 129-bead lineage.
+        self.db.execute(
+            "CREATE OR REPLACE FUNCTION memoriesql.derivation_lineage_limit() RETURNS integer "
+            "LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$ SELECT 3 $$"
+        )
+        # The summary's lineage is summary, note, ledger and manifest; the note's
+        # inspection cites the summary's evidence through its incoming relation.
+        for bead in (summary, note):
+            self.assertEqual(self.inspect(bead).outcome, "budget_exhausted")
+        self.assertEqual(roots(ledger), {(depot,)})
+        self.assertEqual(roots(summary, before), {(self.source,)})
+
     def test_known_time_and_late_arrival_inherit_source_clocks(self) -> None:
         monday = datetime(2026, 9, 21, 9, 0, tzinfo=UTC)
         sunday = monday - timedelta(days=1)
