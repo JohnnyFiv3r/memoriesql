@@ -61,12 +61,12 @@ the authoring path must report incomplete work rather than invent an answer.
 ## Start with the published package
 
 Use **Python 3.13 or 3.14** (`>=3.13,<3.15`). Create an environment and pin the
-current published runtime, 0.0.9 (0.0.10 is prepared, not yet published):
+current published runtime, 0.0.10:
 
 ```console
 python3.13 -m venv .venv
 . .venv/bin/activate
-python -m pip install memoriesql==0.0.9
+python -m pip install memoriesql==0.0.10
 memoriesql --version
 memoriesql contracts --json
 memoriesql contract memoriesql.capture.connector-cursor --json
@@ -121,7 +121,7 @@ rollback or final usage reconciliation.
   It supplies no provider adapter or live-call authorization.
 - **Also in 0.0.9:** terminal-write failures settle dependent cleanup
   with retained errors, while started writes and late usage remain owned.
-- **Prepared for 0.0.10, not yet published:** the executor binds authored
+- **Published in 0.0.10:** the executor binds authored
   statements to its own run reference before hashing, and a data-error
   canonical-apply refusal settles the attempt as invalid output instead of
   leaving it running ([runtime](docs/runtime.md)). Schemas, contract payloads

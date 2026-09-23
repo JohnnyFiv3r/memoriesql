@@ -1,4 +1,21 @@
-# Prepared 0.0.10 release and owner gates
+# 0.0.10 release: preparation, owner gates and publication record
+
+## Publication record
+
+The owner created and pushed `v0.0.10` at release main
+`33ece99bc473685839ef53e14b71a950b9adb88c` on 2026-09-22 (22:17Z), after the
+exact-main package run [35790235188](https://github.com/JohnnyFiv3r/memoriesql/actions/runs/35790235188)
+succeeded. The publishing run
+[35791541401](https://github.com/JohnnyFiv3r/memoriesql/actions/runs/35791541401)
+verified the two archived artifacts against the committed inventory and, after
+the owner's protected approval, uploaded them to PyPI at 22:23Z. Independent
+verification afterwards: the PyPI wheel (`2c6f40db…6b3f8`, 548,152 bytes) and
+sdist (`0d6189cd…30f76`, 488,793 bytes) are byte-identical to the archived CI
+artifacts and match the committed inventory; PyPI metadata reports version
+0.0.10, `>=3.13,<3.15` and the three pinned dependencies; a fresh installation
+from PyPI reports version 0.0.10, 61 contracts, 26 migrations and intact
+`RECORD` hashes. `memoriesql==0.0.10` may now be pinned. The preparation
+record below is retained as written.
 
 This preparation packages accepted main
 `f6f649eed5c5908f21a1bf2f4e365582e51ae6e6` (PR #31 and PR #32 merged 2026-09-22; the runtime is
@@ -94,7 +111,7 @@ evidence scopes and explicit supervised managed dispatch. It adds the
 a statement's `model_run_ref` is host provenance the executor now binds itself for
 single-run trees, and a data-error refusal from canonical apply settles the attempt
 as `invalid_output` (`worker.canonical_apply_refused`) instead of leaving it running.
-These are prepared candidate capabilities, not a claim of publication or real-provider quality.
+These capabilities are published in 0.0.10; publication is not a claim of real-provider quality.
 
 <a id="caller-composition-and-explicit-opt-in"></a>
 

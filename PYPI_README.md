@@ -16,9 +16,8 @@ qualification, authority, worker composition and qualified model bindings.
 
 ## Install and explore
 
-Use Python **3.13 or 3.14** (`>=3.13,<3.15`). This page describes the 0.0.10 distribution.
-Until its publication is independently verified, use the reviewed local wheel;
-after publication, install the exact pin below. Published 0.0.9 remains available
+Use Python **3.13 or 3.14** (`>=3.13,<3.15`). This page describes the published
+0.0.10 distribution; install the exact pin below. Published 0.0.9 remains available
 without the run-reference binding and refusal-settlement changes.
 
 ```console
