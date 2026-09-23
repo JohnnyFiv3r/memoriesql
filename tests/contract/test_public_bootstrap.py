@@ -45,8 +45,8 @@ class PublicBootstrapTests(unittest.TestCase):
 
     def test_registry_is_explicit_complete_and_default_deny(self) -> None:
         records = load_registry()
-        self.assertEqual(len(records), 61)
-        self.assertEqual(len({record["id"] for record in records}), 61)
+        self.assertEqual(len(records), 62)
+        self.assertEqual(len({record["id"] for record in records}), 62)
         catalogs = load_catalog_definitions()
         self.assertEqual(tuple(item.kind for item in catalogs), CATALOG_KINDS)
         counts = {item.kind: 0 for item in catalogs}
@@ -54,10 +54,10 @@ class PublicBootstrapTests(unittest.TestCase):
             counts[str(record["catalog"])] += 1
             self.assertEqual(record["classification"], "proposed_open_core")
             self.assertEqual(record["package_disposition"], "include")
-        self.assertEqual(counts["json_schema"], 55)
+        self.assertEqual(counts["json_schema"], 56)
         self.assertEqual(counts["python"], 5)
         self.assertEqual(counts["connector"], 1)
-        self.assertEqual(sum(counts.values()), 61)
+        self.assertEqual(sum(counts.values()), 62)
 
     def test_generated_catalogs_have_no_drift(self) -> None:
         for path, expected in expected_outputs().items():
@@ -65,7 +65,7 @@ class PublicBootstrapTests(unittest.TestCase):
 
     def test_boundary_scan_is_clean(self) -> None:
         result = verify()
-        self.assertEqual(result["record_count"], 61)
+        self.assertEqual(result["record_count"], 62)
         self.assertEqual(result["default_policy"], "deny")
         self.assertEqual(result["private_boundary_leaks"], [])
 

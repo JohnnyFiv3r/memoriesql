@@ -11,6 +11,10 @@ from psycopg import Connection
 from psycopg.pq import TransactionStatus
 from psycopg.types.json import Jsonb
 
+from memoriesql.application.authored_relations import (
+    ActivateRelatedAuthorship,
+    RelatedActivationReceipt,
+)
 from memoriesql.application.bead_classification import (
     ActivateClassifiedAuthorship,
     ClassificationActivationReceipt,
@@ -50,6 +54,20 @@ class PostgresCompleteInput:
         return ClassificationActivationReceipt.model_validate(self._call(
             "SELECT memoriesql.activate_complete_input_v4(%s)",
             (Jsonb(request.model_dump(mode="json")),), role="memoriesql_application"))
+
+    def activate_related(
+        self, request: ActivateRelatedAuthorship
+    ) -> RelatedActivationReceipt:
+        request = ActivateRelatedAuthorship.model_validate(
+            request.model_dump(mode="json")
+        )
+        return RelatedActivationReceipt.model_validate(
+            self._call(
+                "SELECT memoriesql.activate_complete_input_v5(%s)",
+                (Jsonb(request.model_dump(mode="json")),),
+                role="memoriesql_application",
+            )
+        )
 
     def activate_mentions(
         self, request: ActivateMentionAuthorship

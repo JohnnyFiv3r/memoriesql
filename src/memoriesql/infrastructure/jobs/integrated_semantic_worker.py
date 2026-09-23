@@ -1636,7 +1636,7 @@ class IntegratedSemanticWorker:
             if (
                 settlement_result.status == SemanticResultStatus.SUCCEEDED
                 and claimed.task_kind == "memory.semantic.author-complete-unit"
-                and claimed.contract_revision in (2, 3, 4, 5)
+                and claimed.contract_revision in (2, 3, 4, 5, 6)
                 and not queue.complete_exposure_valid(claimed.fence)
             ):
                 settlement_result = SemanticTaskResult[BaseModel](

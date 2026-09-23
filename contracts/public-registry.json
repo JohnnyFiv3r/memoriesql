@@ -24,7 +24,7 @@
     },
     {
       "disposition": "include",
-      "expected_record_count": 55,
+      "expected_record_count": 56,
       "filename": "json-schema.json",
       "kind": "json_schema",
       "note": "Provider-neutral capture, host, source-range, transcript-fold, and harness-lifecycle schemas."
@@ -61,6 +61,17 @@
   "compatibility": "experimental_0_x_no_general_compatibility_guarantee",
   "default_policy": "deny",
   "records": [
+    {
+      "canonical_payload_sha256": "6ef66a9983fe20c9efc2f4842a215777b1960c8b4c9e5b5ff183269c6df5bc55",
+      "catalog": "json_schema",
+      "classification": "proposed_open_core",
+      "id": "memoriesql.authored-relations.v1",
+      "package_disposition": "include",
+      "path": "contracts/records/memoriesql-authored-relations-v1.json",
+      "public_sha256": "f84ac6d5554ca81cb9f274b534e4ed8fa2cb5af9da12522e216a14e4c00b79e9",
+      "reason": "Public-authored optional claims, pinned-candidate relations, coverage and append-only lifecycle contracts.",
+      "version": "1"
+    },
     {
       "canonical_payload_sha256": "9dfc99fc4bd22dc84aa25f39efe7ca48b8fa4c7cd7b17dfa88d135aa48f8bf4b",
       "catalog": "json_schema",

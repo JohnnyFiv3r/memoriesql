@@ -150,6 +150,15 @@
     },
     {
       "path": "src/memoriesql/application/managed_dispatch.py"
+    },
+    {
+      "path": "src/memoriesql/application/authored_relations.py"
+    },
+    {
+      "path": "src/memoriesql/application/relation_lifecycle.py"
+    },
+    {
+      "path": "src/memoriesql/infrastructure/postgres/relation_lifecycle.py"
     }
   ]
 }
