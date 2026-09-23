@@ -32,14 +32,15 @@ from memoriesql.infrastructure.models.pydanticai_executor import (
     ModelProfileBinding,
     PydanticAIModelProfileRegistry,
 )
-from memoriesql.infrastructure.postgres.migration_runner import migrate
 
 if TYPE_CHECKING:
     from tests.runtime.test_bead_classification import BeadClassification
     from tests.runtime.test_declared_evidence_scope import DeclaredScopes
+    from tests.runtime.test_postgres_runtime import migrate
 else:
     from test_bead_classification import BeadClassification
     from test_declared_evidence_scope import DeclaredScopes
+    from test_postgres_runtime import migrate
 
 
 def units(inputs: int = 11, outputs: int = 7) -> NormalizedUsage:

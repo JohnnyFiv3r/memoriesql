@@ -114,10 +114,15 @@ jobs:
       - name: Prove the reviewed installation with checkout access denied
         # The step above proves the wheel rebuilt from the sdist is byte-identical
         # to the reviewed wheel, so the installed acceptance runs once per
-        # interpreter; a second run on the identical wheel proves nothing.
+        # interpreter; a second run on the identical wheel proves nothing. The
+        # acceptance modules run as four shards sharing the PostgreSQL service;
+        # test migrations serialize on an advisory lock and every module runs in
+        # exactly one shard. The acceptance script denies subprocesses, so the
+        # shards are launched here rather than from inside it.
         run: |
           unset PYTHONPATH
           export PYTHONNOUSERSITE=1
+          shards=4
           for artifact in build/reviewed-package/*.whl; do
             test_root="$(mktemp -d)"
             python -m venv "$test_root/venv"
@@ -125,7 +130,21 @@ jobs:
             cp scripts/run_installed_acceptance.py scripts/prove_package_isolation.py scripts/prove_release_installation.py scripts/prove_fold_recovery_restart.py "$test_root/"
             cp contracts/runtime-inventory.json contracts/public-registry.json "$test_root/"
             cp tests/migrations/*.py tests/runtime/*.py tests/unit/test_contract_catalog_preview.py tests/fixtures/*.json "$test_root/"
-            (cd "$test_root" && venv/bin/python -I prove_package_isolation.py && venv/bin/python -I prove_release_installation.py && venv/bin/python -I run_installed_acceptance.py && venv/bin/python -I prove_fold_recovery_restart.py prepare && venv/bin/python -I prove_fold_recovery_restart.py recover && venv/bin/python -I prove_fold_recovery_restart.py cleanup)
+            (cd "$test_root" && venv/bin/python -I prove_package_isolation.py && venv/bin/python -I prove_release_installation.py)
+            pids=()
+            for shard in $(seq 1 "$shards"); do
+              (cd "$test_root" && venv/bin/python -I run_installed_acceptance.py --shard "$shard/$shards" > "acceptance-$shard.log" 2>&1) &
+              pids+=("$!")
+            done
+            failed=0
+            for shard in $(seq 1 "$shards"); do
+              wait "${pids[$((shard - 1))]}" || failed=1
+              echo "::group::acceptance shard $shard/$shards"
+              cat "$test_root/acceptance-$shard.log"
+              echo "::endgroup::"
+            done
+            test "$failed" -eq 0
+            (cd "$test_root" && venv/bin/python -I prove_fold_recovery_restart.py prepare && venv/bin/python -I prove_fold_recovery_restart.py recover && venv/bin/python -I prove_fold_recovery_restart.py cleanup)
           done
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:

@@ -13,7 +13,7 @@ import unittest
 import uuid
 from contextlib import redirect_stdout
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 
 import psycopg
@@ -22,6 +22,11 @@ from psycopg.conninfo import make_conninfo
 
 from memoriesql.infrastructure.postgres import migration_runner as runner
 from memoriesql.infrastructure.postgres.schema_inspection import inspect_schema
+
+if TYPE_CHECKING:
+    from tests.runtime.test_postgres_runtime import migrate as locked_migrate
+else:
+    from test_postgres_runtime import migrate as locked_migrate
 
 
 class InstalledMigrations(unittest.TestCase):
@@ -47,7 +52,7 @@ class InstalledMigrations(unittest.TestCase):
             )
 
     def migrate(self, start: int, end: int) -> runner.MigrationReceipt:
-        return runner.migrate(
+        return locked_migrate(
             self.connection, expected_current_version=start, target_version=end
         )
 

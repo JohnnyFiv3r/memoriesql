@@ -1,0 +1,28 @@
+{
+  "_comment": "Measured seconds per acceptance test module from one local four-shard run; run_installed_acceptance.py --shard places modules longest-first with these. Refresh with --print-weights when the suite's shape changes; a missing module is estimated from its test count.",
+  "seconds": {
+    "test_bead_classification": 77.6,
+    "test_cancellation_drain": 1.0,
+    "test_cleanup_lease_handoff": 10.1,
+    "test_complete_input_execution": 53.6,
+    "test_complete_input_throughput": 18.2,
+    "test_contract_catalog_preview": 0.0,
+    "test_declared_evidence_scope": 46.2,
+    "test_evidence_packages": 18.7,
+    "test_executor": 0.2,
+    "test_fold_recovery": 29.7,
+    "test_immutable_observations": 13.1,
+    "test_installed_migrations": 6.9,
+    "test_local_entity_mentions": 31.4,
+    "test_logical_unit_materialization": 27.7,
+    "test_managed_dispatch": 57.7,
+    "test_postgres_runtime": 7.5,
+    "test_real_model_admission": 0.2,
+    "test_retained_bytes": 0.0,
+    "test_runtime_ownership": 0.0,
+    "test_source_revisiting": 60.3,
+    "test_source_stable_identity": 40.9,
+    "test_stored_bead_inspection": 49.4,
+    "test_terminal_settlement": 0.1
+  }
+}

@@ -32,14 +32,15 @@ from memoriesql.application.logical_unit_materialization import (
 from memoriesql.infrastructure.postgres.logical_unit_materialization import (
     PostgresLogicalUnitMaterialization,
 )
-from memoriesql.infrastructure.postgres.migration_runner import migrate
 
 if TYPE_CHECKING:
     from tests.runtime.test_evidence_packages import EvidencePackages
     from tests.runtime.test_immutable_observations import ImmutableObservations
+    from tests.runtime.test_postgres_runtime import migrate
 else:
     from test_evidence_packages import EvidencePackages
     from test_immutable_observations import ImmutableObservations
+    from test_postgres_runtime import migrate
 
 
 class LogicalUnitMaterialization(EvidencePackages):

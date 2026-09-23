@@ -27,14 +27,13 @@ from memoriesql.application.fold_recovery import (
     ReadFoldEvidence,
 )
 from memoriesql.infrastructure.postgres.fold_recovery import PostgresFoldRecovery
-from memoriesql.infrastructure.postgres.migration_runner import migrate
 
 if TYPE_CHECKING:
     from tests.runtime.fold_recovery_fixture import digest, insert, seed, service
-    from tests.runtime.test_postgres_runtime import PostgresRuntime
+    from tests.runtime.test_postgres_runtime import PostgresRuntime, migrate
 else:
     from fold_recovery_fixture import digest, insert, seed, service
-    from test_postgres_runtime import PostgresRuntime
+    from test_postgres_runtime import PostgresRuntime, migrate
 
 
 class FoldRecovery(PostgresRuntime):

@@ -55,12 +55,13 @@ from memoriesql.infrastructure.postgres.complete_input_execution import (
     PostgresCompleteInput,
     PostgresEvidenceExposureRecorder,
 )
-from memoriesql.infrastructure.postgres.migration_runner import migrate
 
 if TYPE_CHECKING:
     from tests.runtime.test_complete_input_execution import CompleteInputExecution
+    from tests.runtime.test_postgres_runtime import migrate
 else:
     from test_complete_input_execution import CompleteInputExecution
+    from test_postgres_runtime import migrate
 
 
 class SourceRevisiting(CompleteInputExecution):

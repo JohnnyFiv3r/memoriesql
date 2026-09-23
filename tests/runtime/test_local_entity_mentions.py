@@ -14,12 +14,13 @@ from memoriesql.application.local_entity_mentions import (
     ActivateMentionAuthorship,
     load_local_mentions_task_registry,
 )
-from memoriesql.infrastructure.postgres.migration_runner import migrate
 
 if TYPE_CHECKING:
     from tests.runtime import test_source_revisiting as fixtures
+    from tests.runtime.test_postgres_runtime import migrate
 else:
     import test_source_revisiting as fixtures
+    from test_postgres_runtime import migrate
 
 
 class LocalMentions(fixtures.SourceRevisiting):

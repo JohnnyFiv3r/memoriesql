@@ -27,7 +27,36 @@ from memoriesql.infrastructure.postgres.authorization import PostgresAuthorizati
 from memoriesql.infrastructure.postgres.canonical_transactions import (
     PostgresCanonicalTransactions,
 )
-from memoriesql.infrastructure.postgres.migration_runner import migrate
+from memoriesql.infrastructure.postgres.migration_runner import MigrationReceipt
+from memoriesql.infrastructure.postgres.migration_runner import (
+    migrate as _released_migrate,
+)
+
+# One server-wide advisory lock for every migration the acceptance tests run.
+# The released migrations alter the shared product roles, and two of them
+# running at once on one server fail with "tuple concurrently updated"; the
+# lock lets parallel acceptance shards share one PostgreSQL service. It is
+# taken on the maintenance database because advisory locks are per database.
+MIGRATION_LOCK_KEY = int.from_bytes(b"mqlmigr8", "big")
+
+
+def migrate(
+    connection: Any,
+    *,
+    expected_current_version: int,
+    target_version: int,
+) -> MigrationReceipt:
+    """Run the released migration runner under the server-wide test lock."""
+    with psycopg.connect(os.environ["N1_TEST_DATABASE_URL"], autocommit=True) as gate:
+        gate.execute("SELECT pg_advisory_lock(%s)", (MIGRATION_LOCK_KEY,))
+        try:
+            return _released_migrate(
+                connection,
+                expected_current_version=expected_current_version,
+                target_version=target_version,
+            )
+        finally:
+            gate.execute("SELECT pg_advisory_unlock(%s)", (MIGRATION_LOCK_KEY,))
 
 
 class PostgresRuntime(unittest.TestCase):

@@ -51,12 +51,11 @@ from memoriesql.infrastructure.jobs.postgres_semantic_queue import EnqueueSemant
 from memoriesql.infrastructure.postgres.canonical_transactions import (
     PostgresCanonicalTransactions,
 )
-from memoriesql.infrastructure.postgres.migration_runner import migrate
 
 if TYPE_CHECKING:
-    from tests.runtime.test_postgres_runtime import PostgresRuntime
+    from tests.runtime.test_postgres_runtime import PostgresRuntime, migrate
 else:
-    from test_postgres_runtime import PostgresRuntime
+    from test_postgres_runtime import PostgresRuntime, migrate
 
 
 class ImmutableObservations(PostgresRuntime):
