@@ -189,7 +189,14 @@ class InspectedStatement(FrozenContractModel):
 
 
 class InspectedLifecycleEvent(FrozenContractModel):
+    """One lifecycle event recorded on `target_id`, naming `related_id` when it has one.
+
+    A claim's history includes incoming disputes and resolutions recorded on the
+    competing claim, so every derived state is explained by its listed events.
+    """
+
     event_id: UUID
+    target_id: UUID
     action: str
     related_id: UUID | None
     reason: str

@@ -3572,16 +3572,22 @@ BEGIN
                 END IF;
                 statements := statements || jsonb_build_array(jsonb_build_object('statement_id', s.statement_id, 'text', s.statement_text));
             END LOOP;
+            -- History explains the derived state: own events plus incoming disputes and
+            -- resolutions recorded on the competing claim.
             SELECT count(*) INTO amount FROM (SELECT 1 FROM memoriesql.bead_claim_events
-                WHERE tenant_id = cl.tenant_id AND claim_id = cl.claim_id AND recorded_at <= known LIMIT 65) AS bounded;
+                WHERE tenant_id = cl.tenant_id AND recorded_at <= known
+                  AND (claim_id = cl.claim_id OR (related_claim_id = cl.claim_id AND action IN ('dispute', 'resolve_dispute')))
+                LIMIT 65) AS bounded;
             IF amount > 64 THEN RETURN budget; END IF;
             SELECT COALESCE(jsonb_agg(jsonb_build_object(
-                'event_id', e.claim_event_id, 'action', e.action, 'related_id', e.related_claim_id, 'reason', e.reason,
+                'event_id', e.claim_event_id, 'target_id', e.claim_id, 'action', e.action,
+                'related_id', e.related_claim_id, 'reason', e.reason,
                 'origin', e.origin, 'authoring_bead_id', e.authoring_bead_id,
                 'effective_at', memoriesql.relation_packet_time(e.effective_at),
                 'recorded_at', memoriesql.relation_packet_time(e.recorded_at)) ORDER BY e.recorded_at, e.claim_event_id), '[]'::jsonb)
             INTO events FROM memoriesql.bead_claim_events AS e
-            WHERE e.tenant_id = cl.tenant_id AND e.claim_id = cl.claim_id AND e.recorded_at <= known;
+            WHERE e.tenant_id = cl.tenant_id AND e.recorded_at <= known
+              AND (e.claim_id = cl.claim_id OR (e.related_claim_id = cl.claim_id AND e.action IN ('dispute', 'resolve_dispute')));
             -- Named related claims are disclosed only when their beads are readable.
             FOR row_item IN
                 SELECT DISTINCT k.tenant_id, k.workspace_id, k.access_scope_id, k.bead_version_id
@@ -3599,6 +3605,17 @@ BEGIN
                 END IF;
             END LOOP;
             state := memoriesql.bead_claim_state_v1(cl.tenant_id, cl.claim_id, known);
+            -- Correction beads named by the derived state are disclosed only when readable.
+            FOR row_item IN
+                SELECT a.tenant_id, a.workspace_id, a.access_scope_id, a.bead_version_id
+                FROM jsonb_array_elements_text(state->'origin_corrected_by') AS x(id)
+                JOIN memoriesql.accepted_bead_semantics AS a ON a.tenant_id = cl.tenant_id AND a.bead_id = x.id::uuid
+            LOOP
+                IF NOT memoriesql.current_context_bead_version_authorized(row_item.tenant_id, row_item.workspace_id,
+                        row_item.access_scope_id, row_item.bead_version_id) THEN
+                    RETURN unavailable;
+                END IF;
+            END LOOP;
             claims := claims || jsonb_build_array(jsonb_build_object(
                 'claim_id', cl.claim_id, 'bead_id', cl.bead_id, 'bead_version_id', cl.bead_version_id,
                 'subject', cl.subject_text, 'subject_mention_id', cl.subject_entity_mention_id,
@@ -3668,13 +3685,34 @@ BEGIN
                 WHERE tenant_id = rel.tenant_id AND relation_id = rel.relation_id AND recorded_at <= known LIMIT 65) AS bounded;
             IF amount > 64 THEN RETURN budget; END IF;
             SELECT COALESCE(jsonb_agg(jsonb_build_object(
-                'event_id', e.relation_event_id, 'action', e.action, 'related_id', e.replacement_relation_id,
+                'event_id', e.relation_event_id, 'target_id', e.relation_id, 'action', e.action,
+                'related_id', e.replacement_relation_id,
                 'reason', e.reason, 'origin', e.origin, 'authoring_bead_id', NULL,
                 'effective_at', memoriesql.relation_packet_time(e.effective_at),
                 'recorded_at', memoriesql.relation_packet_time(e.recorded_at)) ORDER BY e.recorded_at, e.relation_event_id), '[]'::jsonb)
             INTO events FROM memoriesql.bead_relation_events AS e
             WHERE e.tenant_id = rel.tenant_id AND e.relation_id = rel.relation_id AND e.recorded_at <= known;
             state := memoriesql.bead_relation_state_v1(rel.tenant_id, rel.relation_id, known);
+            -- Every named replacement relation and correction bead must be readable too:
+            -- both endpoints of each replacement, and each correcting bead.
+            FOR row_item IN
+                SELECT DISTINCT v2.tenant_id, v2.workspace_id, v2.access_scope_id, v2.bead_version_id
+                FROM memoriesql.bead_relation_events AS e
+                JOIN memoriesql.bead_relations AS r2 ON r2.tenant_id = e.tenant_id AND r2.relation_id = e.replacement_relation_id
+                JOIN memoriesql.bead_versions AS v2 ON v2.tenant_id = r2.tenant_id
+                 AND v2.bead_version_id IN (r2.source_bead_version_id, r2.target_bead_version_id)
+                WHERE e.tenant_id = rel.tenant_id AND e.relation_id = rel.relation_id AND e.recorded_at <= known
+                  AND e.replacement_relation_id IS NOT NULL
+                UNION
+                SELECT a.tenant_id, a.workspace_id, a.access_scope_id, a.bead_version_id
+                FROM jsonb_array_elements_text(state->'endpoint_corrected_by') AS x(id)
+                JOIN memoriesql.accepted_bead_semantics AS a ON a.tenant_id = rel.tenant_id AND a.bead_id = x.id::uuid
+            LOOP
+                IF NOT memoriesql.current_context_bead_version_authorized(row_item.tenant_id, row_item.workspace_id,
+                        row_item.access_scope_id, row_item.bead_version_id) THEN
+                    RETURN unavailable;
+                END IF;
+            END LOOP;
             relations := relations || jsonb_build_array(jsonb_build_object(
                 'relation_id', rel.relation_id, 'relation_type', rtype,
                 'direction', CASE WHEN rel.source_bead_id = v.bead_id THEN 'outgoing' ELSE 'incoming' END,

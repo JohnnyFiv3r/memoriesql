@@ -1481,6 +1481,7 @@
           },
           "InspectedLifecycleEvent": {
             "additionalProperties": false,
+            "description": "One lifecycle event recorded on `target_id`, naming `related_id` when it has one.\n\nA claim's history includes incoming disputes and resolutions recorded on the\ncompeting claim, so every derived state is explained by its listed events.",
             "properties": {
               "action": {
                 "title": "Action",
@@ -1543,10 +1544,16 @@
                   }
                 ],
                 "title": "Related Id"
+              },
+              "target_id": {
+                "format": "uuid",
+                "title": "Target Id",
+                "type": "string"
               }
             },
             "required": [
               "event_id",
+              "target_id",
               "action",
               "related_id",
               "reason",

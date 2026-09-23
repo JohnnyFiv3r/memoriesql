@@ -484,6 +484,11 @@ class AuthoredRelations(fixtures.LocalMentions):
             self.lifecycle.record_claim_event(resolution.model_copy(update={"reason": "Changed."}))
         self.assertEqual(self.claim_state(b), [("failed", "current", set(), set())])
         self.assertEqual(self.claim_state(d), [("working", "current", set(), set())])
+        # The competing claim's history explains its state with the incoming events.
+        self.assertEqual(
+            [(e.action, str(e.target_id), str(e.related_id)) for e in self.inspect(d).claims[0].events],
+            [("dispute", ids["b"], ids["d"]), ("resolve_dispute", ids["b"], ids["d"])],
+        )
         # A stale compare-and-swap never appends.
         with self.assertRaises(psycopg.errors.SerializationFailure):
             self.lifecycle.record_claim_event(RecordClaimEvent(
@@ -609,6 +614,39 @@ class AuthoredRelations(fixtures.LocalMentions):
         )
         with self.assertRaises(psycopg.Error), self.db.transaction():
             self.db.execute("DELETE FROM memoriesql.bead_relation_events")
+
+    def test_named_replacement_relations_must_stay_readable(self) -> None:
+        a = self.author("The fictional pump failed on Monday.", "a")
+        ids: dict[str, str] = {}
+        b = self.author(
+            "Three fictional trees wilted.",
+            "b",
+            candidates=(a,),
+            plan=lambda extras, bead, c: ids.setdefault("first", self.relate(extras, bead, c[0], "caused_by")),
+        )
+        other = self.add_source("replacement")
+        self.author(
+            "A fictional report says the pump failure wilted the trees.",
+            "c",
+            candidates=(a,),
+            source=other,
+            plan=lambda extras, bead, c: ids.setdefault("second", self.relate(extras, bead, c[0], "caused_by")),
+        )
+        first = uuid.UUID(ids["first"])
+        self.lifecycle.record_relation_event(RecordRelationEvent(
+            idempotency_key="orchard.replace",
+            relation_id=first,
+            action="supersede",
+            replacement_relation_id=uuid.UUID(ids["second"]),
+            reason="The fictional report restates the relation with better evidence.",
+        ))
+        self.assertEqual(self.inspect(b).relations[0].superseded_by, (uuid.UUID(ids["second"]),))
+        self.db.execute(
+            "UPDATE memoriesql.protected_resources SET status='revoked',revoked_at=clock_timestamp() WHERE resource_id=%s",
+            (other,),
+        )
+        # The replacement's identifier is never disclosed once it is unreadable.
+        self.assertEqual(self.inspect(b).outcome, "unavailable")
 
     def test_workspace_vocabulary_enters_only_by_decision_and_pins_exact_revisions(self) -> None:
         proposal = ProposeRelationType(
