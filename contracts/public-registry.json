@@ -24,7 +24,7 @@
     },
     {
       "disposition": "include",
-      "expected_record_count": 55,
+      "expected_record_count": 57,
       "filename": "json-schema.json",
       "kind": "json_schema",
       "note": "Provider-neutral capture, host, source-range, transcript-fold, and harness-lifecycle schemas."
@@ -61,6 +61,17 @@
   "compatibility": "experimental_0_x_no_general_compatibility_guarantee",
   "default_policy": "deny",
   "records": [
+    {
+      "canonical_payload_sha256": "fcfea72dd05d7c32b74d0a5e6d26798f6ee7efc847f93851f33bc65dc82304ff",
+      "catalog": "json_schema",
+      "classification": "proposed_open_core",
+      "id": "memoriesql.authored-relations.v1",
+      "package_disposition": "include",
+      "path": "contracts/records/memoriesql-authored-relations-v1.json",
+      "public_sha256": "e7b9a34d97a159c4a07d50005509bfb9ee03c5b0b034985864b9f53c985ec67a",
+      "reason": "Public-authored optional claims, pinned-candidate relations, coverage and append-only lifecycle contracts.",
+      "version": "1"
+    },
     {
       "canonical_payload_sha256": "9dfc99fc4bd22dc84aa25f39efe7ca48b8fa4c7cd7b17dfa88d135aa48f8bf4b",
       "catalog": "json_schema",
@@ -449,6 +460,17 @@
       "path": "contracts/records/memoriesql-logical-unit-materialization-v1.json",
       "public_sha256": "2d4ac51829c54bd3bc7f4a9294e25c9e089f0f128906181c0d97a17e968a66c8",
       "reason": "Public-authored canonical materialization and unavailable complete-input task binding.",
+      "version": "1"
+    },
+    {
+      "canonical_payload_sha256": "cc47541bab14a472a7cdcc2c238dfbb26c6a1121db4969df8dcd0c4895db2670",
+      "catalog": "json_schema",
+      "classification": "proposed_open_core",
+      "id": "memoriesql.relation-profile.v1",
+      "package_disposition": "include",
+      "path": "contracts/records/memoriesql-relation-profile-v1.json",
+      "public_sha256": "c4f464f3be01e5fe77c580c525efa84645adbec0e10c5bbc784b08a55de360c5",
+      "reason": "Owner-approved relation semantic profile revision 1 with Semantic Spacetime family mapping and attribution; never gates authoring.",
       "version": "1"
     },
     {

@@ -105,6 +105,10 @@
     {
       "filename": "0026_supervised_managed_dispatch.sql",
       "sha256": "0479a1e5ef462250e1b4f3652a7755ae4ff638b82b805a3a9d185ea107ebe000"
+    },
+    {
+      "filename": "0027_authored_claims_and_relations.sql",
+      "sha256": "93cde47b4a5ed01901041d6e4e669e740c0fc5fda72ed57006652a833a571875"
     }
   ]
 }

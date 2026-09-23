@@ -29,7 +29,7 @@ class RuntimeOwnership(unittest.TestCase):
             assert module.__file__ is not None
             origin = Path(module.__file__).resolve()
             self.assertIn(origin, owned)
-        self.assertEqual(len(rows), 50)
+        self.assertEqual(len(rows), 54)
         self.assertEqual(
             distribution.requires,
             ["psycopg[binary]==3.3.3", "pydantic==2.13.3", "pydantic-ai-slim==2.27.0"],

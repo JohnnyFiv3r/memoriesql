@@ -40,6 +40,10 @@ from pydantic_ai.models.wrapper import WrapperModel
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import RequestUsage, RunUsage, UsageLimits
 
+from memoriesql.application.authored_relations import (
+    RelatedAuthorStep,
+    RelatedExecutionInput,
+)
 from memoriesql.application.bead_classification import (
     CLASSIFIER_INPUT,
     CLASSIFIER_KEY,
@@ -1997,6 +2001,8 @@ class PydanticAISemanticExecutor:
                             if isinstance(
                                 state.task.task_input, ClassificationExecutionInput
                             )
+                            else RelatedAuthorStep
+                            if isinstance(state.task.task_input, RelatedExecutionInput)
                             else MentionAuthorStep
                             if isinstance(state.task.task_input, MentionExecutionInput)
                             else SourceAuthorStep
