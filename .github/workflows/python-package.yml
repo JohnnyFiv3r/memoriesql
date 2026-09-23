@@ -115,14 +115,16 @@ jobs:
         # The step above proves the wheel rebuilt from the sdist is byte-identical
         # to the reviewed wheel, so the installed acceptance runs once per
         # interpreter; a second run on the identical wheel proves nothing. The
-        # acceptance modules run as four shards sharing the PostgreSQL service;
-        # test migrations serialize on an advisory lock and every module runs in
-        # exactly one shard. The acceptance script denies subprocesses, so the
-        # shards are launched here rather than from inside it.
+        # acceptance modules run as three shards sharing the PostgreSQL service
+        # on the four-CPU runner (a fourth shard starved the cancellation
+        # scenarios' five-second waits); only the role-defining migration step
+        # serializes on an advisory lock and every module runs in exactly one
+        # shard. The acceptance script denies subprocesses, so the shards are
+        # launched here rather than from inside it.
         run: |
           unset PYTHONPATH
           export PYTHONNOUSERSITE=1
-          shards=4
+          shards=3
           for artifact in build/reviewed-package/*.whl; do
             test_root="$(mktemp -d)"
             python -m venv "$test_root/venv"
