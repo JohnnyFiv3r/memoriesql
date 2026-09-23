@@ -4,9 +4,8 @@ The `0.x` package line is experimental and provides no general API compatibility
 guarantee. Releases use plain numeric `X.Y.Z` with `vX.Y.Z` tags. This preparation
 selects genuine `0.0.10` metadata and exact `v0.0.10` repository controls; it does not
 itself publish or supply protected upload approval. Alpha/beta/rc suffixes require a separate owner decision.
-Published `0.0.1a1`, `0.0.2`, `0.0.3`, `0.0.4`, `0.0.5`, `0.0.6`, `0.0.7` and `0.0.8`, their tags and inventories remain
-immutable. The previous `runtime-package-artifact-inventory.json` still records
-published 0.0.4; the new versioned 0.0.10 candidate inventory is separate.
+Published releases, their tags and archives remain immutable; the repository
+retains only the current release inventory.
 
 Two narrower integrity rules apply after publication:
 
@@ -16,8 +15,7 @@ Two narrower integrity rules apply after publication:
 
 The 0.0.10 preparation preserves dependencies, migrations
 0001–0026, 61 existing contract records and generated catalogs. Python support stays
-`>=3.13,<3.15`; 3.13 and 3.14 are tested. Older Python may explicitly pin catalog-only
-`0.0.1a1`; it cannot consume the runtime by falling back to that package.
+`>=3.13,<3.15`; 3.13 and 3.14 are tested.
 
 ## Schema and caller transitions
 

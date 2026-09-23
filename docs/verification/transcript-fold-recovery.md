@@ -77,17 +77,17 @@ the regression and [contract](../transcript-fold-recovery.md).
 
 ## Artifact and compatibility evidence
 
-[The candidate inventory](fold-recovery-candidate-artifacts.json) records the new
+The candidate inventory (retired from the repository on 2026-09-22) recorded the new
 wheel/sdist hashes, sizes, members and 54 contract IDs. These are **unreleased**
 archives retaining 0.0.5 metadata because no next version was selected. They must
 not be confused with the published archives above. Two deterministic builds
 matched byte-for-byte; archive inspection enforces explicit namespace/resource
 ownership, genuine embedded versions, pinned dependencies and no private files.
 
-The public package CI compares against this candidate inventory. The separate
-publication verifier and workflow still require the immutable published 0.0.5
-inventory and exact release controls; they were not redirected or loosened.
-Historical inventories, migrations 0001–0018 and the prior 53 record files remain
+At the time, the public package CI compared against that candidate inventory while
+the publication verifier and workflow kept the published 0.0.5 inventory and exact
+release controls; the candidate and historical inventories were retired from the
+repository on 2026-09-22. Migrations 0001–0018 and the prior 53 record files remained
 byte-identical to base. The 160-test installed lane identified two stale schema/module-count assertions:
 19 is now supported (20 is the unsupported target), and the inventory now has
 41 runtime modules instead of 39. These two tests were corrected and rerun

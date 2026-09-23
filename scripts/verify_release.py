@@ -78,41 +78,6 @@ def verify_artifacts(
     return tuple(paths)
 
 
-def verify_source_bytes(
-    directory: Path,
-    frozen: dict[str, Any],
-    *,
-    release_reproduction: bool = False,
-    metadata_version: str = "0.0.7",
-) -> None:
-    """Preserve published payloads everywhere; freeze runtime only for reproduction."""
-    for name, expected in frozen["files"].items():
-        historical = name.startswith(
-            (
-                "migrations/",
-                "contracts/records/",
-                "docs/verification/",
-                "tests/fixtures/",
-            )
-        )
-        if release_reproduction or historical:
-            path = directory / name
-            if (
-                path.is_symlink()
-                or hashlib.sha256(path.read_bytes()).hexdigest() != expected
-            ):
-                raise ValueError(f"frozen source byte drift: {name}")
-    if release_reproduction:
-        for name, expected in frozen["metadata"].items():
-            normalized = (
-                (directory / name)
-                .read_bytes()
-                .replace(metadata_version.encode(), b"APPROVED_VERSION")
-            )
-            if hashlib.sha256(normalized).hexdigest() != expected:
-                raise ValueError(f"frozen release metadata drift: {name}")
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -124,8 +89,6 @@ def main() -> None:
     artifacts = commands.add_parser("artifacts")
     artifacts.add_argument("directory", type=Path)
     artifacts.add_argument("--output", type=Path)
-    source = commands.add_parser("source")
-    source.add_argument("directory", type=Path)
     args = parser.parse_args()
     if args.command == "ci":
         project = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]
@@ -137,12 +100,6 @@ def main() -> None:
             version=project["version"],
         )
         print(f"run_id={run_id}")
-    elif args.command == "source":
-        frozen = json.loads(
-            (ROOT / "tests/fixtures/release-0.0.7-baseline-integrity.json").read_text()
-        )
-        verify_source_bytes(args.directory, frozen, release_reproduction=True)
-        print("Verified frozen 0.0.7 source reproduction")
     else:
         inventory = json.loads(RELEASE_INVENTORY.read_text())
         paths = verify_artifacts(args.directory, inventory)

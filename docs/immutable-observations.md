@@ -107,12 +107,9 @@ application nor worker roles receive direct mutation grants.
 
 ## Candidate and release boundary
 
-The reviewed `0.0.4` candidate is now promoted into the exact-version repository
-release controls. CI and the publisher verifier use the authoritative
-`runtime-package-artifact-inventory.json`. The retained candidate inventory
-`immutable-observations-candidate-artifacts.json` has the same wheel; only packaged
-README release guidance changes the prepared sdist. Published `0.0.3` evidence is
-preserved in `runtime-0.0.3-package-artifact-inventory.json`.
+The reviewed `0.0.4` candidate was promoted into the exact-version repository
+release controls and published. Historical package and candidate inventories were
+retired from the repository on 2026-09-22; the published archives remain the record.
 
 This preparation does not publish the version or authorize external settings,
 tags or consumer adoption. The owner must complete the availability, exact-main

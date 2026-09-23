@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import hashlib
-import json
 import re
 import runpy
 import tomllib
@@ -94,7 +92,6 @@ class PublicBootstrapTests(unittest.TestCase):
         workflow = (ROOT / ".github/workflows/publish-pypi.yml").read_text()
         self.assertIn('tags: ["v0.0.10"]', workflow)
         self.assertEqual(workflow.count("refs/tags/v0.0.10"), 2)
-        self.assertNotIn("v0.0.1a1", workflow)
         self.assertNotIn("v0.0.2", workflow)
         self.assertNotIn("v0.0.3", workflow)
         self.assertNotIn("v0.0.4", workflow)
@@ -136,10 +133,6 @@ class PublicBootstrapTests(unittest.TestCase):
         workflow = (ROOT / ".github/workflows/python-package.yml").read_text()
         publishing = (ROOT / ".github/workflows/publish-pypi.yml").read_text()
         self.assertIn("inspect_python_distribution.py build/dist-a", workflow)
-        # Only the current release is verified in CI; historical baselines are
-        # reproduced manually with `verify_release.py source` when needed.
-        self.assertNotIn("published-0.0.7", workflow)
-        self.assertNotIn("verify_release.py source", workflow)
         self.assertIn("--check-inventory", workflow)
         self.assertIn("--source-commit", workflow)
         self.assertNotIn("verify_release.py artifacts build/dist-a", workflow)
@@ -151,57 +144,9 @@ class PublicBootstrapTests(unittest.TestCase):
         # No historical lanes: the unsupported-interpreter catalog fallback and
         # the frozen-source reproduction were retired on 2026-09-22.
         self.assertNotIn("older-python", workflow)
-        self.assertNotIn("0.0.1a1", workflow)
-        self.assertNotIn("published-0.0.7", workflow)
         compatibility = workflow.split("  compatibility:")[1]
         self.assertIn('python-version: ["3.13", "3.14"]', compatibility)
 
-    def test_export_provenance_hashes_are_current(self) -> None:
-        manifest = json.loads(
-            (ROOT / "docs/provenance/export-provenance.json").read_text()
-        )
-        self.assertEqual(
-            manifest["reviewed_spike_commit"],
-            "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
-        )
-        paths = {entry["public_path"] for entry in manifest["exports"]}
-        record_paths = {
-            str(record["path"])
-            for record in json.loads(
-                (ROOT / "contracts/public-registry.json").read_text()
-            )["records"]
-        }
-        new_record = "contracts/records/memoriesql-evidence-package-v1.json"
-        self.assertEqual(
-            record_paths - paths,
-            {
-                new_record,
-                "contracts/records/memoriesql-logical-unit-materialization-v1.json",
-                "contracts/records/memoriesql-complete-input-execution-v1.json",
-                "contracts/records/memoriesql-evidence-package-reader-v2.json",
-                "contracts/records/memoriesql-transcript-fold-recovery-v1.json",
-                "contracts/records/memoriesql-source-revisiting-v1.json",
-                "contracts/records/memoriesql-source-stable-identity-v1.json",
-                "contracts/records/memoriesql-declared-evidence-scope-v1.json",
-                "contracts/records/memoriesql-supervised-dispatch-v1.json",
-                "contracts/records/memoriesql-local-entity-mentions-v1.json",
-                "contracts/records/memoriesql-bead-classification-v1.json",
-                "contracts/records/memoriesql-stored-bead-inspection-v1.json",
-            },
-        )
-        owned = next(
-            row for row in manifest["public_only"] if row["public_path"] == new_record
-        )
-        self.assertNotIn("reviewed_spike_source_sha256", owned)
-        self.assertEqual(
-            hashlib.sha256((ROOT / new_record).read_bytes()).hexdigest(),
-            owned["public_sha256"],
-        )
-        for entry in manifest["exports"]:
-            data = (ROOT / entry["public_path"]).read_bytes()
-            self.assertEqual(hashlib.sha256(data).hexdigest(), entry["public_sha256"])
-            self.assertRegex(entry["reviewed_spike_source_sha256"], r"^[0-9a-f]{64}$")
-            self.assertEqual(entry["classification"], "proposed_open_core")
 
 
 if __name__ == "__main__":

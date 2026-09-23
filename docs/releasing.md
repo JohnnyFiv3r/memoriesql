@@ -47,12 +47,10 @@ reviewed wheel, and qualify the installed route with checkout access denied on
 each supported interpreter. Development archives retaining 0.0.9 metadata are
 not published 0.0.9 and cannot be renamed or reused as 0.0.10.
 
-Published archives, tags, inventories, migrations and contract payloads remain
-immutable. The 0.0.9 inventory and baseline remain unchanged. The new 0.0.10
-integrity fixture binds the accepted implementation before release-only edits;
-exact runtime reproduction is scoped to this release preparation, not a permanent
-restriction on future development. Historical release guidance remains available
-at the immutable [0.0.9 source](https://github.com/JohnnyFiv3r/memoriesql/blob/v0.0.9/docs/releasing.md).
+Published archives, tags, migrations and contract payloads remain immutable. After
+the `v0.0.10` tag the owner retired historical inventories, baseline fixtures and
+the frozen-source reproduction from the repository; the tagged source and the
+published archives are the record.
 
 Fresh 0.0.10 wheel/sdist builds and an independent sdist-to-wheel reconstruction
 must agree. Independently download final-head hosted archives and compare them
@@ -121,8 +119,8 @@ usage. Started writes and late usage remain owned; uncertain settlement stays ex
 Python remains `>=3.13,<3.15`; dependencies remain `psycopg[binary]==3.3.3`,
 `pydantic==2.13.3` and `pydantic-ai-slim==2.27.0`, without provider extras.
 Use the reviewed local 0.0.10 artifact before publication; only after independently
-verified publication pin `memoriesql==0.0.10`. The catalog-only `0.0.1a1` is never a
-runtime fallback. Existing execution budgets and experimental API bounds are unchanged.
+verified publication pin `memoriesql==0.0.10`. Existing execution budgets and
+experimental API bounds are unchanged.
 
 ## Qualification and remaining gates
 

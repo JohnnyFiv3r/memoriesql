@@ -58,7 +58,6 @@ def verify() -> dict[str, object]:
         if provider_identifiers and str(path.relative_to(ROOT)) not in {
             "migrations/0014_transcript_span_fold.sql",
             "tests/fixtures/schema_snapshot.json",
-            "tests/migrations/test_historical_profiles.py",
         }:
             text_failures.append(
                 f"{path.relative_to(ROOT)}:historical identifier outside exception"

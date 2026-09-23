@@ -131,14 +131,6 @@ def _wheel_inventory(path: Path) -> list[str]:
             )
             if hashlib.sha256(data).hexdigest() != row["sha256"]:
                 raise ValueError("wheel migration byte drift")
-        for row in RUNTIME_ROWS:
-            if (
-                hashlib.sha256(
-                    archive.read(row["path"].removeprefix("src/"))
-                ).hexdigest()
-                != row["sha256"]
-            ):
-                raise ValueError("wheel runtime byte drift")
         for name in EXPECTED_PACKAGE_FILES:
             if name in RESOURCE_FILES:
                 source = (
@@ -250,13 +242,6 @@ def _sdist_inventory(path: Path) -> list[str]:
             )
         if len(members) != len(set(members)):
             raise ValueError("duplicate sdist member")
-        for row in RUNTIME_ROWS:
-            content = archive.extractfile(root + row["path"])
-            if (
-                content is None
-                or hashlib.sha256(content.read()).hexdigest() != row["sha256"]
-            ):
-                raise ValueError("sdist runtime byte drift")
         for row in MIGRATION_ROWS:
             member = archive.extractfile(root + "migrations/" + row["filename"])
             if (

@@ -12,9 +12,7 @@ activate tasks or configure a provider. See [explicit caller composition](releas
 Published `0.0.2` introduced the explicitly inventoried neutral runtime to the
 migration substrate. Python 3.13 is the support floor; 3.13 and 3.14 are the
 initial qualification matrix (`>=3.13,<3.15`). Install an exact reviewed runtime
-wheel. Older Python requires an explicit `memoriesql==0.0.1a1` pin or `--pre`
-for the immutable catalog-only fallback; an unpinned request may fail.
-The historical catalog package is not a runtime installation. Release authorization remains separate.
+wheel. Release authorization remains separate.
 
 At N2, the extracted runtime included authorization, historical canonical writes and receipts,
 neutral capture/range/fold ports, semantic task resolution, PostgreSQL queue and
@@ -23,16 +21,16 @@ accepted only `TestModel` and `FunctionModel`. It preserves conductor support,
 authoring limits, task hashes, transaction boundaries and cancellation settlement.
 It does not assemble or start a product service.
 
-`contracts/runtime-inventory.json` enumerates every added runtime source and its
-hash. Copy entries must equal their approved source content hash. The one task
+`contracts/runtime-inventory.json` enumerates every runtime source module as a
+default-deny closure. The one task
 loader seam takes a caller-supplied `BuiltInModuleRegistry`; canonical task,
 agent, contract, effort and evidence-policy values remain unchanged. The internal
 static module mechanics retain composition, dependency, placement, integrity and
 reserved-identity checks. They are not a supported plugin API or a public product
 module catalog. The capture initializer imports no acquisition or adoption code.
 
-The source inventory and sanitized provenance are default-deny. Wheel and sdist
-inspection checks exact member sets and runtime hashes as well as all fourteen
+The runtime inventory is default-deny. Wheel and sdist inspection checks exact
+member sets against the checkout as well as all fourteen
 unchanged migration resources. CI rebuilds from the public sdist independently,
 installs both wheels in clean environments, records transitive dependency artifact
 hashes for each supported Python, and runs fictional acceptance with checkout
@@ -110,12 +108,9 @@ No schema migration or preview-payload change is needed. The runtime receipt enu
 and cleanup observation methods are experimental additions. Python support, all
 fourteen SQL resources, the 49 preview payloads and twelve preview APIs are unchanged.
 This correction is public-authored development after N2, not another extraction.
-Changed inventory entries use `public-forward`, retain the original approved source
-hash, name the public base commit and base hash, and carry a new current content
-hash. Unchanged copies still require byte equality; all inventories still deny
-unlisted members. No private source, history or provenance is added.
+All inventories deny unlisted members. No private source or history is added.
 
-Published `0.0.1a1`, `0.0.2` and `0.0.3` remain immutable. The following
+Published releases remain immutable. The following
 cleanup history describes the released repair; publication of any later version
 requires separate authority. See the
 [release controls](releasing.md).
