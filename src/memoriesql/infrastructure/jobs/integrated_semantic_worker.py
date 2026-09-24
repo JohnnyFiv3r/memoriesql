@@ -468,6 +468,30 @@ class IntegratedSemanticWorker:
         assert outcome.value is not None
         return outcome.value
 
+    async def _record_refusal_off_loop(
+        self,
+        claimed: ClaimedSemanticTask,
+        error: psycopg_errors.DataError,
+    ) -> asyncio.CancelledError | None:
+        """Keep the database's reason for a refused apply; never block settlement.
+
+        A failed record leaves settlement unchanged: the error code still says the
+        attempt ended because canonical apply refused its output. A cancellation
+        that arrives meanwhile is returned so it propagates after settlement.
+        """
+        sqlstate, message = _refusal_detail(error)
+        _outcome, delayed_cancellation = await self._run_database_call(
+            lambda: self._transaction(
+                lambda queue, _context: queue.record_attempt_refusal(
+                    claimed.fence,
+                    sqlstate=sqlstate,
+                    message=message,
+                    recorded_at=datetime.now(UTC),
+                )
+            )
+        )
+        return delayed_cancellation
+
     async def _settle_cancellation_before_propagation(
         self,
         claimed: ClaimedSemanticTask,
@@ -1046,13 +1070,20 @@ class IntegratedSemanticWorker:
                 # invalid output now instead of leaving it running for the
                 # reaper. Privilege and transport errors keep the existing path:
                 # they are authorization or infrastructure failures, not output.
-                return await self._settle_preflight_failure_off_loop(
+                # The refusal's reason is recorded first, while the lease holds.
+                refusal_cancellation = await self._record_refusal_off_loop(
+                    claimed, persist_outcome.error
+                )
+                receipt = await self._settle_preflight_failure_off_loop(
                     claimed,
                     readiness,
                     error_code="worker.canonical_apply_refused",
                     output_contract_hash=definition.output_contract.schema_hash,
                     status=SemanticResultStatus.INVALID_OUTPUT,
                 )
+                if refusal_cancellation is not None:
+                    raise refusal_cancellation
+                return receipt
             raise persist_outcome.error
         assert persist_outcome.value is not None
         persisted = persist_outcome.value
@@ -1810,6 +1841,16 @@ def _reauthorization_failure_result(
         error_code=failure.error_code,
         retry_class=retry_class,
     )
+
+
+def _refusal_detail(error: psycopg_errors.DataError) -> tuple[str, str]:
+    """The refusal's SQLSTATE and primary message as one bounded printable line."""
+    sqlstate = error.sqlstate if error.sqlstate and len(error.sqlstate) == 5 else "22000"
+    primary = error.diag.message_primary or str(error).partition("\n")[0]
+    message = " ".join(
+        "".join(ch if ch.isprintable() else " " for ch in primary).split()
+    )
+    return sqlstate, (message or "canonical apply refused the output")[:512]
 
 
 def _error_class(error_code: str | None) -> str:

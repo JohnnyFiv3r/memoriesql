@@ -217,3 +217,12 @@ the attempt as `invalid_output` with error code
 deterministic and never retried; the attempt no longer stays `running` for the
 reaper, and callers see the outcome in canonical rows. Privilege and transport
 errors are not output refusals and keep their existing handling.
+
+Unreleased development (schema 28) also keeps the refusal's reason. Before
+settling, the worker records the SQLSTATE and the database's primary message
+(one printable line of at most 512 characters) in
+`memoriesql.semantic_attempt_refusals`, once per attempt, through a fenced
+function only the attempt's leased worker can call. The record is best effort:
+if it fails, settlement is unchanged. The contract functions' own class-22
+refusals are fixed strings; PostgreSQL's type checks can quote the offending
+value from the authored output. Application roles cannot read the table.

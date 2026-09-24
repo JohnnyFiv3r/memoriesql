@@ -109,6 +109,10 @@
     {
       "filename": "0027_authored_claims_and_relations.sql",
       "sha256": "93cde47b4a5ed01901041d6e4e669e740c0fc5fda72ed57006652a833a571875"
+    },
+    {
+      "filename": "0028_semantic_attempt_refusals.sql",
+      "sha256": "5beaf8a1aa7422e6b45aec9c1dbf7d1a41eb1f6a139f7587982db7089ff374b5"
     }
   ]
 }

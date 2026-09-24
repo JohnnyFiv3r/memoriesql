@@ -39,6 +39,13 @@ migrations 0001–0026 and earlier records. No
 specialist relation judgment, inferred edges, agent recall change, provider binding or
 release is part of this slice. See `docs/authored-claims-and-relations.md`.
 
+The owner-authorized forward schema-28 slice (authorized 2026-09-24) keeps why
+canonical apply refused an attempt's output: `semantic_attempt_refusals` and the
+fenced `record_semantic_attempt_refusal`, which the leased worker calls, best effort,
+before it settles the attempt as `worker.canonical_apply_refused`. Preserve
+migrations 0001–0027 and earlier records. No settlement, retry, contract payload,
+dependency or release change is part of this slice. See `docs/runtime.md`.
+
 The Q-owned forward schema-24 slice permits bounded, currently authorized stored
 bead/result and evidence inspection. Preserve migrations 0001–0023 and earlier
 records. No inference, canonical writes, provider binding or private consumption
