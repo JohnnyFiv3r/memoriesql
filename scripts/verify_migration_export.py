@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def verify() -> None:
     inventory = json.loads((ROOT / "contracts/migration-inventory.json").read_text())
     rows = inventory["migrations"]
-    if inventory["default_policy"] != "deny" or len(rows) != 27:
+    if inventory["default_policy"] != "deny" or len(rows) != 28:
         raise ValueError("invalid migration inventory")
     for version, row in enumerate(rows, 1):
         name = row["filename"]

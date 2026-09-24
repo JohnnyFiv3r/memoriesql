@@ -1,6 +1,7 @@
 {
   "_comment": "Measured seconds per acceptance test module from one local four-shard run; run_installed_acceptance.py --shard places modules longest-first with these. Refresh with --print-weights when the suite's shape changes; a missing module is estimated from its test count.",
   "seconds": {
+    "test_attempt_refusals": 13.2,
     "test_authored_relations": 54.3,
     "test_bead_classification": 77.6,
     "test_cancellation_drain": 1.0,

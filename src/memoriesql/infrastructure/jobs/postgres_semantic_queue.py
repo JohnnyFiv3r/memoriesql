@@ -825,6 +825,25 @@ class PostgresSemanticTaskQueue:
             raise RuntimeError("Postgres did not return an integrated failure status")
         return str(row[0])
 
+    def record_attempt_refusal(
+        self,
+        fence: SemanticTaskFence,
+        *,
+        sqlstate: str,
+        message: str,
+        recorded_at: datetime,
+    ) -> bool:
+        """Record why canonical apply refused this attempt's output, once per attempt."""
+        row = self._connection.execute(
+            """
+            SELECT memoriesql.record_semantic_attempt_refusal(
+                %s, %s, %s, %s, %s, %s, %s, %s, %s
+            )
+            """,
+            self._fence_parameters(fence) + (sqlstate, message, recorded_at),
+        ).fetchone()
+        return bool(row and row[0])
+
     def reap_expired(
         self,
         *,
