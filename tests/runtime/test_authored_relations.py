@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import patch
 
 import psycopg
+from psycopg import sql
 from pydantic_ai.messages import ModelRequest, ToolCallPart, UserPromptPart
 
 from memoriesql.application.authored_relations import (
@@ -51,6 +52,12 @@ BUILT_INS = (
     "depends_on", "blocks", "derived_from", "supersedes", "associated_with",
 )
 VOCABULARY = tuple(RelationTypePin(key=key, revision=1) for key in BUILT_INS)
+RELATION_TABLES = (
+    "relation_types", "relation_type_revisions", "relation_type_candidates",
+    "relation_type_decisions", "bead_claims", "bead_claim_statements",
+    "bead_claim_events", "bead_relations", "bead_relation_statements",
+    "bead_relation_events", "relation_candidate_assessments", "semantic_evidence_links",
+)
 Plan = Any
 
 
@@ -1058,6 +1065,262 @@ class AuthoredRelations(fixtures.LocalMentions):
                 reason="No such claim.",
             ))
         self.assertEqual(self.claim_state(a), [("A", "current", set(), set())])
+
+    # -- tenant evidence (ADR-0011 RAA-02) ------------------------------
+
+    def second_tenant(self) -> tuple[uuid.UUID, uuid.UUID, str, PostgresRelationLifecycle]:
+        """A complete second fictional tenant with its own owner, scope and session.
+
+        Personal-local bootstrap admits one active workspace per database, so the
+        fixture writes the rows that bootstrap writes, as the test superuser."""
+        tenant, user, identity, principal, workspace, scope, policy, credential, session = (
+            uuid.uuid4() for _ in range(9)
+        )
+        secret = hashlib.sha256(b"fictional second orchard session").hexdigest()
+        now = datetime.now(UTC)
+        rows: tuple[tuple[str, tuple[Any, ...]], ...] = (
+            ("users", (tenant, user, "active", "Fictional second orchard", now, None)),
+            ("auth_identities", (
+                tenant, identity, user, "memoriesql.local", str(identity),
+                "local_interactive", "active", now, None,
+            )),
+            ("principals", (tenant, principal, "human", user, user, "active", now, None)),
+            ("workspaces", (tenant, workspace, "personal_local", user, "active", now)),
+            ("workspace_memberships", (
+                tenant, workspace, principal, "personal_owner", "active", 1, now, now, None,
+            )),
+            ("access_scopes", (tenant, workspace, scope, user, "owner_private", policy, "active", now)),
+            ("access_policy_revisions", (
+                tenant, workspace, scope, policy, 1, "owner_private", user,
+                "personal-local owner-private default", principal, now,
+            )),
+            ("authentication_credentials", (
+                tenant, credential, principal, "local_session", secret, "active",
+                now, now + timedelta(hours=1), None,
+            )),
+            ("local_auth_sessions", (tenant, session, credential, identity, now)),
+        )
+        with self.db.transaction():
+            for table, values in rows:
+                self.db.execute(
+                    sql.SQL("INSERT INTO memoriesql.{} VALUES ({})").format(
+                        sql.Identifier(table), sql.SQL(",").join([sql.Placeholder()] * len(values))
+                    ),
+                    values,
+                )
+        lifecycle = PostgresRelationLifecycle(
+            self.db, credential_sha256=secret, workspace_id=workspace
+        )
+        return workspace, scope, secret, lifecycle
+
+    def related_pair(self, source: uuid.UUID | None = None) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID]:
+        """A claim on one fictional bead and a caused_by relation to it from a second."""
+        ids: dict[str, str] = {}
+        cause = self.author(
+            "Fictional gate note: the north gate was locked.",
+            "gate",
+            source=source,
+            plan=lambda extras, bead, _: ids.setdefault(
+                "claim", self.add_claim(extras, bead, "north gate", "state", "locked")
+            ),
+        )
+        effect = self.author(
+            "Fictional crew note: the crew waited because the north gate was locked.",
+            "crew",
+            candidates=(cause,),
+            plan=lambda extras, bead, c: ids.setdefault(
+                "relation", self.relate(extras, bead, c[0], "caused_by")
+            ),
+        )
+        return cause, effect, uuid.UUID(ids["claim"]), uuid.UUID(ids["relation"])
+
+    def test_relation_tables_force_row_security_and_grant_no_direct_access(self) -> None:
+        for table in RELATION_TABLES:
+            name = "memoriesql." + table
+            with self.subTest(table=table):
+                self.assertEqual(
+                    self.row(
+                        "SELECT relrowsecurity, relforcerowsecurity FROM pg_class WHERE oid=%s::regclass",
+                        (name,),
+                    ),
+                    (True, True),
+                )
+                for privilege in ("SELECT", "INSERT", "UPDATE", "DELETE"):
+                    self.assertEqual(
+                        self.row(
+                            "SELECT has_table_privilege('memoriesql_application', %s, %s)",
+                            (name, privilege),
+                        ),
+                        (False,),
+                        privilege,
+                    )
+
+    def test_another_tenant_cannot_read_or_probe_claims_and_relations(self) -> None:
+        cause, effect, _, relation = self.related_pair()
+        self.assertEqual([r.relation_id for r in self.inspect(effect).relations], [relation])
+        _, _, _, other = self.second_tenant()
+        unknown = other.inspect_relations(InspectBeadRelations(bead_id=uuid.uuid4()))
+        self.assertEqual(unknown.outcome, "unavailable")
+        for bead in (cause, effect):
+            with self.subTest(bead=bead):
+                seen = other.inspect_relations(InspectBeadRelations(bead_id=bead))
+                # An existing bead of another tenant reads exactly like an unknown one.
+                self.assertEqual(
+                    seen.model_dump(exclude={"bead_id"}), unknown.model_dump(exclude={"bead_id"})
+                )
+
+    def test_another_tenant_cannot_govern_claims_relations_or_vocabulary(self) -> None:
+        _, _, claim, relation = self.related_pair()
+        proposed = self.lifecycle.propose_relation_type(ProposeRelationType(
+            idempotency_key="orchard.shelters.1",
+            access_scope_id=self.scope,
+            key="shelters",
+            label="Shelters",
+            definition="The source's cited structure shields the target's cited fictional crop.",
+            endpoint_rule="structure → crop",
+            forward_reading="shelters",
+            inverse_reading="is sheltered by",
+            symmetric=False,
+            cycle_policy="permitted",
+            reason="Fictional orchard vocabulary.",
+        ))
+        counts = (
+            "SELECT (SELECT count(*) FROM memoriesql.bead_relation_events),"
+            " (SELECT count(*) FROM memoriesql.bead_claim_events),"
+            " (SELECT count(*) FROM memoriesql.relation_type_decisions)"
+        )
+        before = self.row(counts)
+        workspace, scope, secret, other = self.second_tenant()
+        refused: tuple[tuple[str, Any], ...] = (
+            ("relation dispute", lambda: other.record_relation_event(RecordRelationEvent(
+                idempotency_key="orchard.cross.dispute",
+                relation_id=relation,
+                action="dispute",
+                reason="Another tenant's review.",
+            ))),
+            ("claim retraction", lambda: other.record_claim_event(RecordClaimEvent(
+                idempotency_key="orchard.cross.retract",
+                claim_id=claim,
+                action="retract",
+                reason="Another tenant's review.",
+            ))),
+            ("decision in this scope", lambda: other.decide_relation_type(DecideRelationType(
+                idempotency_key="orchard.cross.decide",
+                access_scope_id=self.scope,
+                candidate_id=proposed.candidate_id,
+                decision="accepted",
+                reason="Another tenant's decision.",
+            ))),
+            ("decision in its own scope", lambda: other.decide_relation_type(DecideRelationType(
+                idempotency_key="orchard.cross.decide.own",
+                access_scope_id=scope,
+                candidate_id=proposed.candidate_id,
+                decision="accepted",
+                reason="Another tenant's decision.",
+            ))),
+        )
+        for label, attempt in refused:
+            with self.subTest(label), self.assertRaises(psycopg.errors.InsufficientPrivilege):
+                attempt()
+        # Its session cannot even open an authorization context in this workspace.
+        intruder = PostgresRelationLifecycle(
+            self.db, credential_sha256=secret, workspace_id=self.workspace
+        )
+        with self.assertRaises(psycopg.errors.InvalidAuthorizationSpecification):
+            intruder.inspect_relations(InspectBeadRelations(bead_id=uuid.uuid4()))
+        with self.assertRaises(psycopg.errors.InvalidAuthorizationSpecification):
+            intruder.record_relation_event(RecordRelationEvent(
+                idempotency_key="orchard.cross.bound",
+                relation_id=relation,
+                action="confirm",
+                reason="Another tenant bound to this workspace.",
+            ))
+        self.assertEqual(self.row(counts), before)
+        self.assertNotEqual(workspace, self.workspace)
+
+    def test_replay_never_crosses_a_tenant(self) -> None:
+        _, effect, claim, relation = self.related_pair()
+        confirm = RecordRelationEvent(
+            idempotency_key="orchard.replay.confirm",
+            relation_id=relation,
+            action="confirm",
+            reason="Fictional owner confirmation.",
+            expected_last_event_id=self.latest_relation_event(relation),
+        )
+        reaffirm = RecordClaimEvent(
+            idempotency_key="orchard.replay.reaffirm",
+            claim_id=claim,
+            action="reaffirm",
+            reason="Fictional owner reaffirmation.",
+        )
+        receipts = (
+            self.lifecycle.record_relation_event(confirm),
+            self.lifecycle.record_claim_event(reaffirm),
+        )
+        # The owner's exact replay returns the stored receipts, marked as replays.
+        self.assertEqual(
+            (self.lifecycle.record_relation_event(confirm), self.lifecycle.record_claim_event(reaffirm)),
+            tuple(receipt.model_copy(update={"replayed": True}) for receipt in receipts),
+        )
+        _, _, _, other = self.second_tenant()
+        # The same key and target from another tenant never returns the receipt.
+        with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+            other.record_relation_event(confirm)
+        with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+            other.record_claim_event(reaffirm)
+        self.assertEqual(
+            self.row(
+                "SELECT (SELECT count(*) FROM memoriesql.bead_relation_events WHERE relation_id=%s),"
+                " (SELECT count(*) FROM memoriesql.bead_claim_events WHERE claim_id=%s)",
+                (relation, claim),
+            ),
+            (1, 1),
+        )
+        self.assertEqual(self.inspect(effect).relations[0].state, "active")
+
+    def test_revoked_endpoint_or_session_hides_claims_and_relations_whole(self) -> None:
+        fenced = self.add_source("fence")
+        cause, effect, claim, relation = self.related_pair(source=fenced)
+        self.assertEqual(self.inspect(effect).outcome, "available")
+        self.db.execute(
+            "UPDATE memoriesql.protected_resources SET status='revoked',revoked_at=clock_timestamp() WHERE resource_id=%s",
+            (fenced,),
+        )
+        # A relation to an unreadable endpoint never leaks it: the whole read is unavailable.
+        for bead in (cause, effect):
+            with self.subTest(bead=bead):
+                self.assertEqual(self.inspect(bead).outcome, "unavailable")
+        with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+            self.lifecycle.record_relation_event(RecordRelationEvent(
+                idempotency_key="orchard.revoked.dispute",
+                relation_id=relation,
+                action="dispute",
+                reason="The endpoint is no longer readable.",
+            ))
+        with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+            self.lifecycle.record_claim_event(RecordClaimEvent(
+                idempotency_key="orchard.revoked.retract",
+                claim_id=claim,
+                action="retract",
+                reason="The claim's bead is no longer readable.",
+            ))
+        readable = self.author("Fictional note: the south gate is open.", "south")
+        self.assertEqual(self.inspect(readable).outcome, "available")
+        self.db.execute(
+            "UPDATE memoriesql.authentication_credentials SET status='revoked',revoked_at=clock_timestamp() WHERE principal_id=%s",
+            (self.principal,),
+        )
+        # A revoked session cannot open an authorization context, so it reads and
+        # governs nothing, even what it could read before.
+        with self.assertRaises(psycopg.errors.InvalidAuthorizationSpecification):
+            self.inspect(readable)
+        with self.assertRaises(psycopg.errors.InvalidAuthorizationSpecification):
+            self.lifecycle.record_claim_event(RecordClaimEvent(
+                idempotency_key="orchard.revoked.session",
+                claim_id=claim,
+                action="reaffirm",
+                reason="A revoked session tries to govern.",
+            ))
 
     def test_revision_four_mentions_still_accept_at_schema_27(self) -> None:
         self.setup_mentions()
