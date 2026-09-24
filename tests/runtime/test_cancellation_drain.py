@@ -6,12 +6,14 @@ import asyncio
 import threading
 import unittest
 from collections.abc import Awaitable, Callable
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import Mock
 from uuid import uuid4
 
+import psycopg
 from pydantic_ai.messages import ModelResponse, ToolCallPart
 from pydantic_ai.usage import RequestUsage
 
@@ -25,6 +27,7 @@ from memoriesql.infrastructure.jobs.integrated_semantic_worker import (
     ProviderExecutionReadiness,
     ProviderExecutionState,
     SemanticWorkerConfig,
+    SemanticWorkerCycleReceipt,
     SemanticWorkerIdentity,
     WorkerCycleStatus,
 )
@@ -469,6 +472,106 @@ class CancellationDrain(unittest.IsolatedAsyncioTestCase):
             (await asyncio.wait_for(self.worker.wait_for_cleanup(), 2)).task_status,
             "cancelled",
         )
+
+    def refuse_apply(
+        self, bound: float
+    ) -> tuple[threading.Event, threading.Event, threading.Event]:
+        """Canonical apply refuses the output and the refusal record stalls.
+
+        Only the record reaches the database in this harness, so its transaction
+        is the one that stalls.
+        """
+        entered = threading.Event()
+        release = threading.Event()
+        settled = threading.Event()
+        self.record_started_first = False
+        self.record_timeouts: list[int | None] = []
+
+        def stalled(operation: Any, *, timeout_ms: int | None = None) -> bool:
+            self.record_timeouts.append(timeout_ms)
+            entered.set()
+            if not release.wait(3):
+                raise AssertionError("test did not release the refusal record")
+            return True
+
+        def settle(*args: Any, **kwargs: Any) -> SemanticWorkerCycleReceipt:
+            self.record_started_first = entered.is_set()
+            settled.set()
+            return SemanticWorkerCycleReceipt(
+                cycle_status=WorkerCycleStatus.SETTLED,
+                provider_state=ProviderExecutionState.CONFIGURED,
+                provider_reason_code="fictional.configured",
+                task_status="failed",
+                result_status=kwargs["status"],
+            )
+
+        self.worker._config = replace(
+            self.worker._config, refusal_record_timeout_seconds=bound
+        )
+        self.worker._persist_result = Mock(
+            side_effect=psycopg.errors.InvalidParameterValue(
+                "bead type revision is unavailable"
+            )
+        )
+        self.worker._transaction = Mock(side_effect=stalled)
+        self.worker._settle_preflight_failure = Mock(side_effect=settle)
+        return entered, release, settled
+
+    async def test_refusal_record_wait_is_bounded_and_the_record_stays_owned(
+        self,
+    ) -> None:
+        entered, release, settled = self.refuse_apply(0.05)
+        try:
+            self.release.set()
+            self.assertTrue(await asyncio.to_thread(entered.wait, 2))
+            # Settlement starts once the bound passes, while the record stalls.
+            self.assertTrue(await asyncio.to_thread(settled.wait, 2))
+            await asyncio.sleep(0.05)
+            self.assertFalse(self.foreground.done())
+            self.assertEqual(len(self.worker._refusal_writes), 1)
+            self.assertFalse(self.worker._cleanup_heartbeat.done())
+        finally:
+            release.set()
+        receipt = await asyncio.wait_for(self.foreground, 2)
+        self.assertEqual(receipt.result_status, "invalid_output")
+        self.assertTrue(self.record_started_first)
+        self.assertEqual(
+            self.worker._settle_preflight_failure.call_args.kwargs["error_code"],
+            "worker.canonical_apply_refused",
+        )
+        # The database bounds the record's transaction by the same 50 ms.
+        self.assertEqual(self.record_timeouts, [50])
+        self.assertEqual(self.worker._refusal_writes, set())
+        self.assertIsNone(self.worker._cleanup_heartbeat)
+
+    async def test_cancellation_settles_without_waiting_for_the_refusal_record(
+        self,
+    ) -> None:
+        entered, release, settled = self.refuse_apply(30)
+        try:
+            self.release.set()
+            self.assertTrue(await asyncio.to_thread(entered.wait, 2))
+            self.foreground.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await asyncio.wait_for(self.foreground, 1)
+            # Cancellation ends the wait at once; the 30-second bound never runs out.
+            self.assertTrue(await asyncio.to_thread(settled.wait, 1))
+            self.assertTrue(self.worker.cleanup_pending)
+            self.assertEqual(len(self.worker._refusal_writes), 1)
+            self.assertEqual(
+                (await self.worker.run_once()).cycle_status, "cleanup_pending"
+            )
+            self.assertEqual(self.worker._claim.call_count, 1)
+        finally:
+            release.set()
+        # The cancellation propagates after settlement, once the record returns.
+        with self.assertRaises(asyncio.CancelledError):
+            await asyncio.wait_for(self.worker.wait_for_cleanup(), 2)
+        self.assertTrue(self.record_started_first)
+        self.assertEqual(self.worker._settle_preflight_failure.call_count, 1)
+        self.assertEqual(self.worker._refusal_writes, set())
+        self.assertFalse(self.worker.cleanup_pending)
+        self.assertIsNone(self.worker._cleanup_heartbeat)
 
 
 class AccountingCancellation(unittest.IsolatedAsyncioTestCase):

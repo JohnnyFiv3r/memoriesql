@@ -41,7 +41,7 @@ release is part of this slice. See `docs/authored-claims-and-relations.md`.
 
 The owner-authorized forward schema-28 slice (authorized 2026-09-24) keeps why
 canonical apply refused an attempt's output: `semantic_attempt_refusals` and the
-fenced `record_semantic_attempt_refusal`, which the leased worker calls, best effort,
+fenced `record_semantic_attempt_refusal`, which the leased worker calls within a bound
 before it settles the attempt as `worker.canonical_apply_refused`. Preserve
 migrations 0001–0027 and earlier records. No settlement, retry, contract payload,
 dependency or release change is part of this slice. See `docs/runtime.md`.

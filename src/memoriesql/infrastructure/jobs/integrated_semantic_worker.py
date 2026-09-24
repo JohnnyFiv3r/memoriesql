@@ -137,6 +137,9 @@ class SemanticWorkerConfig:
     executor_contract_version: int = 1
     jitter_basis_points: int = 0
     cancellation_return_timeout_seconds: float = 5.0
+    # How long settlement waits for the diagnostic refusal record, and how long
+    # the database lets that record's whole transaction run.
+    refusal_record_timeout_seconds: float = 2.0
 
     def __post_init__(self) -> None:
         if (
@@ -145,6 +148,15 @@ class SemanticWorkerConfig:
         ):
             raise ValueError(
                 "cancellation return timeout must be finite and nonnegative"
+            )
+        # A diagnostic must not hold settlement for long, and PostgreSQL's
+        # millisecond timeouts must not overflow and silently skip the record.
+        if (
+            not math.isfinite(self.refusal_record_timeout_seconds)
+            or not 0 < self.refusal_record_timeout_seconds <= 60
+        ):
+            raise ValueError(
+                "refusal record timeout must be positive and at most 60 seconds"
             )
         if not 90 <= self.lease_seconds <= 3600:
             raise ValueError("lease_seconds must satisfy the SQL-01D lease contract")
@@ -410,6 +422,11 @@ class IntegratedSemanticWorker:
         self._cancellation_receipt: SemanticWorkerCycleReceipt | None = None
         self._cycle_accounting: _CleanupAccounting | None = None
         self._event_writes: set[asyncio.Task[None]] = set()
+        self._refusal_writes: set[
+            asyncio.Task[
+                tuple[_DatabaseCallOutcome[bool], asyncio.CancelledError | None]
+            ]
+        ] = set()
         self._model_accounting = PostgresModelRequestAccounting(
             connection_factory=connection_factory,
             credential_sha256=identity.credential_sha256,
@@ -473,16 +490,23 @@ class IntegratedSemanticWorker:
         claimed: ClaimedSemanticTask,
         error: psycopg_errors.DataError,
     ) -> asyncio.CancelledError | None:
-        """Keep the database's reason for a refused apply; never block settlement.
+        """Keep the database's reason for a refused apply, within a bound.
 
-        A failed record leaves settlement unchanged: the error code still says the
-        attempt ended because canonical apply refused its output. A cancellation
-        that arrives meanwhile is returned so it propagates after settlement.
+        The record is diagnostic and settlement is not, so settlement waits for
+        the record at most refusal_record_timeout_seconds, and not at all once
+        this cycle is cancelled. The cancellation is returned so it propagates
+        after settlement. The database ends the record's whole transaction,
+        including lock waits and idle time, after the same bound, so the record
+        cannot keep the locks settlement takes next. A record still running when
+        settlement starts
+        stays owned: the cycle does not finish until its thread returns. A failed,
+        timed-out or late record leaves settlement unchanged, and a settled
+        attempt takes no record.
         """
         sqlstate, message = _refusal_detail(error)
-        _outcome, delayed_cancellation = await self._run_database_call(
-            lambda: self._transaction(
-                lambda queue, _context: queue.record_attempt_refusal(
+        record = asyncio.create_task(
+            self._run_database_call(
+                lambda: self._record_refusal(
                     claimed.fence,
                     sqlstate=sqlstate,
                     message=message,
@@ -490,7 +514,17 @@ class IntegratedSemanticWorker:
                 )
             )
         )
-        return delayed_cancellation
+        self._refusal_writes.add(record)
+        record.add_done_callback(self._refusal_writes.discard)
+        try:
+            # asyncio.wait cancels nothing: not on timeout, and not when this
+            # cycle is cancelled while it waits.
+            await asyncio.wait(
+                (record,), timeout=self._config.refusal_record_timeout_seconds
+            )
+        except asyncio.CancelledError as cancellation:
+            return cancellation
+        return None
 
     async def _settle_cancellation_before_propagation(
         self,
@@ -621,8 +655,12 @@ class IntegratedSemanticWorker:
             heartbeat = self._cleanup_heartbeat
 
             async def stop_retention() -> None:
-                while self._event_writes:
-                    await asyncio.gather(*self._event_writes, return_exceptions=True)
+                while self._event_writes or self._refusal_writes:
+                    await asyncio.gather(
+                        *self._event_writes,
+                        *self._refusal_writes,
+                        return_exceptions=True,
+                    )
                 if heartbeat is not None:
                     heartbeat.cancel()
                     await asyncio.gather(heartbeat, return_exceptions=True)
@@ -1070,7 +1108,8 @@ class IntegratedSemanticWorker:
                 # invalid output now instead of leaving it running for the
                 # reaper. Privilege and transport errors keep the existing path:
                 # they are authorization or infrastructure failures, not output.
-                # The refusal's reason is recorded first, while the lease holds.
+                # The refusal's reason is recorded first, while the lease holds;
+                # settlement waits for that diagnostic only within its bound.
                 refusal_cancellation = await self._record_refusal_off_loop(
                     claimed, persist_outcome.error
                 )
@@ -1389,6 +1428,21 @@ class IntegratedSemanticWorker:
                 lease_seconds=self._config.lease_seconds,
                 retained_at=retained_at,
             )
+        )
+
+    def _record_refusal(
+        self,
+        fence: SemanticTaskFence,
+        *,
+        sqlstate: str,
+        message: str,
+        recorded_at: datetime,
+    ) -> bool:
+        return self._transaction(
+            lambda queue, _context: queue.record_attempt_refusal(
+                fence, sqlstate=sqlstate, message=message, recorded_at=recorded_at
+            ),
+            timeout_ms=math.ceil(self._config.refusal_record_timeout_seconds * 1000),
         )
 
     def _attempt_reauthorization(
@@ -1781,10 +1835,20 @@ class IntegratedSemanticWorker:
     def _transaction[T](
         self,
         operation: Callable[[PostgresSemanticTaskQueue, object], T],
+        *,
+        timeout_ms: int | None = None,
     ) -> T:
         with self._connection_factory() as connection:
             with connection.transaction():
                 connection.execute("SET TRANSACTION ISOLATION LEVEL READ COMMITTED")
+                if timeout_ms is not None:
+                    # Before the first lock: the database terminates the session
+                    # once this transaction runs longer, whether it is running,
+                    # waiting on a lock or idle because the client stalled.
+                    connection.execute(
+                        "SELECT set_config('transaction_timeout', %s, true)",
+                        (str(timeout_ms),),
+                    )
                 connection.execute("SET LOCAL ROLE memoriesql_worker")
                 context = PostgresAuthorizationPort(connection).begin_context(
                     credential_sha256=self._identity.credential_sha256,
