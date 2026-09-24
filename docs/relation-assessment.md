@@ -29,6 +29,8 @@ pins, in `relation_assessments` and the task payload:
 
 The activating principal needs maintain authority over the subject, which it may
 write, and every candidate, and raw-source authority over every evidence source.
+It must keep that authority while the task runs: every later check repeats it for
+the activating principal, separately from the worker's or attestor's own authority.
 Candidates are supplied coverage, not a relevance ranking; coverage never searches
 other beads. The same idempotency key with a different request is a conflict,
 never a silent re-pin. Pinned beads are bounded at 131,072 canonical bytes,
@@ -50,7 +52,10 @@ never copied into the task payload. Revision 1 uses fixed packets: interactive
 source rereads inside the task are not part of it.
 
 Authority is rechecked before hydration, immediately before each provider dispatch
-(`authorize_relation_delivery_v1`) and at apply. After each request the attestor, a
+(`authorize_relation_delivery_v1`), when a delivery is recorded and at apply. Each
+check covers two principals separately: the current worker or attestor, and the
+activating principal over every pinned bead, statement, evidence event and evidence
+source, whichever scope it sits in. After each request the attestor, a
 service principal other than the claimant, records what the request received with
 `record_relation_delivery_v1`. It re-derives every excerpt from storage under its
 own authority and compares the packet byte for byte with the pins. Acceptance
@@ -138,9 +143,9 @@ commits proposals, judgments, statements, evidence links, pair dispositions and
 retirements in one transaction with the task receipt. It requires the exact run
 tree: the author's root run and one settled specialist run per contribution, each
 contribution exactly as its attestor recorded it. Every refusal of authored content
-is a data error, so the attempt settles as invalid output. A lapse of authority
-over any pinned bead, statement, evidence source or the attestor policy pauses the
-task instead.
+is a data error, so the attempt settles as invalid output. A lapse of either
+principal's authority over any pinned bead, statement or evidence source, or of the
+attestor policy, pauses the task instead, and accepted beads stay untouched.
 
 ## Storage
 

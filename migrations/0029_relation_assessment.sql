@@ -370,25 +370,272 @@ END;
 $$;
 REVOKE ALL ON FUNCTION memoriesql.relation_evidence_content_v1(uuid, jsonb) FROM PUBLIC;
 
--- The current context's authority over every pinned bead, statement and evidence
--- event and raw-source authority over every evidence source, the origin's raw-source
--- authority and an active attestor policy. A refusal is 42501 and pauses the task;
--- beads are never touched.
+
+-- The activating origin's own current authority over one scope. A relation task
+-- pins beads, statements and evidence that can sit outside its own scope, so the
+-- origin is checked over every scope it pins, never through the worker's or the
+-- attestor's authority. An exact copy of semantic_task_origin_capability_authorized
+-- with the scope as a parameter.
+CREATE FUNCTION memoriesql.relation_assessment_origin_scope_authorized(
+    requested_tenant_id uuid,
+    requested_task_id uuid,
+    requested_access_scope_id uuid,
+    requested_capability text,
+    requested_checked_at timestamp with time zone
+)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, memoriesql
+AS $$
+    SELECT EXISTS (
+        SELECT 1
+        FROM memoriesql.semantic_tasks AS task
+        JOIN memoriesql.principals AS principal
+          ON principal.tenant_id = task.tenant_id
+         AND principal.principal_id = task.origin_principal_id
+         AND principal.status = 'active'
+        JOIN memoriesql.users AS origin_user
+          ON origin_user.tenant_id = principal.tenant_id
+         AND origin_user.user_id = principal.owner_user_id
+         AND origin_user.status = 'active'
+        JOIN memoriesql.workspace_memberships AS membership
+          ON membership.tenant_id = task.tenant_id
+         AND membership.workspace_id = task.workspace_id
+         AND membership.principal_id = task.origin_principal_id
+         AND membership.status = 'active'
+        JOIN memoriesql.role_capabilities AS role_capability
+          ON role_capability.role_key = membership.role_key
+         AND role_capability.capability_key = requested_capability
+        JOIN memoriesql.access_scopes AS scope
+          ON scope.tenant_id = task.tenant_id
+         AND scope.workspace_id = task.workspace_id
+         AND scope.access_scope_id = requested_access_scope_id
+         AND scope.status = 'active'
+        WHERE requested_checked_at IS NOT NULL
+          AND task.tenant_id = requested_tenant_id
+          AND task.task_id = requested_task_id
+          AND (
+              task.origin_pairing_grant_id IS NULL
+              OR EXISTS (
+                  SELECT 1
+                  FROM memoriesql.pairing_grants AS origin_pairing
+                  JOIN memoriesql.pairing_grant_revisions AS origin_revision
+                    ON origin_revision.tenant_id = origin_pairing.tenant_id
+                   AND origin_revision.workspace_id = origin_pairing.workspace_id
+                   AND origin_revision.pairing_grant_id =
+                       origin_pairing.pairing_grant_id
+                  WHERE origin_pairing.tenant_id = task.tenant_id
+                    AND origin_pairing.workspace_id = task.workspace_id
+                    AND origin_pairing.pairing_grant_id =
+                        task.origin_pairing_grant_id
+                    AND origin_pairing.paired_principal_id =
+                        task.origin_principal_id
+                    AND origin_revision.revision = (
+                        SELECT max(latest.revision)
+                        FROM memoriesql.pairing_grant_revisions AS latest
+                        WHERE latest.tenant_id = origin_pairing.tenant_id
+                          AND latest.pairing_grant_id =
+                              origin_pairing.pairing_grant_id
+                    )
+                    AND origin_revision.status = 'active'
+                    AND origin_revision.expires_at > requested_checked_at
+                    AND requested_capability =
+                        ANY(origin_revision.allowed_capabilities)
+                    AND requested_access_scope_id =
+                        ANY(origin_revision.allowed_access_scope_ids)
+              )
+          )
+          AND (
+              (
+                  scope.mode = 'owner_private'
+                  AND (
+                      (
+                          principal.principal_kind = 'human'
+                          AND principal.user_id = scope.owner_user_id
+                          AND task.origin_pairing_grant_id IS NULL
+                      )
+                      OR EXISTS (
+                          SELECT 1
+                          FROM memoriesql.pairing_grants AS pairing
+                          JOIN memoriesql.pairing_grant_revisions AS revision
+                            ON revision.tenant_id = pairing.tenant_id
+                           AND revision.workspace_id = pairing.workspace_id
+                           AND revision.pairing_grant_id = pairing.pairing_grant_id
+                          WHERE pairing.tenant_id = task.tenant_id
+                            AND pairing.workspace_id = task.workspace_id
+                            AND pairing.pairing_grant_id = task.origin_pairing_grant_id
+                            AND pairing.paired_principal_id = task.origin_principal_id
+                            AND pairing.on_behalf_of_user_id = scope.owner_user_id
+                            AND revision.revision = (
+                                SELECT max(latest.revision)
+                                FROM memoriesql.pairing_grant_revisions AS latest
+                                WHERE latest.tenant_id = pairing.tenant_id
+                                  AND latest.pairing_grant_id = pairing.pairing_grant_id
+                            )
+                            AND revision.status = 'active'
+                            AND revision.expires_at > requested_checked_at
+                            AND requested_capability = ANY(revision.allowed_capabilities)
+                            AND requested_access_scope_id = ANY(revision.allowed_access_scope_ids)
+                      )
+                  )
+              )
+              OR (
+                  scope.mode = 'explicit'
+                  AND EXISTS (
+                      SELECT 1
+                      FROM memoriesql.access_grants AS grant_record
+                      JOIN memoriesql.access_grant_revisions AS revision
+                        ON revision.tenant_id = grant_record.tenant_id
+                       AND revision.workspace_id = grant_record.workspace_id
+                       AND revision.access_scope_id = grant_record.access_scope_id
+                       AND revision.grant_id = grant_record.grant_id
+                      WHERE grant_record.tenant_id = task.tenant_id
+                        AND grant_record.workspace_id = task.workspace_id
+                        AND grant_record.access_scope_id = requested_access_scope_id
+                        AND grant_record.target_principal_id = task.origin_principal_id
+                        AND revision.revision = (
+                            SELECT max(latest.revision)
+                            FROM memoriesql.access_grant_revisions AS latest
+                            WHERE latest.tenant_id = revision.tenant_id
+                              AND latest.grant_id = revision.grant_id
+                        )
+                        AND revision.status = 'active'
+                        AND revision.valid_from <= requested_checked_at
+                        AND (
+                            revision.expires_at IS NULL
+                            OR revision.expires_at > requested_checked_at
+                        )
+                        AND 'read' = ANY(revision.permission_keys)
+                  )
+              )
+              OR scope.mode = 'workspace'
+          )
+    )
+$$;
+REVOKE ALL ON FUNCTION memoriesql.relation_assessment_origin_scope_authorized(uuid, uuid, uuid, text, timestamp with time zone) FROM PUBLIC;
+-- The origin's authority over one evidence event: its source stays an active
+-- protected resource and the origin holds the capability over the event's scope.
+CREATE FUNCTION memoriesql.relation_assessment_origin_event_authorized(
+    requested_tenant_id uuid, requested_task_id uuid, requested_access_scope_id uuid,
+    requested_event_id uuid, requested_capability text, requested_checked_at timestamp with time zone
+) RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = pg_catalog, memoriesql SET row_security = off AS $$
+    SELECT EXISTS (
+        SELECT 1 FROM memoriesql.source_events AS event_record
+        JOIN memoriesql.semantic_tasks AS task
+          ON task.tenant_id = event_record.tenant_id AND task.task_id = requested_task_id
+         AND task.workspace_id = event_record.workspace_id
+        JOIN memoriesql.protected_resources AS resource
+          ON resource.tenant_id = event_record.tenant_id AND resource.workspace_id = event_record.workspace_id
+         AND resource.access_scope_id = event_record.access_scope_id AND resource.resource_kind = 'source'
+         AND resource.resource_id = event_record.source_object_id AND resource.status = 'active'
+        WHERE event_record.tenant_id = requested_tenant_id
+          AND event_record.access_scope_id = requested_access_scope_id
+          AND event_record.event_id = requested_event_id
+          AND memoriesql.relation_assessment_origin_scope_authorized(requested_tenant_id, requested_task_id,
+              requested_access_scope_id, requested_capability, requested_checked_at)
+    )
+$$;
+REVOKE ALL ON FUNCTION memoriesql.relation_assessment_origin_event_authorized(uuid, uuid, uuid, uuid, text, timestamp with time zone) FROM PUBLIC;
+
+-- The origin's raw-source authority over one evidence source, over the source's own scope.
+CREATE FUNCTION memoriesql.relation_assessment_origin_source_authorized(
+    requested_tenant_id uuid, requested_task_id uuid, requested_source_object_id uuid,
+    requested_checked_at timestamp with time zone
+) RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = pg_catalog, memoriesql SET row_security = off AS $$
+    SELECT EXISTS (
+        SELECT 1 FROM memoriesql.source_objects AS source
+        JOIN memoriesql.semantic_tasks AS task
+          ON task.tenant_id = source.tenant_id AND task.task_id = requested_task_id
+         AND task.workspace_id = source.workspace_id
+        JOIN memoriesql.protected_resources AS resource
+          ON resource.tenant_id = source.tenant_id AND resource.workspace_id = source.workspace_id
+         AND resource.access_scope_id = source.access_scope_id AND resource.resource_kind = 'source'
+         AND resource.resource_id = source.source_object_id AND resource.status = 'active'
+        WHERE source.tenant_id = requested_tenant_id AND source.source_object_id = requested_source_object_id
+          AND memoriesql.relation_assessment_origin_scope_authorized(requested_tenant_id, requested_task_id,
+              source.access_scope_id, 'source.raw.read', requested_checked_at)
+    )
+$$;
+REVOKE ALL ON FUNCTION memoriesql.relation_assessment_origin_source_authorized(uuid, uuid, uuid, timestamp with time zone) FROM PUBLIC;
+
+-- The origin's maintain authority over one pinned accepted bead version, its
+-- statements and their evidence events. An exact copy of
+-- current_context_accepted_bead_maintain_authorized with the origin's event check
+-- in place of the current context's.
+CREATE FUNCTION memoriesql.relation_assessment_origin_bead_authorized(
+    requested_tenant_id uuid, requested_task_id uuid, requested_workspace_id uuid,
+    requested_access_scope_id uuid, requested_bead_version_id uuid,
+    requested_checked_at timestamp with time zone
+) RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = pg_catalog, memoriesql SET row_security = off AS $$
+    SELECT EXISTS (
+        SELECT 1 FROM memoriesql.accepted_bead_semantics AS accepted
+        JOIN memoriesql.bead_versions AS version
+          ON version.tenant_id = accepted.tenant_id
+         AND version.bead_version_id = accepted.bead_version_id
+        WHERE accepted.tenant_id = requested_tenant_id
+          AND accepted.workspace_id = requested_workspace_id
+          AND accepted.access_scope_id = requested_access_scope_id
+          AND accepted.bead_version_id = requested_bead_version_id
+          AND memoriesql.relation_assessment_origin_event_authorized(
+              requested_tenant_id, requested_task_id, version.access_scope_id, version.event_id, 'memory.maintain', requested_checked_at
+          )
+          AND NOT EXISTS (
+              SELECT 1 FROM memoriesql.bead_statement_revisions AS revision
+              JOIN memoriesql.bead_semantic_statements AS statement
+                ON statement.tenant_id = revision.tenant_id
+               AND statement.bead_id = revision.bead_id
+               AND statement.statement_sequence <= revision.statement_watermark
+              WHERE revision.tenant_id = version.tenant_id
+                AND revision.bead_version_id = version.bead_version_id
+                AND (
+                    NOT memoriesql.relation_assessment_origin_event_authorized(
+                        requested_tenant_id, requested_task_id, statement.access_scope_id, statement.event_id, 'memory.maintain', requested_checked_at
+                    ) OR NOT EXISTS (
+                        SELECT 1 FROM memoriesql.bead_semantic_statement_evidence AS evidence
+                        WHERE evidence.tenant_id = statement.tenant_id
+                          AND evidence.statement_id = statement.statement_id
+                    ) OR EXISTS (
+                        SELECT 1 FROM memoriesql.bead_semantic_statement_evidence AS evidence
+                        WHERE evidence.tenant_id = statement.tenant_id
+                          AND evidence.statement_id = statement.statement_id
+                          AND NOT memoriesql.relation_assessment_origin_event_authorized(
+                              requested_tenant_id, requested_task_id, evidence.access_scope_id, evidence.evidence_event_id, 'memory.maintain', requested_checked_at
+                          )
+                    )
+                )
+          )
+    );
+$$;
+REVOKE ALL ON FUNCTION memoriesql.relation_assessment_origin_bead_authorized(uuid, uuid, uuid, uuid, uuid, timestamp with time zone) FROM PUBLIC;
+
+-- Every check a relation task's work depends on, for two principals separately.
+-- The current context (worker, attestor or activator) needs maintain authority over
+-- every pinned bead, statement and evidence event and raw-source authority over every
+-- evidence source. The activating origin keeps the same authority over the same
+-- pins, whatever the current context holds, and raw-source authority over the task's
+-- scope as for complete-input execution. The attestor policy stays active. A refusal
+-- is 42501 and pauses the task; beads are never touched.
 CREATE FUNCTION memoriesql.relation_assessment_pins_authorize(t uuid, task uuid)
 RETURNS void
 LANGUAGE plpgsql VOLATILE SECURITY DEFINER
 SET search_path = pg_catalog, memoriesql SET row_security = off AS $$
-DECLARE x memoriesql.relation_assessments%ROWTYPE; item jsonb; accepted memoriesql.accepted_bead_semantics%ROWTYPE;
+DECLARE
+    x memoriesql.relation_assessments%ROWTYPE; item jsonb; accepted memoriesql.accepted_bead_semantics%ROWTYPE;
+    checked timestamp with time zone := pg_catalog.clock_timestamp();
 BEGIN
     SELECT ra.* INTO x FROM memoriesql.relation_assessments AS ra WHERE ra.tenant_id = t AND ra.task_id = task;
     IF x.task_id IS NULL OR NOT EXISTS (
         SELECT 1 FROM memoriesql.relation_assessment_dispatch_policies AS d
         WHERE d.tenant_id = t AND d.dispatch_policy_id = x.dispatch_policy_id AND d.workspace_id = x.workspace_id
-          AND d.status = 'active' AND d.expires_at > pg_catalog.clock_timestamp()) THEN
+          AND d.status = 'active' AND d.expires_at > checked) THEN
         RAISE EXCEPTION 'relation_assessment_policy_unavailable' USING ERRCODE = '42501';
     END IF;
-    -- The activating origin keeps raw-source authority, as for complete-input execution.
-    IF NOT memoriesql.semantic_task_origin_capability_authorized(t, task, 'source.raw.read', pg_catalog.clock_timestamp()) THEN
+    IF NOT memoriesql.semantic_task_origin_capability_authorized(t, task, 'source.raw.read', checked) THEN
         RAISE EXCEPTION 'relation_assessment_origin_unavailable' USING ERRCODE = '42501';
     END IF;
     FOR item IN SELECT value FROM jsonb_array_elements(x.beads) LOOP
@@ -400,6 +647,10 @@ BEGIN
                 t, accepted.workspace_id, accepted.access_scope_id, accepted.bead_version_id) THEN
             RAISE EXCEPTION 'relation_assessment_bead_unavailable' USING ERRCODE = '42501';
         END IF;
+        IF NOT memoriesql.relation_assessment_origin_bead_authorized(
+                t, task, accepted.workspace_id, accepted.access_scope_id, accepted.bead_version_id, checked) THEN
+            RAISE EXCEPTION 'relation_assessment_origin_unavailable' USING ERRCODE = '42501';
+        END IF;
     END LOOP;
     FOR item IN SELECT value FROM jsonb_array_elements(x.evidence_units) LOOP
         IF NOT memoriesql.current_context_event_authorized(
@@ -407,6 +658,12 @@ BEGIN
             RAISE EXCEPTION 'relation_evidence_unavailable' USING ERRCODE = '42501';
         END IF;
         PERFORM memoriesql.revisiting_source_authorize((item->>'source_object_id')::uuid);
+        IF NOT memoriesql.relation_assessment_origin_event_authorized(
+                t, task, (item->>'access_scope_id')::uuid, (item->>'event_id')::uuid, 'memory.maintain', checked)
+           OR NOT memoriesql.relation_assessment_origin_source_authorized(
+                t, task, (item->>'source_object_id')::uuid, checked) THEN
+            RAISE EXCEPTION 'relation_assessment_origin_unavailable' USING ERRCODE = '42501';
+        END IF;
     END LOOP;
 END;
 $$;
@@ -868,9 +1125,10 @@ $$;
 -- active relation-type revisions and the evidence behind every pinned statement,
 -- then enqueues the task. A different request under the same key conflicts. The
 -- activator needs maintain authority over every pinned bead, write authority over the
--- subject's scope and raw-source authority over every evidence source. A
--- reconsideration carries the earlier task's recorded disagreement and pins the same
--- beads and vocabulary.
+-- subject's scope and raw-source authority over every evidence source, and must keep
+-- it: every later check repeats it for the activating origin as well as for the
+-- worker or attestor. A reconsideration carries the earlier task's recorded
+-- disagreement and pins the same beads and vocabulary.
 CREATE FUNCTION memoriesql.activate_relation_assessment_v1(request jsonb) RETURNS jsonb
 LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = pg_catalog, memoriesql SET lock_timeout = '500ms' AS $$
 DECLARE
@@ -1905,8 +2163,8 @@ BEGIN
            AND q.status='running' AND a.status IN ('claimed','running') AND q.lease_expires_at>clock_timestamp()
            AND a.deadline_at>clock_timestamp() AND (requested_phase='outcome' OR q.cancel_requested_at IS NULL)) THEN RETURN 'stale_fence'; END IF;
     END IF;
-    -- A relation task stays under the worker's authority over every pinned bead,
-    -- statement and evidence source, and its attestor policy stays active.
+    -- A relation task stays under its origin's and the worker's authority over every
+    -- pinned bead, statement and evidence source, and its attestor policy stays active.
     IF task_record.task_kind='memory.semantic.assess-relations' AND task_record.contract_revision=1 THEN
         BEGIN PERFORM memoriesql.relation_assessment_pins_authorize(requested_tenant_id,requested_task_id);
         EXCEPTION WHEN insufficient_privilege THEN RETURN 'policy_paused';

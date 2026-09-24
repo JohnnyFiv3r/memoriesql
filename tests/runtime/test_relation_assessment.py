@@ -1,11 +1,31 @@
 """Fictional relation assessment after acceptance (schema 29).
 
 Every author and specialist outcome here is a fictional double; no provider is
-called. The fixtures follow the first proof's binding cut: foreign and same-bead
-endpoints, separate attributed basis statements, pair dispositions including not
-assessed, agreement on the exact assertion, disagreement left unaccepted,
-same-write direction correction, one cycle check over both relation kinds,
-authority rechecked at apply and tenant isolation.
+called, and code never judges whether a relation is true. Each fictional bead's one
+unit retains all of its facts and qualifications as source, and the source-backed
+tests assert that both the author and the specialist received them.
+
+The shapes the first proof's binding cut requires, and the tests that prove them:
+
+- endpoints in two beads other than the subject, with the reporter's statement as
+  an attributed basis: ``test_foreign_endpoints_carry_the_reporter_as_an_attributed_basis``;
+- both endpoints in one bead, with a separate basis statement and the source's
+  stated conditions as qualification:
+  ``test_same_bead_endpoints_with_a_separate_basis_are_accepted_on_agreement`` and
+  the first variant of ``test_a_qualifier_in_the_packet_is_used_and_an_absent_one_is_an_abstention``;
+- explicit abstention: no fit and ambiguity in
+  ``test_abstentions_record_every_pair_without_a_specialist_call``, and insufficient
+  evidence when a needed qualifier is outside the authorized scope in the second
+  variant of the qualifier test;
+- authority rechecked for endpoints, basis statements and candidates:
+  ``test_an_endpoint_revoked_before_apply_pauses_the_task_and_changes_nothing`` for
+  the worker, and the three ``test_an_origin_losing_*`` tests for the activating
+  origin alone, before any dispatch, before the specialist and at apply.
+
+The remaining tests cover agreement on the exact assertion, disagreement left
+unaccepted, reconsideration, not-assessed pairs, same-write direction correction,
+one cycle check over both relation kinds, later type revisions, bead-level roots,
+supervised dispatch and tenant isolation.
 """
 
 from __future__ import annotations
@@ -128,9 +148,16 @@ class RelationAssessment(relation_fixtures.AuthoredRelations):
     # -- fixture helpers -------------------------------------------------
 
     def bead(self, *texts: str, key: str, source: uuid.UUID | None = None) -> uuid.UUID:
-        """An accepted fictional bead with one statement per text, all on its own unit."""
+        """An accepted fictional bead with one statement per text.
+
+        Its one unit retains every text as source, so each statement's facts and
+        qualifications are in the evidence delivered for it.
+        """
 
         def statements(extras: dict[str, Any], bead: dict[str, Any], _: list[Any]) -> None:
+            bead["statements"][0]["statement_text"] = texts[0]
+            bead["render"]["title"]["text"] = texts[0][:240]
+            bead["render"]["summary"][0]["text"] = texts[0]
             for text in texts[1:]:
                 extra = dict(bead["statements"][0], statement_id=str(uuid.uuid4()),
                              statement_text=text)
@@ -139,7 +166,138 @@ class RelationAssessment(relation_fixtures.AuthoredRelations):
                     {"text": text, "statement_ids": [extra["statement_id"]]}
                 )
 
-        return self.author(texts[0], key, plan=statements, source=source)
+        return self.author("\n".join(texts), key, plan=statements, source=source)
+
+    @staticmethod
+    def delivered(packet: Packet) -> str:
+        """The retained source a packet delivered: every excerpt's text or parts, in order."""
+        return "\n".join(
+            excerpt["content"] if excerpt["content"] is not None
+            else "".join(part["content"] for part in excerpt["parts"])
+            for excerpt in packet["evidence"]
+        )
+
+    def remote_scope(self) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID]:
+        """An explicit scope with its own fictional source that the owner, the worker and
+        the attestor may each read. Returns the scope, its source and the owner's grant."""
+        scope, owner_grant, source = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        pairings = self.db.execute(
+            "SELECT r.pairing_grant_id, r.revision, r.allowed_capabilities, r.allowed_access_scope_ids "
+            "FROM memoriesql.pairing_grant_revisions AS r "
+            "JOIN memoriesql.pairing_grants AS g USING (tenant_id, pairing_grant_id) "
+            "WHERE g.paired_principal_id IN (%s,%s) AND r.revision = (SELECT max(l.revision) "
+            "FROM memoriesql.pairing_grant_revisions AS l "
+            "WHERE l.tenant_id = r.tenant_id AND l.pairing_grant_id = r.pairing_grant_id)",
+            (self.worker_principal, self.attestor),
+        ).fetchall()
+        self.assertEqual(len(pairings), 2)
+        with self.db.transaction():
+            self.begin()
+            self.db.execute(
+                "SELECT memoriesql.create_access_scope(%s,%s,'explicit','Fictional remote orchard',%s)",
+                (scope, uuid.uuid4(), self.now),
+            )
+            for principal, grant in ((self.principal, owner_grant), (self.worker_principal, uuid.uuid4()),
+                                     (self.attestor, uuid.uuid4())):
+                self.db.execute(
+                    "SELECT memoriesql.create_access_grant(%s,%s,%s,%s,%s,%s)",
+                    (grant, principal, scope, ["read", "write"], self.now, self.now + timedelta(hours=1)),
+                )
+            # The worker's and the attestor's pairings extend to the new scope.
+            for pairing, revision, capabilities, scopes in pairings:
+                self.db.execute(
+                    "SELECT memoriesql.revise_pairing_grant(%s,%s,%s,%s,'active',%s,%s,%s)",
+                    (pairing, revision, capabilities, [*scopes, scope], self.now,
+                     self.now + timedelta(hours=1), self.now),
+                )
+        self.db.execute(
+            "INSERT INTO memoriesql.protected_resources SELECT tenant_id,workspace_id,%s,%s,resource_kind,owner_user_id,status,created_by_principal_id,created_at FROM memoriesql.protected_resources WHERE resource_id=%s",
+            (scope, source, self.source),
+        )
+        self.db.execute(
+            "INSERT INTO memoriesql.source_objects(tenant_id,workspace_id,access_scope_id,source_object_id,source_system,object_kind,external_object_id,schema_version,metadata,created_at,last_observed_at,owner_user_id) SELECT tenant_id,workspace_id,%s,%s,source_system,object_kind,'orchard.remote',schema_version,metadata,created_at,last_observed_at,owner_user_id FROM memoriesql.source_objects WHERE source_object_id=%s",
+            (scope, source, self.source),
+        )
+        producer, policy = uuid.uuid4(), uuid.uuid4()
+        self.db.execute(
+            "INSERT INTO memoriesql.evidence_producer_policies SELECT tenant_id,workspace_id,%s,%s,%s,producer_principal_id,qualification_ref,normalization_policy_version,qualification_evidence_sha256,approved_by_principal_id,created_at,expires_at,status FROM memoriesql.evidence_producer_policies WHERE producer_policy_id=%s",
+            (scope, producer, source, self.policy),
+        )
+        self.db.execute(
+            "INSERT INTO memoriesql.complete_input_dispatch_policies SELECT tenant_id,%s,workspace_id,%s,%s,attestor_principal_id,approved_by_principal_id,qualification_evidence_sha256,created_at,expires_at,status,6 FROM memoriesql.complete_input_dispatch_policies WHERE dispatch_policy_id=%s",
+            (policy, scope, source, self.dispatch_policy),
+        )
+        self.producers[source], self.policies[source] = producer, policy
+        self.checkpoints[source], self.positions[source] = "orchard.remote.raw", (0, 0)
+        return scope, source, owner_grant
+
+    def remote_bead(self, *texts: str, key: str, scope: uuid.UUID, source: uuid.UUID) -> uuid.UUID:
+        local, self.scope = self.scope, scope
+        try:
+            return self.bead(*texts, key=key, source=source)
+        finally:
+            self.scope = local
+
+    def revoke(self, grant: uuid.UUID) -> None:
+        """Revoke one of the owner's grants; the worker's and the attestor's stay active."""
+        with self.db.transaction():
+            self.begin()
+            self.db.execute(
+                "SELECT memoriesql.revise_access_grant(%s,1,%s,'revoked',%s,%s,%s)",
+                (grant, ["read", "write"], self.now, self.now + timedelta(hours=1), self.now),
+            )
+
+    def readers(self, scope: uuid.UUID) -> dict[str, bool]:
+        """Whether the owner, the worker and the attestor may each read a scope now."""
+        readers = {}
+        for name, secret, role in (
+            ("owner", self.secret_hash, "SET LOCAL ROLE memoriesql_application"),
+            ("worker", self.worker_secret, "SET LOCAL ROLE memoriesql_worker"),
+            ("attestor", self.attestor_secret, "SET LOCAL ROLE memoriesql_worker"),
+        ):
+            with self.connection() as connection, connection.transaction():
+                connection.execute(role)
+                PostgresAuthorizationPort(connection).begin_context(
+                    credential_sha256=secret, requested_workspace_id=self.workspace)
+                readers[name] = connection.execute(
+                    "SELECT memoriesql.current_context_scope_permits(%s,'read')", (scope,)).fetchone()[0]
+        return readers
+
+    def origin_refusal(self, task: uuid.UUID) -> str | None:
+        """The refusal the worker's own pin check now raises for a task, if any."""
+        with self.connection() as connection, connection.transaction():
+            PostgresAuthorizationPort(connection).begin_context(
+                credential_sha256=self.worker_secret, requested_workspace_id=self.workspace)
+            try:
+                with connection.transaction():
+                    connection.execute(
+                        "SELECT memoriesql.relation_assessment_pins_authorize(%s,%s)", (self.tenant, task))
+            except psycopg.errors.InsufficientPrivilege as error:
+                return error.diag.message_primary
+        return None
+
+    def revoking(self, grant: uuid.UUID, *, after: str) -> Any:
+        """The real attestor, then the owner's grant revoked once one role's delivery is recorded."""
+        attestor = PostgresRelationDeliveryRecorder(
+            connection_factory=self.connection, credential_sha256=self.attestor_secret,
+            workspace_id=self.workspace)
+        test = self
+
+        class Revoking:
+            async def record_relation_delivery(self, **kwargs: Any) -> None:
+                await attestor.record_relation_delivery(**kwargs)
+                if ("author" if kwargs["decision"] is None else "specialist") == after:
+                    test.revoke(grant)
+
+        return Revoking()
+
+    def beads_as_they_were(self) -> list[tuple[Any, ...]]:
+        """Every accepted and stored bead version, to show paused work changed none."""
+        return self.db.execute(
+            "SELECT 'accepted', bead_id::text, bead_version_id::text FROM memoriesql.accepted_bead_semantics "
+            "UNION ALL SELECT 'stored', bead_id::text, bead_version_id::text FROM memoriesql.bead_versions "
+            "ORDER BY 1, 2, 3"
+        ).fetchall()
 
     def statements(self, bead: uuid.UUID) -> list[str]:
         return [
@@ -342,8 +500,9 @@ class RelationAssessment(relation_fixtures.AuthoredRelations):
             "proposal_id": str(uuid.uuid4()), "relation_type": {"key": type_key, "revision": 1},
             "source": source, "target": target, "basis_statements": list(basis_statements),
             "evidence": evidence, "basis": basis, "qualification": qualification,
-            "rationale": "The fictional note states this connection.", "author_confidence": 0.8,
-            "retires": retires,
+            "rationale": ("The fictional note states this connection." if basis == "source_stated"
+                          else "The fictional author infers this; the note does not state it."),
+            "author_confidence": 0.8, "retires": retires,
         }
 
     @staticmethod
@@ -351,7 +510,9 @@ class RelationAssessment(relation_fixtures.AuthoredRelations):
         return {"contract_version": 1, "judgments": [
             {"proposal_id": p["proposal_id"], "outcome": "assessed", "consistent": True,
              "warranted": [{"relation_type": p["relation_type"], "direction": "as_proposed"}],
-             "abstention": None, "rationale": "The fictional evidence states it."}
+             "abstention": None,
+             "rationale": ("The fictional evidence states it." if p["basis"] == "source_stated"
+                           else "The fictional evidence supports the inference.")}
             for p in packet["proposals"]]}
 
     def propose(self, build: Callable[[Packet], list[dict[str, Any]]]) -> None:
@@ -370,11 +531,11 @@ class RelationAssessment(relation_fixtures.AuthoredRelations):
 
     def test_same_bead_endpoints_with_a_separate_basis_are_accepted_on_agreement(self) -> None:
         # A report isolates a change as the cause of a regression; the trial
-        # result is the separate basis, with its conditions as the qualification.
+        # result is the separate basis, with its stated conditions as the qualification.
         report = self.bead(
             "Fictional change: the irrigation timer moved to dawn.",
             "Fictional regression: the east rows dried out.",
-            "Fictional trial: with the timer restored the rows recovered, twice.",
+            "Fictional trial: in two dry weeks, with the timer restored the rows recovered, twice.",
             key="report",
         )
         change, regression, trial = self.statements(report)
@@ -382,14 +543,19 @@ class RelationAssessment(relation_fixtures.AuthoredRelations):
         self.propose(lambda packet: [self.proposal(
             packet, "caused_by", self.endpoint(packet, report, 1), self.endpoint(packet, report, 0),
             basis_statements=(self.basis_pin(packet, report, 2),),
-            qualification="Under the fictional trial's dry-week conditions.",
+            qualification="In the fictional trial's two dry weeks.",
         )])
         self.run_relations()
         roles = [p["role"] for p in self.frames]
         self.assertEqual(roles, ["author", "specialist"])
-        # Both runs received the same actual evidence, not only statement texts.
+        # Both runs received the same retained source, not only statement texts, and it
+        # holds the change, the regression, the trial and the trial's conditions.
         self.assertEqual(self.frames[0]["evidence"], self.frames[1]["evidence"])
         self.assertTrue(self.frames[0]["evidence"][0]["parts"])
+        for packet in self.frames:
+            for fact in ("the irrigation timer moved to dawn", "the east rows dried out",
+                         "in two dry weeks", "with the timer restored the rows recovered, twice"):
+                self.assertIn(fact, self.delivered(packet), packet["role"])
         inspection = self.inspect_v2(report)
         self.assertEqual(inspection.outcome, "available", inspection)
         (relation,) = inspection.relations
@@ -400,7 +566,7 @@ class RelationAssessment(relation_fixtures.AuthoredRelations):
         self.assertEqual([str(s.statement_id) for s in relation.source_statements], [regression])
         self.assertEqual([str(s.statement_id) for s in relation.target_statements], [change])
         self.assertEqual([str(s.statement_id) for s in relation.basis_statements], [trial])
-        self.assertEqual(relation.qualification, "Under the fictional trial's dry-week conditions.")
+        self.assertEqual(relation.qualification, "In the fictional trial's two dry weeks.")
         assert relation.judgment is not None
         self.assertTrue(relation.judgment.consistent)
         (task,) = inspection.relation_tasks
@@ -421,6 +587,12 @@ class RelationAssessment(relation_fixtures.AuthoredRelations):
             qualification="Sam's suspicion, not a confirmed cause.",
         )])
         self.run_relations()
+        # Both runs received each bead's retained source, including Sam's report.
+        self.assertEqual([p["role"] for p in self.frames], ["author", "specialist"])
+        for packet in self.frames:
+            for fact in ("deploy D went out at noon", "outage O began at one",
+                         "Sam suspects deploy D caused outage O"):
+                self.assertIn(fact, self.delivered(packet), packet["role"])
         (relation,) = self.inspect_v2(report).relations
         self.assertEqual(
             (relation.direction, relation.source_bead_id, relation.target_bead_id),
@@ -439,25 +611,45 @@ class RelationAssessment(relation_fixtures.AuthoredRelations):
         self.assertEqual(dispositions[cast(Any, tuple(sorted((deploy, outage), key=str)))], "related")
 
     def test_abstentions_record_every_pair_without_a_specialist_call(self) -> None:
-        # Nothing states a connection, and similar wording is no fit.
+        # Nothing states a connection, and similar wording is no fit. Within the
+        # failure note, which failure came first is not recorded, so any relation
+        # between its statements is ambiguous.
         first = self.bead("Fictional log: deploy at noon.", key="log-a")
         second = self.bead("Fictional log: errors at one.", key="log-b")
-        self.activate_relations(first, (second,))
-        self.author_plan = lambda packet: {"proposals": [], "dispositions": self.dispositions(
-            packet, [], {"disposition": "abstained", "abstention": "no_fit", "reason": None})}
+        failures = self.bead(
+            "Fictional pump U failed.", "Fictional valve V failed.",
+            "Fictional log: U and V failed together; which failed first is not recorded.",
+            key="failures",
+        )
+        self.activate_relations(first, (second, failures))
+
+        def author(packet: Packet) -> dict[str, Any]:
+            rows = self.dispositions(
+                packet, [], {"disposition": "abstained", "abstention": "no_fit", "reason": None})
+            for row in rows:
+                if row["first_bead_id"] == row["second_bead_id"] == str(failures):
+                    row["abstention"] = "ambiguous"
+            return {"proposals": [], "dispositions": rows}
+
+        self.author_plan = author
         self.run_relations()
         self.assertEqual([p["role"] for p in self.frames], ["author"])
+        self.assertIn("which failed first is not recorded", self.delivered(self.frames[0]))
         inspection = self.inspect_v2(first)
         self.assertEqual(inspection.relations, ())
         self.assertEqual(
             {(d.disposition, d.abstention) for d in inspection.pair_dispositions},
             {("abstained", "no_fit")},
         )
-        self.assertEqual(len(inspection.pair_dispositions), 2)  # (first, second) and (first, first)
+        self.assertEqual(len(inspection.pair_dispositions), 3)  # with second, with failures, with itself
+        abstentions = {(d.first_bead_id, d.second_bead_id): d.abstention
+                       for d in self.inspect_v2(failures).pair_dispositions}
+        self.assertEqual(abstentions[(failures, failures)], "ambiguous")
 
     def test_a_qualifier_in_the_packet_is_used_and_an_absent_one_is_an_abstention(self) -> None:
-        # First variant: the qualifier is in the authorized packet, so the
-        # author uses it; a universal abstention would fail this variant.
+        # First variant: the operator's condition is retained source in the
+        # authorized packet, so the author uses it; a universal abstention would
+        # fail this variant.
         valve = self.bead(
             "Fictional valve V closed.",
             "Fictional pressure P dropped.",
@@ -471,16 +663,33 @@ class RelationAssessment(relation_fixtures.AuthoredRelations):
             qualification="Only while pump K runs.",
         )])
         self.run_relations()
+        self.assertEqual([p["role"] for p in self.frames], ["author", "specialist"])
+        for packet in self.frames:
+            for fact in ("valve V closed", "pressure P dropped",
+                         "only while pump K runs does closing V drop P"):
+                self.assertIn(fact, self.delivered(packet), packet["role"])
         (relation,) = self.inspect_v2(valve).relations
         self.assertEqual((relation.state, relation.qualification), ("active", "Only while pump K runs."))
-        # Second variant: the qualifier sits outside the authorized scope, so the
-        # author abstains for insufficient evidence and asserts nothing.
+        # Second variant: the condition that links gauge and vent is recorded only in
+        # a scope the activator can no longer read, so no task can pin it. The packet
+        # lacks it; the author abstains for insufficient evidence and asserts nothing.
+        scope, source, owner_grant = self.remote_scope()
+        hidden = self.remote_bead("Fictional operator: only while fan Q runs does opening W drop G.",
+                                  key="condition", scope=scope, source=source)
+        self.revoke(owner_grant)
         gauge = self.bead("Fictional gauge G fell.", "Fictional vent W opened.", key="gauge")
+        with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+            self.activate_relations(gauge, (hidden,), key="orchard.assess.gauge.hidden")
         self.activate_relations(gauge, key="orchard.assess.gauge")
         self.author_plan = lambda packet: {"proposals": [], "dispositions": self.dispositions(
             packet, [], {"disposition": "abstained", "abstention": "insufficient_evidence",
                          "reason": "The condition that links them is not in the packet."})}
         self.run_relations()
+        self.assertEqual([p["role"] for p in self.frames], ["author"])
+        delivered = self.delivered(self.frames[0])
+        self.assertIn("gauge G fell", delivered)
+        self.assertIn("vent W opened", delivered)
+        self.assertNotIn("only while fan Q runs", delivered)
         inspection = self.inspect_v2(gauge)
         self.assertEqual(inspection.relations, ())
         (pair,) = inspection.pair_dispositions
@@ -531,7 +740,8 @@ class RelationAssessment(relation_fixtures.AuthoredRelations):
 
     def test_a_proposal_changed_after_its_judgment_is_refused(self) -> None:
         # The specialist judges a copy whose qualification differs from the output's.
-        note = self.bead("Fictional flue F blocked.", "Fictional stove S smoked.", key="flue")
+        note = self.bead("Fictional flue F blocked in the storm.",
+                         "Fictional stove S smoked during the storm.", key="flue")
         self.activate_relations(note)
         self.propose(lambda packet: [self.proposal(
             packet, "caused_by", self.endpoint(packet, note, 1), self.endpoint(packet, note, 0),
@@ -600,6 +810,73 @@ class RelationAssessment(relation_fixtures.AuthoredRelations):
             self.row("SELECT status FROM memoriesql.semantic_tasks WHERE task_kind='memory.semantic.assess-relations'"),
             ("policy_paused",),
         )
+
+    def test_an_origin_losing_a_candidate_scope_pauses_before_any_dispatch(self) -> None:
+        # The worker and the attestor keep their own authority over the candidate's
+        # scope; only the activating origin loses it. Nothing is hydrated or sent.
+        scope, source, owner_grant = self.remote_scope()
+        remote = self.remote_bead("Fictional remote pump failed.", key="remote", scope=scope, source=source)
+        local = self.bead("Fictional local rows wilted.", key="local")
+        receipt = self.activate_relations(local, (remote,))
+        before = self.beads_as_they_were()
+        self.revoke(owner_grant)
+        self.assertEqual(self.readers(scope), {"owner": False, "worker": True, "attestor": True})
+        self.run_relations(expect=None)
+        self.assertEqual(self.frames, [])
+        self.assertEqual(self.row("SELECT count(*) FROM memoriesql.model_provider_request_intents WHERE task_kind='memory.semantic.assess-relations'"), (0,))
+        self.assertEqual(self.row("SELECT count(*) FROM memoriesql.relation_assessment_deliveries"), (0,))
+        self.assertEqual(self.origin_refusal(receipt.task_id), "relation_assessment_origin_unavailable")
+        self.assertEqual(self.row("SELECT status FROM memoriesql.semantic_tasks WHERE task_id=%s", (receipt.task_id,)),
+                         ("policy_paused",))
+        # Paused relation work leaves every accepted bead as it was.
+        self.assertEqual(self.beads_as_they_were(), before)
+
+    def test_an_origin_losing_a_candidate_scope_after_the_author_stops_the_specialist(self) -> None:
+        scope, source, owner_grant = self.remote_scope()
+        remote = self.remote_bead("Fictional remote pump failed.", key="remote", scope=scope, source=source)
+        local = self.bead("Fictional local rows wilted.", key="local")
+        receipt = self.activate_relations(local, (remote,))
+        self.propose(lambda packet: [self.proposal(
+            packet, "caused_by", self.endpoint(packet, local, 0), self.endpoint(packet, remote, 0),
+            basis="agent_inferred")])
+        before = self.beads_as_they_were()
+        self.frames = []
+        asyncio.run(self.relation_worker(recorder=self.revoking(owner_grant, after="author")).run_once())
+        # The specialist is never dispatched once the origin loses the candidate.
+        self.assertEqual([p["role"] for p in self.frames], ["author"])
+        self.assertEqual(self.row("SELECT count(*) FROM memoriesql.relation_assessment_deliveries"), (1,))
+        self.assertEqual(self.row("SELECT count(*) FROM memoriesql.assessed_relations"), (0,))
+        self.assertEqual(self.origin_refusal(receipt.task_id), "relation_assessment_origin_unavailable")
+        self.assertEqual(self.row("SELECT status FROM memoriesql.semantic_tasks WHERE task_id=%s", (receipt.task_id,)),
+                         ("policy_paused",))
+        self.assertEqual(self.beads_as_they_were(), before)
+
+    def test_an_origin_losing_a_basis_only_scope_pauses_at_apply(self) -> None:
+        # The remote bead is only the attributed basis; both endpoints stay local.
+        # Both deliveries were authorized and attested before the origin lost the
+        # remote scope, and apply refuses the whole outcome.
+        scope, source, owner_grant = self.remote_scope()
+        report = self.remote_bead("Fictional inspector: the dry well wilted the local rows.",
+                                  key="inspector", scope=scope, source=source)
+        local = self.bead("Fictional local well ran dry.", "Fictional local rows wilted.", key="local")
+        receipt = self.activate_relations(local, (report,))
+        self.propose(lambda packet: [self.proposal(
+            packet, "caused_by", self.endpoint(packet, local, 1), self.endpoint(packet, local, 0),
+            basis_statements=(self.basis_pin(packet, report, 0),))])
+        before = self.beads_as_they_were()
+        self.frames = []
+        asyncio.run(self.relation_worker(recorder=self.revoking(owner_grant, after="specialist")).run_once())
+        self.assertEqual([p["role"] for p in self.frames], ["author", "specialist"])
+        for packet in self.frames:
+            self.assertIn("the dry well wilted the local rows", self.delivered(packet), packet["role"])
+        self.assertEqual(self.readers(scope), {"owner": False, "worker": True, "attestor": True})
+        self.assertEqual(self.row("SELECT count(*) FROM memoriesql.relation_assessment_deliveries"), (2,))
+        self.assertEqual(self.row("SELECT count(*) FROM memoriesql.assessed_relations"), (0,))
+        self.assertEqual(self.row("SELECT count(*) FROM memoriesql.relation_pair_dispositions"), (0,))
+        self.assertEqual(self.origin_refusal(receipt.task_id), "relation_assessment_origin_unavailable")
+        self.assertEqual(self.row("SELECT status FROM memoriesql.semantic_tasks WHERE task_id=%s", (receipt.task_id,)),
+                         ("policy_paused",))
+        self.assertEqual(self.beads_as_they_were(), before)
 
     def test_an_incomplete_specialist_batch_is_refused_and_the_bead_is_untouched(self) -> None:
         note = self.bead("Fictional door D opened.", "Fictional hall H cooled.", key="door")
