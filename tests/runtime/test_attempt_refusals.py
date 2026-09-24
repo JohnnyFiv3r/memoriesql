@@ -10,6 +10,9 @@ from typing import TYPE_CHECKING, Any, cast
 import psycopg
 from pydantic_ai.messages import ToolCallPart
 
+from memoriesql.infrastructure.jobs.postgres_semantic_queue import (
+    PostgresSemanticTaskQueue,
+)
 from memoriesql.infrastructure.postgres.authorization import PostgresAuthorizationPort
 
 if TYPE_CHECKING:
@@ -83,6 +86,32 @@ class AttemptRefusals(fixtures.LocalMentions):
         self.assertEqual(self.refusals(), [("22023", "bead type revision is unavailable")])
         with self.assertRaises(psycopg.errors.InvalidParameterValue):
             self.record_as_worker("bad", "a reason")
+
+    def test_only_a_live_lease_records_a_refusal(self) -> None:
+        self.setup_mentions()
+        with self.connection() as connection, connection.transaction():
+            connection.execute("SET LOCAL ROLE memoriesql_worker")
+            PostgresAuthorizationPort(connection).begin_context(
+                credential_sha256=self.worker_secret, requested_workspace_id=self.workspace
+            )
+            claimed = PostgresSemanticTaskQueue(connection).claim(
+                worker_id="orchard.worker",
+                worker_instance_id="orchard.instance",
+                lease_seconds=120,
+                deadline_seconds=300,
+                executor_contract_version=1,
+                claimed_at=datetime.now(UTC),
+            )
+        assert claimed
+        lease = "UPDATE memoriesql.semantic_tasks SET lease_expires_at = clock_timestamp() + %s::interval WHERE task_id = %s"
+        # A lapsed lease records nothing, as settlement would refuse that fence.
+        self.db.execute(lease, ("-1 second", claimed.fence.task_id))
+        self.assertFalse(self.record_as_worker("22023", "semantic statement run is unavailable"))
+        self.assertEqual(self.refusals(), [])
+        self.db.execute(lease, ("5 minutes", claimed.fence.task_id))
+        self.assertTrue(self.record_as_worker("22023", "semantic statement run is unavailable"))
+        self.assertFalse(self.record_as_worker("22023", "another reason"))
+        self.assertEqual(self.refusals(), [("22023", "semantic statement run is unavailable")])
 
     def test_accepted_output_records_no_refusal_and_readers_cannot_see_refusals(self) -> None:
         self.setup_mentions()

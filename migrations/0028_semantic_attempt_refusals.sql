@@ -27,9 +27,10 @@ ALTER TABLE memoriesql.semantic_attempt_refusals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE memoriesql.semantic_attempt_refusals FORCE ROW LEVEL SECURITY;
 REVOKE ALL ON memoriesql.semantic_attempt_refusals FROM PUBLIC;
 
--- Record one refusal for the caller's own running attempt. The fence matches the
--- one settlement checks, and the task -> attempt lock order matches settlement's.
--- A second record for the same attempt changes nothing.
+-- Record one refusal for the caller's own running attempt. The fence, the lease,
+-- deadline and context-expiry checks and the task -> attempt lock order match
+-- settlement's, so a worker whose lease lapsed records nothing. A second record for
+-- the same attempt changes nothing.
 CREATE FUNCTION memoriesql.record_semantic_attempt_refusal(
     requested_tenant_id uuid,
     requested_task_id uuid,
@@ -50,6 +51,7 @@ AS $$
 DECLARE
     context_record memoriesql.authorization_contexts%ROWTYPE;
     task_record memoriesql.semantic_tasks%ROWTYPE;
+    attempt_record memoriesql.semantic_task_attempts%ROWTYPE;
     database_now timestamp with time zone := pg_catalog.statement_timestamp();
 BEGIN
     IF requested_sqlstate IS NULL
@@ -85,7 +87,7 @@ BEGIN
     IF NOT FOUND THEN
         RETURN false;
     END IF;
-    PERFORM 1
+    SELECT attempt.* INTO attempt_record
     FROM memoriesql.semantic_task_attempts AS attempt
     WHERE attempt.tenant_id = requested_tenant_id
       AND attempt.task_id = requested_task_id
@@ -97,6 +99,15 @@ BEGIN
       AND attempt.status IN ('claimed', 'running')
     FOR UPDATE;
     IF NOT FOUND THEN
+        RETURN false;
+    END IF;
+    database_now := pg_catalog.clock_timestamp();
+    IF task_record.lease_expires_at <= database_now
+       OR attempt_record.deadline_at <= database_now
+       OR context_record.expires_at <= database_now
+       OR NOT memoriesql.current_context_scope_time_authorized(
+           task_record.access_scope_id, 'read', database_now
+       ) THEN
         RETURN false;
     END IF;
     INSERT INTO memoriesql.semantic_attempt_refusals (
