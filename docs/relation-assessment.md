@@ -115,9 +115,21 @@ once across the contributions. An incomplete or oversized batch is refused
 truthfully, never truncated.
 
 **Reconsideration** is a new, explicitly linked activation (`reconsiders_task_id`)
-of an applied assessment with the same pins. Its input carries the recorded
-disagreement: the unaccepted proposals and their judgments. Each assessment is
-reconsidered at most once, and a reconsideration is never itself reconsidered.
+of an applied assessment of the same subject that left at least one proposal
+unaccepted. Its input carries that recorded disagreement: the unaccepted proposals
+and their judgments. It pins every bead the earlier assessment pinned, at the same
+immutable accepted versions, so the carried disagreement names only statements the
+new task pins and authorizes. When evidence or understanding has changed, it may add
+candidates and pin newer vocabulary revisions. No count limits reconsideration: an
+assessment may be reconsidered again and a reconsideration may itself be
+reconsidered, each by its own explicit, separately authorized and bounded
+activation. Every link and every earlier proposal and judgment stays recorded.
+Nothing activates a reconsideration automatically.
+
+**Attempts.** Each relation task runs at most one attempt, so nothing retries
+automatically. A transient failure or an expired lease dead-letters the task, and
+a task paused during its attempt is never resumed. Running the assessment again is
+a new, explicit activation.
 
 ## Correction, cycles and roots
 
@@ -189,4 +201,8 @@ profiles explicitly.
 - No tracked claims or claim updates after acceptance.
 - Fixed packets; no interactive source rereads inside the task.
 - No statement-level derivation roots and no partial-scope correction.
-- No governed confirm, dispute or retract actions for assessed assertions.
+- No governed confirm, dispute or retract actions for assessed assertions. An
+  accepted replacement can retire one, but nothing can simply withdraw it.
+  Revision 1 is therefore an explicitly incomplete mechanical substrate:
+  append-only dispute and retraction for assessed assertions must exist before
+  assessed relations are used durably in live memory or qualified for recall.

@@ -23,8 +23,9 @@ The shapes the first proof's binding cut requires, and the tests that prove them
   origin alone, before any dispatch, before the specialist and at apply.
 
 The remaining tests cover agreement on the exact assertion, disagreement left
-unaccepted, reconsideration, not-assessed pairs, same-write direction correction,
-one cycle check over both relation kinds, later type revisions, bead-level roots,
+unaccepted, explicit, linked and uncapped reconsideration, one attempt per task
+with no automatic retry, not-assessed pairs, same-write direction correction, one
+cycle check over both relation kinds, later type revisions, bead-level roots,
 supervised dispatch and tenant isolation.
 """
 
@@ -988,28 +989,73 @@ class RelationAssessment(relation_fixtures.AuthoredRelations):
         (relation,) = authored.relations
         self.assertEqual((relation.state, relation.events[0].action), ("superseded", "retire"))
 
-    def test_reconsideration_carries_the_recorded_disagreement_once(self) -> None:
+    def test_reconsideration_is_explicit_linked_and_never_capped(self) -> None:
+        # Each reconsideration is its own explicit, bounded activation carrying its
+        # prior's recorded disagreement. Nothing reconsiders automatically, no count
+        # caps it, a reconsideration may itself be reconsidered, and new evidence may
+        # join. The fictional specialist agrees only with source-stated proposals.
         note = self.bead("Fictional frost F fell.", "Fictional buds B browned.", key="frost")
+        grower = self.bead("Fictional grower: the frost browned the buds.", key="grower")
+
+        def inferred(packet: Packet, key: str = "caused_by") -> list[dict[str, Any]]:
+            source, target = (1, 0) if key == "caused_by" else (0, 1)
+            return [self.proposal(packet, key, self.endpoint(packet, note, source),
+                                  self.endpoint(packet, note, target), basis="agent_inferred")]
+
+        def stated(packet: Packet) -> list[dict[str, Any]]:
+            return [self.proposal(packet, "caused_by", self.endpoint(packet, note, 1),
+                                  self.endpoint(packet, note, 0),
+                                  basis_statements=(self.basis_pin(packet, grower, 0),))]
+
+        def judge(packet: Packet) -> dict[str, Any]:
+            decision = self.agree(packet)
+            basis = {p["proposal_id"]: p["basis"] for p in packet["proposals"]}
+            for judgment in decision["judgments"]:
+                if basis[judgment["proposal_id"]] != "source_stated":
+                    judgment.update(consistent=False, rationale="The note never links them.")
+            return decision
+
+        self.specialist_plan = judge
+        self.propose(inferred)
         first = self.activate_relations(note)
-        self.propose(lambda packet: [self.proposal(
-            packet, "caused_by", self.endpoint(packet, note, 1), self.endpoint(packet, note, 0),
-            basis="agent_inferred")])
-        self.specialist_plan = lambda packet: {"contract_version": 1, "judgments": [
-            dict(j, consistent=False, rationale="The note never links them.")
-            for j in self.agree(packet)["judgments"]]}
         self.run_relations()
+        # A recorded disagreement starts nothing by itself.
+        self.assertEqual(asyncio.run(self.relation_worker().run_once()).cycle_status, "idle")
         second = self.activate_relations(note, key="orchard.reconsider", reconsiders=first.task_id)
         self.assertEqual(second.reconsiders_task_id, first.task_id)
-        self.author_plan = None
-        self.specialist_plan = None
         self.run_relations()
         carried = self.frames[0]["reconsideration"]
-        self.assertEqual(carried["reconsiders_task_id"], str(first.task_id))
-        self.assertEqual(len(carried["proposals"]), 1)
+        self.assertEqual((carried["reconsiders_task_id"], len(carried["proposals"])), (str(first.task_id), 1))
         self.assertFalse(carried["judgments"][0]["consistent"])
-        for key, target in (("orchard.again", first.task_id), ("orchard.chain", second.task_id)):
+        # A reconsideration may itself be reconsidered, here with new evidence joining.
+        self.propose(lambda packet: [*inferred(packet, "led_to"), *stated(packet)])
+        third = self.activate_relations(note, (grower,), key="orchard.chain", reconsiders=second.task_id)
+        self.run_relations()
+        self.assertEqual(self.frames[0]["reconsideration"]["reconsiders_task_id"], str(second.task_id))
+        self.assertIn("the frost browned the buds", self.delivered(self.frames[0]))
+        self.propose(stated)
+        settled = self.activate_relations(note, (grower,), key="orchard.settled")
+        self.run_relations()
+        # No count caps it: the first assessment is reconsidered again, and so is the
+        # chained reconsideration, which re-pins every bead it pinned.
+        fourth = self.activate_relations(note, key="orchard.again", reconsiders=first.task_id)
+        fifth = self.activate_relations(note, (grower,), key="orchard.kept", reconsiders=third.task_id)
+        # Refused: dropping a bead the prior pinned, a prior not yet applied, and a
+        # prior that left nothing unaccepted.
+        for key, candidates, target in (("orchard.dropped", (), third.task_id),
+                                        ("orchard.unapplied", (), fourth.task_id),
+                                        ("orchard.agreed", (grower,), settled.task_id)):
             with self.subTest(key), self.assertRaises(psycopg.errors.ObjectNotInPrerequisiteState):
-                self.activate_relations(note, key=key, reconsiders=target)
+                self.activate_relations(note, candidates, key=key, reconsiders=target)
+        # Linked history stays whole: every link, proposal and judgment is kept.
+        inspection = self.inspect_v2(note)
+        self.assertEqual(
+            {t.task_id: t.reconsiders_task_id for t in inspection.relation_tasks},
+            {first.task_id: None, second.task_id: first.task_id, third.task_id: second.task_id,
+             settled.task_id: None, fourth.task_id: first.task_id, fifth.task_id: third.task_id},
+        )
+        self.assertEqual(sorted(r.state for r in inspection.relations),
+                         ["active", "active", "not_accepted", "not_accepted", "not_accepted"])
 
     def test_activation_pins_replays_and_refuses_conflicts(self) -> None:
         subject = self.bead("Fictional note N.", key="note")
@@ -1070,12 +1116,21 @@ class RelationAssessment(relation_fixtures.AuthoredRelations):
         self.assertEqual(other.inspect_relations(InspectBeadRelationsV2(bead_id=subject)).outcome,
                          "unavailable")
 
-    def test_composition_without_an_attestor_dispatches_nothing(self) -> None:
+    def test_composition_without_an_attestor_dispatches_nothing_and_never_retries(self) -> None:
         note = self.bead("Fictional cellar C flooded.", key="cellar")
-        self.activate_relations(note)
+        task = self.activate_relations(note).task_id
         receipt = asyncio.run(self.relation_worker(recorder=None).run_once())
         self.assertNotEqual(receipt.task_status, "succeeded", receipt)
         self.assertEqual(self.row("SELECT count(*) FROM memoriesql.model_provider_request_intents WHERE task_kind='memory.semantic.assess-relations'"), (0,))
+        # One bounded attempt: the transient failure dead-letters the task instead of
+        # scheduling an automatic retry. Running it again is a new, explicit activation.
+        self.assertEqual(
+            self.row("SELECT status, attempt_count, max_attempts FROM memoriesql.semantic_tasks WHERE task_id=%s", (task,)),
+            ("dead_letter", 1, 1),
+        )
+        self.assertEqual(asyncio.run(self.relation_worker().run_once()).cycle_status, "idle")
+        self.activate_relations(note, key="orchard.assess.again")
+        self.run_relations()
 
     def test_the_claimant_cannot_attest_its_own_delivery(self) -> None:
         note = self.bead("Fictional attic A leaked.", key="attic")

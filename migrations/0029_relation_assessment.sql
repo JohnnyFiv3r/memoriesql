@@ -44,8 +44,10 @@ CREATE TABLE memoriesql.relation_assessments (
     activation_receipt_id uuid NOT NULL,
     created_at timestamp with time zone NOT NULL,
     PRIMARY KEY (tenant_id, task_id),
-    -- Each assessment is reconsidered at most once, by an explicitly linked task.
-    UNIQUE (tenant_id, reconsiders_task_id),
+    -- A reconsideration links to the assessment whose recorded disagreement it
+    -- carries. The link is history, never a cap: an assessment may be reconsidered
+    -- again and a reconsideration may itself be reconsidered, each by its own
+    -- explicit activation.
     CHECK ((reconsiders_task_id IS NULL) = (reconsideration IS NULL)),
     CHECK (reconsiders_task_id IS DISTINCT FROM task_id),
     FOREIGN KEY (tenant_id, task_id) REFERENCES memoriesql.semantic_tasks (tenant_id, task_id),
@@ -1127,8 +1129,8 @@ $$;
 -- activator needs maintain authority over every pinned bead, write authority over the
 -- subject's scope and raw-source authority over every evidence source, and must keep
 -- it: every later check repeats it for the activating origin as well as for the
--- worker or attestor. A reconsideration carries the earlier task's recorded
--- disagreement and pins the same beads and vocabulary.
+-- worker or attestor. A reconsideration carries an earlier applied assessment's
+-- recorded disagreement and pins every bead that assessment pinned.
 CREATE FUNCTION memoriesql.activate_relation_assessment_v1(request jsonb) RETURNS jsonb
 LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = pg_catalog, memoriesql SET lock_timeout = '500ms' AS $$
 DECLARE
@@ -1243,15 +1245,21 @@ BEGIN
     IF jsonb_typeof(request->'reconsiders_task_id') = 'string' THEN
         SELECT ra.* INTO prior FROM memoriesql.relation_assessments AS ra
         WHERE ra.tenant_id = c.tenant_id AND ra.task_id = (request->>'reconsiders_task_id')::uuid FOR SHARE;
-        -- Bounded: an applied assessment of the same pins, never itself a reconsideration,
-        -- reconsidered at most once and only for proposals left unaccepted.
-        IF prior.task_id IS NULL OR prior.workspace_id <> c.workspace_id OR prior.reconsiders_task_id IS NOT NULL
-           OR prior.subject_bead_id <> subject.bead_id OR prior.beads IS DISTINCT FROM pinned
-           OR prior.relation_vocabulary IS DISTINCT FROM vocabulary
+        -- An applied assessment of the same subject with at least one proposal left
+        -- unaccepted. Every bead it pinned is pinned again at its immutable accepted
+        -- version, so the carried disagreement names only statements this task pins
+        -- and authorizes; new candidates and current vocabulary revisions may join
+        -- when evidence or understanding changed. No count limits it: each
+        -- reconsideration is its own explicit, bounded activation, a reconsideration
+        -- may itself be reconsidered, and nothing activates one automatically.
+        IF prior.task_id IS NULL OR prior.workspace_id <> c.workspace_id
+           OR prior.subject_bead_id <> subject.bead_id
+           OR EXISTS (SELECT 1 FROM jsonb_array_elements(prior.beads) AS earlier(v)
+                      WHERE NOT EXISTS (SELECT 1 FROM jsonb_array_elements(pinned) AS again(v)
+                                        WHERE again.v->>'bead_id' = earlier.v->>'bead_id'
+                                          AND again.v->>'bead_version_id' = earlier.v->>'bead_version_id'))
            OR NOT EXISTS (SELECT 1 FROM memoriesql.semantic_tasks AS q
                           WHERE q.tenant_id = c.tenant_id AND q.task_id = prior.task_id AND q.status = 'succeeded')
-           OR EXISTS (SELECT 1 FROM memoriesql.relation_assessments AS ra
-                      WHERE ra.tenant_id = c.tenant_id AND ra.reconsiders_task_id = prior.task_id)
            OR NOT EXISTS (SELECT 1 FROM memoriesql.assessed_relations AS r
                           WHERE r.tenant_id = c.tenant_id AND r.task_id = prior.task_id AND r.acceptance = 'not_accepted') THEN
             RAISE EXCEPTION 'relation_reconsideration_unavailable' USING ERRCODE = '55000';
@@ -3549,4 +3557,7 @@ $$;
 REVOKE ALL ON FUNCTION memoriesql.inspect_relation_vocabulary_v1(jsonb) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION memoriesql.inspect_relation_vocabulary_v1(jsonb) TO memoriesql_application;
 
-INSERT INTO memoriesql.semantic_task_admission_policies (semantic_registry_hash,task_kind,contract_revision,owning_module,task_contract_hash,target_kind,required_capability,queue_name,base_priority,max_attempts,concurrency_key,concurrency_limit) VALUES ('semantic-tasks-v1:a331612010e79e75b7fe8851d322b462b0e575c85103259e5a383aeaadb5ca89','memory.semantic.assess-relations',1,'memoriesql.kernel','804fb7f351db5924cbe1409391965fcc23899a06761f56613ef6786141260373','canonical_semantics','memory.maintain','capture',50,3,NULL,NULL);
+-- One attempt per relation task, so nothing retries automatically: a transient
+-- failure or an expired lease dead-letters the task, and a task paused during its
+-- attempt is never resumed. Another execution is a new, explicit activation.
+INSERT INTO memoriesql.semantic_task_admission_policies (semantic_registry_hash,task_kind,contract_revision,owning_module,task_contract_hash,target_kind,required_capability,queue_name,base_priority,max_attempts,concurrency_key,concurrency_limit) VALUES ('semantic-tasks-v1:a331612010e79e75b7fe8851d322b462b0e575c85103259e5a383aeaadb5ca89','memory.semantic.assess-relations',1,'memoriesql.kernel','804fb7f351db5924cbe1409391965fcc23899a06761f56613ef6786141260373','canonical_semantics','memory.maintain','capture',50,1,NULL,NULL);

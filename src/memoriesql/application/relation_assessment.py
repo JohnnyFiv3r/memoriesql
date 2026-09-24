@@ -692,8 +692,10 @@ class ActivateRelationAssessment(FrozenContractModel):
     """Pin one accepted subject, explicit candidates and exact vocabulary revisions.
 
     An empty candidate set is valid: the subject's own statements can relate.
-    A reconsideration names the earlier assessment whose unaccepted proposals it
-    carries and pins the same beads and vocabulary.
+    A reconsideration names an earlier applied assessment of the same subject whose
+    unaccepted proposals it carries. It pins every bead that assessment pinned and
+    may add candidates or pin newer vocabulary revisions. Each reconsideration is
+    its own explicit activation; none is capped and none is automatic.
     """
 
     contract_version: Literal[1] = 1
