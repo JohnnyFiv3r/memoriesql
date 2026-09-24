@@ -1771,6 +1771,7 @@ GRANT EXECUTE ON FUNCTION memoriesql.apply_relation_assessment_v1(jsonb, text, t
 
 -- Exact restatements: the relation task joins reauthorization, the input envelope,
 -- specialist run admission and supervised dispatch; earlier revisions keep their meaning.
+-- Reauthorization and run events also refuse a NULL phase or time for every task.
 CREATE OR REPLACE FUNCTION memoriesql.reauthorize_semantic_task(
     requested_tenant_id uuid,
     requested_task_id uuid,
@@ -1798,6 +1799,7 @@ BEGIN
     IF NOT FOUND
        OR context_record.principal_kind <> 'service'
        OR context_record.expires_at <= database_now
+       OR requested_phase IS NULL OR requested_at IS NULL
        OR requested_phase NOT IN ('hydrate', 'outcome')
        OR requested_at < database_now - interval '5 minutes'
        OR requested_at > database_now + interval '5 minutes' THEN
@@ -2251,6 +2253,7 @@ BEGIN
     FROM memoriesql.current_authorization_context();
     IF NOT FOUND
        OR context_record.principal_kind <> 'service'
+       OR requested_at IS NULL
        OR requested_at < database_now - interval '5 minutes'
        OR requested_at > database_now + interval '5 minutes'
        OR requested_event_kind NOT IN (

@@ -80,6 +80,7 @@ from memoriesql.infrastructure.models.pydanticai_executor import (
     PydanticAIModelProfileRegistry,
     PydanticAISemanticExecutor,
 )
+from memoriesql.infrastructure.postgres.authorization import PostgresAuthorizationPort
 from memoriesql.infrastructure.postgres.relation_assessment import (
     PostgresRelationAssessments,
     PostgresRelationDeliveryRecorder,
@@ -934,6 +935,70 @@ class RelationAssessment(relation_fixtures.AuthoredRelations):
                      "reason": "The copy was transcribed independently."})])
         self.run_relations()
         self.assertEqual(roots(copy_), [mill])
+
+    def test_a_null_time_never_passes_the_attempt_fence(self) -> None:
+        # Probed on a live attempt: a real time passes, SQL NULL is refused.
+        note = self.bead("Fictional kettle K boiled.", "Fictional window W fogged.", key="kettle")
+        self.activate_relations(note)
+        attestor = PostgresRelationDeliveryRecorder(
+            connection_factory=self.connection, credential_sha256=self.attestor_secret,
+            workspace_id=self.workspace)
+        outcomes: dict[str, tuple[Any, Any]] = {}
+        test = self
+
+        class Probe:
+            async def record_relation_delivery(self, **kwargs: Any) -> None:
+                await attestor.record_relation_delivery(**kwargs)
+                if kwargs["decision"] is None:
+                    outcomes.update(test.probe_null_times())
+
+        receipt = asyncio.run(self.relation_worker(recorder=Probe()).run_once())
+        self.assertEqual(receipt.task_status, "succeeded", receipt)
+        self.assertEqual(outcomes, {"reauthorize": ("authorized", "invalid_phase"),
+                                    "run_event": (True, "refused")})
+
+    def probe_null_times(self) -> dict[str, tuple[Any, Any]]:
+        task, attempt, generation = self.row(
+            "SELECT a.task_id, a.attempt_id, a.lease_generation FROM memoriesql.semantic_task_attempts AS a "
+            "JOIN memoriesql.semantic_tasks AS q USING (tenant_id, task_id) "
+            "WHERE q.task_kind = 'memory.semantic.assess-relations' AND a.status = 'running'")
+        (run,) = self.row(
+            "SELECT run_id FROM memoriesql.semantic_task_runs WHERE attempt_id=%s AND parent_run_id IS NULL",
+            (attempt,))
+        task_input = RELATION_ASSESSMENT_TASK.input_contract.reference
+        output = RELATION_ASSESSMENT_TASK.output_contract.reference
+        profile = RELATION_ASSESSMENT_TASK.model_profile
+        fence = (self.tenant, task, attempt, generation, "orchard.worker", "orchard.instance")
+        with self.connection() as connection, connection.transaction():
+            connection.execute("SET LOCAL ROLE memoriesql_worker")
+            PostgresAuthorizationPort(connection).begin_context(
+                credential_sha256=self.worker_secret, requested_workspace_id=self.workspace)
+
+            def reauthorize(at: Any) -> Any:
+                return connection.execute(
+                    "SELECT memoriesql.reauthorize_semantic_task(%s,%s,%s,%s,%s,%s,'hydrate',%s)",
+                    fence + (at,)).fetchone()[0]
+
+            def replay(at: Any) -> Any:
+                # An exact replay of the live root run's start event.
+                return connection.execute(
+                    "SELECT memoriesql.record_semantic_run_event(%s,%s,%s,%s,%s,%s,'run.started',%s,NULL,"
+                    "'direct_leaf',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NULL,%s)",
+                    fence + (run, RELATION_ASSESSMENT_TASK.leaf_agent_key, task_input.contract_id,
+                             task_input.revision, task_input.schema_hash, output.contract_id,
+                             output.revision, output.schema_hash, profile.profile_key, profile.revision,
+                             profile.effort_key, at)).fetchone()[0]
+
+            def refused(at: Any) -> Any:
+                try:
+                    with connection.transaction():
+                        return replay(at)
+                except psycopg.errors.InvalidParameterValue:
+                    return "refused"
+
+            now = datetime.now(UTC)
+            return {"reauthorize": (reauthorize(now), reauthorize(None)),
+                    "run_event": (replay(now), refused(None))}
 
     def test_vocabulary_read_lists_active_definitions(self) -> None:
         inspection = self.assessments.inspect_vocabulary(InspectRelationVocabulary())
