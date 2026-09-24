@@ -149,8 +149,8 @@ class SemanticWorkerConfig:
             raise ValueError(
                 "cancellation return timeout must be finite and nonnegative"
             )
-        # A diagnostic must not hold settlement for long, and PostgreSQL's
-        # millisecond timeouts must not overflow and silently skip the record.
+        # Policy cap: a diagnostic record may delay settlement only briefly. It is
+        # not a PostgreSQL limit; transaction_timeout accepts far longer values.
         if (
             not math.isfinite(self.refusal_record_timeout_seconds)
             or not 0 < self.refusal_record_timeout_seconds <= 60
@@ -492,10 +492,10 @@ class IntegratedSemanticWorker:
     ) -> asyncio.CancelledError | None:
         """Keep the database's reason for a refused apply, within a bound.
 
-        The record is diagnostic and settlement is not, so settlement waits for
-        the record at most refusal_record_timeout_seconds, and not at all once
-        this cycle is cancelled. The cancellation is returned so it propagates
-        after settlement. The database ends the record's whole transaction,
+        The record is diagnostic and settlement is not, so before settling the
+        worker waits for the record at most refusal_record_timeout_seconds, and
+        not at all once this cycle is cancelled. The cancellation is returned so
+        the cycle raises it after settlement. The database ends the record's whole transaction,
         including lock waits and idle time, after the same bound, so the record
         cannot keep the locks settlement takes next. A record still running when
         settlement starts

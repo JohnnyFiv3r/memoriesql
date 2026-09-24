@@ -222,14 +222,19 @@ Unreleased development (schema 28) also keeps the refusal's reason. Before
 settling, the worker records the SQLSTATE and the database's primary message
 (one printable line of at most 512 characters) in
 `memoriesql.semantic_attempt_refusals`, once per attempt, through a fenced
-function only the attempt's leased worker can call. The record is diagnostic
-and bounded by `SemanticWorkerConfig.refusal_record_timeout_seconds` (two
-seconds by default, at most 60). Settlement waits for it at most that long,
-and not at all once the cycle is cancelled. The database ends the record's
-whole transaction, including lock waits and idle time, after the same bound
-(`transaction_timeout`), so the record cannot keep locks that settlement
-takes. A record still running when settlement starts stays owned by the cycle
-until its thread returns. If the record fails or times out, the reason is not
-kept and settlement is unchanged. The contract functions' own class-22
-refusals are fixed strings; PostgreSQL's type checks can quote the offending
-value from the authored output. Application roles cannot read the table.
+function only the attempt's leased worker can call. The record is diagnostic:
+the worker waits for it at most
+`SemanticWorkerConfig.refusal_record_timeout_seconds` (two seconds by default;
+policy caps it at 60), and not at all once the cycle is cancelled. The
+record's transaction sets `transaction_timeout` to the same value before its
+first lock, so the database ends it, including lock waits and idle time,
+within that bound of its start, and settlement cannot stay behind its locks
+for longer. These bounds cover the record and the wait for it, not when
+`run_once` or `wait_for_cleanup` returns. A record whose thread is stuck
+outside the database stays owned by the cycle until the thread returns, so the
+cycle stays pending, and after cancellation `run_once` can return before
+settlement finishes in the background. If the record fails or times out, the
+reason is not kept and settlement is unchanged. The contract functions' own
+class-22 refusals are fixed strings; PostgreSQL's type checks can quote the
+offending value from the authored output. Application roles cannot read the
+table.
