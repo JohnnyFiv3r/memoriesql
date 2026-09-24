@@ -186,7 +186,8 @@ change who owns the canonical schema: this public package owns it. See the
   [source revisiting](docs/source-revisiting.md),
   [local mentions](docs/local-entity-mentions.md),
   [classification](docs/bead-classification.md),
-  [claims and relations](docs/authored-claims-and-relations.md).
+  [claims and relations](docs/authored-claims-and-relations.md),
+  [relation assessment](docs/relation-assessment.md).
 - **Consumption:** [stored-memory inspection](docs/stored-bead-inspection.md),
   [public API inventory](docs/architecture/public-api-inventory.md),
   [runtime and cleanup](docs/runtime.md).

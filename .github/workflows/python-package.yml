@@ -37,6 +37,7 @@ jobs:
           python scripts/generate_authored_relations_contract.py --check
           python scripts/generate_relation_profile_contract.py --check
           python scripts/generate_bead_classification_contract.py --check
+          python scripts/generate_relation_assessment_contract.py --check
           python scripts/generate_stored_bead_inspection_contract.py --check
           python scripts/generate_catalogs.py --check
           python scripts/verify_public_boundary.py

@@ -18,6 +18,7 @@ from pydantic import BaseModel, ValidationError
 from memoriesql.application.complete_input_execution import (
     CompleteEvidenceBatch,
     CompleteExecutionInput,
+    CompleteInputError,
     EvidenceExposureRecorder,
     ReadCompleteEvidence,
 )
@@ -27,6 +28,11 @@ from memoriesql.application.model_accounting import (
     ProviderRequestIntent,
 )
 from memoriesql.application.module_registry import CompositionHealthReport
+from memoriesql.application.relation_assessment import (
+    EvidenceExcerpt,
+    RelationAssessmentInput,
+    RelationDeliveryRecorder,
+)
 from memoriesql.application.semantic_task_contracts import (
     CancellationSignal,
     EvidenceAccessor,
@@ -68,6 +74,9 @@ from memoriesql.infrastructure.jobs.postgres_semantic_queue import (
     ReauthorizationResult,
     SemanticAuthorizationSnapshot,
     SemanticTaskFence,
+)
+from memoriesql.infrastructure.jobs.relation_assessment_access import (
+    RelationAssessmentEvidenceAccess,
 )
 from memoriesql.infrastructure.jobs.source_revisiting_access import (
     SourceRevisitingEvidenceAccess,
@@ -402,7 +411,7 @@ class IntegratedSemanticWorker:
         readiness_provider: Callable[[], ProviderExecutionReadiness],
         outcome_sinks: RegisteredSemanticOutcomeSinks = SYNTHETIC_OUTCOME_SINKS,
         config: SemanticWorkerConfig = SemanticWorkerConfig(),
-        exposure_recorder: EvidenceExposureRecorder | None = None,
+        exposure_recorder: EvidenceExposureRecorder | RelationDeliveryRecorder | None = None,
     ) -> None:
         self._connection_factory = connection_factory
         self._identity = identity
@@ -839,7 +848,11 @@ class IntegratedSemanticWorker:
                 if isinstance(task_input, CompleteExecutionInput)
                 else None
             ),
-            exposure_recorder=self._exposure_recorder,
+            exposure_recorder=(
+                None
+                if isinstance(task_input, RelationAssessmentInput)
+                else cast(EvidenceExposureRecorder | None, self._exposure_recorder)
+            ),
             source_revisiting=(
                 self._source_revisiting_access(claimed, task_input)
                 if isinstance(task_input, RevisitingExecutionInput)
@@ -848,6 +861,17 @@ class IntegratedSemanticWorker:
             source_delivery_recorder=(
                 self._exposure_recorder
                 if isinstance(self._exposure_recorder, SourceDeliveryRecorder)
+                else None
+            ),
+            relation_assessment=(
+                self._relation_assessment_access(claimed)
+                if isinstance(task_input, RelationAssessmentInput)
+                else None
+            ),
+            relation_delivery_recorder=(
+                self._exposure_recorder
+                if isinstance(task_input, RelationAssessmentInput)
+                and isinstance(self._exposure_recorder, RelationDeliveryRecorder)
                 else None
             ),
         )
@@ -1574,6 +1598,14 @@ class IntegratedSemanticWorker:
                         "complete_input.trusted_dispatch_unavailable",
                     )
                 return cast(SemanticTaskInput[BaseModel], task_input), authorization, {}
+            if isinstance(task_input, RelationAssessmentInput):
+                # Evidence stays behind the fenced reader; the attestor records delivery.
+                if not isinstance(self._exposure_recorder, RelationDeliveryRecorder):
+                    return _PreparationFailure(
+                        SemanticResultStatus.UNAVAILABLE,
+                        "relation_assessment.trusted_dispatch_unavailable",
+                    )
+                return cast(SemanticTaskInput[BaseModel], task_input), authorization, {}
             evidence_content = queue.hydrate_evidence(
                 claimed.fence,
                 task_input.evidence_manifest,
@@ -1624,6 +1656,51 @@ class IntegratedSemanticWorker:
             task_id=claimed.fence.task_id,
             attempt_id=claimed.fence.attempt_id,
             package=task_input.payload.package,
+            read=read,
+            authorize=authorize,
+        )
+
+    def _relation_assessment_access(
+        self, claimed: ClaimedSemanticTask
+    ) -> RelationAssessmentEvidenceAccess:
+        async def read() -> tuple[EvidenceExcerpt, ...]:
+            try:
+                return await self._await_database_call(
+                    lambda: self._transaction(
+                        lambda queue, _context: queue.read_relation_evidence(
+                            claimed.fence
+                        )
+                    )
+                )
+            except psycopg_errors.ProgramLimitExceeded as error:
+                raise CompleteInputError(
+                    SemanticResultStatus.BUDGET_EXHAUSTED,
+                    "relation_assessment.evidence_budget",
+                ) from error
+            except (PermissionError, psycopg_errors.InsufficientPrivilege) as error:
+                raise CompleteInputError(
+                    SemanticResultStatus.POLICY_PAUSED,
+                    "relation_assessment.authorization_unavailable",
+                ) from error
+
+        async def authorize() -> None:
+            try:
+                await self._await_database_call(
+                    lambda: self._transaction(
+                        lambda queue, _context: queue.authorize_relation_delivery(
+                            claimed.fence
+                        )
+                    )
+                )
+            except (PermissionError, psycopg_errors.InsufficientPrivilege) as error:
+                raise CompleteInputError(
+                    SemanticResultStatus.POLICY_PAUSED,
+                    "relation_assessment.authorization_unavailable",
+                ) from error
+
+        return RelationAssessmentEvidenceAccess(
+            task_id=claimed.fence.task_id,
+            attempt_id=claimed.fence.attempt_id,
             read=read,
             authorize=authorize,
         )
@@ -1733,6 +1810,25 @@ class IntegratedSemanticWorker:
                     output_contract_hash=result.output_contract_hash,
                     usage=result.usage,
                     error_code="complete_input.exposure_incomplete",
+                    retry_class=retry_class_for_status(
+                        SemanticResultStatus.INVALID_OUTPUT
+                    ),
+                )
+            if (
+                settlement_result.status == SemanticResultStatus.SUCCEEDED
+                and claimed.task_kind == "memory.semantic.assess-relations"
+                and claimed.contract_revision == 1
+                and not queue.relation_exposure_valid(claimed.fence)
+            ):
+                settlement_result = SemanticTaskResult[BaseModel](
+                    status=SemanticResultStatus.INVALID_OUTPUT,
+                    task_id=result.task_id,
+                    attempt_id=result.attempt_id,
+                    task_kind=result.task_kind,
+                    contract_revision=result.contract_revision,
+                    output_contract_hash=result.output_contract_hash,
+                    usage=result.usage,
+                    error_code="relation_assessment.exposure_incomplete",
                     retry_class=retry_class_for_status(
                         SemanticResultStatus.INVALID_OUTPUT
                     ),

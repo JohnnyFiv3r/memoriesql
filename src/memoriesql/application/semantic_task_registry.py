@@ -186,6 +186,13 @@ def _registry_payload(
     }
 
 
+# Task revisions whose runtime schedules exactly one specialist leaf after the author.
+_RUNTIME_SPECIALISTS: dict[tuple[str, int], str] = {
+    ("memory.semantic.author-complete-unit", 5): "memory.semantic.bead-type-classifier",
+    ("memory.semantic.assess-relations", 1): "memory.semantic.relation-specialist",
+}
+
+
 def inspect_semantic_task_registry(
     module_registry: BuiltInModuleRegistry,
     definitions: Sequence[SemanticTaskDefinition[BaseModel, BaseModel]],
@@ -426,15 +433,17 @@ def inspect_semantic_task_registry(
                 )
 
         if definition.dispatch_mode is DispatchMode.DIRECT_LEAF:
-            # Revision 5 has one runtime-scheduled classification leaf, not a
+            # A few revisions have one runtime-scheduled specialist leaf, not a
             # model delegation tool or a generative conductor.
+            specialist = _RUNTIME_SPECIALISTS.get(
+                (definition.task_kind, definition.contract_revision)
+            )
             classified = (
-                definition.task_kind == "memory.semantic.author-complete-unit"
-                and definition.contract_revision == 5
-                and definition.allowed_delegate_keys == ("memory.semantic.bead-type-classifier",)
+                specialist is not None
+                and definition.allowed_delegate_keys == (specialist,)
                 and definition.run_budget.max_delegate_calls == 1
                 and definition.run_budget.max_parallel_delegates == 1
-                and "memory.semantic.bead-type-classifier" in agent_by_key
+                and specialist in agent_by_key
             )
             if (
                 definition.leaf_agent_key is None

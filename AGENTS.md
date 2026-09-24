@@ -46,6 +46,16 @@ before it settles the attempt as `worker.canonical_apply_refused`. Preserve
 migrations 0001–0027 and earlier records. No settlement, retry, contract payload,
 dependency or release change is part of this slice. See `docs/runtime.md`.
 
+The owner-authorized forward schema-29 slice (authorized 2026-09-24) adds
+`memory.semantic.assess-relations` revision 1: a separate relation task after
+acceptance over existing statements of explicitly pinned accepted beads, with pair
+coverage, a provider-neutral specialist whose agreement on the exact assertion is
+required, attested evidence delivery, same-write retirement, one cycle check over both
+relation kinds and bounded v2 relations and vocabulary reads. Preserve migrations
+0001–0028 and earlier records. No provider, profile binding, default composition,
+tracked claims after acceptance or release is part of this slice. See
+`docs/relation-assessment.md`.
+
 The Q-owned forward schema-24 slice permits bounded, currently authorized stored
 bead/result and evidence inspection. Preserve migrations 0001–0023 and earlier
 records. No inference, canonical writes, provider binding or private consumption

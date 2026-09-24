@@ -162,6 +162,18 @@
     },
     {
       "path": "src/memoriesql/application/relation_profile.py"
+    },
+    {
+      "path": "src/memoriesql/application/relation_assessment.py"
+    },
+    {
+      "path": "src/memoriesql/application/relation_inspection.py"
+    },
+    {
+      "path": "src/memoriesql/infrastructure/jobs/relation_assessment_access.py"
+    },
+    {
+      "path": "src/memoriesql/infrastructure/postgres/relation_assessment.py"
     }
   ]
 }

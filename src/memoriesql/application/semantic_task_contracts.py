@@ -35,6 +35,10 @@ if TYPE_CHECKING:
         CompleteInputAccess,
         EvidenceExposureRecorder,
     )
+    from memoriesql.application.relation_assessment import (
+        RelationAssessmentAccess,
+        RelationDeliveryRecorder,
+    )
     from memoriesql.application.source_revisiting import (
         SourceDeliveryRecorder,
         SourceRevisitingAccess,
@@ -617,6 +621,8 @@ class SemanticRunDeps:
     exposure_recorder: EvidenceExposureRecorder | None = None
     source_revisiting: SourceRevisitingAccess | None = None
     source_delivery_recorder: SourceDeliveryRecorder | None = None
+    relation_assessment: RelationAssessmentAccess | None = None
+    relation_delivery_recorder: RelationDeliveryRecorder | None = None
 
 
 @dataclass(frozen=True)

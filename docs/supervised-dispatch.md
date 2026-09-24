@@ -22,7 +22,8 @@ provision or change it. Only revocation is permitted; the task cannot receive a
 replacement approval. No policies are installed by migration.
 
 The profile permits one managed turn and optionally one subsequent hard-bounded
-inference on a distinct profile. All bindings share the same exact approval.
+inference on a distinct profile, or, for a relation task only, a second managed
+turn. All bindings share the same exact approval.
 `ManagedModelAdmission` requires the `ManagedProviderModel` interface; an arbitrary
 SDK model remains denied. The external adapter must start one fresh turn with the
 supplied host-visible frame and disable host retries and fallback. Hidden provider
@@ -36,7 +37,10 @@ failures and ambiguous completion. An intent replay is not permission to dispatc
 again. Restarting a worker does not replenish the allowance. The second route
 requires successfully accounted reported usage and must fit its conservative
 single-inference reservation into the remaining allowance. It cannot run in
-parallel or use an unsettled first answer.
+parallel or use an unsettled first answer. From schema 29, a
+[relation task](relation-assessment.md) may qualify its specialist's second route
+as a managed turn too; the database admits that for no other task, and the
+reported stops still bound both turns.
 
 ## Accounting without invented precision
 

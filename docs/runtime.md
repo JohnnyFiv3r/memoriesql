@@ -5,7 +5,9 @@ hard-bounded model-admission interface, declared evidence scopes (schema 25),
 [supervised managed dispatch](supervised-dispatch.md) (schema 26), the
 terminal-settlement repair and the run-reference binding. Published 0.0.11
 adds [authored claims and relations](authored-claims-and-relations.md)
-(schema 27, author-complete-unit revision 6). Installing or upgrading does not provision trust,
+(schema 27, author-complete-unit revision 6). Unreleased development adds the
+[relation assessment after acceptance](relation-assessment.md) task (schema 29).
+Installing or upgrading does not provision trust,
 activate tasks or configure a provider. See [explicit caller composition](releasing.md#caller-composition-and-explicit-opt-in).
 
 ## Historical N2 extraction scope

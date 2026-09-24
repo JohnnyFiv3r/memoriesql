@@ -113,6 +113,10 @@
     {
       "filename": "0028_semantic_attempt_refusals.sql",
       "sha256": "cbf07dd5a088bd9d74ee68cbf535214d777d5a36faf3f455da863cb6861616a7"
+    },
+    {
+      "filename": "0029_relation_assessment.sql",
+      "sha256": "7a96b7c1e8c9ec1ca44a1952d72439d33582d0f065e2ddae24ff19ebb3afc665"
     }
   ]
 }
