@@ -1098,7 +1098,8 @@ GRANT EXECUTE ON FUNCTION memoriesql.authorize_relation_delivery_v1(uuid, uuid, 
 CREATE FUNCTION memoriesql.relation_judgment_valid_v1(j jsonb, vocabulary jsonb)
 RETURNS boolean
 LANGUAGE sql IMMUTABLE SET search_path = pg_catalog, memoriesql AS $$
-    SELECT jsonb_typeof(j) = 'object'
+    -- A missing or malformed field makes the whole judgment invalid, never unknown.
+    SELECT COALESCE(jsonb_typeof(j) = 'object'
        AND j - ARRAY['proposal_id', 'outcome', 'consistent', 'warranted', 'abstention', 'rationale'] = '{}'::jsonb
        AND COALESCE(j->>'proposal_id' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', false)
        AND jsonb_typeof(j->'rationale') = 'string' AND btrim(j->>'rationale') <> '' AND char_length(j->>'rationale') <= 2048
@@ -1117,7 +1118,7 @@ LANGUAGE sql IMMUTABLE SET search_path = pg_catalog, memoriesql AS $$
                                            AND d.v->'revision' = w.v#>'{relation_type,revision}'
                                            AND (w.v->'relation_type') - ARRAY['key', 'revision'] = '{}'::jsonb))
        AND (SELECT count(*) = count(DISTINCT (w.v#>>'{relation_type,key}', w.v->>'direction'))
-            FROM jsonb_array_elements(j->'warranted') AS w(v))
+            FROM jsonb_array_elements(j->'warranted') AS w(v)), false)
 $$;
 REVOKE ALL ON FUNCTION memoriesql.relation_judgment_valid_v1(jsonb, jsonb) FROM PUBLIC;
 
@@ -1257,7 +1258,9 @@ CREATE FUNCTION memoriesql.relation_assessment_exposure_valid(t uuid, task uuid,
 RETURNS boolean
 LANGUAGE sql VOLATILE SECURITY DEFINER
 SET search_path = pg_catalog, memoriesql SET row_security = off AS $$
-    SELECT memoriesql.supervised_acceptance_valid(t, task) AND EXISTS (
+    -- Answers only within the caller's own tenant.
+    SELECT COALESCE(t = (SELECT c.tenant_id FROM memoriesql.current_authorization_context() AS c), false)
+       AND memoriesql.supervised_acceptance_valid(t, task) AND EXISTS (
         SELECT 1 FROM memoriesql.relation_assessment_deliveries AS d
         JOIN memoriesql.semantic_task_runs AS r ON r.tenant_id = d.tenant_id AND r.attempt_id = d.attempt_id AND r.run_id = d.run_id
         WHERE d.tenant_id = t AND d.task_id = task AND d.attempt_id = attempt AND d.lease_generation = generation
