@@ -24,7 +24,7 @@
     },
     {
       "disposition": "include",
-      "expected_record_count": 57,
+      "expected_record_count": 58,
       "filename": "json-schema.json",
       "kind": "json_schema",
       "note": "Provider-neutral capture, host, source-range, transcript-fold, and harness-lifecycle schemas."
@@ -460,6 +460,17 @@
       "path": "contracts/records/memoriesql-logical-unit-materialization-v1.json",
       "public_sha256": "2d4ac51829c54bd3bc7f4a9294e25c9e089f0f128906181c0d97a17e968a66c8",
       "reason": "Public-authored canonical materialization and unavailable complete-input task binding.",
+      "version": "1"
+    },
+    {
+      "canonical_payload_sha256": "a8446fe1c00f30c4336f3298f90c019a7913119d227cf43df46b1d5de133f74f",
+      "catalog": "json_schema",
+      "classification": "proposed_open_core",
+      "id": "memoriesql.relation-assessment.v1",
+      "package_disposition": "include",
+      "path": "contracts/records/memoriesql-relation-assessment-v1.json",
+      "public_sha256": "292938ab85539b71795a3ec42879cd532ca4aa0f36892a531a215659b6693c98",
+      "reason": "Public-authored relation assessment after acceptance: pinned-pair coverage, provider-neutral specialist agreement and append-only retirements.",
       "version": "1"
     },
     {

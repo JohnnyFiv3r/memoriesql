@@ -99,10 +99,9 @@ class SupervisedQualification(FrozenContractModel):
         if not isinstance(self.routes[0].target, ManagedDispatchTarget):
             raise ValueError("first route must be the managed turn")
         if len(self.routes) == 2:
-            if not isinstance(self.routes[1].target, ProviderRequestTarget):
-                raise ValueError(
-                    "optional follow-up must retain hard single-inference bounds"
-                )
+            # The follow-up keeps hard single-inference bounds, except that the
+            # database admits a second managed turn for a relation task's
+            # specialist (schema 29) and for no other task.
             if self.routes[0].reference == self.routes[1].reference:
                 raise ValueError("qualification routes require distinct exact profiles")
         return self

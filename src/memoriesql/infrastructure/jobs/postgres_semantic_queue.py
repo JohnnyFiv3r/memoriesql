@@ -26,6 +26,10 @@ from memoriesql.application.observation_commands import (
     AuthorInitialObservationsCommand,
     CorrectObservationCommand,
 )
+from memoriesql.application.relation_assessment import (
+    ApplyRelationAssessment,
+    EvidenceExcerpt,
+)
 from memoriesql.application.semantic_task_contracts import (
     EvidenceManifest,
     SemanticDelegatedRunCorrelation,
@@ -464,6 +468,36 @@ class PostgresSemanticTaskQueue:
             content[reference.reference_id] = text
         return content
 
+    def relation_exposure_valid(self, fence: SemanticTaskFence) -> bool:
+        row = self._connection.execute(
+            "SELECT memoriesql.relation_assessment_exposure_valid(%s,%s,%s,%s)",
+            self._fence_parameters(fence)[:4],
+        ).fetchone()
+        return bool(row and row[0])
+
+    def read_relation_evidence(
+        self, fence: SemanticTaskFence
+    ) -> tuple[EvidenceExcerpt, ...]:
+        self._connection.execute("SET LOCAL statement_timeout='5s'")
+        self._connection.execute("SET LOCAL lock_timeout='500ms'")
+        row = self._connection.execute(
+            "SELECT memoriesql.read_relation_assessment_evidence_v1(%s,%s,%s,%s,%s,%s)",
+            self._fence_parameters(fence),
+        ).fetchone()
+        if row is None or not isinstance(row[0], list):
+            raise PermissionError("relation evidence unavailable")
+        return tuple(EvidenceExcerpt.model_validate(item) for item in row[0])
+
+    def authorize_relation_delivery(self, fence: SemanticTaskFence) -> None:
+        self._connection.execute("SET LOCAL statement_timeout='2s'")
+        self._connection.execute("SET LOCAL lock_timeout='500ms'")
+        row = self._connection.execute(
+            "SELECT memoriesql.authorize_relation_delivery_v1(%s,%s,%s,%s,%s,%s)",
+            self._fence_parameters(fence),
+        ).fetchone()
+        if row is None or row[0] is not True:
+            raise PermissionError("relation delivery authorization unavailable")
+
     def complete_exposure_valid(self, fence: SemanticTaskFence) -> bool:
         row = self._connection.execute(
             "SELECT memoriesql.validate_complete_input_acceptance(%s,%s,%s,%s,%s,%s)",
@@ -725,6 +759,23 @@ class PostgresSemanticTaskQueue:
                 worker_instance_id=fence.worker_instance_id,
                 recorded_at=recorded_at,
             )
+        elif (result.task_kind, result.contract_revision) == (
+            "memory.semantic.assess-relations",
+            1,
+        ):
+            relation_command = ApplyRelationAssessment.model_validate(command_data)
+            row = self._connection.execute(
+                "SELECT memoriesql.apply_relation_assessment_v1(%s,%s,%s,%s)",
+                (
+                    Jsonb(relation_command.model_dump(mode="json")),
+                    fence.worker_id,
+                    fence.worker_instance_id,
+                    recorded_at,
+                ),
+            ).fetchone()
+            if row is None or not isinstance(row[0], dict):
+                raise RuntimeError("relation assessment application returned no receipt")
+            return str(row[0]["task_status"])
         elif (result.task_kind, result.contract_revision) == (
             "memory.semantic.author-complete-unit",
             2,

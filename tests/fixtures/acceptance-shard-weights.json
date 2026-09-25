@@ -20,6 +20,7 @@
     "test_managed_dispatch": 57.7,
     "test_postgres_runtime": 7.5,
     "test_real_model_admission": 0.2,
+    "test_relation_assessment": 76.0,
     "test_retained_bytes": 0.0,
     "test_runtime_ownership": 0.0,
     "test_source_revisiting": 60.3,
