@@ -61,7 +61,7 @@ the authoring path must report incomplete work rather than invent an answer.
 ## Start with the published package
 
 Use **Python 3.13 or 3.14** (`>=3.13,<3.15`). Create an environment and pin the
-current published runtime, 0.0.11:
+current published runtime, 0.0.11 (0.0.12 is prepared, not yet published):
 
 ```console
 python3.13 -m venv .venv
@@ -133,6 +133,16 @@ rollback or final usage reconciliation.
   judgments, and must assess every pinned candidate. States are derived from
   append-only history as of a known time; nothing is inferred and no recency
   winner is chosen. Dependencies are unchanged from 0.0.10.
+- **Prepared for 0.0.12, not yet published:**
+  [relation assessment after acceptance](docs/relation-assessment.md)
+  (schema 29): a separate task has an author propose relations between existing
+  statements of explicitly pinned accepted beads, covering every pinned pair, and
+  accepts a proposal only when a provider-neutral specialist finds that exact
+  assertion consistent. Reconsideration is explicit and linked; nothing retries
+  automatically. Assessed relations cannot yet be disputed or retracted, so they
+  are not qualified for live durable use or recall. Schema 28 keeps why canonical
+  apply refused an attempt's output ([runtime](docs/runtime.md)). Dependencies are
+  unchanged from 0.0.11.
 - **Not yet qualified as an end-to-end product:** live-provider composition,
   real-model observation quality, production source/trust provisioning and recall.
 
