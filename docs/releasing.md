@@ -2,7 +2,26 @@
 
 ## Publication record
 
-Not yet published. This preparation packages merged main
+Under the owner's direction, `v0.0.12` was pushed at release main
+`61bd53366ea653aeed1ac13b3df38e63f4b0cb91` on 2026-09-25 (13:37Z), after the
+exact-main package run [36140624584](https://github.com/JohnnyFiv3r/memoriesql/actions/runs/36140624584)
+succeeded. The publishing run
+[36142106238](https://github.com/JohnnyFiv3r/memoriesql/actions/runs/36142106238)
+verified the two archived artifacts against the committed inventory and, after
+the owner's protected approval, uploaded them to PyPI at 13:48Z. Independent
+verification afterwards, using public unauthenticated reads only: the PyPI wheel
+(`bfc00c11…418ce`, 720,620 bytes) and sdist (`dd8f11dc…efbd3`, 643,655 bytes) are
+byte-identical to the archived CI artifacts and match the committed inventory;
+each carries a trusted-publishing attestation for `JohnnyFiv3r/memoriesql`,
+`publish-pypi.yml` and environment `pypi`; PyPI metadata reports version 0.0.12,
+`>=3.13,<3.15` and the three pinned dependencies, and neither file is yanked; a
+fresh hash-pinned installation from the PyPI index reports version 0.0.12, 64
+contracts, 29 migrations and intact `RECORD` hashes, and passes the
+package-isolation and release-installation proofs. `memoriesql==0.0.12` may now be
+pinned. Publication is not private adoption: consumers still pin, qualify and
+compose it separately. The preparation record below is retained as written.
+
+This preparation packages merged main
 `95b160709bda3dc794f139ac761772e70d681aeb` (PR #42 merged 2026-09-25), whose
 exact-main package run is [run 36138162249](https://github.com/JohnnyFiv3r/memoriesql/actions/runs/36138162249)
 (package and both installed-route compatibility jobs). The release changes
