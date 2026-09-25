@@ -61,12 +61,12 @@ the authoring path must report incomplete work rather than invent an answer.
 ## Start with the published package
 
 Use **Python 3.13 or 3.14** (`>=3.13,<3.15`). Create an environment and pin the
-current published runtime, 0.0.11 (0.0.12 is prepared, not yet published):
+current published runtime, 0.0.12:
 
 ```console
 python3.13 -m venv .venv
 . .venv/bin/activate
-python -m pip install memoriesql==0.0.11
+python -m pip install memoriesql==0.0.12
 memoriesql --version
 memoriesql contracts --json
 memoriesql contract memoriesql.capture.connector-cursor --json
@@ -133,7 +133,7 @@ rollback or final usage reconciliation.
   judgments, and must assess every pinned candidate. States are derived from
   append-only history as of a known time; nothing is inferred and no recency
   winner is chosen. Dependencies are unchanged from 0.0.10.
-- **Prepared for 0.0.12, not yet published:**
+- **Published in 0.0.12:**
   [relation assessment after acceptance](docs/relation-assessment.md)
   (schema 29): a separate task has an author propose relations between existing
   statements of explicitly pinned accepted beads, covering every pinned pair, and

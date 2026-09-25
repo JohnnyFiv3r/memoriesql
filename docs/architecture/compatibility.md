@@ -1,10 +1,8 @@
 # Compatibility policy
 
 The `0.x` package line is experimental and provides no general API compatibility
-guarantee. Releases use plain numeric `X.Y.Z` with `vX.Y.Z` tags; `0.0.11` (`v0.0.11`)
-is the current published release. This preparation selects genuine `0.0.12` metadata
-and exact `v0.0.12` repository controls; it does not itself publish or supply
-protected upload approval. Alpha/beta/rc suffixes require a separate owner decision.
+guarantee. Releases use plain numeric `X.Y.Z` with `vX.Y.Z` tags; `0.0.12` (`v0.0.12`)
+is the current published release. Alpha/beta/rc suffixes require a separate owner decision.
 Published releases, their tags and archives remain immutable; the repository
 retains only the current release inventory.
 
@@ -14,9 +12,9 @@ Two narrower integrity rules apply after publication:
 2. Breaking contract-payload changes require a new contract version. A defective
    uploaded wheel/sdist is corrected by a new distribution version, never replacement.
 
-The 0.0.12 preparation preserves dependencies, the bytes of migrations 0001–0027
-and all 63 published contract payloads. It adds migrations 0028 and 0029 and one
-contract record, `memoriesql.relation-assessment.v1` (64 in total), with regenerated
+Published 0.0.12 preserves dependencies, the bytes of migrations 0001–0027
+and all 63 previously published contract payloads. It adds migrations 0028 and 0029
+and one contract record, `memoriesql.relation-assessment.v1` (64 in total), with regenerated
 catalogs. Published 0.0.11 added migration 0027 and two contract records,
 `memoriesql.authored-relations.v1` and `memoriesql.relation-profile.v1`. Python
 support stays `>=3.13,<3.15`; 3.13 and 3.14 are tested.
@@ -77,7 +75,7 @@ unchanged and experimental. Repeated usage does not inflate unique target covera
 See [recovery](../transcript-fold-recovery.md) and [revisiting](../source-revisiting.md).
 
 Published archives and tags remain immutable; the repository keeps only the current
-release inventory, and only the new 0.0.12 inventory is used by the prepared release gate. Production grants,
+release inventory, the 0.0.12 one. Production grants,
 providers, implicit migration or task activation are not supplied by installation.
 
 ## Schema 21 source-stable opt-in in 0.0.7
@@ -101,9 +99,9 @@ No historical equivalence, migration of bindings or duplicate repair is inferred
 Production identity-policy approval and a separately authorized release precede
 consumer adoption. PR-02O/CP-2 and the historical queue evidence remain incomplete.
 
-## Prepared 0.0.12 public composition
+## Published 0.0.12 public composition
 
-The 0.0.12 candidate adds [relation assessment after acceptance](../relation-assessment.md)
+Published 0.0.12 adds [relation assessment after acceptance](../relation-assessment.md)
 on top of published 0.0.11: forward-only schema 29 and task
 `memory.semantic.assess-relations` revision 1, a separately activated task over
 explicitly pinned accepted beads whose proposals are accepted only when a

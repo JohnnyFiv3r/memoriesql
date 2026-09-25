@@ -1,6 +1,6 @@
 # Attributable bead classification v1
 
-Published in 0.0.8 and retained in 0.0.9, 0.0.10, 0.0.11 and the prepared 0.0.12 candidate, this merged slice builds on authored
+Published in 0.0.8 and retained in 0.0.9, 0.0.10, 0.0.11 and 0.0.12, this merged slice builds on authored
 local mentions at schema 22.
 Schema 23/task `memory.semantic.author-complete-unit` revision 5 pins explicitly
 selected registered bead-type definitions at activation. It uses the existing
