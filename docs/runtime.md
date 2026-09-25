@@ -5,8 +5,9 @@ hard-bounded model-admission interface, declared evidence scopes (schema 25),
 [supervised managed dispatch](supervised-dispatch.md) (schema 26), the
 terminal-settlement repair and the run-reference binding. Published 0.0.11
 adds [authored claims and relations](authored-claims-and-relations.md)
-(schema 27, author-complete-unit revision 6). Unreleased development adds the
-[relation assessment after acceptance](relation-assessment.md) task (schema 29).
+(schema 27, author-complete-unit revision 6). The prepared 0.0.12 candidate adds
+the [relation assessment after acceptance](relation-assessment.md) task (schema 29)
+and keeps canonical-apply refusal reasons (schema 28); publication remains gated.
 Installing or upgrading does not provision trust,
 activate tasks or configure a provider. See [explicit caller composition](releasing.md#caller-composition-and-explicit-opt-in).
 
@@ -220,7 +221,7 @@ deterministic and never retried; the attempt no longer stays `running` for the
 reaper, and callers see the outcome in canonical rows. Privilege and transport
 errors are not output refusals and keep their existing handling.
 
-Unreleased development (schema 28) also keeps the refusal's reason. Before
+The prepared 0.0.12 candidate (schema 28) also keeps the refusal's reason. Before
 settling, the worker records the SQLSTATE and the database's primary message
 (one printable line of at most 512 characters) in
 `memoriesql.semantic_attempt_refusals`, once per attempt, through a fenced

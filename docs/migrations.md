@@ -3,10 +3,10 @@
 Published 0.0.11 contains schemas 1–27, including declared evidence scopes
 (schema 25), supervised managed dispatch (schema 26) and
 [authored claims and relations](authored-claims-and-relations.md) (schema 27).
-Unreleased development adds schema 28, which keeps
+The prepared 0.0.12 candidate adds schema 28, which keeps
 [why canonical apply refused](runtime.md#run-references-and-canonical-apply-refusals)
 an attempt's output, and schema 29, the
-[relation assessment after acceptance](relation-assessment.md) task. All historical SQL bytes are preserved. Python 3.13+ is required; qualification covers
+[relation assessment after acceptance](relation-assessment.md) task; publication remains gated. All historical SQL bytes are preserved. Python 3.13+ is required; qualification covers
 3.13 and 3.14 (`>=3.13,<3.15`). Package installation does not apply migrations or
 provision production trust. Upgrade and release authorization remain separate.
 
@@ -15,8 +15,8 @@ Use the exact reviewed artifact and version, never an unbounded
 
 ```console
 python3.13 -m venv migration-env
-migration-env/bin/python -m pip install ./memoriesql-0.0.11-py3-none-any.whl
-migration-env/bin/python -c "from importlib.metadata import version; assert version('memoriesql') == '0.0.11'; from memoriesql.infrastructure.postgres.migration_runner import discover_migrations; assert len(discover_migrations()) == 27"
+migration-env/bin/python -m pip install ./memoriesql-0.0.12-py3-none-any.whl
+migration-env/bin/python -c "from importlib.metadata import version; assert version('memoriesql') == '0.0.12'; from memoriesql.infrastructure.postgres.migration_runner import discover_migrations; assert len(discover_migrations()) == 29"
 ```
 
 The installer rejects this artifact on unsupported interpreters. Publication and
@@ -46,7 +46,7 @@ is a bounded test hook; `migrate()` always uses installed resources.
 
 ## Authority, history, and recovery
 
-`contracts/migration-inventory.json` explicitly owns the development stream of 29 filenames and hashes (27 in published 0.0.11). Root `migrations/` is the sole authored stream. Setuptools
+`contracts/migration-inventory.json` explicitly owns the stream of 29 filenames and hashes packaged by the prepared 0.0.12 (27 in published 0.0.11). Root `migrations/` is the sole authored stream. Setuptools
 stages those exact bytes into the wheel; the sdist retains root SQL and rebuilds
 the same resources. There is no editable second stream or fallback discovery.
 The public provenance inventory records copy/adapt decisions and opaque content

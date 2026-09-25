@@ -16,12 +16,13 @@ qualification, authority, worker composition and qualified model bindings.
 
 ## Install and explore
 
-Use Python **3.13 or 3.14** (`>=3.13,<3.15`). This page describes the published
-0.0.11 distribution; install the exact pin below. Published 0.0.10 remains available
-without authored claims and relations (schema 27).
+Use Python **3.13 or 3.14** (`>=3.13,<3.15`). This page describes the 0.0.12
+distribution. Until its publication is independently verified, use the reviewed
+local wheel; after publication, install the exact pin below. Published 0.0.11
+remains available without relation assessment after acceptance (schemas 28–29).
 
 ```console
-python3.13 -m pip install memoriesql==0.0.11
+python3.13 -m pip install memoriesql==0.0.12
 memoriesql --version
 memoriesql contracts --json
 memoriesql contract memoriesql.capture.connector-cursor --json
@@ -52,7 +53,16 @@ attribution, conditions and uncertainty. Its short title and summary are human
 navigation, not replacement evidence. Meaning is authored by an agent or human;
 deterministic code validates and persists it.
 
-Version 0.0.11 adds authored claims and relations (schema 27, author-complete-unit
+Version 0.0.12 adds relation assessment after acceptance (schema 29, task
+`memory.semantic.assess-relations` revision 1): a separate task pins explicitly
+supplied accepted beads and exact relation-type revisions, an author proposes
+relations between their existing statements and covers every pinned pair, and
+code accepts a proposal only when a provider-neutral specialist finds that exact
+assertion consistent; a disagreement stays unaccepted. Assessed relations cannot
+yet be disputed or retracted, so they are an explicitly incomplete substrate, not
+qualified for live durable use or recall. Schema 28 keeps why canonical apply
+refused an attempt's output. Dependencies are unchanged from 0.0.11. Version
+0.0.11 adds authored claims and relations (schema 27, author-complete-unit
 revision 6): the primary author of one complete unit may optionally propose
 tracked claims, evidence-backed relations to explicitly pinned candidate beads
 and lifecycle judgments about those candidates' claims, and assess every pinned

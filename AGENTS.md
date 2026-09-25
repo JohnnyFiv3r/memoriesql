@@ -95,6 +95,15 @@ automation performs no PyPI sign-in. Protected upload approval remains the
 owner's action; stop when the publishing workflow waits for it. See
 `docs/releasing.md`.
 
+On 2026-09-25, after PR #42 merged schema 29, the owner directed the 0.0.12
+release to its protected upload approval: preparing it from merged main
+`95b160709bda3dc794f139ac761772e70d681aeb`, merging its exact qualified release PR,
+and creating/pushing `v0.0.12` once at subsequently verified current release main.
+The owner advanced the environment tag rule to `v0.0.12` and stated that the PyPI
+configuration is already set: automation performs no PyPI sign-in or check.
+Protected upload approval remains the owner's action; stop when the publishing
+workflow waits for it. See `docs/releasing.md`.
+
 On 2026-09-22, after `v0.0.10` was tagged, the owner decided that with no external
 forks or consumers the repository owes no backwards compatibility until that
 changes, and authorized retiring the historical release bookkeeping: historical
