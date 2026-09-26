@@ -159,9 +159,12 @@ inspection. Agent-led recall and richer relationship/maintenance behavior remain
 development goals, not capabilities provided by the current catalog CLI.
 
 The [PR-05 public interface decision packet](docs/agent-sql-results-v1.md) specifies
-proposed agent-authored SELECT and immutable reusable results. Its exact contract
-and policies await owner approval and independent unseen-holdout freeze; it adds
-no executable recall capability to the published package.
+proposed agent-authored SELECT, immutable reusable results and durable branching
+investigation checkpoints. The approved direction also prioritizes
+[assessed-relation lifecycle completion](docs/relation-assessment.md#forward-lifecycle-completion)
+for relation-aware retrieval. Exact interfaces and workload-qualified policies
+still await owner approval and an independent unseen-holdout freeze; these plans
+add no executable recall capability to the published package.
 
 ## Architectural commitments
 

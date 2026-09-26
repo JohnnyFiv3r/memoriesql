@@ -1,30 +1,42 @@
-# PR-05: agent-authored SELECT and reusable results — decision packet 1
+# PR-05: agent-authored SELECT and reusable results — decision packet 2
 
-Status: **proposed exact contract; Phase A only**, 2026-09-26. Plan A is approved;
-the policies below await explicit approval. This is the public interface authority
-for the proposed slice, not an installed capability or an executable contract.
+Status: **owner-amended contract proposal; Phase A**, 2026-09-26. The product
+decisions below are approved; the amended exact interface and measured policy
+qualification remain incomplete. This is the public proposal authority, not an
+installed capability, executable contract or frozen interface.
 Public main was reverified as `4ee8243045cf52ec2b0b7e81a842cb3b02f716de`;
-the merged Desktop planning reference as `4214b1ad11aeaac117a51b1a6d7524e49a58eb64`.
-This independently authored specification reconciles ADR-0012, SQL-02 §5.0
-revision 2, SQL-10, EG-0001 and the PR-05 execution plan. It contains no private
+the merged Desktop planning reference as `f2d03ecac4831f9231d32fea9d04728f8fd415a6`.
+This independently authored specification reconciles the owner amendment to
+ADR-0012, SQL-02 §5.0 revision 3, SQL-10, EG-0001 and the PR-05 execution plan.
+The corresponding product-doc amendment is not yet merged. It contains no private
 corpus, questions, gold, evidence artifacts or upstream source adaptation.
 
 ## Decision requested
 
-Approve this packet's exact interface and policy together, or identify a specific
-exception. The recommended coherent cut is genuine relational composition over
-accepted observations, evidence bindings, recorded identities and retained
-results; immutable atomic results; whole-result refusal after dependency loss;
-48-hour reuse; and one cumulative execution policy. These are new recommendations,
-not previously approved numbers or measured capacity claims.
+The owner approved broader qualified SQL composition, relation-ready recall,
+resumable branching investigation checkpoints, whole-result refusal after required
+dependency loss, a 30-day temporary-result target and durable explicitly saved
+investigations. The prior packet at `11692c3` is not approved as-is. Complete the
+relation and checkpoint wire cuts and workload-grounded policy choices below,
+then present one revised exact interface for approval. Existing proposed fields
+are retained for review, not silently frozen by this amendment.
 
 | Consequential choice | Recommended default | Material alternative / cost |
 | --- | --- | --- |
-| SQL and provenance | The finite composable subset below, including joins, CTEs and groups; refuse unsupported lineage | Add set/window/recursive forms later with their own provenance contracts; no fixed-template replacement |
+| SQL and provenance | Useful standard composition, including set/window forms; qualify each supported provenance shape | Any exclusion needs a concrete authorization, provenance or execution limitation; bounded recursion needs its own proof, not a blanket grant |
 | Changed authority | Refuse the entire affected result and its descendants, including metadata and aggregates | An explicitly new reduced-authority child needs a separately qualified exclusion contract; omit initially |
 | Time | Same-frame saved-input refinement; fresh, labelled live children for expansion/refresh | Mixed-frame comparison needs a separate typed interpretation; omit initially |
-| Retention | Fixed 48 hours from creation, no renewal; protected bodies share that expiry; minimal audit 30 days | 24 hours reduces exposure but cannot reliably cover next-day reuse; 7-day opt-in adds storage/erasure obligations; omit initially |
-| Work | One policy sized for 40-page enumeration and 1 MiB source reads; enforce duration, bytes, reservations and concurrency | A smaller interactive profile must report W2/W3 limitations; no examined-row promise without an executor fence |
+| Investigation history | Target 20 automatic checkpoints plus named saved checkpoints; restore creates a branch | Checkpoint count is not a query/result-generation limit; exact persistence and resume envelopes need approval |
+| Retention | Target 30 days for temporary results; saved investigations persist without routine expiry while saved, subject to disclosed quotas and erasure | Retain required dependency closure; no earliest-parent expiry trap, silent eviction or arbitrary ancestry-depth cap |
+| Work | Ground duration/byte/reservation/concurrency limits in representative workloads and provenance/storage measurements | Table values below remain unapproved qualification candidates, not capacity guarantees; no silent escalation or examined-row promise without a fence |
+| Relation readiness | Complete and release the bounded assessed-assertion lifecycle dependency and expose qualified relation projections | Observation-only mechanics can progress independently but do not satisfy the intended relation-aware delivery; unrelated claims capabilities need not block it |
+
+The owner authorized the five-step delivery sequence: reconcile this packet and
+product roadmap; scope assessed-relation lifecycle completion; review and explicitly
+approve the amended exact interface and remaining policy; independently freeze the
+contract-bound unseen holdout; then implement, qualify and release publicly before
+private consumption. This does not waive any gate, choose a version, approve a
+protected upload, or authorize provider spending, owner-data access or deployment.
 
 **Implementation gates:** an explicit owner decision must identify the approved
 packet commit and its contract/policy digest, including any recorded amendments.
@@ -115,8 +127,16 @@ from `observations`, and retains every unresolved successor branch; it never
 chooses a recency winner. `corrections` and inspection expose the exact lineage.
 If a required correction dependency is protected, withhold that observation family
 as unavailable rather than present an older version as current. This view says
-nothing about tracked-claim or assessed-relation currentness. Claims, relations,
-conflicts, neighbors, causal paths and proposal relations are **unavailable** in v1.
+nothing about tracked-claim currentness. Tracked claims and proposal-ledger relations remain
+outside this first cut. Assessed relation projections are an intended dependency-
+gated part of the revised interface, not empty placeholder tables. Before exact
+freeze, specify their keys, endpoint/basis statement and evidence bindings, pinned
+type/direction/qualification, current/as-of lifecycle and coverage, against the
+forward contract described in [relation assessment](relation-assessment.md#forward-lifecycle-completion).
+Expose them only after that dependency is qualified and released. Neither an
+accepted replacement nor the legacy inline governance route supplies assessed
+dispute/retraction. No general conflict-completeness, statement-level root or
+specialized causal-path claim follows from a basic relation projection.
 
 ## 2. SQL admission and independent database authority
 
@@ -132,7 +152,8 @@ The material alternative is maintained
 PostgreSQL parser but requiring a qualified native Python binding and build
 closure. Do not silently adopt pglast's different license or port upstream code.
 
-Admit exactly one SELECT: explicit projections/aliases; `WHERE`; `AND/OR/NOT`;
+The retained baseline proposes exactly one SELECT with explicit projections/aliases;
+`WHERE`; `AND/OR/NOT`;
 typed `= <> < <= > >=`, `IS [NOT] NULL`, `IN` over bound values/subselects;
 typed scalar `= ANY($n::type[])` for array membership (only an admitted parameter
 array cast, maximum 64 elements, no null elements; an empty array matches nothing);
@@ -143,9 +164,11 @@ No cross/natural/right/full joins or unconstrained theta joins. Join edges must
 match catalog identity keys or saved-column identity types; self joins are allowed.
 Grouping/CTEs may compose, including aggregates of saved group facts, provided
 the complete witness derivation is supported. Duplicate projected values retain
-bag multiplicity; DISTINCT records collapsed multiplicities.
+bag multiplicity; DISTINCT records collapsed multiplicities. This baseline is
+not the complete amended admission matrix: its exclusions also need documented
+product/authority/provenance/work rationale before exact approval.
 
-The closed function list is `count(*)`, `count(expr)`, `count(DISTINCT expr)`,
+The baseline closed function list is `count(*)`, `count(expr)`, `count(DISTINCT expr)`,
 `sum(numeric|int8)`, `min/max` on comparable scalar types; `lower/upper(text)`,
 `coalesce` of one type, `nullif` of one type; and
 `date_trunc('day'|'month'|'year', timestamptz, 'UTC')`. Numeric `+ - * /`,
@@ -164,10 +187,22 @@ literal cannot manufacture visibility. Bound arrays use the typed ANY form;
 relation names. Catalog relations are discovery
 surfaces, so an unanchored content query may discover new authorized records.
 Reject multiple statements, DML/DDL (also inside CTEs), SELECT INTO, row locking,
-session commands, OFFSET, recursion, windows, set operations, lateral/set-returning
-functions, regex, arbitrary extensions, filesystem/network/large-object functions,
+session commands, side effects, filesystem/network/large-object functions,
 volatile functions, SEM_* calls and physical/system schema names. Return the
 unsupported construct and safe source position; do not rewrite the question.
+
+The earlier blanket exclusions of windows and set operations are superseded.
+Before exact freeze, extend the admission/provenance matrix for useful UNION and
+window compositions (including per-entity ranking, preceding observations and
+partitioned aggregates). Declare each form's multiplicity, ordering, frame and
+contributor semantics. Bounded recursion needs finite termination, cycle handling,
+path/provenance and cancellation/work cases consistent with the existing traversal
+contract; a tiny successful query is not qualification. Other syntax such as
+OFFSET, lateral operations, regex and additional scalar functions is evaluated
+against concrete use cases and safe execution, not excluded merely for convenience.
+Unqualified forms remain explicitly unsupported until their contracts pass; this
+amendment is neither a promise of all PostgreSQL syntax nor permission to execute
+unregistered functions. Preserve full composition, not a fixed-template facade.
 
 **Authority implementation:** use separate trusted bookkeeping and restricted
 query connections, not a privileged login that merely SET ROLEs downward.
@@ -241,7 +276,10 @@ must match the input frame. Catalog_hash must name an installed catalog, with
 no implicit downgrade or assumption that a package version proves compatibility.
 Parents are duplicate-free, at most eight, and include every bound input;
 refine requires inputs, expand/refresh require parents, and discovery/enumeration
-require neither. Ancestor depth is at most 16; overflow is unsupported_query.
+require neither. Do not impose the former 16-level ancestry cap: bound lineage
+inspection and actual work/storage without silently ending a valid investigation
+at an arbitrary generation. Exact depth-independent continuation and retention
+rules must qualify before the amended interface freezes.
 Candidate profile/request must occur together; query text is 1–4,096 UTF-8 bytes,
 max_candidates 1–2,000. The evaluation relation is query-local and may participate
 in ordinary admitted SELECT joins/CTEs/groups; requesting a profile never silently
@@ -310,6 +348,8 @@ Result inspection returns its schema, query/typed parameters, coverage, protecte
 population manifest and paged contributor witnesses. All targets must be visible
 in this run or explicitly admitted; lineage inspection may admit only authorized
 correction neighbors. Unsupported claim/relation facets are refused, not empty.
+The intended assessed-relation inspection shape is still a gap in this amended
+envelope and must be specified against the forward lifecycle contract before freeze.
 Hydration checks both observation and source dependencies and returns exact bytes
 or lossless retained normalized text, unit/part hashes, returned-span SHA-256,
 original locators, occurrence, attribution and any transformation/version label.
@@ -411,10 +451,15 @@ with changes/removals disclosed. Expansion declares a superset scope; refresh
 declares its new cutoff/scope. Neither copies old-frame values into the live
 computation. General live-plus-saved or mixed-frame value joins are unsupported.
 New children get new IDs/receipts; parents never change. A later grant cannot
-silently widen an old result. Every child expires at the earlier of creation plus
-48 hours and the earliest parent's expiry; refresh is not a retention-renewal
-loophole. After expiry, independent live discovery can create a new result but
-cannot claim an unavailable parent's lineage or reuse its original identity.
+silently widen an old result. Temporary results target 30 days from creation;
+access alone does not renew retention. A successfully admitted child or saved
+checkpoint must retain the dependencies required for its promised lifetime, under
+the same accounted quota. Do not cap a fresh child's lifetime at its oldest
+parent's expiry or silently mutate that parent's original metadata. Model retention
+holds separately from immutable result contents; allocation is refused if its
+closure cannot be retained. Saving never resurrects expired/erased content or
+resets work counters. After effective expiry, independent live discovery can
+create a new result but cannot claim reuse of unavailable original bytes.
 
 Materialize the entire admitted query or return no result. Explicit SQL LIMIT is
 part of the query and labelled limited coverage; delivery page limits never alter
@@ -443,6 +488,37 @@ about specific source contents still require the eligible record and hydration.
 Source-root sets are preserved when recorded; unavailable root qualification stays
 unknown. No corroboration count is invented from joins, aliases or repeated chunks.
 
+### Investigation checkpoints and explicit resume
+
+This is approved product behavior; its exact public mutation/read envelopes,
+atomicity, idempotency, concurrent branch updates and retention-release rules must
+be completed before exact-contract approval. It adds derived investigation state
+under PostgreSQL authority, not a second memory ledger or task executor.
+
+Persist a checkpoint manifest referencing immutable result IDs/digests and their
+frames, the question, explicit investigation progress, concise recorded findings
+and predecessor/branch identity. Do not store hidden model reasoning or promise
+restoration of model internals. PR-05 owns provider-neutral manifests and result
+retention/access; PR-06 interprets agent working state and chooses the next query.
+Do not copy the full database or duplicate result bodies at each checkpoint.
+
+Target 20 automatic checkpoints per investigation, plus explicitly named saves.
+This is a history-management target, not a limit on queries, refinements or result
+generations. Restoring an authorized checkpoint creates a new branch and admits
+selected saved evidence into the current run; it does not alter canonical memories,
+erase receipts, refund consumed allowance or recover revoked permissions. Restart
+preserves unfinished run counters; only an explicitly admitted new run receives
+its own policy allowance. Old-frame evidence cannot silently become current.
+
+Named saved investigations persist while saved, subject to current authority,
+declared operator quotas and governed erasure, without routine expiry. Retain their
+complete required result/provenance closure. Pruning automatic history removes only
+unneeded references: it cannot remove content supporting another retained save or
+valid child. Explicit deletion, release of a save and subsequent garbage collection
+must have defined ownership and replay behavior. Measure actual unique retained
+bytes, shared attribution, provenance and indexes before settling quotas. Stable
+IDs and manifest pointers alone do not prove inexpensive storage or usable resume.
+
 ## 5. Revocation, erasure, retention and work policy
 
 Reauthorize the whole result closure, including parents, authoring context, source/
@@ -450,7 +526,8 @@ model dependencies, correction/identity dependencies, contributor/population
 manifests, query text, parameters, counts, hashes and lineage. Losing any required
 dependency refuses all access and derivation. No row filtering, count decrement,
 old identity substitution or stale metadata escapes under the original ID.
-Regrant may restore access only if content remains retained and unexpired.
+Regrant may restore access only if content remains retained under its effective
+retention policy (including any admitted save/closure hold), and not erased.
 Reduction/salvage and sharing between principals are excluded from v1.
 
 Governed erasure first blocks disclosure at the same authority fence and invalidates
@@ -465,8 +542,12 @@ independent fact. Backup/WAL physical erasure follows governed storage lifecycle
 this interface promises immediate logical withdrawal, not instantaneous deletion
 of every physical replica. Failed cleanup remains owned and explicitly pending.
 
-Recommend one **unmeasured qualification policy**, replacing both proposed numeric
-profiles; no larger allowance is caller-selectable. Values are binary byte units:
+The following values are **unapproved qualification candidates**, not product
+capacity guarantees or a settled single allowance. The amended workload set must
+justify them or replace them explicitly before exact policy approval. Larger
+allowances require operator admission; no automatic escalation or hidden reset.
+Separate query materialization/storage from preview/page delivery. Values are
+binary byte units:
 
 | Counter / fence | Proposed default |
 | --- | --- |
@@ -476,7 +557,7 @@ profiles; no larger allowance is caller-selectable. Values are binary byte units
 | SQL structure | 16 KiB SQL, 64 parameters / 64 KiB parameter bytes, 8 saved inputs, 8 relation references, 4 CTEs, 8 join/group nodes, expression depth 32 |
 | Delivery | Default 20 / maximum 50 rows per page, 256 KiB whole response; helpers 16 observations / 8 source selections; hydration 64 KiB per response, at most 16 KiB per selected span |
 | Transport | 8 MiB per run, including helper bytes, metadata, cursors and redelivery; reserve 16 KiB for terminal diagnostics |
-| Retention admission | 16 MiB per result including rows/query/receipt/provenance; 64 MiB newly allocated per run; 128 MiB and 256 unexpired results per workspace; reserve pessimistically before execution and settle actual physical allocation |
+| Retention admission | Candidate 16 MiB per result and 64 MiB new allocation/run; former 128 MiB/256-result workspace caps require requalification for 30-day results, 20 checkpoints and durable saves; account shared dependency holds and provenance, reserve before execution and settle actual allocation |
 | Query settings | `work_mem=4MiB`, `hash_mem_multiplier=1`, `temp_file_limit=32MiB`, parallel query disabled, JIT off; restricted login cannot change them |
 
 **Work unit is reserved database duration plus measured storage/transport**, not
@@ -504,9 +585,13 @@ server/parser/role compatibility and fail closed if fences are unavailable.
 Store actual row/provenance allocations (including index/row overhead) and shared
 storage attribution; no zero-cost descendants or accounting double counts.
 Reservations block excess allocation; do not evict still-valid results or silently
-extend expiry on page access. Provenance overflow refuses an otherwise small
-aggregate. Response overflow never emits half a row; use a smaller projection or
-bounded hydration. No query result or cache becomes a second canonical authority.
+extend expiry on page access. Explicit retention holds are separately admitted and
+accounted; revocation/erasure override them. Provenance overflow refuses an
+otherwise small aggregate. A response too large for direct display uses a labelled
+bounded preview/page while the complete committed result remains addressable;
+preview clipping is never stored-result truncation or a coverage claim. Response
+overflow never emits half a row; a single oversized field needs a bounded read or
+explicit limitation. No query result or cache becomes a second canonical authority.
 
 ## 6. Acceptance, exclusions and next handoff
 
@@ -516,10 +601,12 @@ cases. Their parameters must freeze with the approved policy before Phase B:
 | Workload | Required acceptance / honest failure |
 | --- | --- |
 | W1: 100K observations; ≤2K candidates, alias collisions and permission skew | Useful independently authored filters/joins/CTEs and saved-input refinement; missing tenant predicates cannot widen scope; revoked/latest-hidden identities do not leak |
-| W2: million-row corpus; 2K authorized output rows at roughly 2 KiB/row | Complete immutable materialization, 40 pages of 50, restart and follow-up within the 8 MiB/64-access budget **including** metadata; allocation/work overflow reports budget_exhausted, not complete enumeration |
-| W3: 36 monthly groups over up to 100K eligible records, skew/fanout/corrections/late arrivals | Counts and distinct counts preserve multiplicity and paged contributor/population witnesses; prove cold and reused plans; a 15-second or 16-MiB provenance miss fails honestly even with tiny output |
+| W2: million-row corpus; 2K authorized output rows at roughly 2 KiB/row | Complete immutable materialization, 40 pages of 50, restart and follow-up **including** metadata. Test the candidate 8 MiB/64-access envelope and revise it explicitly if it cannot support this product workload; honest budget_exhausted proves the fence, not successful enumeration or capacity qualification |
+| W3: 36 monthly groups over up to 100K eligible records, skew/fanout/corrections/late arrivals | Counts and distinct counts preserve multiplicity and paged contributor/population witnesses; prove useful cold and reused plans. A candidate 15-second or 16-MiB provenance miss must fail honestly, but does not qualify the representative workload; measure and resolve the mismatch before claiming delivery |
 | W4: four 256-KiB retained source units | Sixteen 64-KiB calls using multiple ≤16-KiB exact spans transfer 1 MiB plus metadata; hashes/locators/attribution survive, gaps remain explicit; no new source family |
-| W5: restart, next-day reuse, several children, revoke one contributor, then expiry/erasure | Same parent bytes/ID, explicit child edges, no discovery rerun on import/page, cross-run evidence admission, denied aggregates/metadata, retained charges and cleanup; test both sides of 48-hour expiry |
+| W5: restart, cross-session reuse, >20 refinements/checkpoints, saved branch, dependency revocation and expiry/erasure | Same parent bytes/ID, explicit restore branches, no discovery rerun on import/page, no budget reset or ancestry cliff; test both sides of 30-day temporary expiry, durable saves and retention of their closure without duplication or stale access |
+| W6: relation lifecycle and composition | Released assessed confirmation/dispute/retraction, current/as-of state, endpoint/basis evidence and applicable roots; withdrawal cannot remain traversable in a fresh evaluation, while historical saved results remain historical rather than current support |
+| W7: SQL breadth and presentation | Useful set/window compositions and separately admitted bounded traversal with contributor/coverage semantics; a tiny preview over a larger saved result must support later complete paging/counting without new discovery |
 
 Additional acceptance: tenant/resource/mixed-authority isolation through joins,
 outer nonmatches and aggregates; guessed anchors and SQL/function/catalog/CTE
@@ -545,7 +632,7 @@ this packet sets operational budgets, not new evaluation thresholds. Selection
 uses sealed returned-evidence/status/coverage bundles. Generated-answer diagnostics
 cannot rank/pass a retrieval condition; a forbidden-answer veto remains a separate
 integrated-product safety gate. Source/indexing cost and amortized reuse cost are
-reported separately. W1–W5 do not waive SQL-10's later 10M-row production gate.
+reported separately. W1–W7 do not waive SQL-10's later 10M-row production gate.
 
 After both entry attestations, implement the smallest coherent public slice with
 fictional development fixtures. Run focused checks, one complete relevant
@@ -563,8 +650,17 @@ candidate implementation or new migration is authorized in this Phase A packet.
 No Gridex dependency/adaptation, model/provider calls, spending, owner data,
 private core workaround, release/tag/publication, deployment or checkpoint.
 Any later approved adaptation needs exact source revision/files, license/NOTICE,
-modification attribution and boundary tests. Unsupported claim/relation lifecycle
-stays unavailable. PR-06 owns model investigation, finish and answers.
+modification attribution and boundary tests. Unsupported claims stay unavailable;
+the intended relation-aware delivery requires its named lifecycle dependency, not
+an indefinite exclusion. PR-06 owns model investigation, checkpoint working-state
+interpretation, finish and answers.
+
+Before this amended packet is ready for exact approval, finish the relation
+projection and lifecycle dependency reference; the checkpoint/save/restore/branch
+wire and retention-hold contracts; the broadened SQL/provenance matrix; and justified
+work/storage policy candidates. Do not treat the prior packet's review or digest
+as approval of these new contracts. No unseen holdout is frozen against this
+incomplete revision, and no PR-05 runtime gate is opened by the documentation edit.
 
 Next dependency handoff: owner approval of the exact packet commit/digest →
 independent custodian freeze attestation → public implementation/qualification →

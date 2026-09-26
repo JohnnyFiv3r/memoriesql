@@ -196,6 +196,39 @@ supervised dispatch is unchanged, and no provider, credential, profile binding o
 default composition is included. Composition binds the author and specialist
 profiles explicitly.
 
+## Forward lifecycle completion
+
+The owner approved completing governed assessed-relation lifecycle as a near-term
+dependency of relation-aware retrieval. This section is a forward scope, not a
+claim that revision 1 implements it. Replacement alone is not withdrawal.
+
+The next contract must provide append-only confirmation, dispute and retraction
+for assessed assertions without mutating accepted bead authorship or obtaining a
+new model judgment. Before interface freeze, specify eligible actors and current
+delegated authority, reason/evidence requirements, legal transitions, optimistic
+concurrency, idempotency and recorded/effective-time semantics. Preserve existing
+acceptance, replacement, specialist attribution and historical receipts.
+
+Qualify one consistent current/as-of interpretation across authorized inspection,
+retrieval eligibility, traversal, applicable evidence roots and cycle checks. A
+retracted assertion cannot remain current support through another read path;
+historical inspection must preserve what was known at its frame. Dispute must
+remain visible as uncertainty, neither erased nor silently treated as settled.
+Endpoint and basis-statement authorization still apply at access and write time.
+
+Acceptance needs installed-artifact tests for tenant isolation, revocation,
+concurrent governance, replay, every transition and agreement among those read
+paths. Use a forward contract/migration; do not rewrite historical SQL or relabel
+the existing human governance route for bead relations as assessed governance.
+Release the qualified public change before product composition or relation-aware
+retrieval consumes it. The exact state/admission interface remains an owner
+decision before freeze.
+
+This cut does not require tracked claims, partial correction, statement-level
+derivation roots, specialist reconsideration or maintenance automation. Their
+separate limitations remain; applicable roots here means only qualified existing
+root semantics. Nor does this mechanical cut certify semantic relationship quality.
+
 ## Limitations of revision 1
 
 - No tracked claims or claim updates after acceptance.
