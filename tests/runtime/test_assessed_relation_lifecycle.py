@@ -1548,6 +1548,113 @@ class AssessedLifecycle(fixtures.RelationAssessment):
                 (self.tenant, bead),
             )[0]
 
+    def test_lifecycle_pending_assertion_can_be_retired_without_clearing_correction(
+        self,
+    ) -> None:
+        source, target, relation = self.assertion()
+        successor = self.correction(source)
+        self.assertEqual(self.read(source).relations[0].state, "reassessment_pending")
+        self.activate_relations(source, (target,), key="pending-replacement")
+        self.propose(
+            lambda packet: [
+                self.proposal(
+                    packet,
+                    "supports",
+                    self.endpoint(packet, source, 0),
+                    self.endpoint(packet, target, 0),
+                    basis="agent_inferred",
+                    retires=dict(
+                        relation_kind="assessed",
+                        relation_id=str(relation),
+                        reason="Fictional explicit pending replacement.",
+                    ),
+                )
+            ]
+        )
+        self.run_relations()
+        old = next(r for r in self.read(source).relations if r.relation_id == relation)
+        self.assertEqual(old.state, "superseded")
+        self.assertTrue(old.correction_pending)
+        self.assertIn(successor, old.endpoint_corrected_by)
+        self.assertEqual(len(old.superseded_by), 1)
+        self.assertFalse(old.support_eligible)
+
+    def test_lifecycle_not_accepted_assertion_cannot_be_retired(self) -> None:
+        source, target, relation = self.assertion(accepted=False)
+        before = self.beads_as_they_were()
+        self.specialist_plan = None
+        self.activate_relations(source, (target,), key="unaccepted-replacement")
+        self.propose(
+            lambda packet: [
+                self.proposal(
+                    packet,
+                    "supports",
+                    self.endpoint(packet, source, 0),
+                    self.endpoint(packet, target, 0),
+                    basis="agent_inferred",
+                    retires=dict(
+                        relation_kind="assessed",
+                        relation_id=str(relation),
+                        reason="Fictional illegal unaccepted retirement.",
+                    ),
+                )
+            ]
+        )
+        self.run_relations(expect="failed_terminal")
+        self.assertEqual(self.beads_as_they_were(), before)
+        self.assertEqual(
+            self.row("SELECT count(*) FROM memoriesql.relation_retirements")[0], 0
+        )
+        self.assertEqual(
+            self.row("SELECT count(*) FROM memoriesql.assessed_relations")[0], 1
+        )
+        self.assertEqual(self.read(source).relations[0].state, "not_accepted")
+
+    def test_lifecycle_equal_recorded_times_follow_sequence_not_uuid(self) -> None:
+        source, _, relation = self.assertion()
+        known = self.row("SELECT clock_timestamp()")[0]
+        # Generation-only fixture: exercise the installed function's identical
+        # authority, transition, concurrency, receipt and storage code with a tied
+        # recording clock and deliberately reversed event UUID order. No stored
+        # original event/receipt is changed and no lifecycle rule is substituted.
+        definition = self.row(
+            "SELECT pg_get_functiondef('memoriesql.record_assessed_relation_event_v1(jsonb)'::regprocedure)"
+        )[0]
+        high, low = uuid.UUID(int=(1 << 128) - 2), uuid.UUID(int=1)
+        tied = definition.replace(
+            "eid uuid:=uuidv7()",
+            "eid uuid:=CASE WHEN request->>'action'='dispute' THEN '"
+            + str(high)
+            + "'::uuid ELSE '"
+            + str(low)
+            + "'::uuid END",
+            1,
+        ).replace(
+            "now_at:=clock_timestamp();",
+            "now_at:='" + known.isoformat() + "'::timestamptz;",
+            1,
+        )
+        self.assertNotEqual(tied, definition)
+        self.db.execute(tied)
+        try:
+            dispute = self.governance.record_event(
+                self.lifecycle_command(source, relation, "dispute", "tied-dispute")
+            )
+            confirm_command = self.lifecycle_command(
+                source, relation, "confirm", "tied-confirm"
+            )
+            confirm = self.governance.record_event(confirm_command)
+        finally:
+            self.db.execute(definition)
+        self.assertEqual(dispute.recorded_at, confirm.recorded_at)
+        self.assertGreater(dispute.relation_event_id.int, confirm.relation_event_id.int)
+        self.assertEqual(confirm.previous_event_id, dispute.relation_event_id)
+        current = self.read(source, known).relations[0]
+        self.assertEqual(current.state, "active")
+        self.assertEqual([e.event_number for e in current.events], [1, 2])
+        self.assertEqual([e.action for e in current.events], ["dispute", "confirm"])
+        self.assertTrue(self.governance.record_event(confirm_command).replayed)
+
     def test_lifecycle_legacy_authored_mixed_cycle_reservation_and_release(
         self,
     ) -> None:

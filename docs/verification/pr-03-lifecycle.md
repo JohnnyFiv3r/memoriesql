@@ -93,6 +93,15 @@ replay/conflict/incomplete receipts, independent-key and same-key concurrency,
 correction/confirmation and replacement/withdrawal races, as-of/current agreement,
 protected saved records, uncertainty propagation, observing unions, SCC ties,
 128/129 bounds, uncapped event history and whole-response budget refusal.
+The final suite has 38 cases. Three final transition cases prove pending
+retirement retaining correction, refusal to retire an unaccepted proposal and
+equal recorded times ordered by event sequence despite reversed UUID order. The
+last uses a generation-only recording-clock/UUID fixture through the installed
+public governance function; it changes no stored event/receipt or lifecycle rule.
+Two final projection refinements bind authored acceptance to the exact authoring
+version and pass the once-resolved cutoff into legacy-v1 inspection. No signature
+or approved document changes.
+
 Four broad-review regression cases also qualify legacy authored mixed cycles and
 later permitted revisions, separately cited query/raw-read-only evidence (using a
 trusted denial-only policy fixture), and a canonical non-observation unit with
