@@ -5,10 +5,10 @@ decisions below are approved; the amended exact interface and measured policy
 qualification remain incomplete. This is the public proposal authority, not an
 installed capability, executable contract or frozen interface.
 Public main was reverified as `4ee8243045cf52ec2b0b7e81a842cb3b02f716de`;
-the merged Desktop planning reference as `f2d03ecac4831f9231d32fea9d04728f8fd415a6`.
+the merged Desktop planning amendment as `84f93ec272cc1e868efffb0765b8366bdc5bf987`.
 This independently authored specification reconciles the owner amendment to
 ADR-0012, SQL-02 §5.0 revision 3, SQL-10, EG-0001 and the PR-05 execution plan.
-The corresponding product-doc amendment is not yet merged. It contains no private
+The corresponding product-doc amendment is merged. This packet contains no private
 corpus, questions, gold, evidence artifacts or upstream source adaptation.
 
 ## Decision requested
@@ -38,32 +38,62 @@ contract-bound unseen holdout; then implement, qualify and release publicly befo
 private consumption. This does not waive any gate, choose a version, approve a
 protected upload, or authorize provider spending, owner-data access or deployment.
 
-**Implementation gates:** an explicit owner decision must identify the approved
-packet commit and its contract/policy digest, including any recorded amendments.
+**Implementation gates:** an explicit owner decision must identify the complete
+approval record below: packet commit/digest, pinned normative dependency blobs
+and any recorded amendments. The packet digest alone is not the interface identity.
 Separately, the independent PR-04/evaluation custodian must attest that a loadable
 source-attributed corpus is ready and an unseen holdout was frozen **against that
-approved digest before any PR-05 runtime or candidate-condition implementation**.
+approved record before any PR-05 runtime or candidate-condition implementation**.
 Its attestation names the sealed holdout manifest digest, both conditions and
 unchanged threshold/profile manifests, without exposing questions or gold.
 The implementer neither creates nor reads that holdout. A prose merge, architecture
 approval, or green CI satisfies neither gate. Both gates are presently **pending**.
 
-Approval digest procedure v1: `packet_sha256` is lowercase SHA-256 of the exact
+Approval digest procedure v2: `packet_sha256` is lowercase SHA-256 of the exact
 Git blob bytes at `<packet_commit>:docs/agent-sql-results-v1.md`, including its
 final newline; no Markdown rendering, Unicode normalization or whitespace cleanup.
 In Bash/Zsh, enable `set -o pipefail`, then reproduce with
 `git show <packet_commit>:docs/agent-sql-results-v1.md | shasum -a 256`.
 Record a digest only on zero pipeline exit; missing/mistyped commit or blob fails
 the gate even if the last program printed an empty-input hash.
-The closed approval record is `{version:1,packet_commit:text(40 lowercase hex),
-packet_path:"docs/agent-sql-results-v1.md",algorithm:"sha256",packet_sha256:text,
-approval_ref:text,amendments:[{amendment_ref:text,supersedes_packet_sha256:text}]}`.
-Initial amendments is empty. Any amendment must first be incorporated into a new
-committed packet; the record lists its amendment ref/preceding digest, and the
-owner explicitly approves the new whole-packet digest. An external prose exception
-cannot alter the effective contract. The custodian attestation repeats that exact
-record/digest and its separate sealed evaluation manifest digests; a mismatch
-requires a new approval/freeze rather than an inferred equivalent contract.
+Every external document that defines interface semantics is also a required
+normative dependency. In this revision that list is exactly
+`docs/relation-assessment.md` (the **whole blob**, not a mutable heading/URL).
+Resolve it at the same `packet_commit` in this public repository and hash its exact
+Git blob bytes by the same procedure, including the final newline:
+`git show <packet_commit>:docs/relation-assessment.md | shasum -a 256`, with
+`pipefail` enabled and zero pipeline exit required. Never substitute a checkout,
+branch tip, latest release or live hyperlink for an approved blob. Informational
+research, compatibility/release-process links and private roadmap context cannot
+silently add interface rules. Any further normative dependency must be listed
+here and pinned before approval, including transitive interface dependencies.
+
+Define `DependencyPin={path:text,commit:text(40 lowercase hex),sha256:text(64
+lowercase hex)}` and `InterfacePin={packet_commit:text(40 lowercase hex),
+packet_path:"docs/agent-sql-results-v1.md",algorithm:"sha256",
+packet_sha256:text(64 lowercase hex),dependencies:[DependencyPin]}`. Paths are
+unique repository-relative file paths, sorted lexicographically, without `..`,
+absolute paths or URL fragments; every dependency commit equals `packet_commit`.
+The closed approval record is `{version:2,interface:InterfacePin,approval_ref:text,
+amendments:[{amendment_ref:text,supersedes:InterfacePin}]}`. Initial amendments is
+empty. The custodian repeats the **entire** exact record and its separate sealed
+evaluation manifest digests; it verifies every blob and required dependency entry.
+Missing, duplicate, extra, mismatched or unpinned normative entries fail the gate.
+Version 1 records are insufficient for this amended interface.
+
+An amendment to either the packet or a normative dependency requires a newly
+committed interface and explicit owner approval of its complete new record, then
+a matching custodian freeze. `supersedes` identifies the preceding whole pin, not
+just its packet hash: a lifecycle-only change can leave the packet hash unchanged.
+Later edits elsewhere do not mutate the already approved pinned interface; using
+those edits requires the new approval/freeze. No external prose exception or
+inferred equivalence can change the effective contract.
+
+Approval-verification acceptance must reject: a correct packet hash paired with
+an altered lifecycle blob; a missing or wrong-commit dependency pin; missing blob
+lookup despite an empty-input hash being printed; and a custodian record that
+matches the packet but omits or changes dependency pins. Exact unchanged pins
+must verify even if an unrelated branch tip later changes.
 
 ## 1. Exact logical catalog
 
@@ -133,6 +163,8 @@ gated part of the revised interface, not empty placeholder tables. Before exact
 freeze, specify their keys, endpoint/basis statement and evidence bindings, pinned
 type/direction/qualification, current/as-of lifecycle and coverage, against the
 forward contract described in [relation assessment](relation-assessment.md#forward-lifecycle-completion).
+That link is navigational; its required semantics come only from the exact
+`docs/relation-assessment.md` blob pinned in the v2 approval record.
 Expose them only after that dependency is qualified and released. Neither an
 accepted replacement nor the legacy inline governance route supplies assessed
 dispute/retraction. No general conflict-completeness, statement-level root or
@@ -317,6 +349,16 @@ work {reserved_ms,observed_db_ms?,charged_ms,transport_bytes,retained_bytes,
       cancellation_state,measurement_state:measured|unavailable}
 ```
 
+`result.expires_at` is the immutable deadline for **standalone temporary access**
+to this result, not a physical-deletion deadline or the lifetime of an admitted
+checkpoint access context. It never changes on child creation, save or page read.
+The complete checkpoint request/access-basis envelope is still a required addition
+before exact freeze: it must identify the specific retained checkpoint and root
+result, bind that context into fingerprints/cursors/disclosure receipts, and expose
+its current access basis and end condition separately from `result.expires_at`.
+The baseline actions above alone do not yet implement saved-checkpoint access.
+An old cursor or a result ID cannot implicitly select that access context.
+
 `row_ref` is the saved 1-based int8 ordinal; `fact_ref` is
 `{result_id:uuid,row_ref:int8}`; query/lineage/provenance/receipt/frame refs are UUIDs.
 `evidence_refs` and visibility lists contain `{kind:observation|statement|source|
@@ -430,7 +472,10 @@ do not emit alternate literal UTF-8/optional slash escapes. This describes exact
 bytes for independent implementations; a serializer-profile change needs a new
 contract/catalog revision, not rehashing old results.
 Retries/redelivery do not rerun the query; uncertain ownership is recovered first.
-Expired/erased bindings never recreate a result under the original ID/key.
+Unavailable bindings never recreate a result under the original ID/key. A valid
+checkpoint context may deliver already retained bytes under their original result
+ID after standalone access expires; that is contextual reuse, not recreation or
+renewal of the expired standalone route. Erased bytes can never be recovered here.
 
 Use a short repeatable-read query snapshot, with an explicit recorded-knowledge
 cutoff and transaction-visible input manifest. `known_at` excludes later-recorded
@@ -451,15 +496,34 @@ with changes/removals disclosed. Expansion declares a superset scope; refresh
 declares its new cutoff/scope. Neither copies old-frame values into the live
 computation. General live-plus-saved or mixed-frame value joins are unsupported.
 New children get new IDs/receipts; parents never change. A later grant cannot
-silently widen an old result. Temporary results target 30 days from creation;
-access alone does not renew retention. A successfully admitted child or saved
-checkpoint must retain the dependencies required for its promised lifetime, under
-the same accounted quota. Do not cap a fresh child's lifetime at its oldest
-parent's expiry or silently mutate that parent's original metadata. Model retention
-holds separately from immutable result contents; allocation is refused if its
-closure cannot be retained. Saving never resurrects expired/erased content or
-resets work counters. After effective expiry, independent live discovery can
-create a new result but cannot claim reuse of unavailable original bytes.
+silently widen an old result. Temporary results target 30 days of standalone
+access from creation. Distinguish three things:
+
+- **Standalone disclosure:** direct page/import/inspect/SQL-input reuse requires
+  trusted time strictly before that result's original `expires_at`, as well as
+  current authority. A child or physical retention hold does not extend this route.
+- **Dependency retention:** an admitted child/checkpoint retains the exact bytes
+  and provenance required for its own promised lifetime under the accounted quota.
+  Such a hold prevents premature physical purge, but grants no standalone parent
+  access. A valid child's computation and bounded provenance inspection may use
+  required held dependencies despite the parent's standalone expiry; this does not
+  admit the parent as a fresh query input or expose unrelated parent contents.
+- **Checkpoint disclosure:** an explicit, currently valid retained checkpoint may
+  expose the root result IDs/digests selected in its immutable manifest, under a
+  separately receipted checkpoint-bound access context. That route survives the
+  roots' standalone expiry while the checkpoint is retained (without routine
+  expiry for an active named save), subject to current authority and erasure.
+  Unselected ancestors are dependency-only, not automatically saved/queryable roots.
+
+Do not cap a new child's life at its oldest parent's standalone expiry or mutate
+the parent's immutable metadata/digest. Admit required holds atomically with the
+child/checkpoint/save or refuse the allocation. A checkpoint may select a root
+only while that root is accessible directly or through an already valid explicit
+checkpoint context; physically held but otherwise expired data cannot be rescued
+by guessing its ID. Extending a child chain alone never renews an ancestor's direct
+access. New children are distinct, currently authorized and fully charged results.
+After all disclosure contexts end, only independent live discovery can produce
+new accessible results; it cannot claim reuse of unavailable original bytes.
 
 Materialize the entire admitted query or return no result. Explicit SQL LIMIT is
 part of the query and labelled limited coverage; delivery page limits never alter
@@ -469,7 +533,9 @@ ORDER BY and internal tie witnesses; absent ordering, seal a deterministic
 witness order. Duplicate values have distinct row ordinals. Authenticated cursors
 bind result/digest/schema/frame/order/next ordinal and owner scope; current consuming
 run authorization is checked on every page. Index changes do not invalidate saved
-pages. Bad/tampered cursors are invalid_request; expiry is unavailable.
+pages. Bad/tampered cursors are invalid_request; an expired disclosure context is
+unavailable even if its bytes are still held. Cursors cannot switch from direct
+to checkpoint disclosure implicitly.
 
 Each output row/group has a compositional witness DAG: exact input row/revision
 pins, intermediate result-fact refs, membership, multiplicity and transformation.
@@ -518,6 +584,21 @@ valid child. Explicit deletion, release of a save and subsequent garbage collect
 must have defined ownership and replay behavior. Measure actual unique retained
 bytes, shared attribution, provenance and indexes before settling quotas. Stable
 IDs and manifest pointers alone do not prove inexpensive storage or usable resume.
+Releasing a save or pruning a checkpoint ends only that checkpoint's disclosure
+context and releases its holds; it neither extends nor shortens a result's original
+standalone deadline. Another valid child or save may still retain the bytes.
+Restoring a checkpoint never turns dependency-only ancestors into selected roots.
+
+Required boundary examples (future installed-runtime acceptance, not executed
+proof in this proposal):
+
+| Situation | Required result |
+| --- | --- |
+| Parent P expires on day 30; child C created on day 29 has its own day-59 expiry | On day 31, direct P paging/query-input reuse is unavailable. C remains usable with necessary held provenance; P's original digest/expiry do not change. |
+| Before day 30, named save S explicitly selects P as a root | On day 31, direct P access is unavailable, but explicitly S-bound P read/refinement is allowed after current authorization; it preserves P's identity/frame and reports the checkpoint access basis. |
+| P is only an unselected ancestor of C in save S | S preserves C and required evidence, not unrestricted P access. P cannot be promoted to a root after direct expiry merely because its bytes remain held. |
+| S is released after P's direct expiry, but C still needs P | S-bound P access stops immediately; C's bounded dependency use remains. Retain P until no valid holder needs it; do not silently renew P or break C. |
+| Revocation/regrant or governed erasure affects P | Revocation blocks every affected disclosure context. Regrant alone restores neither expired direct access nor a released save; an existing valid checkpoint may resume only if bytes remain and all current authority checks pass. Erasure overrides every hold and invalidates dependent disclosure. |
 
 ## 5. Revocation, erasure, retention and work policy
 
@@ -526,14 +607,21 @@ model dependencies, correction/identity dependencies, contributor/population
 manifests, query text, parameters, counts, hashes and lineage. Losing any required
 dependency refuses all access and derivation. No row filtering, count decrement,
 old identity substitution or stale metadata escapes under the original ID.
-Regrant may restore access only if content remains retained under its effective
-retention policy (including any admitted save/closure hold), and not erased.
+Regrant may restore access only through a still-valid disclosure context (unexpired
+standalone access or an explicit retained checkpoint selecting that root), with
+all required bytes retained and no erasure. Physical retention alone cannot make
+an expired direct route or released checkpoint usable again. The standalone
+expiry of a held ancestor is not evidence loss for a valid child; missing, erased
+or unauthorized required dependency content still refuses the whole child.
 Reduction/salvage and sharing between principals are excluded from v1.
 
 Governed erasure first blocks disclosure at the same authority fence and invalidates
 affected descendants; purge result bodies, queries/parameters, manifests, hashes,
 indexes and sensitive receipt bodies within a proposed 24-hour cleanup SLA.
-Retention expiry blocks access immediately, with the same cleanup SLA. Leave only
+Disclosure-context expiry/release blocks that route immediately. Ordinary physical
+cleanup starts only when no unexpired standalone route or valid child/checkpoint
+hold requires the data, with the same proposed cleanup SLA. Governed erasure
+overrides those holds and blocks every affected route before purge. Leave only
 a 30-day private tombstone/audit containing opaque run/step/result identifiers,
 terminal state, timestamps, noncontent work charges and idempotency disposition;
 no source IDs, content/query digests, counts or contributor names. It is not an
@@ -662,6 +750,6 @@ work/storage policy candidates. Do not treat the prior packet's review or digest
 as approval of these new contracts. No unseen holdout is frozen against this
 incomplete revision, and no PR-05 runtime gate is opened by the documentation edit.
 
-Next dependency handoff: owner approval of the exact packet commit/digest →
+Next dependency handoff: owner approval of the complete v2 interface pin record →
 independent custodian freeze attestation → public implementation/qualification →
 separately authorized public release → released-version Desktop consumption.
