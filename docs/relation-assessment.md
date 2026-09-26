@@ -628,11 +628,100 @@ unchanged; any new shape has its own version.
 
 ### Qualified roots and cycle consistency
 
-Qualified root computation retains the existing bead/source-unit lineage union,
-source-object identity, whole-lineage 128-bead refusal and earliest-bead source
-for bottom strongly connected components. It adds no statement-level root,
-proposition store, semantic inference or confidence threshold. Shared sources
-still count once; a transformation creates no corroborating root.
+The algorithm below is normative and self-contained. It states the historically
+qualified bead/source-unit computation explicitly, with L4's forward eligibility
+and gap checks. Historical SQL/code names do not supply additional rules. It adds
+no statement-level root, proposition store, semantic inference or confidence
+threshold. Shared sources count once; a transformation creates no corroborating
+root. All record selection and authorization use the one frame defined above.
+
+**Inputs and graph identity.** A bead record supplies its `bead_id`, immutable
+`created_at`, primary `event_id` and observed `source_unit_id`. Its primary source
+event supplies the canonical `source_object_id`. An evidence unit supplies its
+`source_unit_id` and primary source event. These are stored identities, not IDs
+inferred from matching text, names or hashes. A root is always a source-object
+UUID. The graph has bead UUID vertices and a directed edge from source bead to
+target bead for every eligible built-in `derived_from` assertion (canonical type
+ID `30000000-0000-4000-8000-000000000009`) between different beads. Include authored
+and accepted assessed assertions at their pinned historical revision; workspace
+predicates with a similar name are not derivation edges. Collapse duplicate bead
+edges to a set; do not collapse their assertion/provenance dependencies. Evidence
+and governance statements do not create graph edges.
+
+**Roots of one bead.** For starting bead B, compute the distinct reachable set R,
+including B (zero-length reachability), using eligible derivation edges. A bead
+with no eligible outgoing edge is a singleton terminal component, subject to the
+gap checks below. Exploration uses sorted bead UUIDs and sorted distinct neighbor
+UUIDs, with an already-visited set; depth does not impose a second limit. Exactly
+128 distinct reached beads, including B, is admitted. Discovering a 129th refuses
+the entire root computation as `budget_exhausted`, before returning any roots,
+partial counts or partial gaps. This is a per-starting-bead reachable-set bound,
+not a bound on path length, number of derivation assertions or final root count.
+The result must not depend on query-plan/physical row order.
+
+After the complete bounded set is known, form its complete eligible edge set and
+reflexive/transitive reachability. Two vertices are in the same strongly connected
+component exactly when each reaches the other. Select **bottom** components:
+components with no outgoing edge to a different component. For each bottom
+component choose the representative with minimum `(bead.created_at, bead_id)`;
+timestamp comparison is by recorded UTC instant, followed by UUID unsigned
+128-bit order (equivalently canonical lowercase UUID text order). This is stored
+bead creation time, not relation acceptance, source occurrence/effective time or
+most recent confirmation. The representative contributes the source-object UUID
+of its primary source event. Return the distinct union over bottom components,
+sorted by that same UUID order. Members of a cyclic bottom component contribute
+one representative source before source-object deduplication. An upstream bead
+adds no source of its own. A singleton original contributes its own primary source;
+multiple bottom components contribute their roots, with shared source objects
+counted once. SCC representative choice resolves a mechanical provenance tie,
+not competing semantic assertions.
+
+**Roots of one evidence unit.** For unit U, select every same-tenant bead record
+whose exact `source_unit_id=U` and whose `created_at` is visible and at or before
+the recording cutoff. This historically qualified observing set is not restricted
+to the statement that cited U, the newest bead, one workspace-filtered subset or
+a supplied candidate list. Compute the above bead roots for every member and
+take their sorted distinct source-object union. Each member has its own 128-bead
+reachable-set check; do not apply an invented 128-element cap to the combined
+unit union or truncate the observing set. If there are no observing beads, U's
+primary source object is its singleton original root. A caller must already have
+selected U and its source event as visible by this frame; a future/missing unit
+cannot acquire a fallback root. An authorized, structurally complete computation
+on these nonempty inputs has at least one root. An unexpectedly empty union is
+`unavailable`, not zero independent evidence and not permission for a fallback.
+
+**Roots and count of an assertion.** Select its exact stored assertion-evidence
+links recorded by the cutoff, compute unit roots for each, and return each item's
+sorted root set. The assertion's `independent_root_count` is the cardinality of
+the distinct union of those source-object IDs across all required evidence items.
+Repeated source objects and repeated appearances of one unit contribute once.
+Endpoint/basis statement count, relation confidence and governance-event evidence
+do not alter this union. One independent count never means multiple citations
+are independently corroborating. Roots of a governance evidence unit can be
+inspected separately; citing it does not add it to assertion evidence.
+
+**Qualification before output.** The following L4 checks apply to every reached
+bead and every member of an evidence unit's observing set before any root set is
+reported. Any gap makes that unit's root set null; union all its explanatory gap
+records, deduplicate by `(kind,relation_id,reason)` and sort by kind, UUID and
+reason. `disputed` takes precedence over `corrected` for one nonterminal assertion
+that has both conditions; terminal retraction uses `withdrawn`, and an uncovered
+supersession uses `replacement_gap`. Other assertions' gaps remain represented.
+Any unqualified required unit makes the assertion count null, never a partial
+union. No-observing-bead fallback is allowed only for the genuinely empty
+observing set, never because an observing bead is denied or indeterminate.
+
+Every observing/reached bead, used assertion, excluded assertion explaining a
+gap, retirement/replacement/correction, primary source event and returned root
+source is a protected dependency, even when only its ID/hash/count would be
+returned. A required same-tenant bead in another workspace that is unreadable
+refuses the complete computation; do not filter it and compute a smaller union.
+Missing/inconsistent required source-event mappings also refuse as `unavailable`.
+Authority loss takes precedence over disclosure of a semantic gap. Time/response
+bounds can refuse the whole read in addition to the per-bead bound. Both roots
+and their complete dependency manifests must fit their owning response/result
+admission; an algorithm may not return a truncated set merely because the final
+source-object union is small.
 
 Use only support-eligible `derived_from` assertions of either kind between
 different beads as derivation edges at the selected frame. For each reached bead,
@@ -702,6 +791,7 @@ Required fictional installed-wheel and installed-sdist cases:
 | Time and replay | Null/past/future/naive effective time, late-recorded withdrawal, equal recorded timestamps, actual concurrent visibility manifests, restart/lost response, byte-identical old acceptance and receipts |
 | Read agreement | New/legacy inspection, fresh eligibility and ordinary traversal, both kinds of derivation, root counts/gaps and cycle reservation agree at one frame before/during/after dispute, confirm, retract and replacement |
 | Derived uncertainty | Multi-hop/shared roots, withdrawn/disputed edge inside lineage, no false own-source corroboration, eligible replacement chains, forbidden statement cycle versus permitted bead SCC, same-bead unsupported roots and explicit overflow |
+| Exact root algorithm | Multiple observing beads per unit, union across evidence units, true no-observer fallback versus denied/gapped observers; SCC representative by created_at then UUID (including equal timestamps and conflicting source clocks); 128 reachable beads pass and 129 refuse for each seed; a combined unit union above 128 is not silently capped |
 | Preservation | Accepted bead version/statements/evidence/authorship receipts, proposal/judgment, author/specialist runs/deliveries, pair coverage, earlier lifecycle/retirement and failed/pending task evidence stay unchanged; governance schedules zero semantic/provider work |
 
 Build exact wheel/sdist from the implementation head; install each in a fresh
