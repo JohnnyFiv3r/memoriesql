@@ -67,6 +67,17 @@ agents cannot alter it or select internal authorization columns.
 | `observation_topics` (`link_id:uuid`) | `bead_id:uuid`, `bead_version_id:uuid`, `topic_id:uuid`, `topic_revision_id:uuid`, `recorded_at:timestamptz` |
 | `input.<alias>` (saved `row_ref`) | The exact immutable saved column schema; binding is through the request, never a physical table identifier |
 
+Reserved evaluation capability `evaluation_v1.candidates` has key
+`candidate_ref:uuid` and columns `bead_id:uuid`, `bead_version_id:uuid`,
+`evidence_ref:uuid?`, `surface:text` = `authored|source`, `score:float8` (finite
+diagnostic), `match_ref:uuid` (paged terms/spans/structured-match explanation).
+It exists only in an explicitly selected, qualified evaluation profile. The same
+schema covers FTS/pg_trgm and the optional in-Postgres vector condition; profile
+and ranking/index revisions are receipted. All endpoints are authorized before
+ranking and disclosure. Candidate/match IDs and scores are discovery diagnostics,
+not evidence or visibility of underlying source contents. No production/default
+profile or automatic embedding/provider call is admitted.
+
 `source_precision` is `instant|second|minute|hour|day|month|year|interval|unknown`.
 Original timestamps, qualifications, render clause/support/omission mappings and
 locators remain losslessly available through inspection. Null renders stay null;
@@ -189,7 +200,7 @@ Every action has `{contract_version:1, run_ref:uuid, step_key:uuid, kind}`:
 
 | `kind` | Required payload (optional fields marked ?) |
 | --- | --- |
-| `query` | `catalog_hash`, `sql:text`, `parameters:[{position:int,type,value}]`, `inputs:[{alias,result_id}]`, `parents:[result_id]`, `scope:{source_refs:[uuid],known_at:timestamptz,view:resolved\|historical}`, `intent:discover\|enumerate\|refine\|expand\|refresh`, `max_result_bytes:int`, `page_size:int`, `candidate_profile_ref:uuid?` |
+| `query` | `catalog_hash`, `sql:text`, `parameters:[{position:int,type,value}]`, `inputs:[{alias,result_id}]`, `parents:[result_id]`, `scope:{source_refs:[uuid],known_at:timestamptz,view:resolved\|historical}`, `intent:discover\|enumerate\|refine\|expand\|refresh`, `max_result_bytes:int`, `page_size:int`, `candidate_profile_ref:uuid?`, `candidate_request:{surface:authored\|source\|both,query:text,max_candidates:int}?` |
 | `reuse_result` | `result_id:uuid`, `page_size:int`, `cursor:text?` |
 | `inspect` | `observation_refs:[{bead_id,bead_version_id}]`, `result_id:uuid?`, `provenance_ref:uuid?`, `facets:[content\|provenance\|lifecycle\|evidence_metadata]`, `view`, `known_at:timestamptz`, `cursor:text?` (at least one target; at most 16 observations; provenance_ref needs its visible result) |
 | `hydrate_source` | `selections:[{evidence_ref:uuid,part_id:uuid,lineage_ordinal:int?,representation:raw_bytes\|normalized_text,start:int,end:int}]`, `max_bytes:int`, `cursor:text?` (1–8 selections, half-open intervals; raw needs its recorded lineage ordinal) |
@@ -210,6 +221,15 @@ no implicit downgrade or assumption that a package version proves compatibility.
 Parents are duplicate-free, at most eight, and include every bound input;
 refine requires inputs, expand/refresh require parents, and discovery/enumeration
 require neither. Ancestor depth is at most 16; overflow is unsupported_query.
+Candidate profile/request must occur together; query text is 1–4,096 UTF-8 bytes,
+max_candidates 1–2,000. The evaluation relation is query-local and may participate
+in ordinary admitted SELECT joins/CTEs/groups; requesting a profile never silently
+changes LIKE or another base SQL predicate into a ranked search. Profiles bind
+preregistered tokenizer/FTS/trigram/vector/ranking parameters and their input
+artifacts; vector qualification here uses fictional retained development vectors,
+with no inference hidden in query execution. Match inspection through its visible
+result/provenance ref returns `{match_ref,candidate_ref,surface,terms:[text],
+spans:[{evidence_ref,start:int,end:int}],structured_keys:[text],profile_ref:uuid}`.
 
 Every reply has `{contract_version:1, run_ref, step_key, outcome, receipt_ref,
 access_receipt_ref, remaining, error?}`. Outcomes are `available | unavailable |
@@ -475,9 +495,11 @@ normalize in fictional replay. No test is a semantic-quality claim.
 Preserve EG-0001's **FTS/pg_trgm** and **optional in-Postgres vector candidate**
 conditions as separately named evaluation-only peers, with identical logical SQL,
 reuse, authority, hydration and policy. `candidate_profile_ref` has no default;
-if unavailable, return unsupported_query, never empty/fallback. Candidate extension
-catalogs/ranking parameters require custodian preregistration against the approved
-base contract before implementation; no candidate-condition code in Phase A.
+if unavailable, return unsupported_query, never empty/fallback. The reserved
+evaluation catalog above and profile/ranking parameters require custodian
+preregistration against the approved contract before implementation; no
+candidate-condition code in Phase A. Any schema amendment returns to the exact
+contract approval/freeze gates rather than silently modifying the frozen interface.
 Preserve the existing signed quality floors/material-lift thresholds unchanged;
 this packet sets operational budgets, not new evaluation thresholds. Selection
 uses sealed returned-evidence/status/coverage bundles. Generated-answer diagnostics
