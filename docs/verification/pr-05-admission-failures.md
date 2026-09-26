@@ -31,3 +31,15 @@ Artifact inspection initially rejected the new dependency notice against the his
 Review of 0af2171 found four issues. The catalog extraction had omitted fields containing digits: four required content_sha256 columns, including the second source_units key. The registry and generated metadata now match the byte-version identity; native same-unit/different-hash fixtures preserve both versions and join exact bytes. Bound text parameters now carry explicit C collation, verified by native pg_collation_for and parameter-only matching/sets. DISTINCT ON's actual SQLGlot on argument was already rejected by the closed argument list, but it now has an explicit shape refusal and negative case protecting uniqueness derivation. Phase checks reject illegal aggregate/window placement and nesting while native SUM(COUNT(*)) OVER remains useful and admitted.
 
 The first repair check had a strict-mypy loop-variable narrowing failure and one unit assertion expecting a different identifier-quoting spelling; both were corrected. All 74 source cases, 12 native composition cases and unchanged 5 authority cases pass. These repairs change package bytes; the earlier a3ef572a wheel / 30befa8c sdist receipt is historical and cannot qualify the repaired head. The native fixture now explicitly sets UTC through trusted setup, eliminating the earlier inherited-zoneinfo warning without weakening the isolation guard.
+
+## Installed convergence assertion repair
+
+Exact-head CI run 36278007879 at 9fb7111 failed both Python 3.13 and 3.14 installed
+convergence lane: the runtime-ownership case still expected 58 modules, while
+the approved inventory contains 61 after adding the three internal SQL modules.
+Its subsequent dependency assertion also omitted the selected SQLGlot pin.
+Both expectations now name the current inventory and exact dependency list;
+the independent per-module installed-distribution ownership check and frozen
+canonical task/executor hashes are unchanged. Shards 1 and 3 passed (116 and
+113 cases); shard 2 ran 158 cases with that one failure. This failed run remains
+historical evidence and does not qualify the repaired head.
