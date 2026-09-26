@@ -1,10 +1,11 @@
-# PR-05: agent-authored SELECT and reusable results — decision packet 2
+# PR-05: agent-authored SELECT and reusable results — decision packet 3
 
-Status: **owner-amended contract proposal; Phase A**, 2026-09-26. The product
-decisions below are approved; the amended exact interface and measured policy
-qualification remain incomplete. This is the public proposal authority, not an
-installed capability, executable contract or frozen interface.
-Public main was reverified as `4ee8243045cf52ec2b0b7e81a842cb3b02f716de`;
+Status: **completed interface proposal for exact approval; Phase A**, 2026-09-26.
+Product direction is approved; this proposed wire contract and policy candidates
+await exact approval and runtime qualification. This is the public proposal
+authority, not an installed capability, executable contract or frozen interface.
+Public main was reverified as `e8cfa0df3c1f8109c199a8126c0556624bc421b6`
+(PR #45 accepted `2a5b9a6b3b1bcc3a3cbff21186ee95d85fea80a2`);
 the merged Desktop planning amendment as `84f93ec272cc1e868efffb0765b8366bdc5bf987`.
 This independently authored specification reconciles the owner amendment to
 ADR-0012, SQL-02 §5.0 revision 3, SQL-10, EG-0001 and the PR-05 execution plan.
@@ -13,22 +14,22 @@ corpus, questions, gold, evidence artifacts or upstream source adaptation.
 
 ## Decision requested
 
-The owner approved broader qualified SQL composition, relation-ready recall,
-resumable branching investigation checkpoints, whole-result refusal after required
-dependency loss, a 30-day temporary-result target and durable explicitly saved
-investigations. The prior packet at `11692c3` is not approved as-is. Complete the
-relation and checkpoint wire cuts and workload-grounded policy choices below,
-then present one revised exact interface for approval. Existing proposed fields
-are retained for review, not silently frozen by this amendment.
+Approve this whole packet and its pinned relation dependency, including the
+explicit disclosure contexts and policy candidates in §5. The approved direction
+remains genuine composable SELECT, immutable reusable results, relation-ready
+recall and branching investigations. `11692c3`, its hash and its 48-hour policy
+are superseded. Only consequential policy alternatives appear below; parser pin,
+indexes and physical layout are engineering qualification work.
 
 | Consequential choice | Recommended default | Material alternative / cost |
 | --- | --- | --- |
-| SQL and provenance | Useful standard composition, including set/window forms; qualify each supported provenance shape | Any exclusion needs a concrete authorization, provenance or execution limitation; bounded recursion needs its own proof, not a blanket grant |
+| SQL and provenance | Closed composable matrix in §2, including sets/windows and bounded recursion | Unqualified shapes return unsupported; do not substitute templates or broaden functions |
 | Changed authority | Refuse the entire affected result and its descendants, including metadata and aggregates | An explicitly new reduced-authority child needs a separately qualified exclusion contract; omit initially |
 | Time | Same-frame saved-input refinement; fresh, labelled live children for expansion/refresh | Mixed-frame comparison needs a separate typed interpretation; omit initially |
-| Investigation history | Target 20 automatic checkpoints plus named saved checkpoints; restore creates a branch | Checkpoint count is not a query/result-generation limit; exact persistence and resume envelopes need approval |
+| Investigation history | 20 retained automatic checkpoints per investigation, 30-day automatic lifetime; named saves persist while saved; restore creates a branch | Longer automatic history increases holds/storage; it is not a query/result-generation limit |
 | Retention | Target 30 days for temporary results; saved investigations persist without routine expiry while saved, subject to disclosed quotas and erasure | Retain required dependency closure; no earliest-parent expiry trap, silent eviction or arbitrary ancestry-depth cap |
-| Work | Ground duration/byte/reservation/concurrency limits in representative workloads and provenance/storage measurements | Table values below remain unapproved qualification candidates, not capacity guarantees; no silent escalation or examined-row promise without a fence |
+| Erasure/audit | Immediate logical withdrawal; owned primary cleanup within 24 hours; noncontent private tombstones for 30 days | A different cleanup/audit period changes operational/privacy commitments and needs explicit approval; backup/WAL lifecycle is separately declared |
+| Work/storage | One disclosed baseline candidate in §5, justified by W1–W7 sizing; runtime fit measurements pending | Operator-admitted larger policy requires explicit new run/storage admission; no silent escalation or unsupported resource promise |
 | Relation readiness | Complete and release the bounded assessed-assertion lifecycle dependency and expose qualified relation projections | Observation-only mechanics can progress independently but do not satisfy the intended relation-aware delivery; unrelated claims capabilities need not block it |
 
 The owner authorized the five-step delivery sequence: reconcile this packet and
@@ -158,21 +159,54 @@ chooses a recency winner. `corrections` and inspection expose the exact lineage.
 If a required correction dependency is protected, withhold that observation family
 as unavailable rather than present an older version as current. This view says
 nothing about tracked-claim currentness. Tracked claims and proposal-ledger relations remain
-outside this first cut. Assessed relation projections are an intended dependency-
-gated part of the revised interface, not empty placeholder tables. Before exact
-freeze, specify their keys, endpoint/basis statement and evidence bindings, pinned
-type/direction/qualification, current/as-of lifecycle and coverage, against the
-forward contract described in [relation assessment](relation-assessment.md#forward-lifecycle-completion).
-That link is navigational; its required semantics come only from the exact
-`docs/relation-assessment.md` blob pinned in the v2 approval record.
-Expose them only after that dependency is qualified and released. Neither an
-accepted replacement nor the legacy inline governance route supplies assessed
-dispute/retraction. No general conflict-completeness, statement-level root or
-specialized causal-path claim follows from a basic relation projection.
+outside this first cut. The following assessed projections consume the single
+PR-03 projector defined in the pinned whole
+[relation assessment](relation-assessment.md#forward-lifecycle-completion) blob.
+They are unavailable until the forward lifecycle dependency is qualified and
+released; 0.0.12 rows or an empty placeholder cannot satisfy that capability.
+
+| Relation (key) | Exact columns beyond the key |
+| --- | --- |
+| `assessed_relations` (`relation_id:uuid`) | `task_id:uuid`, `type_key:text`, `type_revision:int8`, `source_bead_id:uuid`, `source_bead_version_id:uuid`, `target_bead_id:uuid`, `target_bead_version_id:uuid`, `basis:text` = `source_stated\|agent_inferred`, `rationale:text`, `qualification:text?`, `author_confidence:numeric`, `author_run_ref:text`, `specialist_run_ref:text`, `acceptance_receipt_id:uuid`, `recorded_at:timestamptz`, `state:text` = `active\|disputed\|reassessment_pending\|retracted\|superseded`, `head_token:text`, `support_eligible:bool`, `support_reason:text?` = `disputed\|corrected\|retracted\|superseded`, `correction_pending:bool`, `roots_status:text` = `qualified\|indeterminate\|unsupported`, `independent_root_count:int8?` |
+| `relation_statements` (`relation_id:uuid`, `role:text`, `statement_id:uuid`) | `role` = `source\|target\|basis`, `bead_id:uuid`, `bead_version_id:uuid`; exact text joins `statements` |
+| `relation_evidence` (`relation_id:uuid`, `statement_id:uuid`, `source_unit_id:uuid`) | `content_sha256:text`, `evidence_ref:uuid`, `roots_status:text` as above |
+| `relation_events` (`event_id:uuid`) | `relation_id:uuid`, `action:text` = `confirm\|dispute\|retract\|retire`, `related_relation_id:uuid?`, `reason:text`, `origin:text` = `authored\|governed`, `authoring_bead_id:uuid?`, `effective_at:timestamptz?`, `recorded_at:timestamptz`, `event_number:int8?`, `previous_event_id:uuid?`, `recorded_by_principal_id:uuid`, `recorded_by_user_id:uuid?`, `idempotency_receipt_id:uuid` |
+| `relation_event_evidence` (`event_id:uuid`, `statement_id:uuid`, `source_unit_id:uuid`) | `content_sha256:text`, `evidence_ref:uuid`; human event evidence does not become assertion support |
+| `relation_types` (`type_key:text`, `type_revision:int8`) | `namespace:text` = `memoriesql\|workspace`, `label:text`, `definition:text`, `endpoint_rule:text`, `forward_reading:text`, `inverse_reading:text`, `symmetric:bool`, `evidence_expectation:text?`, `example:text?`, `counterexample:text?`, `cycle_policy:text` = `permitted\|forbidden` |
+| `relation_pairs` (`task_id:uuid`, `first_bead_id:uuid`, `second_bead_id:uuid`) | `first_bead_version_id:uuid`, `second_bead_version_id:uuid`, `disposition:text` = `related\|not_related\|abstained\|not_assessed`, `abstention:text?` = `no_fit\|insufficient_evidence\|ambiguous`, `reason:text?` |
+| `relation_corrections` (`relation_id:uuid`, `role:text`, `correcting_bead_id:uuid`) | `role` = `source\|target\|basis`, `correcting_bead_version_id:uuid` (resolved at this frame, not falsely a lifecycle-event pin) |
+| `relation_replacements` (`relation_id:uuid`, `replacement_relation_id:uuid`) | No additional columns; exact recorded replacement, never revival after its withdrawal |
+
+Only accepted assessed assertions enter this SQL catalog; unaccepted proposals and
+specialist judgments remain inspectable through the exact PR-03 v3 Assertion /
+Judgment types. The SQL orientation is always stored source → target, never the
+bead-relative incoming/outgoing/basis inspection direction. Type definitions are
+the pinned revisions, including later-deactivated vocabulary. Relative direction,
+full judgments and qualified evidence-root IDs/gaps are returned by `inspect` as
+`relations:[Assertion],relation_types:[TypeDefinition],relation_pairs:[PairDisposition]`
+using that dependency's closed types; no lifecycle writes are exposed here.
+Root/gap arrays are paged witness members, not inferred corroboration. A count is
+nonnull only for qualified roots; no partial independent count is a complete union.
+
+Current/as-of scans use the shared recording cutoff plus actual snapshot manifest;
+effective time is attributed metadata, never operative scheduling. Confirmation
+cannot rebind corrected pins; dispute is inspectable uncertainty, and terminal
+withdrawal never revives a predecessor. Only support_eligible edges enter settled
+path support. Conservative root gaps and distinct cycle reservations follow
+PR-03 choices L1–L5. Saved frames retain original state/roots after later semantic
+changes under current authority; they cannot claim current support without fresh
+validation. Pair dispositions cover supplied bead pairs, not all statement pairs
+or all competing assertions. No general conflict completeness, statement-level
+roots or specialized causal-path guarantee follows from these projections.
+Every row binds endpoint/basis, event evidence/actor attribution, type, judgment,
+correction/replacement and applicable root/gap authority. Unreadable families
+cannot enter a discovery population; no protected counts are disclosed. A targeted
+read or reuse whose required closure loses authority refuses wholly, rather than
+showing an older state or partial root count.
 
 ## 2. SQL admission and independent database authority
 
-Recommend maintained [SQLGlot](https://sqlglot.com/sqlglot.html), pure Python,
+Propose maintained [SQLGlot](https://sqlglot.com/sqlglot.html), pure Python,
 MIT-licensed, with explicit PostgreSQL dialect and an exact qualified pin in
 Phase B. Use its AST, not its optimizer, execution engine or cross-dialect
 transpilation. It is not a complete PostgreSQL validator: reject unknown AST
@@ -183,8 +217,14 @@ The material alternative is maintained
 [libpg_query](https://pganalyze.com/blog/pg-query-2-0-postgres-query-parser), using the actual extracted
 PostgreSQL parser but requiring a qualified native Python binding and build
 closure. Do not silently adopt pglast's different license or port upstream code.
+The engineering rationale is its maintained PostgreSQL dialect, inspectable AST
+and no mandatory native build for supported Python. This is a proposal, not a
+selected dependency: an exact version, parser/emitter differential corpus, license
+closure and installed 3.13/3.14 results are **pending**. Minor SQLGlot releases can
+break compatibility; never float its pin. Failure to qualify requires an explicit
+engineering revision and equivalent admission evidence, not unchecked execution.
 
-The retained baseline proposes exactly one SELECT with explicit projections/aliases;
+The proposed contract admits exactly one SELECT with explicit projections/aliases;
 `WHERE`; `AND/OR/NOT`;
 typed `= <> < <= > >=`, `IS [NOT] NULL`, `IN` over bound values/subselects;
 typed scalar `= ANY($n::type[])` for array membership (only an admitted parameter
@@ -192,20 +232,21 @@ array cast, maximum 64 elements, no null elements; an empty array matches nothin
 `LIKE/ILIKE` over text; non-recursive SELECT-only CTEs; correlated `EXISTS` /
 `NOT EXISTS`; inner and left equality joins; `GROUP BY`, `HAVING`, `DISTINCT`;
 `ORDER BY ... ASC/DESC NULLS FIRST/LAST`; and an explicit nonnegative `LIMIT`.
-No cross/natural/right/full joins or unconstrained theta joins. Join edges must
-match catalog identity keys or saved-column identity types; self joins are allowed.
+No cross/natural joins or unconstrained theta joins. Inner/left/right/full equality
+joins use catalog identity keys or compatible saved-column identity types;
+self joins are allowed. Right/full nonmatches require both population witnesses.
 Grouping/CTEs may compose, including aggregates of saved group facts, provided
 the complete witness derivation is supported. Duplicate projected values retain
-bag multiplicity; DISTINCT records collapsed multiplicities. This baseline is
-not the complete amended admission matrix: its exclusions also need documented
-product/authority/provenance/work rationale before exact approval.
+bag multiplicity; DISTINCT records collapsed multiplicities. This baseline is not
+qualified at runtime merely by being listed here. Each shape below has mandatory
+acceptance obligations; admission is unavailable until they pass.
 
 The baseline closed function list is `count(*)`, `count(expr)`, `count(DISTINCT expr)`,
-`sum(numeric|int8)`, `min/max` on comparable scalar types; `lower/upper(text)`,
+`sum/avg(numeric|int8)`, `min/max` on comparable scalar types; `lower/upper(text)`,
 `coalesce` of one type, `nullif` of one type; and
 `date_trunc('day'|'month'|'year', timestamptz, 'UTC')`. Numeric `+ - * /`,
 searched `CASE`, and checked `int8↔numeric` casts are allowed. COUNT returns int8;
-SUM follows PostgreSQL int8/numeric promotion; wire numerics are decimal strings,
+SUM/AVG follow PostgreSQL numeric promotion; wire numerics are decimal strings,
 never lossy JSON floats. Null/empty aggregate semantics are PostgreSQL's. All
 operators/functions/casts resolve to inventoried builtin OIDs and signatures;
 text comparison uses the catalog's pinned deterministic collation. No identifier
@@ -223,18 +264,63 @@ session commands, side effects, filesystem/network/large-object functions,
 volatile functions, SEM_* calls and physical/system schema names. Return the
 unsupported construct and safe source position; do not rewrite the question.
 
-The earlier blanket exclusions of windows and set operations are superseded.
-Before exact freeze, extend the admission/provenance matrix for useful UNION and
-window compositions (including per-entity ranking, preceding observations and
-partitioned aggregates). Declare each form's multiplicity, ordering, frame and
-contributor semantics. Bounded recursion needs finite termination, cycle handling,
-path/provenance and cancellation/work cases consistent with the existing traversal
-contract; a tiny successful query is not qualification. Other syntax such as
-OFFSET, lateral operations, regex and additional scalar functions is evaluated
-against concrete use cases and safe execution, not excluded merely for convenience.
-Unqualified forms remain explicitly unsupported until their contracts pass; this
-amendment is neither a promise of all PostgreSQL syntax nor permission to execute
-unregistered functions. Preserve full composition, not a fixed-template facade.
+### Composition and provenance qualification matrix
+
+All rows use one frame/catalog, preserve the whole required authority closure and
+pay the same execution/provenance/storage budget. These are composable grammar
+rules, not canned query texts. No runtime qualification is claimed in Phase A.
+
+| Admitted shape | Saved derivation / mandatory qualification |
+| --- | --- |
+| Projection, predicates, scalar subqueries, SELECT-only CTEs | Exact row witnesses, expression tree, null/three-valued logic and scalar cardinality errors; CTE reuse cannot drop dependencies |
+| Equality inner/left/right/full joins | Bag tuple witnesses and multiplicities; nonmatches retain searched population/predicate, including both sides for full joins; qualify skew/fanout and protected nonmatches |
+| EXISTS/NOT EXISTS, IN/subqueries | Positive witnesses plus searched population and null/exclusion basis; protected excluded records cannot leak absence |
+| GROUP/HAVING, admitted aggregates including FILTER(WHERE...), DISTINCT | Group members/multiplicity and full tested population, including rejected groups and empty aggregate; count tuples, distinct identities and roots separately |
+| UNION ALL / UNION | Branch identity and bag contributions / collapsed duplicates with all witnesses; column counts, SQL types and semantic ref kinds must match, no implicit ref-to-text erasure |
+| INTERSECT [ALL] / EXCEPT [ALL] | Both branch populations, equality classes and multiplicities; ALL uses min(left,right) / max(left-right,0); even a right branch with no returned contributor remains required authority |
+| row_number, rank, dense_rank | Partition/order/peer witnesses; row_number needs a total visible key order; ties remain ties for rank/dense_rank, never changed by a hidden tie breaker |
+| lag/lead(expr, offset, default?) | Offset is structural integer 0–64, default same scalar type; total visible key order, partition and chosen-neighbor/nonexistence witnesses; respect nulls |
+| Window COUNT/SUM/AVG/MIN/MAX | Explicit ROWS frame with unbounded preceding/following, current row or structural 0–4096 row offsets; frame members and partition/order witnesses, shared DAG storage; omission of frame is invalid_request |
+| ORDER BY/LIMIT/OFFSET | Stable sealed tie order and selected/excluded population; OFFSET 0–10000 is an explicit query subset, not a paging mechanism; whole computation is charged |
+| One bounded recursive CTE | Rules below, path/iteration witnesses, cycle and depth-bound coverage; complete finite result or failure, never silently clipped paths |
+
+Set equality uses PostgreSQL null/duplicate semantics and pinned collation;
+order is guaranteed only by the outer ORDER BY and sealed tie order.
+[PostgreSQL set semantics](https://www.postgresql.org/docs/current/queries-union.html).
+Window facts depend on their partition, ordering and frame, not just the current
+row. Require explicit ROWS frames for aggregate windows; RANGE/GROUPS, frame
+exclusions and IGNORE NULLS remain unsupported because their peer/frame lineage
+has no qualified v1 mapping. Ranking/lag/lead use partition/order semantics, not
+an aggregate frame. [PostgreSQL windows](https://www.postgresql.org/docs/current/functions-window.html).
+
+Bounded recursion admits `WITH RECURSIVE` with one SELECT seed, UNION ALL, one
+self-reference and key-equality expansion over qualified relation endpoints or
+correction edges. A request declares `recursion:{cte:text,depth_column:text,
+node_column:text,max_depth:int}` (max_depth 1–8). The seed must bind at most 16
+visible typed anchors and initialize depth to zero; the recursive arm increments
+it by exactly one and conjunctively tests depth < max_depth. Admission verifies
+this structural invariant and emits an independent guard; neither a user LIMIT
+nor UNION deduplication proves termination. Native `CYCLE <node_column> SET
+<cycle_flag> USING <path_column>` is required; cycling rows are recorded for
+diagnostics and excluded from further expansion. The generated path is internal,
+not a general array SQL surface. Final rows may select the depth and cycle flag;
+path IDs/multiplicity are inspected through provenance. Expansion edges must be
+support-eligible at this frame under PR-03's projector; disputed/withdrawn/gapped
+assertions can be inspected in ordinary SELECT but cannot become path support.
+At most eight levels is an explicit bounded-path question, not a promise to find
+all reachable nodes. Coverage records `explicit_depth` even if the frontier ends
+early. Qualify cycles, diamonds, repeated endpoints, high degree, all depth values,
+erasure, cancellation and complete path witnesses. Depth bounds termination, not
+fanout/work; provenance overflow or timeout fails the whole result.
+[PostgreSQL recursive execution](https://www.postgresql.org/docs/current/queries-with.html).
+
+Unsupported: mutual/general recursion, cross/theta/natural joins (no qualified
+population/fanout mapping), LATERAL/set-returning functions (no v1 cardinality
+mapping), regex (no qualified cost/admission profile), arbitrary arrays/JSON,
+user functions/casts/collations and additional window/scalar functions (no closed
+signature/witness mapping). No semantic traversal, causal inference, path ranking
+or general conflict-completeness is inferred from relational composition. Add a
+feature by a new qualified catalog/contract revision, not silent parser acceptance.
 
 **Authority implementation:** use separate trusted bookkeeping and restricted
 query connections, not a privileged login that merely SET ROLEs downward.
@@ -284,14 +370,24 @@ The trusted host starts `Run {run_ref, catalog_hash, policy_hash, started_at,
 expires_at, default_known_at, remaining}` after authentication; callers cannot
 set tenant, principal, workspace, allowances or admission policy.
 
-Every action has `{contract_version:1, run_ref:uuid, step_key:uuid, kind}`:
+Every action has `{contract_version:1, run_ref:uuid, step_key:uuid, kind}`.
+`ResultPin={result_id:uuid,content_digest:hash}`. Result-bearing requests use
+`AccessContext={kind:standalone}` or
+`{kind:checkpoint,checkpoint_id:uuid,manifest_digest:hash,root:ResultPin,
+basis:RetentionBasis}`. `RetentionBasis={kind:automatic}` or
+`{kind:named_save,save_id:uuid,revision:int8}` pins one specific active hold.
+The latter must select that exact root in a currently retained checkpoint, under
+the same authenticated principal/tenant/owner/workspace/access-scope identity.
+It is an explicit access basis, not a bearer capability. For multiple inputs each
+binding carries its own context; a checkpoint containing C cannot name ancestor P
+as its root. No implicit context selection, inheritance or fallback is allowed.
 
 | `kind` | Required payload (optional fields marked ?) |
 | --- | --- |
-| `query` | `catalog_hash`, `sql:text`, `parameters:[{position:int,type,value}]`, `inputs:[{alias,result_id}]`, `parents:[result_id]`, `scope:{source_refs:[uuid],known_at:timestamptz,view:resolved\|historical}`, `intent:discover\|enumerate\|refine\|expand\|refresh`, `max_result_bytes:int`, `page_size:int`, `candidate_profile_ref:uuid?`, `candidate_request:{surface:authored\|source\|both,query:text,max_candidates:int}?` |
-| `reuse_result` | `result_id:uuid`, `page_size:int`, `cursor:text?` |
-| `inspect` | `observation_refs:[{bead_id,bead_version_id}]`, `result_id:uuid?`, `provenance_ref:uuid?`, `facets:[content\|provenance\|lifecycle\|evidence_metadata]`, `view`, `known_at:timestamptz`, `cursor:text?` (at least one target; at most 16 observations; provenance_ref needs its visible result) |
-| `hydrate_source` | `selections:[{evidence_ref:uuid,part_id:uuid,lineage_ordinal:int?,representation:raw_bytes\|normalized_text,start:int,end:int}]`, `max_bytes:int`, `cursor:text?` (1–8 selections, half-open intervals; raw needs its recorded lineage ordinal) |
+| `query` | `catalog_hash`, `sql:text`, `parameters:[{position:int,type,value}]`, `inputs:[{alias,result:ResultPin,access:AccessContext}]`, `parents:[{result:ResultPin,access:AccessContext}]`, `scope:{source_refs:[uuid],known_at:timestamptz,view:resolved\|historical}`, `intent:discover\|enumerate\|refine\|expand\|refresh`, `max_result_bytes:int`, `page_size:int`, `recursion:{cte,depth_column,node_column,max_depth}?`, `candidate_profile_ref:uuid?`, `candidate_request:{surface:authored\|source\|both,query:text,max_candidates:int}?` |
+| `reuse_result` | `result:ResultPin`, `access:AccessContext`, `page_size:int`, `cursor:text?` |
+| `inspect` | `observation_refs:[{bead_id,bead_version_id}]`, `relation_refs:[uuid]`, `result:{pin:ResultPin,access:AccessContext}?`, `provenance_ref:uuid?`, `facets:[content\|provenance\|lifecycle\|evidence_metadata]`, `view`, `known_at:timestamptz`, `cursor:text?` (at least one target; at most 16 observation/relation targets; provenance_ref needs its visible result) |
+| `hydrate_source` | `selections:[{evidence_ref:uuid,part_id:uuid,lineage_ordinal:int?,representation:raw_bytes\|normalized_text,start:int,end:int,origin:{result:ResultPin,access:AccessContext}?}]`, `max_bytes:int`, `cursor:text?` (1–8 selections, half-open intervals; raw needs its recorded lineage ordinal; saved-result evidence carries origin) |
 
 An empty `source_refs` means the run's already admitted workspace scope, never
 all tenants. Nonempty source IDs must be admitted anchors. Omitted UI dates must
@@ -310,8 +406,8 @@ Parents are duplicate-free, at most eight, and include every bound input;
 refine requires inputs, expand/refresh require parents, and discovery/enumeration
 require neither. Do not impose the former 16-level ancestry cap: bound lineage
 inspection and actual work/storage without silently ending a valid investigation
-at an arbitrary generation. Exact depth-independent continuation and retention
-rules must qualify before the amended interface freezes.
+at an arbitrary generation. Depth-independent continuation and retention rules
+are defined below and require runtime qualification before delivery.
 Candidate profile/request must occur together; query text is 1–4,096 UTF-8 bytes,
 max_candidates 1–2,000. The evaluation relation is query-local and may participate
 in ordinary admitted SELECT joins/CTEs/groups; requesting a profile never silently
@@ -339,32 +435,39 @@ An available query/reuse reply additionally has:
 ```text
 result {result_id, content_digest, originating_run_ref, created_at, expires_at,
         catalog_hash, policy_hash, result_schema:[{name,pg_type,ref_type?,nullable}],
-        frame:{frame_ref,known_at,snapshot_digest,view,source_watermarks},
+        frame:{frame_ref,known_at,snapshot_at,snapshot_digest,view,source_watermarks,
+               lifecycle_projection_version:int?,projection_manifest_sha256:hash?},
         parents:[{result_id,content_digest,edge:refine|join|expand|refresh}],
         query_ref, lineage_ref, coverage, order_basis, total_rows}
 page {rows:[{row_ref,values,fact_ref?,evidence_refs:[],provenance_ref}],
       next_cursor?,has_more}
 visibility {new_refs:[],previous_refs:[],hydration_required:[]}
 work {reserved_ms,observed_db_ms?,charged_ms,transport_bytes,retained_bytes,
+      allocation_profile_hash,measured_physical_bytes?,
       cancellation_state,measurement_state:measured|unavailable}
 ```
 
 `result.expires_at` is the immutable deadline for **standalone temporary access**
 to this result, not a physical-deletion deadline or the lifetime of an admitted
 checkpoint access context. It never changes on child creation, save or page read.
-The complete checkpoint request/access-basis envelope is still a required addition
-before exact freeze: it must identify the specific retained checkpoint and root
-result, bind that context into fingerprints/cursors/disclosure receipts, and expose
-its current access basis and end condition separately from `result.expires_at`.
-The baseline actions above alone do not yet implement saved-checkpoint access.
-An old cursor or a result ID cannot implicitly select that access context.
+Each successful result/helper disclosure includes `access_bases:[{context:AccessContext,
+checked_at:timestamptz,valid_until:timestamptz?,end_condition:standalone_expiry|
+checkpoint_expiry_or_prune|save_release,hold_ref:uuid?}]`. Null valid_until is only
+for the specified active named-save basis; it promises no bypass of authority,
+erasure or storage admission. Context is part of request/response fingerprints,
+cursors and disclosure receipts, including selected root digest. Save/release
+creates/ends a basis without changing the immutable result or manifest.
+Every page rechecks the context; switching contexts requires a new step and cursor.
+Dependency-only holds have no AccessContext and cannot authorize independent
+paging, inspection or SQL input admission of an ancestor.
 
 `row_ref` is the saved 1-based int8 ordinal; `fact_ref` is
 `{result_id:uuid,row_ref:int8}`; query/lineage/provenance/receipt/frame refs are UUIDs.
-`evidence_refs` and visibility lists contain `{kind:observation|statement|source|
-result_fact,ref:uuid,version_ref:uuid?,content_sha256:text?}`; result facts instead
-carry the typed fact_ref, and a source ref must pin its unit hash. The discriminator
-fixes the payload, so these kinds are not interchangeable. `values` is an ordered
+`evidence_refs`, findings and visibility lists contain the closed `EvidenceRef`
+union: `{kind:observation,ref:uuid,version_ref:uuid}` (bead/version),
+`{kind:statement,ref:uuid,version_ref:uuid}` (statement/bead version),
+`{kind:source,ref:uuid,unit_ref:uuid,content_sha256:hash}` (evidence pin/unit), or
+`{kind:result_fact,fact:fact_ref}`. Kinds are not interchangeable. `values` is an ordered
 array matching result_schema. `order_basis` is `[{column:text,direction:asc|desc,
 nulls:first|last}]` plus `tie_basis:witness_ordinal`; source_watermarks are
 `[{source_ref:uuid,known_through:timestamptz?,coverage:complete|partial|unknown|
@@ -373,13 +476,17 @@ are all protected. `remaining` contains nonnegative `accesses:int`, `db_ms:int`,
 `transport_bytes:int`, `allocation_bytes:int`, `run_expires_at:timestamptz`.
 Cancellation state is `none|requested|rollback_confirmed|cleanup_pending|settled`.
 Safe error codes are `syntax|binding|type|cursor|feature|provenance|unavailable|
-expired|idempotency|time|transport|storage|arithmetic|database|settlement`.
+expired|idempotency|branch_conflict|save_conflict|time|transport|storage|arithmetic|
+database|settlement`. Authorized head/save conflicts use outcome invalid_request;
+no competing protected value is returned.
 
 `coverage` has `query_result:complete`, `population_basis:authorized_logical_scope |
 retained_subset | limited_query`, `source_capture`, `authored`, `search_ready`,
 `discovered` (each `complete|partial|unknown|unavailable`), `known_through?`,
-`gaps:[{facet,reason}]` and `truncation:explicit_limit|null`. Counts of inaccessible
-records/gaps are never disclosed. A completed zero-row query means no match in
+`gaps:[{facet,reason}]` and `truncation:explicit_limit|explicit_depth|null`. Counts of inaccessible
+records/gaps are never disclosed. Frame lifecycle fields are both null if no
+relation projection was used; otherwise version 1 and the shared projector's
+actual visible-dependency hash. A completed zero-row query means no match in
 that admitted population/frame/profile. Even complete query execution and every
 delivered page do not prove complete source coverage or supported absence.
 
@@ -390,28 +497,67 @@ Result inspection returns its schema, query/typed parameters, coverage, protecte
 population manifest and paged contributor witnesses. All targets must be visible
 in this run or explicitly admitted; lineage inspection may admit only authorized
 correction neighbors. Unsupported claim/relation facets are refused, not empty.
-The intended assessed-relation inspection shape is still a gap in this amended
-envelope and must be specified against the forward lifecycle contract before freeze.
+Assessed-relation inspection uses the projection and qualifications in §1; it
+never derives its own lifecycle state or silently substitutes a legacy read.
 Hydration checks both observation and source dependencies and returns exact bytes
 or lossless retained normalized text, unit/part hashes, returned-span SHA-256,
 original locators, occurrence, attribution and any transformation/version label.
 No synthetic coordinates, imports, file/network fetch or source reauthoring.
 Whole-source completeness remains independent of completion of the selected spans.
-Available helper payloads are `inspection:{observations:[StoredBead],
+Available helper payloads are `inspection:{observations:[ObservationInspection],
 corrections:[CorrectionRow],source_units:[SourceUnitRow],result:ResultMetadata?,
+relations:[Assertion],relation_types:[TypeDefinition],relation_pairs:[PairDisposition],
 evidence_pins:[EvidencePin],provenance:ProvenancePage?}` or
 `hydration:{slices:[{evidence_pin:EvidencePin,representation,start,end,content:text?,
 bytes_base64:text?,returned_sha256:text}],selection_complete:bool}`; both include
-visibility, work, next_cursor? and has_more. StoredBead/AcceptedMeaning,
-PackageDeclaration, SealedPackagePin and EvidenceInventoryEntry reuse their exact
-published types. EvidencePin is `{ref:uuid,bead_id:uuid,bead_version_id:uuid,
-statement_id:uuid,unit:UnitSupport,package:SealedPackagePin?,declaration:
-PackageDeclaration?,part:EvidenceInventoryEntry?}`; absent packages/parts are
-explicitly unsupported for hydration. ResultMetadata is the result record above;
+visibility, work, access_bases, next_cursor? and has_more.
+This new wrapper has the following self-contained closed types; existing published
+helper payloads retain their own meanings and bytes, not mutable implicit schema
+dependencies of this packet. `?` is required nullable; limits apply to whole
+encoded responses and existing immutable input bounds, never silent truncation.
+
+```text
+ObservationInspection = {observation:ObservationRow,statements:StatementRow[],
+  render:{revision:int,title:Clause,summary:Clause[],detail:Clause[],
+          omissions:[{statement_id:uuid,reason:text}]}?,
+  type:{key:text,revision_id:uuid,definition:text},
+  authorship:{receipt_id:uuid,task_id:uuid,attempt_id:uuid,run_ref:text,
+             task_contract_key:text,task_contract_version:int},
+  mentions:EntityMentionRow[],entities:EntityRow[],topics:TopicRow[]}
+Clause = {text:text,statement_ids:uuid[]}
+UnitSupport = {event_id:uuid,source_unit_id:uuid,content_sha256:hash}
+EvidencePin = {ref:uuid,bead_id:uuid,bead_version_id:uuid,statement_id:uuid,
+  unit:UnitSupport,package:PackagePin?,part:PartPin?,native:NativeFacts,
+  qualification:SourceQualification?,normalization_policy_version:text?}
+PackagePin = {package_id:uuid,sealed_receipt_id:uuid,inventory_sha256:hash,
+  required_parts:int,required_characters:int,required_utf8_bytes:int,
+  source_revision_key:text,occurrence_key:text,
+  occurrence_identity_basis:native|producer_assigned,package_revision:int}
+PartPin = {part_id:uuid,ordinal:int,component_key:text,component_offset:int,
+  parent_component_key:text?,kind:text,content_sha256:hash,characters:int,
+  utf8_bytes:int,derivation:identity_utf8|producer_normalized,lineage:RawSpan[]}
+RawSpan = {source_range_receipt_id:uuid,byte_start:int,byte_end_exclusive:int,
+  source_bytes_sha256:hash,fold_receipt_id:uuid?,fold_outcome_ordinal:int?}
+NativeFacts = {native_id:text?,parent_native_id:text?,session_native_id:text?,
+  branch_native_id:text?,participant_native_id:text?,role:text?,source_order:int?,
+  occurred_at:timestamptz?,occurred_at_raw:text?,time_precision:text?}
+SourceQualification = {qualification_ref:text,boundary:qualified_native_unit|unresolved,
+  boundary_basis:text,physical_records:complete|pending_tail,
+  topology:known|partially_known|unknown,normalized_input:complete|incomplete,
+  source_completeness:producer_attested|unresolved,
+  exclusions:text[],unresolved_coverage:text[]}
+```
+
+All `*Row` types are the complete named logical row schema in §1, with both keys
+and columns; singular names map to their plural relation. Relation Assertion /
+TypeDefinition / PairDisposition are the pinned dependency's exact closed types,
+encoded using this packet's scalar wire rules. EvidencePin binds actual unit
+support, never invented sentence-to-span evidence. Absent package/part is
+unsupported for part hydration; inspection remains useful. ResultMetadata is the result record above;
 CorrectionRow/SourceUnitRow use the exact logical relation schemas. Unrequested
 facets have empty collections/null, not a claim of no corrections/evidence.
 ProvenancePage is `{population_ref:uuid,nodes:[{node_ref:uuid,operation:scan|filter|
-project|join|group|distinct|exists|limit,input_refs:[uuid],member_refs:[uuid],
+project|join|group|distinct|exists|set|window|recursion|limit,input_refs:[uuid],member_refs:[uuid],
 multiplicities:[int8]}],members:[{member_ref:uuid,relation:text,key_values:[],
 frame_ref:uuid,evidence_refs:[],parent_fact_ref?}],next_cursor?,has_more}`
 with typed key_values matching the named logical key and equal member/multiplicity
@@ -423,7 +569,7 @@ Hydration offsets are normalized characters or raw bytes as selected; metadata
 never changes those units. The new base64 wrapper does not change older hex readers.
 
 Visibility is delivery-bound: a trusted disclosure receipt binds exact response
-digest, refs, consuming run and current authority. Only refs in delivered rows,
+digest, contexts/root pins, refs, consuming run and current authority. Only refs in delivered rows,
 inspection or hydration become visible. An aggregate makes its scoped fact visible,
 not every contributor's full content. A lost response can be redelivered under
 the same step key, with a new access receipt and charges. Cross-run reuse requires
@@ -496,8 +642,8 @@ with changes/removals disclosed. Expansion declares a superset scope; refresh
 declares its new cutoff/scope. Neither copies old-frame values into the live
 computation. General live-plus-saved or mixed-frame value joins are unsupported.
 New children get new IDs/receipts; parents never change. A later grant cannot
-silently widen an old result. Temporary results target 30 days of standalone
-access from creation. Distinguish three things:
+silently widen an old result. The recommended policy sets `expires_at` to
+`created_at + 30 × 24 hours` UTC for temporary standalone access. Distinguish three things:
 
 - **Standalone disclosure:** direct page/import/inspect/SQL-input reuse requires
   trusted time strictly before that result's original `expires_at`, as well as
@@ -556,38 +702,105 @@ unknown. No corroboration count is invented from joins, aliases or repeated chun
 
 ### Investigation checkpoints and explicit resume
 
-This is approved product behavior; its exact public mutation/read envelopes,
-atomicity, idempotency, concurrent branch updates and retention-release rules must
-be completed before exact-contract approval. It adds derived investigation state
-under PostgreSQL authority, not a second memory ledger or task executor.
+PR-05 persists compact manifests and retention/access; PR-06 interprets progress
+and chooses the next query. No database snapshot, open transaction, hidden model
+reasoning, model internals or second canonical memory store is captured.
 
-Persist a checkpoint manifest referencing immutable result IDs/digests and their
-frames, the question, explicit investigation progress, concise recorded findings
-and predecessor/branch identity. Do not store hidden model reasoning or promise
-restoration of model internals. PR-05 owns provider-neutral manifests and result
-retention/access; PR-06 interprets agent working state and chooses the next query.
-Do not copy the full database or duplicate result bodies at each checkpoint.
+`CheckpointPin={checkpoint_id:uuid,manifest_digest:hash}` and
+`CheckpointAccess={checkpoint:CheckpointPin,basis:RetentionBasis}`. An immutable manifest is
+`{checkpoint_id,investigation_id:uuid,branch_id:uuid,sequence:int8,
+predecessor:CheckpointPin?,fork_origin:CheckpointPin?,working_state_source:CheckpointPin?,created_at:timestamptz,
+automatic_expires_at:timestamptz,question:text,progress:{status:investigating|
+paused|ready_for_pr06,note:text},findings:[{text:text,facts:[fact_ref],
+evidence_refs:[EvidenceRef]}],roots:[{result:ResultPin,frame_ref:uuid}]}`.
+Question ≤4 KiB, note ≤2 KiB, ≤16 concise findings totaling ≤8 KiB; ≤32 roots,
+whole canonical manifest ≤32 KiB. Referenced facts/evidence must have delivery
+receipts and belong to selected roots or their inspected witness closure; text
+is attributed working state, never accepted meaning or proof. Root frames may
+differ in a manifest, each labelled separately; that grants no mixed-frame SQL.
+The manifest digest uses result-json-v1, excluding itself. No result bodies are
+copied. A predecessor/fork pin is historical lineage, not automatic disclosure of
+that checkpoint or all its roots. Protect question/findings/names as result data.
 
-Target 20 automatic checkpoints per investigation, plus explicitly named saves.
-This is a history-management target, not a limit on queries, refinements or result
-generations. Restoring an authorized checkpoint creates a new branch and admits
-selected saved evidence into the current run; it does not alter canonical memories,
-erase receipts, refund consumed allowance or recover revoked permissions. Restart
-preserves unfinished run counters; only an explicitly admitted new run receives
-its own policy allowance. Old-frame evidence cannot silently become current.
+These actions use the common run/step envelope and current identity equality:
 
-Named saved investigations persist while saved, subject to current authority,
-declared operator quotas and governed erasure, without routine expiry. Retain their
-complete required result/provenance closure. Pruning automatic history removes only
-unneeded references: it cannot remove content supporting another retained save or
-valid child. Explicit deletion, release of a save and subsequent garbage collection
-must have defined ownership and replay behavior. Measure actual unique retained
-bytes, shared attribution, provenance and indexes before settling quotas. Stable
-IDs and manifest pointers alone do not prove inexpensive storage or usable resume.
-Releasing a save or pruning a checkpoint ends only that checkpoint's disclosure
-context and releases its holds; it neither extends nor shortens a result's original
-standalone deadline. Another valid child or save may still retain the bytes.
-Restoring a checkpoint never turns dependency-only ancestors into selected roots.
+| kind | Closed request payload | Available payload beyond common reply |
+| --- | --- | --- |
+| checkpoint | `investigation_id:uuid?,branch_id:uuid?,expected_head:CheckpointPin?,question,progress,findings,roots:[{result:ResultPin,access:AccessContext}]` | `checkpoint:Manifest,branch:{branch_id,head:CheckpointPin},retention:RetentionState` |
+| read_checkpoint | `access:CheckpointAccess` | `checkpoint:Manifest,retention:RetentionState,root_contexts:[AccessContext]`; no result rows become visible |
+| save_checkpoint | `access:CheckpointAccess,name:text,expected_save_revision:int8?` | `save:SaveBinding,retention:RetentionState` |
+| release_save | `investigation_id:uuid,name:text,expected_save_revision:int8` | `released:{save_id:uuid,revision:int8,state:released}`; noncontent management receipt only |
+| restore_checkpoint | `access:CheckpointAccess,selected_roots:[ResultPin]` | `branch:Branch,checkpoint:Manifest,root_contexts:[AccessContext]`; no implicit row/fact/evidence delivery |
+| branch_investigation | `access:CheckpointAccess,selected_roots:[ResultPin]` | Same as restore; explicit fork without interpreting progress |
+
+For the first checkpoint, investigation/branch/expected_head are all null; trusted
+code allocates an investigation and branch. Later writes supply all three and
+compare-and-swap the head under a branch lock. A mismatch is `branch_conflict`,
+with no overwrite or leaked competing manifest. Roots are duplicate-free; their
+digests and access contexts must verify before allocation. Each successful append
+atomically publishes manifest, head, holds, storage charges and idempotency receipt;
+concurrent identical keys get one manifest. Text/roots and all contexts enter the
+fingerprint. No partial checkpoint or acknowledged head exists on allocation failure.
+
+`SaveBinding={save_id:uuid,investigation_id:uuid,name:text,revision:int8,
+checkpoint:CheckpointPin,state:active|released,recorded_at:timestamptz}`.
+Name is `[a-z][a-z0-9_-]{0,63}`, unique per investigation and owner. Null expected
+revision creates a previously unused name; an existing name requires its exact
+latest revision. Updating a name atomically transfers its hold to the new checkpoint
+and appends revision+1; no silent overwrite. release requires the active revision,
+appends released revision+1, and ends that save's hold. A mismatch is `save_conflict`.
+Only the original authenticated owner identity may manage it; ordinary replays
+still reauthorize. Save needs an already retained, fully authorized checkpoint:
+expired/pruned/erased manifests cannot be rescued by IDs or dependency-only holds.
+Releasing an owned name can proceed without disclosing its revoked contents, so
+inaccessible saved bytes do not trap storage. Its management reply always contains
+only opaque save ID/revision/state and noncontent charges, not checkpoint/name
+metadata. Exact replay returns the original mutation receipt plus a new access
+receipt; it cannot resurrect a released binding. New save/update is a new step.
+
+`RetentionState={automatic_until:timestamptz,automatic_retained:bool,
+named_holds:[{save_id:uuid,revision:int8}],retained:bool,hold_ref:uuid?,
+unique_bytes:int8,context_end:automatic_expiry_or_prune|last_save_release}` is
+dynamic, protected and receipted; it is not part of the immutable manifest digest.
+Retain the newest 20 automatic checkpoints across all branches of an investigation,
+each for at most 30 days from creation, plus every actively named checkpoint.
+An older automatic manifest may survive solely via named holds; pruning its
+automatic slot does not end named access. No checkpoint-count limit constrains
+query generations or branch depth. Appending checkpoint 21 atomically prunes the
+oldest automatic slot; retain noncontent lineage pins for valid descendants and
+never release holds needed by another checkpoint/result. No silent eviction of
+an unexpired result or active named save. Allocation is refused if admitted quota
+cannot honor these promises. Explicit release ends a save, not another holder.
+
+Restore/branch lock the retained source checkpoint, reauthorize its **whole** root
+closure, require selected_roots to be a subset of its exact roots, and atomically
+create a new branch with a new automatic initial checkpoint containing only those
+roots, copied question/progress and only findings whose references remain selected.
+Empty selection creates a question-only branch; never attach dependency-only
+ancestors as roots. Copied working text binds `working_state_source` to the source
+checkpoint and retains/rechecks that whole protected dependency closure, even when
+some roots are unselected; no reduced-authority text salvage. An ordinary authored
+checkpoint has null working_state_source. A hold for this metadata does not grant
+independent access to the source checkpoint or its unselected roots.
+Return `Branch={branch_id:uuid,investigation_id:uuid,
+fork_origin:CheckpointPin,head:CheckpointPin,created_at:timestamptz}`. New manifest
+contexts carry its new ID/digest; source cursors cannot cross over. This admitted
+hold transfer may extend contextual use, costs storage/work and leaves every
+result's standalone expiry unchanged. No rows are admitted merely by restoring:
+reuse/inspect/hydrate with the returned context explicitly delivers them to this
+run. No canonical memory rollback, budget refund, revived permission or relabelling
+of historical evidence. Restart preserves unfinished reservations/counters.
+
+Checkpoint access validates its **specified** automatic or named-save basis;
+cursors pin that basis plus checkpoint/root digests, never a mutable alias.
+Release/retarget ends the old named-save revision's context immediately, even if
+other holds retain the checkpoint. Automatic expiry/prune ends the automatic
+context even if a save remains. Using a different valid basis requires an explicit
+new step/context/cursor; there is no fallback. All holds
+retain unique required result/provenance bytes and the manifest, not a new content
+copy. Context closure, pruning and quota settlement are atomic with their receipt;
+owned GC follows after. Revocation refuses the whole checkpoint, including question,
+findings, root hashes, counts and save names. Erasure overrides all holds.
 
 Required boundary examples (future installed-runtime acceptance, not executed
 proof in this proposal):
@@ -595,10 +808,12 @@ proof in this proposal):
 | Situation | Required result |
 | --- | --- |
 | Parent P expires on day 30; child C created on day 29 has its own day-59 expiry | On day 31, direct P paging/query-input reuse is unavailable. C remains usable with necessary held provenance; P's original digest/expiry do not change. |
-| Before day 30, named save S explicitly selects P as a root | On day 31, direct P access is unavailable, but explicitly S-bound P read/refinement is allowed after current authorization; it preserves P's identity/frame and reports the checkpoint access basis. |
+| Before day 30, named save S explicitly selects P as a root | On day 31, direct P access is unavailable, but explicitly S-bound P read/refinement is allowed after current authorization; it preserves P's identity/frame and reports checkpoint ID/digest, root pin and S's hold revision. |
 | P is only an unselected ancestor of C in save S | S preserves C and required evidence, not unrestricted P access. P cannot be promoted to a root after direct expiry merely because its bytes remain held. |
 | S is released after P's direct expiry, but C still needs P | S-bound P access stops immediately; C's bounded dependency use remains. Retain P until no valid holder needs it; do not silently renew P or break C. |
 | Revocation/regrant or governed erasure affects P | Revocation blocks every affected disclosure context. Regrant alone restores neither expired direct access nor a released save; an existing valid checkpoint may resume only if bytes remain and all current authority checks pass. Erasure overrides every hold and invalidates dependent disclosure. |
+| Automatic checkpoint A is pruned/expired while named save S still holds it | An A-automatic cursor refuses; a new explicitly S-bound step/cursor may use selected roots. Retarget/release of S never switches the old cursor to another hold or checkpoint. |
+| Checkpoint 21 and a branch restore after >20 result refinements | Only oldest automatic history is pruned; named saves/valid-child closure remain. A fresh branch gets new manifest/head/context; memory, prior frames, permissions and charged work are unchanged. |
 
 ## 5. Revocation, erasure, retention and work policy
 
@@ -639,14 +854,55 @@ binary byte units:
 
 | Counter / fence | Proposed default |
 | --- | --- |
-| Run lifetime / operations | 30 minutes, 64 admitted accesses (including pages, imports, helpers, retries); counters/deadlines survive restart |
-| Operation / cumulative DB work | 15 seconds per whole operation, 120 seconds per run, including authorization, lineage, persistence and cleanup; every constituent statement uses the remaining operation deadline; 500 ms lock timeout |
-| Workspace admission | Two active runs, one executing DB operation; rolling 24-hour 1,200-second DB allowance and 128 MiB transport allowance; new runs cannot bypass these persisted counters |
-| SQL structure | 16 KiB SQL, 64 parameters / 64 KiB parameter bytes, 8 saved inputs, 8 relation references, 4 CTEs, 8 join/group nodes, expression depth 32 |
+| Run lifetime / operations | 30 minutes, 128 admitted accesses (pages, imports, helpers, checkpoints, restores, retries); counters/deadlines survive restart |
+| Operation / cumulative DB work | 30 seconds per whole operation, 300 seconds per run, including authorization, lineage, persistence and cleanup; every constituent statement uses the remaining deadline; 500 ms lock timeout |
+| Workspace admission | Two active runs, one executing DB operation; rolling 24-hour 1,800-second DB allowance and 256 MiB transport; no reset through new runs/branches |
+| SQL structure | 32 KiB SQL, 64 parameters / 64 KiB parameter bytes, 8 saved inputs, 16 relation references, 8 CTEs, 16 join/group/set/window nodes, expression depth 32; one qualified recursive CTE with depth 1–8 and ≤16 seeds |
 | Delivery | Default 20 / maximum 50 rows per page, 256 KiB whole response; helpers 16 observations / 8 source selections; hydration 64 KiB per response, at most 16 KiB per selected span |
-| Transport | 8 MiB per run, including helper bytes, metadata, cursors and redelivery; reserve 16 KiB for terminal diagnostics |
-| Retention admission | Candidate 16 MiB per result and 64 MiB new allocation/run; former 128 MiB/256-result workspace caps require requalification for 30-day results, 20 checkpoints and durable saves; account shared dependency holds and provenance, reserve before execution and settle actual allocation |
-| Query settings | `work_mem=4MiB`, `hash_mem_multiplier=1`, `temp_file_limit=32MiB`, parallel query disabled, JIT off; restricted login cannot change them |
+| Transport | 16 MiB per run including metadata, cursors and redelivery; reserve 16 KiB for terminal diagnostics |
+| Retention admission | 64 MiB charged allocation/result, 128 MiB new allocation/run, 512 MiB retained unique allocation/workspace including saved closure; no independent result-count/ancestry cap; reserve before execution |
+| Checkpoint/control state | 32 KiB manifest, newest 20 automatic checkpoints/investigation for ≤30 days; named saves persist while saved under the same quota; history stubs/audits/holds are charged too |
+| Query settings | `work_mem=4MiB`, `hash_mem_multiplier=1`, `temp_file_limit=64MiB`, parallel query disabled, JIT off; restricted login cannot change them |
+
+These are the smallest recommended **qualification baseline**, not observed
+capacity. W2's 2,000 × 2 KiB is 3.906 MiB of rows; 40 pages of 50 fit 128 accesses
+with room for W4's 16 hydration calls, >20 refinements and checkpoints. 16 MiB
+transport leaves space for page envelopes/provenance and rereads; still meter
+actual encoded responses, not this arithmetic. W3's 100K lineage members at a
+planning estimate of 256 bytes/member is 24.4 MiB before node/index overhead;
+64 MiB/result is a candidate, not an asserted provenance size. Use shared DAG
+nodes, not quadratic copied partition witnesses. Twenty 32 KiB manifests are
+640 KiB, but twenty distinct 16 MiB result closures are 320 MiB before overhead;
+512 MiB/workspace is a modest admission tier, not unlimited durable saves.
+Shared roots are charged once; a save cannot fit by ignoring ancestors. At 30-day
+retention, even 4 MiB/day consumes 120 MiB before provenance; sustained histories
+can hit quota and require explicit release or operator admission. There is no
+promise that every new save fits indefinitely.
+
+Thirty seconds/operation and 300 seconds/run are measurement candidates giving
+room for W3 cold aggregation and iterative W1/W5 work; they establish no latency
+claim. Before delivery, measure cold/warm W1–W7 on declared PostgreSQL/server,
+indexes, hardware and authorization skew: complete query plus witness generation,
+allocation/GC, p50/p95 duration, encoded transport, physical heap/index/WAL growth,
+spills and canceled cleanup. Report all failures. Useful enumeration, aggregation,
+set/window and bounded-path investigations must actually complete within the
+approved tier; a correctly enforced timeout alone does not qualify them. Runtime
+measurements are pending because Phase A authorizes no PR-05 executor or fixtures.
+If the tier fails, revise indexing/layout first; a material policy increase returns
+to exact owner approval and matching freeze. An explicitly operator-admitted
+larger tier is an alternative for larger workloads, never agent-selected fallback.
+
+Storage unit `allocation_bytes` is canonical retained result/manifest/witness/query
+bytes plus ledger/row/index overhead charged by a versioned allocation profile.
+The implementation must qualify conservative physical-overhead reservations for
+its layout, measure actual owned growth and settle charges before publication.
+Publish `allocation_profile_hash`, charged bytes and separately measured physical
+bytes/measurement state in receipts. Do not call encoded bytes physical disk use.
+No allocation is acknowledged unless its rows, provenance and required holds fit
+the reserved quota; uncertainty retains the reservation and stops new admission.
+Shared allocations have one workspace ledger owner and reference-counted holds;
+adding a hold charges only new manifest/ledger bytes while retaining its entire
+required closure. No unbounded free checkpoint, lineage or idempotency metadata.
 
 **Work unit is reserved database duration plus measured storage/transport**, not
 examined rows. Atomically reserve the operation's maximum remaining duration and
@@ -670,8 +926,8 @@ Diagnostic EXPLAIN ANALYZE/BUFFERS runs on fictional data consume work too; they
 are measurements, not authorization or an enforcement substitute. Preflight actual
 server/parser/role compatibility and fail closed if fences are unavailable.
 
-Store actual row/provenance allocations (including index/row overhead) and shared
-storage attribution; no zero-cost descendants or accounting double counts.
+Store charged row/provenance allocations, separately measured physical growth and
+shared attribution; no zero-cost descendants or accounting double counts.
 Reservations block excess allocation; do not evict still-valid results or silently
 extend expiry on page access. Explicit retention holds are separately admitted and
 accounted; revocation/erasure override them. Provenance overflow refuses an
@@ -689,12 +945,12 @@ cases. Their parameters must freeze with the approved policy before Phase B:
 | Workload | Required acceptance / honest failure |
 | --- | --- |
 | W1: 100K observations; ≤2K candidates, alias collisions and permission skew | Useful independently authored filters/joins/CTEs and saved-input refinement; missing tenant predicates cannot widen scope; revoked/latest-hidden identities do not leak |
-| W2: million-row corpus; 2K authorized output rows at roughly 2 KiB/row | Complete immutable materialization, 40 pages of 50, restart and follow-up **including** metadata. Test the candidate 8 MiB/64-access envelope and revise it explicitly if it cannot support this product workload; honest budget_exhausted proves the fence, not successful enumeration or capacity qualification |
-| W3: 36 monthly groups over up to 100K eligible records, skew/fanout/corrections/late arrivals | Counts and distinct counts preserve multiplicity and paged contributor/population witnesses; prove useful cold and reused plans. A candidate 15-second or 16-MiB provenance miss must fail honestly, but does not qualify the representative workload; measure and resolve the mismatch before claiming delivery |
+| W2: million-row corpus; 2K authorized output rows at roughly 2 KiB/row | Complete immutable materialization, 40 pages of 50, restart and follow-up including metadata under the candidate 16 MiB/128-access envelope; truthful exhaustion is fence evidence, not successful enumeration |
+| W3: 36 monthly groups over up to 100K eligible records, skew/fanout/corrections/late arrivals | Counts/distinct counts preserve multiplicity and contributor/population witnesses; useful cold/reused plans must fit proposed 30-second operation and 64 MiB result allocation or policy must be revised explicitly |
 | W4: four 256-KiB retained source units | Sixteen 64-KiB calls using multiple ≤16-KiB exact spans transfer 1 MiB plus metadata; hashes/locators/attribution survive, gaps remain explicit; no new source family |
 | W5: restart, cross-session reuse, >20 refinements/checkpoints, saved branch, dependency revocation and expiry/erasure | Same parent bytes/ID, explicit restore branches, no discovery rerun on import/page, no budget reset or ancestry cliff; test both sides of 30-day temporary expiry, durable saves and retention of their closure without duplication or stale access |
-| W6: relation lifecycle and composition | Released assessed confirmation/dispute/retraction, current/as-of state, endpoint/basis evidence and applicable roots; withdrawal cannot remain traversable in a fresh evaluation, while historical saved results remain historical rather than current support |
-| W7: SQL breadth and presentation | Useful set/window compositions and separately admitted bounded traversal with contributor/coverage semantics; a tiny preview over a larger saved result must support later complete paging/counting without new discovery |
+| W6: relation lifecycle and composition | Released assessed confirmation/dispute/retraction, current/as-of state and L1–L5 root/cycle rules; fresh support withdraws while historical saved values stay unchanged; revoked event evidence/actor metadata refuses the whole result, including independent counts |
+| W7: SQL breadth and presentation | UNION/INTERSECT/EXCEPT bag/null cases, per-entity ranks/lag/running totals, bounded recursive depths/cycles/diamonds/high degree, full witnesses and protected negative populations; small preview then full saved count/page without discovery rerun |
 
 Additional acceptance: tenant/resource/mixed-authority isolation through joins,
 outer nonmatches and aggregates; guessed anchors and SQL/function/catalog/CTE
@@ -743,12 +999,10 @@ the intended relation-aware delivery requires its named lifecycle dependency, no
 an indefinite exclusion. PR-06 owns model investigation, checkpoint working-state
 interpretation, finish and answers.
 
-Before this amended packet is ready for exact approval, finish the relation
-projection and lifecycle dependency reference; the checkpoint/save/restore/branch
-wire and retention-hold contracts; the broadened SQL/provenance matrix; and justified
-work/storage policy candidates. Do not treat the prior packet's review or digest
-as approval of these new contracts. No unseen holdout is frozen against this
-incomplete revision, and no PR-05 runtime gate is opened by the documentation edit.
+This completed proposal stops at exact-interface approval. Parser/authority,
+composition, useful workload fit and physical storage qualification remain
+explicit Phase B acceptance obligations, not accomplished measurements. No unseen
+holdout is created, read or inspected here, and documentation merge opens no gate.
 
 Next dependency handoff: owner approval of the complete v2 interface pin record →
 independent custodian freeze attestation → public implementation/qualification →
