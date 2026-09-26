@@ -158,6 +158,11 @@ The next product proof connects real authorship to visible, authorized source
 inspection. Agent-led recall and richer relationship/maintenance behavior remain
 development goals, not capabilities provided by the current catalog CLI.
 
+The [PR-05 public interface decision packet](docs/agent-sql-results-v1.md) specifies
+proposed agent-authored SELECT and immutable reusable results. Its exact contract
+and policies await owner approval and independent unseen-holdout freeze; it adds
+no executable recall capability to the published package.
+
 ## Architectural commitments
 
 - **PostgreSQL is canonical.** Evidence, observations, receipts and lifecycle
