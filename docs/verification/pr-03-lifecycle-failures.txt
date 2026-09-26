@@ -1,3 +1,44 @@
+===== compile-final.log =====
+0001_create_schema_history.sql
+0002_create_source_ledger.sql
+0003_create_receipts_and_outbox.sql
+0004_create_thin_observation_views.sql
+0005_create_principals_and_access_scopes.sql
+0006_force_resource_authorization.sql
+0007_create_stable_semantic_identity.sql
+0008_create_semantic_task_queue.sql
+0009_integrate_semantic_worker.sql
+0010_quality_first_usage_accounting.sql
+0011_canonical_observation_transactions.sql
+0012_capture_envelopes_and_inbox.sql
+0013_durable_source_range_capture.sql
+0014_transcript_span_fold.sql
+0015_immutable_observation_commands.sql
+0016_complete_input_evidence_packages.sql
+0017_logical_unit_materialization.sql
+0018_complete_input_execution.sql
+0019_transcript_fold_recovery.sql
+0020_author_controlled_source_revisiting.sql
+0021_source_stable_occurrence_identity.sql
+0022_authored_local_entity_mentions.sql
+0023_attributable_bead_classification.sql
+0024_bounded_stored_bead_inspection.sql
+0025_declared_evidence_scopes.sql
+0026_supervised_managed_dispatch.sql
+0027_authored_claims_and_relations.sql
+0028_semantic_attempt_refusals.sql
+0029_relation_assessment.sql
+0030_assessed_relation_lifecycle.sql
+Traceback (most recent call last):
+  File "/private/tmp/pr03-proof/migrate.py", line 10, in <module>
+    with c.transaction(): c.execute(p.read_text())
+                          ~~~~~~~~~^^^^^^^^^^^^^^^
+  File "<installed-env>/lib/python3.13/site-packages/psycopg/connection.py", line 300, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.UndefinedColumn: column r.authoring_bead_version_id does not exist
+LINE 61: ...bead_id=r.authoring_bead_id AND v.bead_version_id=r.authorin...
+                                                              ^
+
 ===== focused-01.log =====
 Traceback (most recent call last):
   File "<copied-tests>/run.py", line 2, in <module>
@@ -1796,6 +1837,32 @@ FAILED (errors=1)
 
 ===== install-11.log =====
 error: failed to open file `<user-home>/.cache/uv/sdists-v9/.git`: Operation not permitted (os error 1)
+
+===== restart-final-313-wheel-prepare.log =====
+Traceback (most recent call last):
+  File "/private/tmp/pr03-proof/final-313-wheel/prove_assessed_relation_restart.py", line 136, in <module>
+    main()
+    ~~~~^^
+  File "/private/tmp/pr03-proof/final-313-wheel/prove_assessed_relation_restart.py", line 31, in main
+    fixture.setUp()
+    ~~~~~~~~~~~~~^^
+  File "/private/tmp/pr03-proof/final-313-wheel/test_assessed_relation_lifecycle.py", line 35, in setUp
+    migrate(self.db, expected_current_version=29, target_version=30)
+    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/pr03-proof/final-313-wheel/test_postgres_runtime.py", line 85, in migrate
+    return _released_migrate(
+        connection,
+        expected_current_version=expected_current_version,
+        target_version=target_version,
+    )
+  File "/private/tmp/pr03-proof/final-313-wheel/venv/lib/python3.13/site-packages/memoriesql/infrastructure/postgres/migration_runner.py", line 232, in migrate
+    cursor.execute(migration.sql, prepare=False)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/pr03-proof/final-313-wheel/venv/lib/python3.13/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.UndefinedColumn: column r.authoring_bead_version_id does not exist
+LINE 61: ...bead_id=r.authoring_bead_id AND v.bead_version_id=r.authorin...
+                                                              ^
 
 ===== review-regressions-before-fix.log =====
 test_lifecycle_legacy_authored_mixed_cycle_reservation_and_release (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_legacy_authored_mixed_cycle_reservation_and_release) ... unknown PostgreSQL timezone: 'Etc/UTC'; will use UTC

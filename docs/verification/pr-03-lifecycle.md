@@ -141,6 +141,11 @@ Its legacy cycle-routing claim referenced schema27; schema29 already calls the
 shared checker, and installed mixed/later-policy regressions passed before the
 repair. All-key lock hardening addresses the remaining lock issue. A separately
 reproduced future-unit fallback defect is fixed by checking unit creation time.
+The final exact-pin refinement initially referenced a nonexistent authoring-version
+column. Full-schema compile and installed restart preparation failed before any
+governance event; M30 rolled back to29. The repaired expression selects the
+authoring bead's existing source/target version pin, with successful full compile.
+This failure is retained; a package-only green check did not qualify the migration.
 Passing later checks do not erase these records. Historical PR #42/#45 failure
 evidence in the approved document remains untouched. A later local text-cleanup
 mistake removed part of a private inspection function; the reviewed installed

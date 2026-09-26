@@ -58,7 +58,7 @@ CREATE FUNCTION memoriesql.relation_assertions_v1(t uuid, known timestamptz)
 RETURNS TABLE(kind text,relation_id uuid,workspace_id uuid,source_bead_id uuid,source_bead_version_id uuid,target_bead_id uuid,target_bead_version_id uuid,relation_type_revision_id uuid,acceptance text,acceptance_receipt_id uuid,recorded_at timestamptz)
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog,memoriesql SET row_security=off AS $$
  SELECT 'authored',r.relation_id,r.workspace_id,r.source_bead_id,r.source_bead_version_id,r.target_bead_id,r.target_bead_version_id,r.relation_type_revision_id,'accepted',s.idempotency_receipt_id,r.recorded_at
- FROM memoriesql.bead_relations r JOIN memoriesql.bead_versions v ON v.tenant_id=r.tenant_id AND v.bead_id=r.authoring_bead_id AND v.bead_version_id=r.authoring_bead_version_id
+ FROM memoriesql.bead_relations r JOIN memoriesql.bead_versions v ON v.tenant_id=r.tenant_id AND v.bead_id=r.authoring_bead_id AND v.bead_version_id=CASE WHEN r.authoring_bead_id=r.source_bead_id THEN r.source_bead_version_id ELSE r.target_bead_version_id END
  JOIN memoriesql.semantic_task_receipts s ON s.tenant_id=v.tenant_id AND s.semantic_task_receipt_id=v.semantic_task_receipt_id WHERE r.tenant_id=t AND r.recorded_at<=known
  UNION ALL
  SELECT 'assessed',r.relation_id,r.workspace_id,r.source_bead_id,r.source_bead_version_id,r.target_bead_id,r.target_bead_version_id,r.relation_type_revision_id,r.acceptance,s.idempotency_receipt_id,r.recorded_at
