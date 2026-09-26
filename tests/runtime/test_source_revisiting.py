@@ -7,7 +7,7 @@ import hashlib
 import json
 import unittest
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 
 import psycopg
@@ -169,8 +169,12 @@ class SourceRevisiting(CompleteInputExecution):
         return self.step(messages, info)
 
     def worker(
-        self, callback: Any = None, *, recorder: Any = True,
-        task_definition: Any = None, registry_factory: Any = None,
+        self,
+        callback: Any = None,
+        *,
+        recorder: Any = True,
+        task_definition: Any = None,
+        registry_factory: Any = None,
     ) -> IntegratedSemanticWorker:
         task = task_definition or SOURCE_REVISITING_TASK
         modules = BuiltInModuleRegistry._from_source_controlled(
@@ -257,9 +261,7 @@ class SourceRevisiting(CompleteInputExecution):
             self.assertIn("source_revisiting_target_budget", str(error))
         else:
             result = asyncio.run(self.worker().run_once())
-            self.fail(
-                f"oversized activation admitted 131073 characters: {result}"
-            )
+            self.fail(f"oversized activation admitted 131073 characters: {result}")
         self.assertEqual(self.activation_effects(), before)
         self.assertEqual(
             self.row(
@@ -761,11 +763,7 @@ class SourceRevisiting(CompleteInputExecution):
 
         self.setup_revisiting()
         claimed = self.claim()
-        expires = datetime.now(UTC) + timedelta(milliseconds=300)
-        self.db.execute(
-            "UPDATE memoriesql.authentication_credentials SET expires_at=%s WHERE secret_sha256=%s",
-            (expires, self.worker_secret),
-        )
+        reader = self.worker()
         with self.connection() as blocker, ThreadPoolExecutor(1) as pool:
             with blocker.transaction():
                 blocker.execute(
@@ -773,13 +771,13 @@ class SourceRevisiting(CompleteInputExecution):
                     (str(self.tenant) + ":semantic_outcome_authority:",),
                 )
                 waiting = pool.submit(
-                    self.worker()._transaction,
+                    reader._transaction,
                     lambda queue, _: queue.read_source_evidence(
                         claimed.fence,
                         ReadSourceEvidence.model_validate(self.selection()),
                     ),
                 )
-                until = time.monotonic() + 0.2
+                until = time.monotonic() + 3
                 saw_wait = False
                 while time.monotonic() < until:
                     saw_wait = bool(
@@ -789,10 +787,20 @@ class SourceRevisiting(CompleteInputExecution):
                     )
                     if saw_wait:
                         break
+                    if waiting.done():
+                        break
                     time.sleep(0.005)
                 self.assertTrue(saw_wait, "reader must really wait")
-                time.sleep(max(0, (expires - datetime.now(UTC)).total_seconds()) + 0.02)
-            with self.assertRaises((PermissionError, psycopg.Error)):
+                # Expire only after this authenticated reader demonstrably
+                # waits. The blocker owns the mutation fence reentrantly;
+                # committing publishes expiry before releasing that fence.
+                # A short prearmed deadline can expire during worker startup
+                # on a loaded runner and never exercise post-wait authority.
+                blocker.execute(
+                    "UPDATE memoriesql.authentication_credentials SET expires_at=clock_timestamp()-interval '1 millisecond' WHERE secret_sha256=%s",
+                    (self.worker_secret,),
+                )
+            with self.assertRaises(psycopg.errors.InsufficientPrivilege):
                 waiting.result(timeout=3)
         self.assert_no_meaning()
 

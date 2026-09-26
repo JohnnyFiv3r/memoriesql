@@ -43,3 +43,18 @@ the independent per-module installed-distribution ownership check and frozen
 canonical task/executor hashes are unchanged. Shards 1 and 3 passed (116 and
 113 cases); shard 2 ran 158 cases with that one failure. This failed run remains
 historical evidence and does not qualify the repaired head.
+
+Run 36278830493 at fbb079a subsequently failed the Python 3.14 historical
+source-revisiting expiry case: no required advisory-lock wait was observed.
+The inferred fixture race is startup latency: the case prearmed a 300ms
+credential lifetime and allowed only 200ms to observe that wait. The fixture now
+constructs the worker while authorized, confirms the reader actually waits, then
+expires its credential inside the blocking transaction before publishing that
+expiry and releasing the authority fence together. Its refusal assertion is
+strengthened to InsufficientPrivilege; lock timeout or unrelated database errors
+cannot pass it. Canonical authorization, source readers and migration bytes are
+unchanged. Five focused installed repetitions pass on each supported interpreter;
+delayed-start qualification is separately recorded on the PR. The original
+Python 3.13 lane completed all 387 installed cases and fresh-process recovery;
+that cannot qualify the repaired exact head or replace its required Python 3.14
+lane. This repairs test coordination, not production authority or policy.
