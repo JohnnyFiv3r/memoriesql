@@ -93,6 +93,14 @@ replay/conflict/incomplete receipts, independent-key and same-key concurrency,
 correction/confirmation and replacement/withdrawal races, as-of/current agreement,
 protected saved records, uncertainty propagation, observing unions, SCC ties,
 128/129 bounds, uncapped event history and whole-response budget refusal.
+Four broad-review regression cases also qualify legacy authored mixed cycles and
+later permitted revisions, separately cited query/raw-read-only evidence (using a
+trusted denial-only policy fixture), and a canonical non-observation unit with
+true no-observer fallback versus future-unit refusal. Migration0029 already used
+the shared both-kind cycle checker; the forward restatement preserves that call
+and every authorship/claims/coverage rule while extending sorted locks to all
+pinned type keys. No duplicate cycle or lifecycle implementation is added.
+
 Original-record snapshots and zero new task/event checks distinguish governance
 from fresh authorship/model work. `prove_assessed_relation_restart.py` uses three
 processes: committed response loss, fresh-process replay and isolated cleanup.
@@ -118,6 +126,12 @@ fixture errors, stale artifact installation after a denied cache path, and an
 authorization-context preparation race are identified separately. The terminal
 race proof prepares contexts before competing apply transactions and exercises
 the same installed public governance SQL without changing production authority.
+Broad review5327463342 at4fe3094 identified an evidence-maintain overconstraint;
+the installed refusal reproduced and the repaired raw/query-only path passes.
+Its legacy cycle-routing claim referenced schema27; schema29 already calls the
+shared checker, and installed mixed/later-policy regressions passed before the
+repair. All-key lock hardening addresses the remaining lock issue. A separately
+reproduced future-unit fallback defect is fixed by checking unit creation time.
 Passing later checks do not erase these records. Historical PR #42/#45 failure
 evidence in the approved document remains untouched. A later local text-cleanup
 mistake removed part of a private inspection function; the reviewed installed
@@ -131,4 +145,4 @@ has no release readiness claim: the approved dependency, owner merge decisions,
 future release/version/publication qualification and Desktop consumption remain
 separate. PR-03 still excludes tracked claims, partial correction, statement-level
 roots, specialist reconsideration/recovery and autonomous maintenance. No release,
-publication, provider call, owner-data access, deployment or checkpoint was run.
+publication, provider call, owner-data access, deployment or live checkpoint was run.

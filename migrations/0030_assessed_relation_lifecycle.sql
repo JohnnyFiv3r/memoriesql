@@ -324,7 +324,7 @@ CREATE FUNCTION memoriesql.qualified_unit_roots_v1(t uuid,unit uuid,known timest
 LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,memoriesql SET row_security=off AS $$
 DECLARE b uuid; source uuid; u record; q jsonb; roots jsonb:='[]'; gaps jsonb:='[]'; deps jsonb:='[]'; status text:='qualified'; observing boolean:=false;
 BEGIN
- SELECT su.*,ev.source_object_id INTO u FROM memoriesql.source_units su JOIN memoriesql.source_events ev ON ev.tenant_id=su.tenant_id AND ev.event_id=su.event_id WHERE su.tenant_id=t AND su.source_unit_id=unit AND ev.recorded_at<=known;
+ SELECT su.*,ev.source_object_id INTO u FROM memoriesql.source_units su JOIN memoriesql.source_events ev ON ev.tenant_id=su.tenant_id AND ev.event_id=su.event_id WHERE su.tenant_id=t AND su.source_unit_id=unit AND su.created_at<=known AND ev.recorded_at<=known;
  IF NOT FOUND OR NOT memoriesql.current_context_event_authorized(u.access_scope_id,u.event_id,'memory.query','read') THEN RAISE EXCEPTION 'root_unavailable' USING ERRCODE='42501'; END IF;
  PERFORM memoriesql.revisiting_source_authorize(u.source_object_id);
  deps:=memoriesql.relation_unit_records_v1(t,unit,known);
@@ -1488,11 +1488,11 @@ CREATE FUNCTION memoriesql.relation_unit_records_v1(t uuid,id uuid,known timesta
 LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,memoriesql SET row_security=off AS $$
 DECLARE u record; result jsonb;
 BEGIN
- SELECT su.*,ev.source_object_id,ev.recorded_at,ev.content_hash event_content_hash INTO u FROM memoriesql.source_units su JOIN memoriesql.source_events ev ON ev.tenant_id=su.tenant_id AND ev.event_id=su.event_id WHERE su.tenant_id=t AND su.source_unit_id=id AND ev.recorded_at<=known;
+ SELECT su.*,ev.source_object_id,ev.recorded_at,ev.content_hash event_content_hash INTO u FROM memoriesql.source_units su JOIN memoriesql.source_events ev ON ev.tenant_id=su.tenant_id AND ev.event_id=su.event_id WHERE su.tenant_id=t AND su.source_unit_id=id AND su.created_at<=known AND ev.recorded_at<=known;
  IF NOT FOUND OR NOT memoriesql.current_context_event_authorized(u.access_scope_id,u.event_id,'memory.query','read') THEN RAISE EXCEPTION 'dependency_unavailable' USING ERRCODE='42501'; END IF;
  PERFORM memoriesql.revisiting_source_authorize(u.source_object_id);
  result:=jsonb_build_array(
- jsonb_build_object('kind','source_unit','id',id::text,'row',jsonb_build_object('source_unit_id',id,'event_id',u.event_id,'content_sha256',u.content_hash)),
+ jsonb_build_object('kind','source_unit','id',id::text,'row',jsonb_build_object('source_unit_id',id,'event_id',u.event_id,'content_sha256',u.content_hash,'created_at',memoriesql.relation_packet_time(u.created_at))),
  jsonb_build_object('kind','source_event','id',u.event_id::text,'row',jsonb_build_object('event_id',u.event_id,'source_object_id',u.source_object_id,'content_sha256',u.event_content_hash,'recorded_at',memoriesql.relation_packet_time(u.recorded_at))),
  jsonb_build_object('kind','source_object','id',u.source_object_id::text,'row',jsonb_build_object('source_object_id',u.source_object_id)));
  RETURN result;
@@ -1617,10 +1617,12 @@ BEGIN
 END $$;
 REVOKE ALL ON FUNCTION memoriesql.relation_assertion_row_v1(uuid,text,uuid,uuid,timestamptz) FROM PUBLIC;
 
+-- Separately cited evidence requires exact accepted pins and current query/raw
+-- read authority. Endpoint/basis maintain checks remain in closure authorization.
 CREATE FUNCTION memoriesql.assessed_lifecycle_evidence_authorized_v1(t uuid,w uuid,item jsonb) RETURNS boolean
 LANGUAGE sql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,memoriesql SET row_security=off AS $$
- SELECT memoriesql.lifecycle_evidence_authorized(t,w,item) AND EXISTS(
- SELECT 1 FROM memoriesql.bead_semantic_statements s JOIN memoriesql.accepted_bead_semantics a ON a.tenant_id=s.tenant_id AND a.bead_id=s.bead_id AND a.bead_version_id=s.bead_version_id JOIN memoriesql.bead_semantic_statement_evidence e ON e.tenant_id=s.tenant_id AND e.statement_id=s.statement_id WHERE s.tenant_id=t AND s.workspace_id=w AND s.statement_id=(item->>'statement_id')::uuid AND e.evidence_source_unit_id=(item->>'source_unit_id')::uuid AND e.evidence_content_hash=item->>'content_hash' AND memoriesql.current_context_bead_version_authorized(t,w,s.access_scope_id,s.bead_version_id) AND memoriesql.current_context_semantic_statement_authorized(t,w,s.access_scope_id,s.statement_id) AND memoriesql.current_context_accepted_bead_maintain_authorized(t,w,s.access_scope_id,s.bead_version_id) AND memoriesql.current_context_event_authorized(e.access_scope_id,e.evidence_event_id,'memory.query','read'))
+ SELECT EXISTS(
+ SELECT 1 FROM memoriesql.bead_semantic_statements s JOIN memoriesql.accepted_bead_semantics a ON a.tenant_id=s.tenant_id AND a.bead_id=s.bead_id AND a.bead_version_id=s.bead_version_id JOIN memoriesql.bead_semantic_statement_evidence e ON e.tenant_id=s.tenant_id AND e.statement_id=s.statement_id WHERE s.tenant_id=t AND s.workspace_id=w AND s.statement_id=(item->>'statement_id')::uuid AND e.evidence_source_unit_id=(item->>'source_unit_id')::uuid AND e.evidence_content_hash=item->>'content_hash' AND memoriesql.current_context_bead_version_authorized(t,w,s.access_scope_id,s.bead_version_id) AND memoriesql.current_context_semantic_statement_authorized(t,w,s.access_scope_id,s.statement_id) AND memoriesql.current_context_event_authorized(e.access_scope_id,e.evidence_event_id,'memory.query','read') AND memoriesql.current_context_event_authorized(e.access_scope_id,e.evidence_event_id,'source.read','read'))
 $$;
 REVOKE ALL ON FUNCTION memoriesql.assessed_lifecycle_evidence_authorized_v1(uuid,uuid,jsonb) FROM PUBLIC;
 
@@ -1638,3 +1640,286 @@ BEGIN
  RETURN result;
 END $$;
 REVOKE ALL ON FUNCTION memoriesql.lifecycle_parse_time_v1(text) FROM PUBLIC;
+
+-- Narrow schema-29 bundle restatement: retain its existing common cycle check
+-- and all authorship/claims/coverage rules; lock every pinned type key/revision.
+CREATE OR REPLACE FUNCTION memoriesql.apply_authored_relations_v1(
+    t uuid, w uuid, scope uuid, task uuid, attempt uuid, authored_bead uuid, authored_version uuid,
+    receipt uuid, payload jsonb, run_ref text, principal uuid, at timestamp with time zone
+) RETURNS void
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER
+SET search_path = pg_catalog, memoriesql SET row_security = off AS $$
+DECLARE
+    x memoriesql.complete_input_executions%ROWTYPE;
+    rel jsonb; cand jsonb; item jsonb; claim jsonb; upd jsonb; ref jsonb;
+    statement uuid; unit uuid; claim_event uuid; type_revision uuid; named uuid[];
+    candidate_scope uuid; candidate_version uuid; forbidden uuid;
+    uuid_pattern constant text := '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
+BEGIN
+    SELECT * INTO x FROM memoriesql.complete_input_executions WHERE tenant_id = t AND execution_task_id = task;
+    IF x.execution_contract_revision IS DISTINCT FROM 6
+       OR payload - ARRAY['annotations', 'relations', 'candidate_assessments', 'claims', 'claim_updates'] <> '{}'::jsonb
+       OR jsonb_typeof(payload->'relations') IS DISTINCT FROM 'array' OR jsonb_array_length(payload->'relations') > 16
+       OR jsonb_typeof(payload->'candidate_assessments') IS DISTINCT FROM 'array'
+       OR jsonb_typeof(payload->'claims') IS DISTINCT FROM 'array' OR jsonb_array_length(payload->'claims') > 16
+       OR jsonb_typeof(payload->'claim_updates') IS DISTINCT FROM 'array' OR jsonb_array_length(payload->'claim_updates') > 16
+       OR EXISTS (SELECT 1 FROM jsonb_array_elements(payload->'relations') AS r(v)
+                  WHERE COALESCE(v->>'relation_id', '') !~ uuid_pattern OR COALESCE(v->>'candidate_bead_id', '') !~ uuid_pattern
+                     OR jsonb_typeof(v->'authored_statement_ids') IS DISTINCT FROM 'array'
+                     OR jsonb_typeof(v->'candidate_statement_ids') IS DISTINCT FROM 'array'
+                     OR jsonb_typeof(v->'evidence') IS DISTINCT FROM 'array'
+                     OR jsonb_array_length(v->'authored_statement_ids') NOT BETWEEN 1 AND 8
+                     OR jsonb_array_length(v->'candidate_statement_ids') NOT BETWEEN 1 AND 8
+                     OR jsonb_array_length(v->'evidence') NOT BETWEEN 1 AND 8
+                     OR EXISTS (SELECT 1 FROM jsonb_array_elements_text(v->'authored_statement_ids') AS s(i) WHERE s.i !~ uuid_pattern)
+                     OR EXISTS (SELECT 1 FROM jsonb_array_elements_text(v->'candidate_statement_ids') AS s(i) WHERE s.i !~ uuid_pattern)
+                     OR (SELECT count(*) <> count(DISTINCT i) FROM jsonb_array_elements_text(v->'authored_statement_ids') AS s(i))
+                     OR (SELECT count(*) <> count(DISTINCT i) FROM jsonb_array_elements_text(v->'candidate_statement_ids') AS s(i)))
+       OR (SELECT count(*) <> count(DISTINCT v->>'relation_id') FROM jsonb_array_elements(payload->'relations') AS r(v))
+       OR EXISTS (SELECT 1 FROM jsonb_array_elements(payload->'claims') AS k(v)
+                  WHERE COALESCE(v->>'claim_id', '') !~ uuid_pattern
+                     OR jsonb_typeof(v->'statement_ids') IS DISTINCT FROM 'array'
+                     OR jsonb_array_length(v->'statement_ids') NOT BETWEEN 1 AND 8
+                     OR EXISTS (SELECT 1 FROM jsonb_array_elements_text(v->'statement_ids') AS s(i) WHERE s.i !~ uuid_pattern)
+                     OR (SELECT count(*) <> count(DISTINCT i) FROM jsonb_array_elements_text(v->'statement_ids') AS s(i))
+                     OR (jsonb_typeof(v->'subject_mention_id') = 'string' AND v->>'subject_mention_id' !~ uuid_pattern))
+       OR (SELECT count(*) <> count(DISTINCT v->>'claim_id') FROM jsonb_array_elements(payload->'claims') AS k(v))
+       OR EXISTS (SELECT 1 FROM jsonb_array_elements(payload->'claim_updates') AS u(v)
+                  WHERE COALESCE(v->>'target_claim_id', '') !~ uuid_pattern
+                     OR (jsonb_typeof(v->'related_claim_id') = 'string' AND v->>'related_claim_id' !~ uuid_pattern)
+                     OR jsonb_typeof(v->'basis_statement_ids') IS DISTINCT FROM 'array'
+                     OR jsonb_array_length(v->'basis_statement_ids') NOT BETWEEN 1 AND 8
+                     OR EXISTS (SELECT 1 FROM jsonb_array_elements_text(v->'basis_statement_ids') AS s(i) WHERE s.i !~ uuid_pattern)) THEN
+        RAISE EXCEPTION 'authored_relations_invalid' USING ERRCODE = '22023';
+    END IF;
+    -- Fresh identifiers only; a collision is an authored error, never an adopted row.
+    IF EXISTS (SELECT 1 FROM jsonb_array_elements(payload->'relations') AS r(v)
+               JOIN memoriesql.bead_relations AS existing ON existing.tenant_id = t AND existing.relation_id = (v->>'relation_id')::uuid)
+       OR EXISTS (SELECT 1 FROM jsonb_array_elements(payload->'claims') AS k(v)
+                  JOIN memoriesql.bead_claims AS existing ON existing.tenant_id = t AND existing.claim_id = (v->>'claim_id')::uuid) THEN
+        RAISE EXCEPTION 'authored_identifier_conflict' USING ERRCODE = '22023';
+    END IF;
+    -- Every pinned candidate is assessed exactly once.
+    IF (SELECT COALESCE(jsonb_agg(v->>'candidate_bead_id' ORDER BY v->>'candidate_bead_id'), '[]'::jsonb)
+        FROM jsonb_array_elements(payload->'candidate_assessments') AS a(v))
+       IS DISTINCT FROM (SELECT COALESCE(jsonb_agg(v->>'bead_id' ORDER BY v->>'bead_id'), '[]'::jsonb)
+                         FROM jsonb_array_elements(x.relation_candidates) AS c(v)) THEN
+        RAISE EXCEPTION 'relation_candidate_coverage_incomplete' USING ERRCODE = '22023';
+    END IF;
+
+    -- All pinned type keys are serialized before the shared both-kind cycle check, so
+    -- concurrent bundles cannot close a cycle together (locks in a fixed order).
+    FOR forbidden IN
+        SELECT DISTINCT r.relation_type_id
+        FROM jsonb_array_elements(payload->'relations') AS p(v)
+        JOIN memoriesql.relation_types AS ty ON ty.type_key = p.v#>>'{relation_type,key}'
+         AND (ty.tenant_id IS NULL OR (ty.tenant_id = t AND ty.workspace_id = w))
+        JOIN memoriesql.relation_type_revisions AS r ON r.relation_type_id = ty.relation_type_id
+         AND r.revision = (p.v#>>'{relation_type,revision}')::integer
+        ORDER BY 1
+    LOOP
+        PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
+            t::text || ':relation-cycle:' || forbidden::text, 0));
+    END LOOP;
+
+    FOR rel IN SELECT value FROM jsonb_array_elements(payload->'relations') ORDER BY value->>'relation_id' LOOP
+        cand := (SELECT v FROM jsonb_array_elements(x.relation_candidates) AS c(v) WHERE v->>'bead_id' = rel->>'candidate_bead_id');
+        IF cand IS NULL THEN
+            RAISE EXCEPTION 'relation_candidate_not_pinned' USING ERRCODE = '22023';
+        END IF;
+        SELECT access_scope_id, bead_version_id INTO candidate_scope, candidate_version FROM memoriesql.accepted_bead_semantics
+        WHERE tenant_id = t AND bead_id = (cand->>'bead_id')::uuid AND bead_version_id = (cand->>'bead_version_id')::uuid;
+        IF jsonb_typeof(rel->'relation_type') IS DISTINCT FROM 'object'
+           OR NOT EXISTS (SELECT 1 FROM jsonb_array_elements(x.relation_vocabulary) AS d(v)
+                          WHERE v->>'key' = rel#>>'{relation_type,key}' AND v->'revision' = rel#>'{relation_type,revision}') THEN
+            RAISE EXCEPTION 'unknown_relation_type' USING ERRCODE = '22023';
+        END IF;
+        SELECT r.relation_type_revision_id INTO type_revision FROM memoriesql.relation_types AS ty
+        JOIN memoriesql.relation_type_revisions AS r ON r.relation_type_id = ty.relation_type_id
+        WHERE ty.type_key = rel#>>'{relation_type,key}' AND r.revision = (rel#>>'{relation_type,revision}')::integer
+          AND (ty.tenant_id IS NULL OR (ty.tenant_id = t AND ty.workspace_id = w));
+        IF type_revision IS NULL OR rel->>'basis' IS NULL OR rel->>'basis' NOT IN ('source_stated', 'agent_inferred')
+           OR rel->>'direction' IS NULL OR rel->>'direction' NOT IN ('from_authored', 'to_authored')
+           OR jsonb_typeof(rel->'rationale') IS DISTINCT FROM 'string' OR btrim(rel->>'rationale') = '' OR char_length(rel->>'rationale') > 1024
+           OR jsonb_typeof(rel->'qualification') NOT IN ('string', 'null')
+           OR (jsonb_typeof(rel->'qualification') = 'string' AND (btrim(rel->>'qualification') = '' OR char_length(rel->>'qualification') > 1024))
+           OR jsonb_typeof(rel->'author_confidence') IS DISTINCT FROM 'number'
+           OR (rel->>'author_confidence')::numeric NOT BETWEEN 0 AND 1
+           OR round((rel->>'author_confidence')::numeric, 2) <> (rel->>'author_confidence')::numeric THEN
+            RAISE EXCEPTION 'authored_relations_invalid' USING ERRCODE = '22023';
+        END IF;
+        -- Endpoint propositions: statements of the authored version and of the pinned candidate packet.
+        IF EXISTS (SELECT 1 FROM jsonb_array_elements_text(rel->'authored_statement_ids') AS s(i)
+                   WHERE NOT EXISTS (SELECT 1 FROM memoriesql.bead_semantic_statements AS st
+                                     WHERE st.tenant_id = t AND st.statement_id = s.i::uuid AND st.bead_version_id = authored_version)) THEN
+            RAISE EXCEPTION 'relation_statement_not_authored' USING ERRCODE = '22023';
+        END IF;
+        IF EXISTS (SELECT 1 FROM jsonb_array_elements_text(rel->'candidate_statement_ids') AS s(i)
+                   WHERE NOT EXISTS (SELECT 1 FROM jsonb_array_elements(cand->'statements') AS p(v) WHERE p.v->>'statement_id' = s.i)
+                      OR NOT EXISTS (SELECT 1 FROM memoriesql.bead_semantic_statements AS st
+                                     WHERE st.tenant_id = t AND st.statement_id = s.i::uuid AND st.bead_version_id = candidate_version)) THEN
+            RAISE EXCEPTION 'relation_statement_not_pinned' USING ERRCODE = '22023';
+        END IF;
+        named := ARRAY(SELECT i::uuid FROM jsonb_array_elements_text(rel->'authored_statement_ids') AS s(i))
+              || ARRAY(SELECT i::uuid FROM jsonb_array_elements_text(rel->'candidate_statement_ids') AS s(i));
+        -- Evidence must already support one of the relation's named propositions.
+        FOR ref IN SELECT value FROM jsonb_array_elements(rel->'evidence') LOOP
+            IF jsonb_typeof(ref) IS DISTINCT FROM 'object' OR ref - ARRAY['source_unit_id', 'content_hash'] <> '{}'::jsonb
+               OR COALESCE(ref->>'source_unit_id', '') !~ uuid_pattern OR COALESCE(ref->>'content_hash', '') !~ '^[a-f0-9]{64}$'
+               OR NOT EXISTS (SELECT 1 FROM memoriesql.bead_semantic_statement_evidence AS ev
+                              WHERE ev.tenant_id = t AND ev.statement_id = ANY(named)
+                                AND ev.evidence_source_unit_id = (ref->>'source_unit_id')::uuid
+                                AND ev.evidence_content_hash = ref->>'content_hash') THEN
+                RAISE EXCEPTION 'relation_evidence_unbound' USING ERRCODE = '22023';
+            END IF;
+        END LOOP;
+        IF (SELECT count(*) <> count(DISTINCT (v->>'source_unit_id', v->>'content_hash'))
+            FROM jsonb_array_elements(rel->'evidence') AS r(v)) THEN
+            RAISE EXCEPTION 'authored_relations_invalid' USING ERRCODE = '22023';
+        END IF;
+        INSERT INTO memoriesql.bead_relations (
+            tenant_id, workspace_id, relation_id, source_access_scope_id, source_bead_id, source_bead_version_id,
+            target_access_scope_id, target_bead_id, target_bead_version_id, relation_type_revision_id, basis,
+            rationale_text, qualification_text, author_confidence, authoring_bead_id, semantic_task_id,
+            semantic_attempt_id, semantic_run_id, authored_by_principal_id, recorded_at
+        ) SELECT
+            t, w, (rel->>'relation_id')::uuid,
+            CASE WHEN rel->>'direction' = 'from_authored' THEN scope ELSE candidate_scope END,
+            CASE WHEN rel->>'direction' = 'from_authored' THEN authored_bead ELSE (cand->>'bead_id')::uuid END,
+            CASE WHEN rel->>'direction' = 'from_authored' THEN authored_version ELSE candidate_version END,
+            CASE WHEN rel->>'direction' = 'from_authored' THEN candidate_scope ELSE scope END,
+            CASE WHEN rel->>'direction' = 'from_authored' THEN (cand->>'bead_id')::uuid ELSE authored_bead END,
+            CASE WHEN rel->>'direction' = 'from_authored' THEN candidate_version ELSE authored_version END,
+            type_revision, rel->>'basis', rel->>'rationale', NULLIF(rel->'qualification', 'null'::jsonb) #>> '{}',
+            (rel->>'author_confidence')::numeric, authored_bead, task, attempt, run_ref, principal, at;
+        INSERT INTO memoriesql.bead_relation_statements (tenant_id, relation_id, endpoint, workspace_id, access_scope_id, statement_id)
+        SELECT t, (rel->>'relation_id')::uuid,
+               CASE WHEN rel->>'direction' = 'from_authored' THEN 'source' ELSE 'target' END, w, scope, i::uuid
+        FROM jsonb_array_elements_text(rel->'authored_statement_ids') AS s(i)
+        UNION ALL
+        SELECT t, (rel->>'relation_id')::uuid,
+               CASE WHEN rel->>'direction' = 'from_authored' THEN 'target' ELSE 'source' END, w, candidate_scope, i::uuid
+        FROM jsonb_array_elements_text(rel->'candidate_statement_ids') AS s(i);
+        FOR statement, unit IN
+            SELECT DISTINCT ev.statement_id, ev.evidence_source_unit_id
+            FROM jsonb_array_elements(rel->'evidence') AS r(v)
+            JOIN memoriesql.bead_semantic_statement_evidence AS ev
+              ON ev.tenant_id = t AND ev.statement_id = ANY(named)
+             AND ev.evidence_source_unit_id = (r.v->>'source_unit_id')::uuid
+             AND ev.evidence_content_hash = r.v->>'content_hash'
+            ORDER BY 1, 2
+        LOOP
+            PERFORM memoriesql.record_semantic_evidence_link(t, w, 'relation', (rel->>'relation_id')::uuid,
+                'supports', statement, unit, at);
+        END LOOP;
+    END LOOP;
+
+    -- An assertion never references itself, and no cycle-forbidden key forms a cycle
+    -- between statements among its active assertions once this write commits.
+    IF EXISTS (
+        SELECT 1 FROM jsonb_array_elements(payload->'relations') AS p(v)
+        JOIN memoriesql.bead_relation_statements AS source_side
+          ON source_side.tenant_id = t AND source_side.relation_id = (p.v->>'relation_id')::uuid AND source_side.endpoint = 'source'
+        JOIN memoriesql.bead_relation_statements AS target_side
+          ON target_side.tenant_id = t AND target_side.relation_id = source_side.relation_id AND target_side.endpoint = 'target'
+         AND target_side.statement_id = source_side.statement_id
+    ) THEN
+        RAISE EXCEPTION 'relation_self_reference' USING ERRCODE = '22023';
+    END IF;
+    -- The shared check covers both relation kinds, so an assessed assertion counts too.
+    IF memoriesql.relation_cycle_closes_v1(t, (
+        SELECT COALESCE(jsonb_agg(jsonb_build_object('kind', 'authored', 'relation_id', p.v->>'relation_id')), '[]'::jsonb)
+        FROM jsonb_array_elements(payload->'relations') AS p(v))) THEN
+        RAISE EXCEPTION 'relation_cycle_forbidden' USING ERRCODE = '22023';
+    END IF;
+
+    FOR item IN SELECT value FROM jsonb_array_elements(payload->'candidate_assessments') ORDER BY value->>'candidate_bead_id' LOOP
+        cand := (SELECT v FROM jsonb_array_elements(x.relation_candidates) AS c(v) WHERE v->>'bead_id' = item->>'candidate_bead_id');
+        SELECT access_scope_id, bead_version_id INTO candidate_scope, candidate_version FROM memoriesql.accepted_bead_semantics
+        WHERE tenant_id = t AND bead_id = (cand->>'bead_id')::uuid AND bead_version_id = (cand->>'bead_version_id')::uuid;
+        IF item->>'assessment' IS NULL OR item->>'assessment' NOT IN ('edge', 'no_edge', 'unassessed')
+           OR (item->>'assessment' = 'edge') IS DISTINCT FROM EXISTS (
+                SELECT 1 FROM jsonb_array_elements(payload->'relations') AS r(v) WHERE r.v->>'candidate_bead_id' = item->>'candidate_bead_id')
+           OR jsonb_typeof(item->'reason') NOT IN ('string', 'null')
+           OR (jsonb_typeof(item->'reason') = 'string' AND (btrim(item->>'reason') = '' OR char_length(item->>'reason') > 1024))
+           OR (item->>'assessment' = 'unassessed' AND jsonb_typeof(item->'reason') IS DISTINCT FROM 'string') THEN
+            RAISE EXCEPTION 'relation_candidate_coverage_invalid' USING ERRCODE = '22023';
+        END IF;
+        INSERT INTO memoriesql.relation_candidate_assessments (
+            tenant_id, workspace_id, access_scope_id, authoring_bead_id, authoring_bead_version_id,
+            candidate_access_scope_id, candidate_bead_id, candidate_bead_version_id, assessment, reason_text,
+            semantic_task_id, semantic_attempt_id, semantic_run_id, recorded_at
+        ) VALUES (
+            t, w, scope, authored_bead, authored_version, candidate_scope, (cand->>'bead_id')::uuid,
+            candidate_version, item->>'assessment', NULLIF(item->'reason', 'null'::jsonb) #>> '{}', task, attempt, run_ref, at
+        );
+    END LOOP;
+
+    FOR claim IN SELECT value FROM jsonb_array_elements(payload->'claims') ORDER BY value->>'claim_id' LOOP
+        IF EXISTS (SELECT 1 FROM jsonb_array_elements_text(claim->'statement_ids') AS s(i)
+                   WHERE NOT EXISTS (SELECT 1 FROM memoriesql.bead_semantic_statements AS st
+                                     WHERE st.tenant_id = t AND st.statement_id = s.i::uuid AND st.bead_version_id = authored_version))
+           OR (jsonb_typeof(claim->'subject_mention_id') = 'string' AND NOT EXISTS (
+                SELECT 1 FROM memoriesql.entity_mentions AS m
+                WHERE m.tenant_id = t AND m.entity_mention_id = (claim->>'subject_mention_id')::uuid
+                  AND m.bead_version_id = authored_version))
+           OR jsonb_typeof(claim->'subject_mention_id') NOT IN ('string', 'null')
+           OR jsonb_typeof(claim->'subject') IS DISTINCT FROM 'string' OR btrim(claim->>'subject') = '' OR char_length(claim->>'subject') > 256
+           OR jsonb_typeof(claim->'slot') IS DISTINCT FROM 'string' OR btrim(claim->>'slot') = '' OR char_length(claim->>'slot') > 128
+           OR jsonb_typeof(claim->'value') IS DISTINCT FROM 'string' OR btrim(claim->>'value') = '' OR char_length(claim->>'value') > 1024
+           OR jsonb_typeof(claim->'applicability') NOT IN ('string', 'null')
+           OR (jsonb_typeof(claim->'applicability') = 'string'
+               AND (btrim(claim->>'applicability') = '' OR char_length(claim->>'applicability') > 1024)) THEN
+            RAISE EXCEPTION 'authored_claim_invalid' USING ERRCODE = '22023';
+        END IF;
+        INSERT INTO memoriesql.bead_claims (
+            tenant_id, workspace_id, access_scope_id, claim_id, bead_id, bead_version_id, subject_text,
+            subject_entity_mention_id, slot_text, value_text, applicability_text, semantic_task_id,
+            semantic_attempt_id, semantic_run_id, authored_by_principal_id, recorded_at
+        ) VALUES (
+            t, w, scope, (claim->>'claim_id')::uuid, authored_bead, authored_version, claim->>'subject',
+            (NULLIF(claim->'subject_mention_id', 'null'::jsonb) #>> '{}')::uuid, claim->>'slot', claim->>'value',
+            NULLIF(claim->'applicability', 'null'::jsonb) #>> '{}', task, attempt, run_ref, principal, at
+        );
+        INSERT INTO memoriesql.bead_claim_statements (tenant_id, workspace_id, access_scope_id, claim_id, statement_id)
+        SELECT t, w, scope, (claim->>'claim_id')::uuid, i::uuid FROM jsonb_array_elements_text(claim->'statement_ids') AS s(i);
+    END LOOP;
+
+    FOR upd IN SELECT value FROM jsonb_array_elements(payload->'claim_updates')
+               ORDER BY value->>'target_claim_id', value->>'action', value->>'related_claim_id' LOOP
+        -- The author saw only pinned candidates' claims; the target must be one of them.
+        IF NOT EXISTS (SELECT 1 FROM jsonb_array_elements(x.relation_candidates) AS c(v),
+                                     jsonb_array_elements(c.v->'claims') AS k(v2)
+                       WHERE k.v2->>'claim_id' = upd->>'target_claim_id')
+           OR upd->>'action' IS NULL OR upd->>'action' NOT IN ('supersede', 'dispute', 'reaffirm')
+           OR (upd->>'action' = 'reaffirm') IS DISTINCT FROM (jsonb_typeof(upd->'related_claim_id') IS DISTINCT FROM 'string')
+           OR (jsonb_typeof(upd->'related_claim_id') = 'string' AND NOT EXISTS (
+                SELECT 1 FROM jsonb_array_elements(payload->'claims') AS k(v) WHERE k.v->>'claim_id' = upd->>'related_claim_id'))
+           OR jsonb_typeof(upd->'reason') IS DISTINCT FROM 'string' OR btrim(upd->>'reason') = '' OR char_length(upd->>'reason') > 1024
+           OR EXISTS (SELECT 1 FROM jsonb_array_elements_text(upd->'basis_statement_ids') AS s(i)
+                      WHERE NOT EXISTS (SELECT 1 FROM memoriesql.bead_semantic_statements AS st
+                                        WHERE st.tenant_id = t AND st.statement_id = s.i::uuid AND st.bead_version_id = authored_version)) THEN
+            RAISE EXCEPTION 'claim_update_invalid' USING ERRCODE = '22023';
+        END IF;
+        claim_event := pg_catalog.uuidv7();
+        INSERT INTO memoriesql.bead_claim_events (
+            tenant_id, workspace_id, claim_event_id, claim_id, action, related_claim_id, reason, origin,
+            authoring_bead_id, authoring_bead_version_id, semantic_task_id, semantic_attempt_id, semantic_run_id,
+            idempotency_receipt_id, recorded_by_principal_id, effective_at, recorded_at
+        ) VALUES (
+            t, w, claim_event, (upd->>'target_claim_id')::uuid, upd->>'action',
+            (NULLIF(upd->'related_claim_id', 'null'::jsonb) #>> '{}')::uuid,
+            upd->>'reason', 'authored', authored_bead, authored_version, task, attempt, run_ref, receipt, principal, NULL, at
+        );
+        FOR statement, unit IN
+            SELECT ev.statement_id, ev.evidence_source_unit_id FROM memoriesql.bead_semantic_statement_evidence AS ev
+            WHERE ev.tenant_id = t
+              AND ev.statement_id IN (SELECT i::uuid FROM jsonb_array_elements_text(upd->'basis_statement_ids') AS s(i))
+            ORDER BY 1, 2
+        LOOP
+            PERFORM memoriesql.record_semantic_evidence_link(t, w, 'claim_event', claim_event, 'supports', statement, unit, at);
+        END LOOP;
+    END LOOP;
+END;
+$$;
+REVOKE ALL ON FUNCTION memoriesql.apply_authored_relations_v1(uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,jsonb,text,uuid,timestamptz) FROM PUBLIC;

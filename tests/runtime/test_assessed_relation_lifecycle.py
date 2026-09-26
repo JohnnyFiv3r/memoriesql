@@ -1548,6 +1548,309 @@ class AssessedLifecycle(fixtures.RelationAssessment):
                 (self.tenant, bead),
             )[0]
 
+    def test_lifecycle_legacy_authored_mixed_cycle_reservation_and_release(
+        self,
+    ) -> None:
+        source, target, relation = self.assertion(key="derived_from")
+        self.governance.record_event(
+            self.lifecycle_command(source, relation, "dispute", "mixed-reserve")
+        )
+        before = self.beads_as_they_were()
+
+        def bridge(extras: Any, bead: Any, candidates: Any) -> None:
+            self.relate(
+                extras, bead, candidates[0], "derived_from", basis="agent_inferred"
+            )
+            self.relate(
+                extras,
+                bead,
+                candidates[1],
+                "derived_from",
+                direction="to_authored",
+                basis="agent_inferred",
+            )
+
+        self.author(
+            "Fictional legacy cycle bridge.",
+            "mixed-refuse",
+            candidates=(source, target),
+            plan=bridge,
+            expect=None,
+        )
+        self.assertEqual(self.beads_as_they_were(), before)
+        self.governance.record_event(
+            self.lifecycle_command(source, relation, "retract", "mixed-release")
+        )
+        accepted = self.author(
+            "Fictional released legacy bridge.",
+            "mixed-allow",
+            candidates=(source, target),
+            plan=bridge,
+        )
+        self.assertEqual(len(self.read(accepted).relations), 2)
+
+    def test_lifecycle_legacy_permitted_revision_cannot_close_forbidden_pin(
+        self,
+    ) -> None:
+        from unittest.mock import patch
+
+        from memoriesql.application.authored_relations import RelationTypePin
+        from memoriesql.application.relation_lifecycle import (
+            DecideRelationType,
+            ProposeRelationType,
+        )
+
+        proposal = ProposeRelationType(
+            idempotency_key="legacy-custom-1",
+            access_scope_id=self.scope,
+            key="mitigates",
+            label="Mitigates",
+            definition="Fictional direction.",
+            endpoint_rule="action -> harm",
+            forward_reading="mitigates",
+            inverse_reading="is mitigated by",
+            symmetric=False,
+            cycle_policy="forbidden",
+            reason="Fictional controlled vocabulary.",
+        )
+
+        def accept(p: Any, key: str) -> None:
+            candidate = self.lifecycle.propose_relation_type(p)
+            self.lifecycle.decide_relation_type(
+                DecideRelationType(
+                    idempotency_key=key,
+                    access_scope_id=self.scope,
+                    candidate_id=candidate.candidate_id,
+                    decision="accepted",
+                    reason="Fictional owner acceptance.",
+                )
+            )
+
+        accept(proposal, "legacy-custom-1-accept")
+        source = self.bead("Fictional first endpoint.", key="legacy-policy-source")
+        target = self.bead("Fictional second endpoint.", key="legacy-policy-target")
+        self.activate_relations(
+            source,
+            (target,),
+            key="legacy-policy-forward",
+            vocabulary=fixtures.VOCABULARY
+            + (RelationTypePin(key="mitigates", revision=1),),
+        )
+        self.propose(
+            lambda packet: [
+                self.proposal(
+                    packet,
+                    "mitigates",
+                    self.endpoint(packet, source, 0),
+                    self.endpoint(packet, target, 0),
+                    basis="agent_inferred",
+                )
+            ]
+        )
+        self.run_relations()
+        relation = self.read(source).relations[0].relation_id
+        accept(
+            proposal.model_copy(
+                update=dict(idempotency_key="legacy-custom-2", cycle_policy="permitted")
+            ),
+            "legacy-custom-2-accept",
+        )
+
+        def bridge(extras: Any, bead: Any, candidates: Any) -> None:
+            self.relate(
+                extras, bead, candidates[0], "mitigates", basis="agent_inferred"
+            )
+            self.relate(
+                extras,
+                bead,
+                candidates[1],
+                "mitigates",
+                direction="to_authored",
+                basis="agent_inferred",
+            )
+            for row in extras["relations"]:
+                row["relation_type"]["revision"] = 2
+
+        activate = self.activate
+
+        def latest(*args: Any, **kwargs: Any) -> Any:
+            return activate(
+                *args,
+                **(
+                    kwargs
+                    | dict(
+                        vocabulary=fixtures.VOCABULARY
+                        + (RelationTypePin(key="mitigates", revision=2),)
+                    )
+                ),
+            )
+
+        before = self.beads_as_they_were()
+        with patch.object(self, "activate", side_effect=latest):
+            self.author(
+                "Fictional later permitted cycle bridge.",
+                "legacy-permitted-refuse",
+                candidates=(source, target),
+                plan=bridge,
+                expect=None,
+            )
+        self.assertEqual(self.beads_as_they_were(), before)
+        self.governance.record_event(
+            self.lifecycle_command(source, relation, "retract", "legacy-policy-release")
+        )
+        with patch.object(self, "activate", side_effect=latest):
+            self.author(
+                "Fictional permitted released bridge.",
+                "legacy-permitted-allow",
+                candidates=(source, target),
+                plan=bridge,
+            )
+
+    def test_lifecycle_separate_evidence_needs_query_raw_read_without_maintain(
+        self,
+    ) -> None:
+        source, _, relation = self.assertion()
+        scope, source_object, grant = self.remote_scope()
+        other = self.remote_bead(
+            "Fictional read-only governance evidence.",
+            key="raw-only",
+            scope=scope,
+            source=source_object,
+        )
+        statement, unit, content_hash = self.row(
+            "SELECT s.statement_id,e.evidence_source_unit_id,e.evidence_content_hash FROM memoriesql.bead_semantic_statements s JOIN memoriesql.bead_semantic_statement_evidence e USING(tenant_id,statement_id) WHERE s.bead_id=%s",
+            (other,),
+        )
+        # A trusted denial-only policy fixture makes the capability distinction
+        # observable without creating a product grant API or granting authority.
+        definition = self.row(
+            "SELECT pg_get_functiondef('memoriesql.current_context_event_authorized(uuid,uuid,text,text)'::regprocedure)"
+        )[0]
+        self.db.execute(
+            definition.replace(
+                "SELECT EXISTS (",
+                "SELECT NOT (requested_access_scope_id='"
+                + str(scope)
+                + "'::uuid AND requested_capability='memory.maintain') AND EXISTS (",
+                1,
+            )
+        )
+        with self.db.transaction():
+            self.begin()
+            self.db.execute("RESET ROLE")
+            self.assertFalse(
+                self.row(
+                    "SELECT memoriesql.current_context_event_authorized(%s,(SELECT event_id FROM memoriesql.beads WHERE bead_id=%s),'memory.maintain','read')",
+                    (scope, other),
+                )[0]
+            )
+        command = self.lifecycle_command(
+            source, relation, "confirm", "raw-only-confirm"
+        ).model_copy(
+            update=dict(
+                evidence=(
+                    self.lifecycle_command(source, relation, "confirm", "raw-pin")
+                    .evidence[0]
+                    .model_copy(
+                        update=dict(
+                            statement_id=statement,
+                            source_unit_id=unit,
+                            content_hash=content_hash,
+                        )
+                    ),
+                )
+            )
+        )
+        receipt = self.governance.record_event(command)
+        self.assertIsInstance(receipt, AssessedRelationEventReceipt, receipt)
+        self.assertTrue(self.governance.record_event(command).replayed)
+        self.assertEqual(
+            self.read(source).relations[0].events[0].evidence[0].statement_id, statement
+        )
+        self.assertEqual(
+            self.governance.record_event(
+                self.lifecycle_command(
+                    source, relation, "dispute", "raw-history-dispute"
+                )
+            ).state,
+            "disputed",
+        )
+        self.assertEqual(
+            self.governance.record_event(
+                self.lifecycle_command(
+                    source, relation, "retract", "raw-history-retract"
+                )
+            ).state,
+            "retracted",
+        )
+        self.revoke(grant)
+        self.assertEqual(self.governance.record_event(command).error, "unavailable")
+
+    def test_lifecycle_true_no_observer_fallback_and_future_unit_refusal(self) -> None:
+        import psycopg
+
+        original = self.command()
+        unit = original.units[0].model_copy(
+            update=dict(
+                source_unit_id=uuid.uuid4(),
+                is_observation=False,
+                parent_unit_id=original.units[0].source_unit_id,
+                detail=original.units[0].detail.model_copy(
+                    update=dict(turn_id="orchard.non-observer")
+                ),
+                external_unit_id="orchard.non-observer",
+                unit_ordinal=1,
+            )
+        )
+        command = original.model_copy(
+            update=dict(units=original.units + (unit,), checkpoint=None)
+        )
+        self.accept(command)
+        known = self.row(
+            "SELECT GREATEST(u.created_at,e.recorded_at) FROM memoriesql.source_units u JOIN memoriesql.source_events e USING(tenant_id,event_id) WHERE u.source_unit_id=%s",
+            (unit.source_unit_id,),
+        )[0]
+        self.assertEqual(
+            self.row(
+                "SELECT count(*) FROM memoriesql.beads WHERE source_unit_id=%s",
+                (unit.source_unit_id,),
+            )[0],
+            0,
+        )
+
+        def qualify(known: Any, source_unit: uuid.UUID = unit.source_unit_id) -> Any:
+            with self.db.transaction():
+                self.begin()
+                self.db.execute("RESET ROLE")
+                return self.row(
+                    "SELECT memoriesql.qualified_unit_roots_v1(%s,%s,%s)",
+                    (self.tenant, source_unit, known),
+                )[0]
+
+        roots = qualify(known)
+        self.assertEqual(roots["roots_status"], "qualified")
+        self.assertEqual(roots["derivation_root_ids"], [str(self.source)])
+        with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+            qualify(known, uuid.uuid4())
+        # Trusted clock-only seed adjustment isolates a future unit on an already
+        # visible event; no content/evidence or application authority is changed.
+        with self.db.transaction():
+            self.db.execute(
+                "ALTER TABLE memoriesql.source_units DISABLE TRIGGER source_units_immutable"
+            )
+            self.db.execute(
+                "UPDATE memoriesql.source_units SET created_at=%s WHERE source_unit_id=%s",
+                (known + timedelta(microseconds=1), unit.source_unit_id),
+            )
+            self.db.execute(
+                "ALTER TABLE memoriesql.source_units ENABLE TRIGGER source_units_immutable"
+            )
+        with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+            qualify(known)
+        self.assertEqual(
+            qualify(known + timedelta(microseconds=1))["roots_status"], "qualified"
+        )
+
     def test_lifecycle_shared_frame_context_keeps_one_snapshot_and_cleans_up(
         self,
     ) -> None:

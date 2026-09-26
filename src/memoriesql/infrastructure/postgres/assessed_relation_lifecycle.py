@@ -79,7 +79,10 @@ class PostgresAssessedRelationLifecycle:
         except (QueryCanceled, LockNotAvailable):
             return AssessedRelationEventRefusal(error="budget_exhausted")
         except UndefinedFunction as error:
-            if "record_assessed_relation_event_v1" not in str(error):
+            if (
+                "record_assessed_relation_event_v1("
+                not in str(error).split("CONTEXT:")[0]
+            ):
                 raise
             return AssessedRelationEventRefusal(error="schema_mismatch")
 
