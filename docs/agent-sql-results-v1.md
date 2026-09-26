@@ -791,6 +791,14 @@ receipt; it cannot resurrect a released binding. New save/update is a new step.
 resolve_save is the cross-run/restart name-to-pin lookup; missing, released or
 denied names share unavailable. It discloses no protected name/checkpoint metadata
 before the active binding's whole closure is reauthorized.
+Its available response must bind `access.checkpoint=save.checkpoint` and
+`access.basis={kind:named_save,save_id:save.save_id,revision:save.revision}` from
+the same locked read. It must never return an automatic or another save's basis,
+even while those also retain the manifest. read_checkpoint propagates its supplied
+basis into every returned root_context; checkpoint/restore/branch return their new
+automatic basis. save_checkpoint returns its active binding so subsequent lookup
+can select that exact named revision. Concurrent release/retarget that wins before
+delivery makes the resolved context unavailable; it cannot silently switch bases.
 
 `RetentionState={automatic_until:timestamptz,automatic_retained:bool,
 named_holds:[{save_id:uuid,revision:int8}],retained:bool,hold_ref:uuid?,
