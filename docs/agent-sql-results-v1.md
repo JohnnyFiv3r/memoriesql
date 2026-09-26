@@ -736,6 +736,7 @@ These actions use the common run/step envelope and current identity equality:
 | checkpoint | `investigation_id:uuid?,branch_id:uuid?,expected_head:CheckpointPin?,question,progress,findings,roots:[{result:ResultPin,access:AccessContext}]` | `checkpoint:Manifest,branch:{branch_id,head:CheckpointPin},retention:RetentionState` |
 | read_checkpoint | `access:CheckpointAccess` | `checkpoint:Manifest,retention:RetentionState,root_contexts:[AccessContext]`; no result rows become visible |
 | save_checkpoint | `access:CheckpointAccess,name:text,expected_save_revision:int8?` | `save:SaveBinding,retention:RetentionState` |
+| resolve_save | `investigation_id:uuid,name:text` | `save:SaveBinding,access:CheckpointAccess,retention:RetentionState`; exact active binding after full reauthorization, no rows |
 | release_save | `investigation_id:uuid,name:text,expected_save_revision:int8` | `released:{save_id:uuid,revision:int8,state:released}`; noncontent management receipt only |
 | restore_checkpoint | `access:CheckpointAccess,selected_roots:[ResultPin]` | `branch:Branch,checkpoint:Manifest,root_contexts:[AccessContext]`; no implicit row/fact/evidence delivery |
 | branch_investigation | `access:CheckpointAccess,selected_roots:[ResultPin]` | Same as restore; explicit fork without interpreting progress |
@@ -748,6 +749,9 @@ digests and access contexts must verify before allocation. Each successful appen
 atomically publishes manifest, head, holds, storage charges and idempotency receipt;
 concurrent identical keys get one manifest. Text/roots and all contexts enter the
 fingerprint. No partial checkpoint or acknowledged head exists on allocation failure.
+Sequence starts at one per branch and increases by one; predecessor is the
+compared head, fork_origin is set only on a restored/branched initial checkpoint.
+Automatic expiry is creation + 30 × 24 hours UTC. save/resolve never changes it.
 
 `SaveBinding={save_id:uuid,investigation_id:uuid,name:text,revision:int8,
 checkpoint:CheckpointPin,state:active|released,recorded_at:timestamptz}`.
@@ -764,6 +768,9 @@ inaccessible saved bytes do not trap storage. Its management reply always contai
 only opaque save ID/revision/state and noncontent charges, not checkpoint/name
 metadata. Exact replay returns the original mutation receipt plus a new access
 receipt; it cannot resurrect a released binding. New save/update is a new step.
+resolve_save is the cross-run/restart name-to-pin lookup; missing, released or
+denied names share unavailable. It discloses no protected name/checkpoint metadata
+before the active binding's whole closure is reauthorized.
 
 `RetentionState={automatic_until:timestamptz,automatic_retained:bool,
 named_holds:[{save_id:uuid,revision:int8}],retained:bool,hold_ref:uuid?,
