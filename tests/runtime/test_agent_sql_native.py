@@ -38,6 +38,7 @@ class AgentSqlNative(unittest.TestCase):
     dsn: ClassVar[str]
     catalog: ClassVar[SqlCatalog]
     edges: ClassVar[list[tuple[int, int]]]
+
     @classmethod
     def setUpClass(cls) -> None:
         cls.admin = psycopg.connect(os.environ["N1_TEST_DATABASE_URL"], autocommit=True)
@@ -47,6 +48,7 @@ class AgentSqlNative(unittest.TestCase):
         )
         cls.dsn = make_conninfo(os.environ["N1_TEST_DATABASE_URL"], dbname=cls.name)
         cls.db = psycopg.connect(cls.dsn, autocommit=True)
+        cls.db.execute("SET timezone='UTC'")
         cls.catalog = SqlCatalog.installed()
         cls.db.execute(
             "CREATE SCHEMA memory_v1; CREATE SCHEMA evaluation_v1; CREATE SCHEMA input"
@@ -108,6 +110,13 @@ class AgentSqlNative(unittest.TestCase):
         cls.db.execute(
             "INSERT INTO input.prior VALUES (%s, %s), (%s, %s)",
             (identity(1), Decimal("2.5"), identity(2), Decimal("3.5")),
+        )
+        for digest in ("a" * 64, "b" * 64):
+            cls.insert("memory_v1.source_units", 500, {"content_sha256": digest})
+        cls.insert(
+            "memory_v1.statement_sources",
+            500,
+            {"source_unit_id": identity(500), "content_sha256": "a" * 64},
         )
 
     @classmethod
@@ -175,6 +184,46 @@ class AgentSqlNative(unittest.TestCase):
             (SqlParameter(1, "text", "%orchard%"),),
         )
         self.assertEqual(rows, [(identity(i),) for i in range(1, 7)])
+
+    def test_content_versions_join_by_bytes_and_order_by_complete_visible_key(
+        self,
+    ) -> None:
+        rows = self.execute(
+            "SELECT u.source_unit_id AS unit,u.content_sha256 AS digest,row_number() OVER (ORDER BY u.source_unit_id,u.content_sha256) AS n FROM memory_v1.source_units u ORDER BY u.source_unit_id,u.content_sha256"
+        )
+        self.assertEqual(
+            rows, [(identity(500), "a" * 64, 1), (identity(500), "b" * 64, 2)]
+        )
+        rows = self.execute(
+            "SELECT u.content_sha256 AS digest FROM memory_v1.source_units u JOIN memory_v1.statement_sources s ON s.source_unit_id=u.source_unit_id AND s.content_sha256=u.content_sha256"
+        )
+        self.assertEqual(rows, [("a" * 64,)])
+
+    def test_parameter_only_collation_and_group_aggregates_feed_windows(self) -> None:
+        params = (SqlParameter(1, "text", "İ"), SqlParameter(2, "text", "i"))
+        self.assertEqual(
+            self.execute("SELECT $1 ILIKE $2 AS matched", params), [(False,)]
+        )
+        rows = self.execute("SELECT $1 AS text UNION SELECT $2 AS text", params)
+        self.assertEqual(set(rows), {("i",), ("İ",)})
+        admitted = admit_select("SELECT lower($1) AS text", (params[0],))
+        rows = self.db.execute(
+            "SELECT pg_collation_for(q.text) FROM (" + admitted.sql + ") q",
+            admitted.parameters,
+        ).fetchall()
+        self.assertEqual(rows, [('"C"',)])
+        rows = self.execute(
+            "SELECT s.bead_id AS id, sum(count(*)) OVER (ORDER BY s.bead_id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS n FROM memory_v1.statements s GROUP BY s.bead_id ORDER BY s.bead_id"
+        )
+        self.assertEqual(
+            rows,
+            [
+                (identity(1), Decimal(2)),
+                (identity(2), Decimal(3)),
+                (identity(3), Decimal(4)),
+                (identity(4), Decimal(5)),
+            ],
+        )
 
     def test_sets_preserve_nulls_and_bag_multiplicity(self) -> None:
         a = Counter([identity(i) for i in range(1, 7)])

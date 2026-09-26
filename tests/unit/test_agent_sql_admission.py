@@ -59,6 +59,56 @@ class AgentSqlAdmissionTests(unittest.TestCase):
         self.assertEqual(result.parameters, {"p1": private_value})
         self.assertIn("CAST(%(p1)s AS TEXT)", result.sql)
 
+    def test_byte_identity_and_composite_source_key_are_preserved(self) -> None:
+        catalog = SqlCatalog.installed()
+        for name in (
+            "source_units",
+            "statement_sources",
+            "relation_evidence",
+            "relation_event_evidence",
+        ):
+            self.assertEqual(
+                catalog.relations["memory_v1." + name]
+                .column("content_sha256")
+                .type.pg_type,
+                "text",
+            )
+        self.assertEqual(
+            catalog.relations["memory_v1.source_units"].unique_keys,
+            (("source_unit_id", "content_sha256"),),
+        )
+        with self.assertRaises(SqlAdmissionError):
+            admit_select(
+                "SELECT row_number() OVER (ORDER BY u.source_unit_id) AS n FROM memory_v1.source_units u"
+            )
+        admit_select(
+            "SELECT row_number() OVER (ORDER BY u.source_unit_id,u.content_sha256) AS n FROM memory_v1.source_units u"
+        )
+
+    def test_parameter_only_text_uses_catalog_collation(self) -> None:
+        result = admit_select(
+            "SELECT $1 ILIKE $2 AS matched",
+            (SqlParameter(1, "text", "İ"), SqlParameter(2, "text", "i")),
+        )
+        self.assertEqual(result.sql.count('COLLATE "pg_catalog"."C"'), 2)
+
+    def test_distinct_on_and_illegal_aggregate_window_phases_are_refused(self) -> None:
+        for query in (
+            "SELECT DISTINCT ON (o.bead_id) o.title AS title FROM memory_v1.observations o",
+            "SELECT o.bead_id AS id FROM memory_v1.observations o WHERE count(*)=$1",
+            "SELECT o.bead_id AS id FROM memory_v1.observations o WHERE row_number() OVER (ORDER BY o.bead_id,o.bead_version_id)=$1",
+            "SELECT count(*) AS n FROM memory_v1.observations o GROUP BY count(*)",
+            "SELECT count(*) AS n FROM memory_v1.observations o GROUP BY row_number() OVER (ORDER BY o.bead_id,o.bead_version_id)",
+            "SELECT count(*) AS n FROM memory_v1.observations o HAVING row_number() OVER (ORDER BY o.bead_id,o.bead_version_id)=$1",
+            "SELECT sum(count(*)) AS n FROM memory_v1.observations o",
+            "SELECT sum(row_number() OVER (ORDER BY o.bead_id,o.bead_version_id)) AS n FROM memory_v1.observations o",
+            "SELECT lag(lag(o.summary,1) OVER (ORDER BY o.bead_id,o.bead_version_id),1) OVER (ORDER BY o.bead_id,o.bead_version_id) AS n FROM memory_v1.observations o",
+        ):
+            with self.subTest(query=query), self.assertRaises(SqlAdmissionError):
+                admit_select(
+                    query, (SqlParameter(1, "int8", "1"),) if "$1" in query else ()
+                )
+
     def test_qualified_columns_group_alias_and_percent_tokens(self) -> None:
         result = admit_select(
             'SELECT memory_v1.observations.bead_id AS "%(p1)s%%" FROM memory_v1.observations WHERE observations.summary=$1',

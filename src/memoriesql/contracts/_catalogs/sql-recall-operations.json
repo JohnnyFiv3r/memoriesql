@@ -718,6 +718,13 @@
           },
           {
             "key": false,
+            "name": "content_sha256",
+            "nullable": false,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
             "name": "evidence_ref",
             "nullable": false,
             "pg_type": "uuid",
@@ -857,6 +864,13 @@
             "nullable": false,
             "pg_type": "uuid",
             "reference_kind": "source_unit_ref"
+          },
+          {
+            "key": false,
+            "name": "content_sha256",
+            "nullable": false,
+            "pg_type": "text",
+            "reference_kind": null
           },
           {
             "key": false,
@@ -1126,6 +1140,13 @@
             "reference_kind": "source_unit_ref"
           },
           {
+            "key": true,
+            "name": "content_sha256",
+            "nullable": false,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
             "key": false,
             "name": "event_id",
             "nullable": false,
@@ -1232,7 +1253,8 @@
           }
         ],
         "keys": [
-          "source_unit_id"
+          "source_unit_id",
+          "content_sha256"
         ]
       },
       "statement_sources": {
@@ -1257,6 +1279,13 @@
             "nullable": false,
             "pg_type": "uuid",
             "reference_kind": "event_ref"
+          },
+          {
+            "key": false,
+            "name": "content_sha256",
+            "nullable": false,
+            "pg_type": "text",
+            "reference_kind": null
           },
           {
             "key": false,

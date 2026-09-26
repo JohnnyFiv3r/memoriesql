@@ -66,12 +66,14 @@ reconciliation, or a qualified server-side fence, are required before dependent
 execution. No silent interpretation or policy relaxation is applied.
 
 Initial local source checks: generated catalogs, byte-exact migration inventory,
-public boundary, runtime closure, Ruff, strict mypy and 71 source tests pass after
+public boundary, runtime closure, Ruff, strict mypy and 74 source tests pass after
 the preserved dependency-allowlist correction. Focused native PostgreSQL 18.4
-checks pass: 10 composition cases and 5 authority cases. One authority case
+checks pass: 12 composition cases and 5 authority cases. One authority case
 records the USERSET limitation rather than qualifying settings enforcement.
-Installed wheel/sdist qualification on Python 3.13/3.14 and exact-head CI must
-be recorded on the implementation PR before this slice is considered qualified.
+All four initial wheel/sdist routes on Python 3.13/3.14 passed 28 focused cases
+with checkout access denied; exact CI-built bytes matched. Those bytes are now
+superseded by substantive review repairs. Repaired installed qualification and
+exact-head CI must be recorded on the PR before this slice is qualified.
 
 Full immutable results/witnesses, canonical relation projections, operation
 settlement/accounting, current authorization/erasure, restart, checkpoint/save/

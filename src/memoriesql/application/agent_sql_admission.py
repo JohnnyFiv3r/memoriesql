@@ -262,6 +262,12 @@ def _closed_tree(tree: exp.Expr) -> None:
     compositions = 0
     for node in nodes:
         name = type(node).__name__
+        if (
+            isinstance(node, exp.Distinct)
+            and isinstance(node.parent, exp.Select)
+            and (node.expressions or node.args.get("on"))
+        ):
+            _refuse(node, "distinct_on")
         if name not in _ARGS:
             _refuse(node, name)
         if any(
@@ -491,6 +497,7 @@ class _Binder:
                 )
         where = node.args.get("where")
         if where:
+            _phase(where.this, aggregates=False, windows=False)
             self.boolean(where.this, scope, ctes)
         columns = []
         synthetic: set[str] = set()
@@ -513,6 +520,7 @@ class _Binder:
                 synthetic.add(name)
             if not name or name in expressions:
                 _refuse(projected, "projection_alias", "invalid_request")
+            _phase(value, aggregates=True, windows=True)
             type_ = self.expression(value, scope, ctes)
             if type_.array or type_.pg_type == "null":
                 _refuse(projected, "projected_type", "invalid_request")
@@ -536,10 +544,15 @@ class _Binder:
                         expression.replace(replacement)
                         expression = replacement
                 group_expressions.append(expression)
+                _phase(expression, aggregates=False, windows=False)
                 self.expression(expression, scope, ctes)
         having = node.args.get("having")
         if having:
+            _phase(having.this, aggregates=True, windows=False)
             self.boolean(having.this, scope, ctes)
+        if node.args.get("order"):
+            for item in node.args["order"].expressions:
+                _phase(item.this, aggregates=True, windows=True)
         self.order(
             node.args.get("order"),
             scope,
@@ -1113,6 +1126,43 @@ class _Binder:
         return SqlRelation((*relation.columns, SqlColumn(cycle_flag, BOOL)), ())
 
 
+def _phase(node: exp.Expr, *, aggregates: bool, windows: bool) -> None:
+    """Check one query level; subqueries receive their own phase checks."""
+    if isinstance(node, exp.Subquery | exp.Select | exp.SetOperation):
+        return
+    if isinstance(node, exp.Window):
+        if not windows:
+            _refuse(node, "window_phase", "invalid_request")
+        function = node.this
+        if isinstance(function, exp.Filter):
+            _phase(function.expression, aggregates=False, windows=False)
+            function = function.this
+        if isinstance(function, exp.Count | exp.Sum | exp.Avg | exp.Min | exp.Max):
+            # Ordinary group aggregates may feed a later window aggregate;
+            # e.g. SUM(COUNT(*)) OVER is valid and useful PostgreSQL composition.
+            for window_argument in function.iter_expressions():
+                _phase(window_argument, aggregates=True, windows=False)
+        else:
+            _phase(function, aggregates=True, windows=False)
+        for key in ("partition_by", "order", "spec"):
+            value = node.args.get(key)
+            for item in value if isinstance(value, list) else [value] if value else []:
+                _phase(item, aggregates=True, windows=False)
+        return
+    if isinstance(node, exp.Filter):
+        _phase(node.this, aggregates=aggregates, windows=windows)
+        _phase(node.expression, aggregates=False, windows=False)
+        return
+    if isinstance(node, exp.Count | exp.Sum | exp.Avg | exp.Min | exp.Max):
+        if not aggregates:
+            _refuse(node, "aggregate_phase", "invalid_request")
+        for aggregate_argument in node.iter_expressions():
+            _phase(aggregate_argument, aggregates=False, windows=False)
+        return
+    for child in node.iter_expressions():
+        _phase(child, aggregates=aggregates, windows=windows)
+
+
 def _lower(tree: exp.Expr, parameters: dict[int, BoundParameter]) -> dict[str, Any]:
     values = {}
     for parameter in list(tree.find_all(exp.Parameter)):
@@ -1121,12 +1171,16 @@ def _lower(tree: exp.Expr, parameters: dict[int, BoundParameter]) -> dict[str, A
         name = "p" + str(position)
         values[name] = bound.value
         dtype = bound.type.pg_type + ("[]" if bound.type.array else "")
-        parameter.replace(
-            exp.Cast(
-                this=exp.Placeholder(this=name),
-                to=exp.DataType.build(dtype, dialect="postgres"),
-            )
+        lowered: exp.Expr = exp.Cast(
+            this=exp.Placeholder(this=name),
+            to=exp.DataType.build(dtype, dialect="postgres"),
         )
+        if bound.type.pg_type == "text":
+            lowered = exp.Collate(
+                this=lowered,
+                expression=exp.column("C", table="pg_catalog", quoted=True),
+            )
+        parameter.replace(lowered)
     for aggregate in list(tree.find_all(exp.Min, exp.Max)):
         physical = aggregate.meta.get("input_pg_type")
         if physical == "bool":
