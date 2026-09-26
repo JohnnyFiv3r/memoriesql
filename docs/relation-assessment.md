@@ -484,7 +484,8 @@ these exact extensions:
   `action=retire`, `origin=authored`, with null event number/previous event;
 - each evidence item also carries `roots_status` and
   `roots_gap_relation_ids:[{kind:authored|assessed,relation_id:uuid,reason}]`, empty when
-  qualified/unsupported. Their disclosures require the same closure authority.
+  qualified. Indeterminate/unsupported items retain their exact explanatory gaps;
+  their disclosures require the same closure authority.
 
 The closed row types below are the complete interface consumed by PR-05; prior
 contract files/code names are implementation references, not additional normative
@@ -504,7 +505,7 @@ EvidencePin = {statement_id:uuid, source_unit_id:uuid, content_hash:sha256}
 RootStatus = qualified | indeterminate | unsupported
 State = active | disputed | reassessment_pending | retracted | superseded | not_accepted
 RootGap = {kind:authored|assessed, relation_id:uuid,
-           reason:disputed|corrected|withdrawn|replacement_gap}
+           reason:disputed|corrected|withdrawn|replacement_gap|statement_roots_unsupported}
 Evidence = {statement_id:uuid, source_unit_id:uuid, content_sha256:sha256,
             derivation_root_ids:uuid[]?, roots_status:RootStatus,
             roots_gap_relation_ids:RootGap[]}
@@ -599,7 +600,11 @@ equal cutoffs with different visible records have different manifest hashes.
 
 Unaccepted assessed rows preserve `acceptance=not_accepted`; their evidence can
 still have qualified roots without making the proposal support. Same-bead
-assessed derivation remains unsupported for statement-level root attribution.
+accepted support-eligible derivation has `roots_status=unsupported` and null
+`independent_root_count`, including when separately rooted basis evidence exists.
+Its evidence items retain their own unit-level qualification; a qualified basis
+unit does not establish the missing statement-level attribution. The propagation
+rule below prevents an affected bead/unit from becoming an own-source fallback.
 `derivation_root_ids` identifies canonical **source objects**, not source units,
 beads, statements or assertion IDs. Root rows in PR-05 preserve that identity.
 Other qualified evidence in that inspection stays usable on its own; aggregate
@@ -614,7 +619,8 @@ PR-05 owns admission of its complete result/provenance allocation. It may not
 truncate root closure or convert the inspection ceiling into a hidden SQL LIMIT.
 Malformed read/time/version inputs return exactly `{contract_version:3,
 outcome:refused,error:invalid_request|schema_mismatch}`. Array root status is
-`qualified` only if every required item is qualified; otherwise `unsupported`
+`qualified` only if every required item and the assertion's own root attribution
+are qualified; otherwise `unsupported`
 takes precedence over `indeterminate`, and its aggregate count is null.
 
 Legacy v1/v2 inspection and existing root-array/count helpers must delegate state
@@ -723,6 +729,45 @@ and their complete dependency manifests must fit their owning response/result
 admission; an algorithm may not return a truncated set merely because the final
 source-object union is small.
 
+**Same-bead derivation and propagation.** At this frame, any accepted,
+support-eligible built-in `derived_from` assertion whose source and target bead
+IDs are equal represents a statement-level shape this contract does not compute.
+For each root walk, examine such assertions on every reached bead (including its
+starting bead) and on every observing seed of the unit. Do not turn the excluded
+self-edge into a singleton original or a computed SCC representative. Instead
+that bead-root computation has `roots_status=unsupported`, a null root array,
+and a gap `{kind,relation_id,reason:statement_roots_unsupported}` for each such
+assertion. It has no qualified original root to add to a union. The self-edge
+does not add a vertex to the 128-bead bound and creates no new source object.
+Cross-bead ancestors reaching the affected bead inherit that unsupported outcome;
+the unsupported member is never dropped from an observing set or evidence union.
+
+If any observing member's bead-root computation is unsupported, the entire unit
+is unsupported with null `derivation_root_ids`, even if other members have
+qualified roots or indeterminate gaps. An assertion requiring that unit has
+`roots_status=unsupported` and null `independent_root_count`. Preserve all
+authorized explanations from unsupported and indeterminate members/items, sorted
+and deduplicated as above; precedence does not erase the lesser-status gaps.
+Other individual evidence units may retain their independently qualified root
+arrays, but cannot produce a partial aggregate count. Independently of these
+unit results, an inspected assertion that is itself an accepted support-eligible
+same-bead derivation also has unsupported aggregate root attribution, as specified
+above; qualified foreign basis evidence does not change that subject-level floor.
+
+An unaccepted same-bead proposal causes no graph edge or unsupported/gap outcome
+for other beads/units. A disputed, correction-pending, retracted or superseded
+same-bead assertion follows L4's noneligible gap/replacement rules below rather
+than pretending to be an eligible statement-level edge. If another eligible
+same-bead assertion still exists, unsupported takes precedence. Later removal
+does not automatically certify an original: withdrawal still leaves its L4 gap.
+Apply current authorization and the complete dependency/budget checks before
+disclosing any unsupported outcome or explanatory ID. Denied/erased dependencies
+produce `unavailable`, not an unsupported substitute or a smaller union; an
+uncompleted over-budget closure produces `budget_exhausted`. No new semantic
+judgment, statement-root algorithm or change to assertion acceptance/eligibility
+is implied. Legacy root-array/count and v1/v2 inspection adapters refuse this
+unsupported answer as already specified, rather than returning a singleton root.
+
 Use only support-eligible `derived_from` assertions of either kind between
 different beads as derivation edges at the selected frame. For each reached bead,
 also examine accepted outgoing derivation assertions excluded by dispute,
@@ -792,6 +837,7 @@ Required fictional installed-wheel and installed-sdist cases:
 | Read agreement | New/legacy inspection, fresh eligibility and ordinary traversal, both kinds of derivation, root counts/gaps and cycle reservation agree at one frame before/during/after dispute, confirm, retract and replacement |
 | Derived uncertainty | Multi-hop/shared roots, withdrawn/disputed edge inside lineage, no false own-source corroboration, eligible replacement chains, forbidden statement cycle versus permitted bead SCC, same-bead unsupported roots and explicit overflow |
 | Exact root algorithm | Multiple observing beads per unit, union across evidence units, true no-observer fallback versus denied/gapped observers; SCC representative by created_at then UUID (including equal timestamps and conflicting source clocks); 128 reachable beads pass and 129 refuse for each seed; a combined unit union above 128 is not silently capped |
+| Same-bead unsupported roots | Accepted eligible self-derivation: null bead/unit/assertion roots/count, never own-source fallback; propagation through a cross-bead ancestor and multiple observing/evidence members; unsupported over indeterminate with all authorized gaps retained; foreign basis roots stay separately qualified but do not certify the subject; unaccepted proposal has no effect; later dispute/retraction follows L4; denied dependencies refuse all metadata; legacy reads refuse unsupported answers |
 | Preservation | Accepted bead version/statements/evidence/authorship receipts, proposal/judgment, author/specialist runs/deliveries, pair coverage, earlier lifecycle/retirement and failed/pending task evidence stay unchanged; governance schedules zero semantic/provider work |
 
 Build exact wheel/sdist from the implementation head; install each in a fresh
