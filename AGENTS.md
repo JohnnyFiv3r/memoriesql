@@ -11,6 +11,17 @@ This repository is the staged public boundary for the memoriesQL open core. Keep
 - Every contribution must carry a Developer Certificate of Origin sign-off.
 - Open requested PRs in non-draft state, subscribe to their comments, and address, answer, and resolve actionable review threads. Require CI on the final PR commit. For this bootstrap, request one broad review and at most one focused rereview; do not merge, publish, or change repository visibility without owner authorization.
 
+The 2026-09-26 owner amendment prioritizes governed assessed-relation lifecycle
+and expands the PR-05 proposal to qualified SQL composition and durable branching
+investigations. See `docs/relation-assessment.md#forward-lifecycle-completion` and
+`docs/agent-sql-results-v1.md`. Approved product direction is not exact-interface
+approval: reconcile relation/checkpoint/save contracts and workload-grounded
+policy, obtain approval of the amended packet, then an independent unseen-holdout
+freeze before retrieval runtime. Preserve the public-first release boundary;
+restoring a checkpoint cannot roll back memory, authority or consumed budgets.
+The prior packet at `11692c3` is not approved as-is. This documentation amendment
+selects no release version, protected upload, provider spend or deployment.
+
 The owner-authorized schema-21 slice adds only explicit source-stable logical
 materialization, reviewed producer identity scope and compatibility fences. See
 `docs/logical-unit-materialization.md`. Preserve SQL 0001–0020 and all earlier
