@@ -39,7 +39,10 @@ approval, or green CI satisfies neither gate. Both gates are presently **pending
 Approval digest procedure v1: `packet_sha256` is lowercase SHA-256 of the exact
 Git blob bytes at `<packet_commit>:docs/agent-sql-results-v1.md`, including its
 final newline; no Markdown rendering, Unicode normalization or whitespace cleanup.
-Reproduce with `git show <packet_commit>:docs/agent-sql-results-v1.md | shasum -a 256`.
+In Bash/Zsh, enable `set -o pipefail`, then reproduce with
+`git show <packet_commit>:docs/agent-sql-results-v1.md | shasum -a 256`.
+Record a digest only on zero pipeline exit; missing/mistyped commit or blob fails
+the gate even if the last program printed an empty-input hash.
 The closed approval record is `{version:1,packet_commit:text(40 lowercase hex),
 packet_path:"docs/agent-sql-results-v1.md",algorithm:"sha256",packet_sha256:text,
 approval_ref:text,amendments:[{amendment_ref:text,supersedes_packet_sha256:text}]}`.
@@ -230,7 +233,7 @@ Input aliases match `[a-z][a-z0-9_]{0,31}` and cannot shadow catalog/CTE names.
 No rationale, target facet or interpretation field can affect authorization.
 Integers used as limits/positions are nonnegative JSON integers (parameter positions
 are 1–64). Parameter types are the scalar SQL types above, typed reference kinds,
-or their bounded IN arrays; contextual type mismatches are rejected. Projected
+or their bounded typed arrays for ANY; contextual type mismatches are rejected. Projected
 column names must be unique. Hash/ref fields have their declared type even inside
 nested records; an untyped object cannot smuggle a different identifier kind.
 Live cutoffs cannot exceed trusted server time; saved-input scope/view/cutoff
