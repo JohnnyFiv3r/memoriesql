@@ -36,6 +36,20 @@ unchanged threshold/profile manifests, without exposing questions or gold.
 The implementer neither creates nor reads that holdout. A prose merge, architecture
 approval, or green CI satisfies neither gate. Both gates are presently **pending**.
 
+Approval digest procedure v1: `packet_sha256` is lowercase SHA-256 of the exact
+Git blob bytes at `<packet_commit>:docs/agent-sql-results-v1.md`, including its
+final newline; no Markdown rendering, Unicode normalization or whitespace cleanup.
+Reproduce with `git show <packet_commit>:docs/agent-sql-results-v1.md | shasum -a 256`.
+The closed approval record is `{version:1,packet_commit:text(40 lowercase hex),
+packet_path:"docs/agent-sql-results-v1.md",algorithm:"sha256",packet_sha256:text,
+approval_ref:text,amendments:[{amendment_ref:text,supersedes_packet_sha256:text}]}`.
+Initial amendments is empty. Any amendment must first be incorporated into a new
+committed packet; the record lists its amendment ref/preceding digest, and the
+owner explicitly approves the new whole-packet digest. An external prose exception
+cannot alter the effective contract. The custodian attestation repeats that exact
+record/digest and its separate sealed evaluation manifest digests; a mismatch
+requires a new approval/freeze rather than an inferred equivalent contract.
+
 ## 1. Exact logical catalog
 
 Proposed contract ID `memoriesql.agent-sql-results.v1`, contract version 1;
@@ -117,6 +131,8 @@ closure. Do not silently adopt pglast's different license or port upstream code.
 
 Admit exactly one SELECT: explicit projections/aliases; `WHERE`; `AND/OR/NOT`;
 typed `= <> < <= > >=`, `IS [NOT] NULL`, `IN` over bound values/subselects;
+typed scalar `= ANY($n::type[])` for array membership (only an admitted parameter
+array cast, maximum 64 elements, no null elements; an empty array matches nothing);
 `LIKE/ILIKE` over text; non-recursive SELECT-only CTEs; correlated `EXISTS` /
 `NOT EXISTS`; inner and left equality joins; `GROUP BY`, `HAVING`, `DISTINCT`;
 `ORDER BY ... ASC/DESC NULLS FIRST/LAST`; and an explicit nonnegative `LIMIT`.
@@ -140,8 +156,9 @@ casts, arbitrary collations, overloaded user functions or dynamic identifiers.
 All values use `$1…$64` typed parameters (structural constants above and LIMIT
 excepted). Semantic ID parameters are registered vocabulary pins or currently
 visible/server-admitted typed anchors; a guessed ID, a UUID string cast or a SQL
-literal cannot manufacture visibility. Bound arrays may only supply typed IN
-membership; they cannot supply relation names. Catalog relations are discovery
+literal cannot manufacture visibility. Bound arrays use the typed ANY form;
+`IN ($1)` accepts one scalar, never an array expansion. Arrays cannot supply
+relation names. Catalog relations are discovery
 surfaces, so an unanchored content query may discover new authorized records.
 Reject multiple statements, DML/DDL (also inside CTEs), SELECT INTO, row locking,
 session commands, OFFSET, recursion, windows, set operations, lateral/set-returning
@@ -190,7 +207,8 @@ never enter generic diagnostics. Replayed access gets a new authorization receip
 
 All wire objects are closed, versioned, immutable JSON; UUIDs are opaque typed
 refs, hashes are 64 lowercase hex, timestamps UTC RFC3339, bytes base64, int8 and
-numeric values decimal strings, booleans/null/text native JSON. Reject unknown
+numeric values decimal strings, float8 values exact hexadecimal strings, and
+booleans/null/text native JSON. Reject unknown
 fields, nonfinite scores, invalid UTF-8, mismatched types or missing parameters.
 The trusted host starts `Run {run_ref, catalog_hash, policy_hash, started_at,
 expires_at, default_known_at, remaining}` after authentication; callers cannot
@@ -324,7 +342,9 @@ digest, refs, consuming run and current authority. Only refs in delivered rows,
 inspection or hydration become visible. An aggregate makes its scoped fact visible,
 not every contributor's full content. A lost response can be redelivered under
 the same step key, with a new access receipt and charges. Cross-run reuse requires
-the same authenticated owner/workspace, reauthorization of the complete dependency
+equality of the originating authenticated principal, tenant, owner, workspace and
+access-scope identity (including on-behalf-of/pairing identity), plus current
+reauthorization of the complete dependency
 closure, and explicit delivery of selected rows/facts into the new run. Retained
 evidence is not automatically current-run evidence; a source snippet is not exact
 hydration. PR-06 owns final material-invalidation checking, finish and answers.
@@ -341,14 +361,31 @@ before atomic commit; crash injection between any writes must expose neither a
 partial result nor a successful receipt. Concurrent identical requests have one
 executor/result; different request bytes under the same key conflict. Fingerprint
 all semantic inputs including limits, frames, profile, input digests and types.
-The version-1 digest is SHA-256 over canonical UTF-8 JSON (sorted object keys,
-ordered arrays, no whitespace, explicit nulls and decimal-string numeric values)
+The version-1 digest is SHA-256 over canonical UTF-8 JSON using `result-json-v1`
+(sorted object keys, ordered arrays, no whitespace, explicit nulls and typed scalars)
 of immutable schema/rows/query/lineage/frame/coverage metadata; exclude the digest
 itself, delivery receipts and changing access/work counters. Catalog and serializer/
 provenance revisions must match for saved-input composition. Initial reuse requires
 the same catalog hash and a v1 reader; future compatibility mappings require
 explicit qualified registry entries. Unchanged catalog hashes can survive package
 upgrades. Incompatibility is unsupported_query, never silent refresh/re-execution.
+
+`result-json-v1` uses the existing public canonical JSON encoder with
+`ensure_ascii=True`, `sort_keys=True`, separators `(',', ':')`, after these closed
+scalar conversions: UUIDs lowercase hyphenated; timestamps UTC
+`YYYY-MM-DDTHH:MM:SS.ffffffZ` (six fractional digits); SQL int8/numeric decimal
+strings with no plus/exponent/leading zeroes, no fractional trailing zeroes and
+zero always `"0"`; finite float8 values use exact IEEE-754 hexadecimal strings
+as Python `float.hex()` defines (including the sign of zero); raw bytes standard
+padded RFC4648 base64. Boolean/null are JSON primitives; control integers are
+ordinary decimal JSON integers. No JSON floats, duplicate keys or unpaired
+Unicode surrogates are admitted. Sort keys by Unicode code point; never normalize
+source Unicode. Strings escape quote/backslash, use short `\b\f\n\r\t` escapes,
+lowercase `\uXXXX` for other controls/DEL/non-ASCII BMP, and lowercase UTF-16
+surrogate-pair escapes for non-BMP. Printable ASCII including `/` stays literal;
+do not emit alternate literal UTF-8/optional slash escapes. This describes exact
+bytes for independent implementations; a serializer-profile change needs a new
+contract/catalog revision, not rehashing old results.
 Retries/redelivery do not rerun the query; uncertain ownership is recovered first.
 Expired/erased bindings never recreate a result under the original ID/key.
 
