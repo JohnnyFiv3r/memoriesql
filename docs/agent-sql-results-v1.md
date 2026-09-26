@@ -228,24 +228,29 @@ closure and installed 3.13/3.14 results are **pending**. Minor SQLGlot releases 
 break compatibility; never float its pin. Failure to qualify requires an explicit
 engineering revision and equivalent admission evidence, not unchecked execution.
 
-The proposed contract admits exactly one SELECT with explicit projections/aliases;
+The complete closed grammar is the following expression/clause rules **together
+with** the composition matrix and bounded-recursion rules below. They are one
+admission contract, not a narrower baseline plus optional undocumented extensions.
+It admits exactly one SELECT with explicit projections/aliases;
 `WHERE`; `AND/OR/NOT`;
 typed `= <> < <= > >=`, `IS [NOT] NULL`, `IN` over bound values/subselects;
 typed scalar `= ANY($n::type[])` for array membership (only an admitted parameter
 array cast, maximum 64 elements, no null elements; an empty array matches nothing);
-`LIKE/ILIKE` over text; non-recursive SELECT-only CTEs; correlated `EXISTS` /
-`NOT EXISTS`; inner and left equality joins; `GROUP BY`, `HAVING`, `DISTINCT`;
-`ORDER BY ... ASC/DESC NULLS FIRST/LAST`; and an explicit nonnegative `LIMIT`.
+`LIKE/ILIKE` over text; SELECT-only CTEs (non-recursive, or one qualified recursive
+CTE under the rules below); correlated `EXISTS` / `NOT EXISTS`; inner/left/right/full
+equality joins; `GROUP BY`, `HAVING`, `DISTINCT`; UNION/INTERSECT/EXCEPT [ALL];
+the closed window forms below; `ORDER BY ... ASC/DESC NULLS FIRST/LAST`;
+and explicit nonnegative `LIMIT`/bounded `OFFSET`.
 No cross/natural joins or unconstrained theta joins. Inner/left/right/full equality
 joins use catalog identity keys or compatible saved-column identity types;
 self joins are allowed. Right/full nonmatches require both population witnesses.
 Grouping/CTEs may compose, including aggregates of saved group facts, provided
 the complete witness derivation is supported. Duplicate projected values retain
-bag multiplicity; DISTINCT records collapsed multiplicities. This baseline is not
+bag multiplicity; DISTINCT records collapsed multiplicities. This grammar is not
 qualified at runtime merely by being listed here. Each shape below has mandatory
 acceptance obligations; admission is unavailable until they pass.
 
-The baseline closed function list is `count(*)`, `count(expr)`, `count(DISTINCT expr)`,
+The closed scalar/aggregate function list is `count(*)`, `count(expr)`, `count(DISTINCT expr)`,
 `sum/avg(numeric|int8)`, `min/max` on comparable scalar types; `lower/upper(text)`,
 `coalesce` of one type, `nullif` of one type; and
 `date_trunc('day'|'month'|'year', timestamptz, 'UTC')`. Numeric `+ - * /`,
@@ -255,6 +260,9 @@ never lossy JSON floats. Null/empty aggregate semantics are PostgreSQL's. All
 operators/functions/casts resolve to inventoried builtin OIDs and signatures;
 text comparison uses the catalog's pinned deterministic collation. No identifier
 casts, arbitrary collations, overloaded user functions or dynamic identifiers.
+The only additional window function signatures are row_number(), rank(),
+dense_rank(), lag(expr,offset,default?) and lead(expr,offset,default?), plus these
+admitted aggregates used OVER the explicitly qualified frames in the matrix.
 
 All values use `$1…$64` typed parameters (structural constants above and LIMIT
 excepted). Semantic ID parameters are registered vocabulary pins or currently
@@ -715,7 +723,7 @@ reasoning, model internals or second canonical memory store is captured.
 
 `CheckpointPin={checkpoint_id:uuid,manifest_digest:hash}` and
 `CheckpointAccess={checkpoint:CheckpointPin,basis:RetentionBasis}`. An immutable manifest is
-`{checkpoint_id,investigation_id:uuid,branch_id:uuid,sequence:int8,
+`{checkpoint_id,investigation_id:uuid,branch_id:uuid,sequence:int8,investigation_sequence:int8,
 predecessor:CheckpointPin?,fork_origin:CheckpointPin?,working_state_source:CheckpointPin?,created_at:timestamptz,
 automatic_expires_at:timestamptz,question:text,progress:{status:investigating|
 paused|ready_for_pr06,note:text},findings:[{text:text,facts:[fact_ref],
@@ -752,6 +760,18 @@ fingerprint. No partial checkpoint or acknowledged head exists on allocation fai
 Sequence starts at one per branch and increases by one; predecessor is the
 compared head, fork_origin is set only on a restored/branched initial checkpoint.
 Automatic expiry is creation + 30 × 24 hours UTC. save/resolve never changes it.
+All checkpoint append/restore/branch, save/retarget/release and expiry/prune
+operations serialize retention using an investigation-wide lock, not branch
+locks alone. Lock order is authority fence, run/step ownership, workspace allocation
+ledger, involved investigation locks sorted by UUID, then branch/save/hold locks
+sorted by their typed IDs. Recheck contexts/head after waiting. Under that lock,
+allocate a strictly increasing investigation_sequence starting at one (no reuse),
+publish the new manifest and prune the lowest sequence among automatic slots until
+at most 20 remain. The investigation sequence is the total prune order, independent
+of equal timestamps or branch-local sequence. GC takes the same retention/ledger
+locks before deleting anything and rechecks current holders. A failed transaction
+publishes neither the new sequence/manifest nor any pruned context. No model/network
+wait is held under these locks.
 
 `SaveBinding={save_id:uuid,investigation_id:uuid,name:text,revision:int8,
 checkpoint:CheckpointPin,state:active|released,recorded_at:timestamptz}`.
@@ -827,7 +847,7 @@ proof in this proposal):
 | S is released after P's direct expiry, but C still needs P | S-bound P access stops immediately; C's bounded dependency use remains. Retain P until no valid holder needs it; do not silently renew P or break C. |
 | Revocation/regrant or governed erasure affects P | Revocation blocks every affected disclosure context. Regrant alone restores neither expired direct access nor a released save; an existing valid checkpoint may resume only if bytes remain and all current authority checks pass. Erasure overrides every hold and invalidates dependent disclosure. |
 | Automatic checkpoint A is pruned/expired while named save S still holds it | An A-automatic cursor refuses; a new explicitly S-bound step/cursor may use selected roots. Retarget/release of S never switches the old cursor to another hold or checkpoint. |
-| Checkpoint 21 and a branch restore after >20 result refinements | Only oldest automatic history is pruned; named saves/valid-child closure remain. A fresh branch gets new manifest/head/context; memory, prior frames, permissions and charged work are unchanged. |
+| Checkpoint 21, concurrent appends/restores on two branches with equal timestamps | Investigation-wide sequence/retention lock yields distinct ordered commits and ≤20 automatic slots; deterministic oldest slot alone is pruned, named/child holds remain; no rollback or budget reset. |
 
 ## 5. Revocation, erasure, retention and work policy
 
