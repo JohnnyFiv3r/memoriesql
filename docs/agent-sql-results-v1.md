@@ -168,10 +168,10 @@ released; 0.0.12 rows or an empty placeholder cannot satisfy that capability.
 | Relation (key) | Exact columns beyond the key |
 | --- | --- |
 | `assessed_relations` (`relation_id:uuid`) | `task_id:uuid`, `type_key:text`, `type_revision:int8`, `source_bead_id:uuid`, `source_bead_version_id:uuid`, `target_bead_id:uuid`, `target_bead_version_id:uuid`, `basis:text` = `source_stated\|agent_inferred`, `rationale:text`, `qualification:text?`, `author_confidence:numeric`, `author_run_ref:text`, `specialist_run_ref:text`, `acceptance_receipt_id:uuid`, `recorded_at:timestamptz`, `state:text` = `active\|disputed\|reassessment_pending\|retracted\|superseded`, `head_token:text`, `support_eligible:bool`, `support_reason:text?` = `disputed\|corrected\|retracted\|superseded`, `correction_pending:bool`, `roots_status:text` = `qualified\|indeterminate\|unsupported`, `independent_root_count:int8?` |
-| `relation_statements` (`relation_id:uuid`, `role:text`, `statement_id:uuid`) | `role` = `source\|target\|basis`, `bead_id:uuid`, `bead_version_id:uuid`; exact text joins `statements` |
+| `relation_statements` (`relation_id:uuid`, `role:text`, `statement_id:uuid`) | `role` = `source\|target\|basis`, `bead_id:uuid`, `bead_version_id:uuid`, `text:text`; exact immutable endpoint/basis text, never successor substitution |
 | `relation_evidence` (`relation_id:uuid`, `statement_id:uuid`, `source_unit_id:uuid`) | `content_sha256:text`, `evidence_ref:uuid`, `roots_status:text` as above |
 | `relation_events` (`event_id:uuid`) | `relation_id:uuid`, `action:text` = `confirm\|dispute\|retract\|retire`, `related_relation_id:uuid?`, `reason:text`, `origin:text` = `authored\|governed`, `authoring_bead_id:uuid?`, `effective_at:timestamptz?`, `recorded_at:timestamptz`, `event_number:int8?`, `previous_event_id:uuid?`, `recorded_by_principal_id:uuid`, `recorded_by_user_id:uuid?`, `idempotency_receipt_id:uuid` |
-| `relation_event_evidence` (`event_id:uuid`, `statement_id:uuid`, `source_unit_id:uuid`) | `content_sha256:text`, `evidence_ref:uuid`; human event evidence does not become assertion support |
+| `relation_event_evidence` (`event_id:uuid`, `statement_id:uuid`, `source_unit_id:uuid`) | `bead_id:uuid`, `bead_version_id:uuid`, `statement_text:text`, `content_sha256:text`, `evidence_ref:uuid`; human event evidence does not become assertion support |
 | `relation_types` (`type_key:text`, `type_revision:int8`) | `namespace:text` = `memoriesql\|workspace`, `label:text`, `definition:text`, `endpoint_rule:text`, `forward_reading:text`, `inverse_reading:text`, `symmetric:bool`, `evidence_expectation:text?`, `example:text?`, `counterexample:text?`, `cycle_policy:text` = `permitted\|forbidden` |
 | `relation_pairs` (`task_id:uuid`, `first_bead_id:uuid`, `second_bead_id:uuid`) | `first_bead_version_id:uuid`, `second_bead_version_id:uuid`, `disposition:text` = `related\|not_related\|abstained\|not_assessed`, `abstention:text?` = `no_fit\|insufficient_evidence\|ambiguous`, `reason:text?` |
 | `relation_corrections` (`relation_id:uuid`, `role:text`, `correcting_bead_id:uuid`) | `role` = `source\|target\|basis`, `correcting_bead_version_id:uuid` (resolved at this frame, not falsely a lifecycle-event pin) |
@@ -187,6 +187,10 @@ full judgments and qualified evidence-root IDs/gaps are returned by `inspect` as
 using that dependency's closed types; no lifecycle writes are exposed here.
 Root/gap arrays are paged witness members, not inferred corroboration. A count is
 nonnull only for qualified roots; no partial independent count is a complete union.
+Pinned relation/event text and evidence remain inspectable at their exact accepted
+versions even when resolved observations withhold a corrected predecessor. Those
+dedicated columns do not depend on a successful join to the resolved observation
+population; a caller must not substitute successor text or lose the historical pin.
 
 Current/as-of scans use the shared recording cutoff plus actual snapshot manifest;
 effective time is attributed metadata, never operative scheduling. Confirmation
@@ -307,6 +311,9 @@ not a general array SQL surface. Final rows may select the depth and cycle flag;
 path IDs/multiplicity are inspected through provenance. Expansion edges must be
 support-eligible at this frame under PR-03's projector; disputed/withdrawn/gapped
 assertions can be inspected in ordinary SELECT but cannot become path support.
+Recursive v1 additionally requires qualified roots: this conservative path
+admission is stricter than canonical support_eligible, which can be true while
+roots_status is indeterminate. Ordinary SQL/inspection preserve both values.
 At most eight levels is an explicit bounded-path question, not a promise to find
 all reachable nodes. Coverage records `explicit_depth` even if the frontier ends
 early. Qualify cycles, diamonds, repeated endpoints, high degree, all depth values,
