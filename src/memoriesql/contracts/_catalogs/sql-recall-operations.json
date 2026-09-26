@@ -6,6 +6,1399 @@
   "entries": [],
   "interface_version": "1",
   "kind": "sql_recall_operations",
+  "logical_catalog": {
+    "admission_stage": "internal_kernel; query/result/helper execution is not yet delivered",
+    "collation": "C",
+    "evaluation_relation": {
+      "columns": [
+        {
+          "key": true,
+          "name": "candidate_ref",
+          "nullable": false,
+          "pg_type": "uuid",
+          "reference_kind": "candidate_ref"
+        },
+        {
+          "key": false,
+          "name": "bead_id",
+          "nullable": false,
+          "pg_type": "uuid",
+          "reference_kind": "bead_ref"
+        },
+        {
+          "key": false,
+          "name": "bead_version_id",
+          "nullable": false,
+          "pg_type": "uuid",
+          "reference_kind": "bead_version_ref"
+        },
+        {
+          "key": false,
+          "name": "evidence_ref",
+          "nullable": true,
+          "pg_type": "uuid",
+          "reference_kind": "evidence_ref"
+        },
+        {
+          "key": false,
+          "name": "surface",
+          "nullable": false,
+          "pg_type": "text",
+          "reference_kind": null
+        },
+        {
+          "key": false,
+          "name": "score",
+          "nullable": false,
+          "pg_type": "float8",
+          "reference_kind": null
+        },
+        {
+          "key": false,
+          "name": "match_ref",
+          "nullable": false,
+          "pg_type": "uuid",
+          "reference_kind": "match_ref"
+        }
+      ],
+      "keys": [
+        "candidate_ref"
+      ],
+      "name": "candidates",
+      "namespace": "evaluation_v1",
+      "selection": "explicit_qualified_profile_only"
+    },
+    "namespace": "memory_v1",
+    "relations": {
+      "assessed_relations": {
+        "columns": [
+          {
+            "key": true,
+            "name": "relation_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "relation_ref"
+          },
+          {
+            "key": false,
+            "name": "task_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "task_ref"
+          },
+          {
+            "key": false,
+            "name": "type_key",
+            "nullable": false,
+            "pg_type": "text",
+            "reference_kind": "relation_type_key"
+          },
+          {
+            "key": false,
+            "name": "type_revision",
+            "nullable": false,
+            "pg_type": "int8",
+            "reference_kind": "relation_type_revision"
+          },
+          {
+            "key": false,
+            "name": "source_bead_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "bead_ref"
+          },
+          {
+            "key": false,
+            "name": "source_bead_version_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "bead_version_ref"
+          },
+          {
+            "key": false,
+            "name": "target_bead_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "bead_ref"
+          },
+          {
+            "key": false,
+            "name": "target_bead_version_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "bead_version_ref"
+          },
+          {
+            "key": false,
+            "name": "basis",
+            "nullable": false,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "rationale",
+            "nullable": false,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "qualification",
+            "nullable": true,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "author_confidence",
+            "nullable": false,
+            "pg_type": "numeric",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "author_run_ref",
+            "nullable": false,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "specialist_run_ref",
+            "nullable": false,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "acceptance_receipt_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "receipt_ref"
+          },
+          {
+            "key": false,
+            "name": "recorded_at",
+            "nullable": false,
+            "pg_type": "timestamptz",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "state",
+            "nullable": false,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "head_token",
+            "nullable": false,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "support_eligible",
+            "nullable": false,
+            "pg_type": "bool",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "support_reason",
+            "nullable": true,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "correction_pending",
+            "nullable": false,
+            "pg_type": "bool",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "roots_status",
+            "nullable": false,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "independent_root_count",
+            "nullable": true,
+            "pg_type": "int8",
+            "reference_kind": null
+          }
+        ],
+        "keys": [
+          "relation_id"
+        ]
+      },
+      "corrections": {
+        "columns": [
+          {
+            "key": true,
+            "name": "predecessor_version_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "bead_version_ref"
+          },
+          {
+            "key": true,
+            "name": "successor_version_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "bead_version_ref"
+          },
+          {
+            "key": false,
+            "name": "predecessor_bead_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "bead_ref"
+          },
+          {
+            "key": false,
+            "name": "successor_bead_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "bead_ref"
+          },
+          {
+            "key": false,
+            "name": "reason",
+            "nullable": false,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "recorded_at",
+            "nullable": false,
+            "pg_type": "timestamptz",
+            "reference_kind": null
+          }
+        ],
+        "keys": [
+          "predecessor_version_id",
+          "successor_version_id"
+        ]
+      },
+      "entities": {
+        "columns": [
+          {
+            "key": true,
+            "name": "entity_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "entity_ref"
+          },
+          {
+            "key": true,
+            "name": "entity_revision_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "entity_revision_ref"
+          },
+          {
+            "key": false,
+            "name": "entity_type_key",
+            "nullable": true,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "canonical_label",
+            "nullable": false,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "recorded_at",
+            "nullable": false,
+            "pg_type": "timestamptz",
+            "reference_kind": null
+          }
+        ],
+        "keys": [
+          "entity_id",
+          "entity_revision_id"
+        ]
+      },
+      "entity_aliases": {
+        "columns": [
+          {
+            "key": true,
+            "name": "alias_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "alias_ref"
+          },
+          {
+            "key": false,
+            "name": "entity_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "entity_ref"
+          },
+          {
+            "key": false,
+            "name": "alias",
+            "nullable": false,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "alias_kind",
+            "nullable": false,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "recorded_at",
+            "nullable": false,
+            "pg_type": "timestamptz",
+            "reference_kind": null
+          }
+        ],
+        "keys": [
+          "alias_id"
+        ]
+      },
+      "entity_mentions": {
+        "columns": [
+          {
+            "key": true,
+            "name": "mention_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "mention_ref"
+          },
+          {
+            "key": false,
+            "name": "bead_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "bead_ref"
+          },
+          {
+            "key": false,
+            "name": "bead_version_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "bead_version_ref"
+          },
+          {
+            "key": false,
+            "name": "surface_text",
+            "nullable": false,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "local_state",
+            "nullable": true,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "local_reason",
+            "nullable": true,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "resolution_state",
+            "nullable": false,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "resolution_id",
+            "nullable": true,
+            "pg_type": "uuid",
+            "reference_kind": "resolution_ref"
+          },
+          {
+            "key": false,
+            "name": "recorded_at",
+            "nullable": false,
+            "pg_type": "timestamptz",
+            "reference_kind": null
+          }
+        ],
+        "keys": [
+          "mention_id"
+        ]
+      },
+      "mention_entities": {
+        "columns": [
+          {
+            "key": true,
+            "name": "mention_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "mention_ref"
+          },
+          {
+            "key": true,
+            "name": "resolution_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "resolution_ref"
+          },
+          {
+            "key": true,
+            "name": "entity_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "entity_ref"
+          },
+          {
+            "key": false,
+            "name": "entity_revision_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "entity_revision_ref"
+          }
+        ],
+        "keys": [
+          "mention_id",
+          "resolution_id",
+          "entity_id"
+        ]
+      },
+      "observation_topics": {
+        "columns": [
+          {
+            "key": true,
+            "name": "link_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "link_ref"
+          },
+          {
+            "key": false,
+            "name": "bead_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "bead_ref"
+          },
+          {
+            "key": false,
+            "name": "bead_version_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "bead_version_ref"
+          },
+          {
+            "key": false,
+            "name": "topic_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "topic_ref"
+          },
+          {
+            "key": false,
+            "name": "topic_revision_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "topic_revision_ref"
+          },
+          {
+            "key": false,
+            "name": "recorded_at",
+            "nullable": false,
+            "pg_type": "timestamptz",
+            "reference_kind": null
+          }
+        ],
+        "keys": [
+          "link_id"
+        ]
+      },
+      "observations": {
+        "columns": [
+          {
+            "key": true,
+            "name": "bead_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "bead_ref"
+          },
+          {
+            "key": true,
+            "name": "bead_version_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "bead_version_ref"
+          },
+          {
+            "key": false,
+            "name": "event_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "event_ref"
+          },
+          {
+            "key": false,
+            "name": "source_unit_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "source_unit_ref"
+          },
+          {
+            "key": false,
+            "name": "bead_type_key",
+            "nullable": false,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "bead_type_revision_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "bead_type_revision_ref"
+          },
+          {
+            "key": false,
+            "name": "title",
+            "nullable": true,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "summary",
+            "nullable": true,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "detail",
+            "nullable": true,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "render_state",
+            "nullable": false,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "recorded_at",
+            "nullable": false,
+            "pg_type": "timestamptz",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "effective_at",
+            "nullable": true,
+            "pg_type": "timestamptz",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "effective_basis",
+            "nullable": false,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "correction_state",
+            "nullable": false,
+            "pg_type": "text",
+            "reference_kind": null
+          }
+        ],
+        "keys": [
+          "bead_id",
+          "bead_version_id"
+        ]
+      },
+      "relation_corrections": {
+        "columns": [
+          {
+            "key": true,
+            "name": "relation_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "relation_ref"
+          },
+          {
+            "key": true,
+            "name": "role",
+            "nullable": false,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": true,
+            "name": "correcting_bead_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "bead_ref"
+          },
+          {
+            "key": false,
+            "name": "correcting_bead_version_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "bead_version_ref"
+          }
+        ],
+        "keys": [
+          "relation_id",
+          "role",
+          "correcting_bead_id"
+        ]
+      },
+      "relation_event_evidence": {
+        "columns": [
+          {
+            "key": true,
+            "name": "event_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "relation_event_ref"
+          },
+          {
+            "key": true,
+            "name": "statement_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "statement_ref"
+          },
+          {
+            "key": true,
+            "name": "source_unit_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "source_unit_ref"
+          },
+          {
+            "key": false,
+            "name": "bead_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "bead_ref"
+          },
+          {
+            "key": false,
+            "name": "bead_version_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "bead_version_ref"
+          },
+          {
+            "key": false,
+            "name": "statement_text",
+            "nullable": false,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "evidence_ref",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "evidence_ref_ref"
+          }
+        ],
+        "keys": [
+          "event_id",
+          "statement_id",
+          "source_unit_id"
+        ]
+      },
+      "relation_events": {
+        "columns": [
+          {
+            "key": true,
+            "name": "event_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "relation_event_ref"
+          },
+          {
+            "key": false,
+            "name": "relation_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "relation_ref"
+          },
+          {
+            "key": false,
+            "name": "action",
+            "nullable": false,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "related_relation_id",
+            "nullable": true,
+            "pg_type": "uuid",
+            "reference_kind": "relation_ref"
+          },
+          {
+            "key": false,
+            "name": "reason",
+            "nullable": false,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "origin",
+            "nullable": false,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "authoring_bead_id",
+            "nullable": true,
+            "pg_type": "uuid",
+            "reference_kind": "bead_ref"
+          },
+          {
+            "key": false,
+            "name": "effective_at",
+            "nullable": true,
+            "pg_type": "timestamptz",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "recorded_at",
+            "nullable": false,
+            "pg_type": "timestamptz",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "event_number",
+            "nullable": true,
+            "pg_type": "int8",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "previous_event_id",
+            "nullable": true,
+            "pg_type": "uuid",
+            "reference_kind": "relation_event_ref"
+          },
+          {
+            "key": false,
+            "name": "recorded_by_principal_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "principal_ref"
+          },
+          {
+            "key": false,
+            "name": "recorded_by_user_id",
+            "nullable": true,
+            "pg_type": "uuid",
+            "reference_kind": "user_ref"
+          },
+          {
+            "key": false,
+            "name": "idempotency_receipt_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "receipt_ref"
+          }
+        ],
+        "keys": [
+          "event_id"
+        ]
+      },
+      "relation_evidence": {
+        "columns": [
+          {
+            "key": true,
+            "name": "relation_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "relation_ref"
+          },
+          {
+            "key": true,
+            "name": "statement_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "statement_ref"
+          },
+          {
+            "key": true,
+            "name": "source_unit_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "source_unit_ref"
+          },
+          {
+            "key": false,
+            "name": "evidence_ref",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "evidence_ref_ref"
+          },
+          {
+            "key": false,
+            "name": "roots_status",
+            "nullable": false,
+            "pg_type": "text",
+            "reference_kind": null
+          }
+        ],
+        "keys": [
+          "relation_id",
+          "statement_id",
+          "source_unit_id"
+        ]
+      },
+      "relation_pairs": {
+        "columns": [
+          {
+            "key": true,
+            "name": "task_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "task_ref"
+          },
+          {
+            "key": true,
+            "name": "first_bead_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "bead_ref"
+          },
+          {
+            "key": true,
+            "name": "second_bead_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "bead_ref"
+          },
+          {
+            "key": false,
+            "name": "first_bead_version_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "bead_version_ref"
+          },
+          {
+            "key": false,
+            "name": "second_bead_version_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "bead_version_ref"
+          },
+          {
+            "key": false,
+            "name": "disposition",
+            "nullable": false,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "abstention",
+            "nullable": true,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "reason",
+            "nullable": true,
+            "pg_type": "text",
+            "reference_kind": null
+          }
+        ],
+        "keys": [
+          "task_id",
+          "first_bead_id",
+          "second_bead_id"
+        ]
+      },
+      "relation_replacements": {
+        "columns": [
+          {
+            "key": true,
+            "name": "relation_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "relation_ref"
+          },
+          {
+            "key": true,
+            "name": "replacement_relation_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "relation_ref"
+          }
+        ],
+        "keys": [
+          "relation_id",
+          "replacement_relation_id"
+        ]
+      },
+      "relation_statements": {
+        "columns": [
+          {
+            "key": true,
+            "name": "relation_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "relation_ref"
+          },
+          {
+            "key": true,
+            "name": "role",
+            "nullable": false,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": true,
+            "name": "statement_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "statement_ref"
+          },
+          {
+            "key": false,
+            "name": "bead_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "bead_ref"
+          },
+          {
+            "key": false,
+            "name": "bead_version_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "bead_version_ref"
+          },
+          {
+            "key": false,
+            "name": "text",
+            "nullable": false,
+            "pg_type": "text",
+            "reference_kind": null
+          }
+        ],
+        "keys": [
+          "relation_id",
+          "role",
+          "statement_id"
+        ]
+      },
+      "relation_types": {
+        "columns": [
+          {
+            "key": true,
+            "name": "type_key",
+            "nullable": false,
+            "pg_type": "text",
+            "reference_kind": "relation_type_key"
+          },
+          {
+            "key": true,
+            "name": "type_revision",
+            "nullable": false,
+            "pg_type": "int8",
+            "reference_kind": "relation_type_revision"
+          },
+          {
+            "key": false,
+            "name": "namespace",
+            "nullable": false,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "label",
+            "nullable": false,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "definition",
+            "nullable": false,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "endpoint_rule",
+            "nullable": false,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "forward_reading",
+            "nullable": false,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "inverse_reading",
+            "nullable": false,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "symmetric",
+            "nullable": false,
+            "pg_type": "bool",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "evidence_expectation",
+            "nullable": true,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "example",
+            "nullable": true,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "counterexample",
+            "nullable": true,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "cycle_policy",
+            "nullable": false,
+            "pg_type": "text",
+            "reference_kind": null
+          }
+        ],
+        "keys": [
+          "type_key",
+          "type_revision"
+        ]
+      },
+      "source_units": {
+        "columns": [
+          {
+            "key": true,
+            "name": "source_unit_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "source_unit_ref"
+          },
+          {
+            "key": false,
+            "name": "event_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "event_ref"
+          },
+          {
+            "key": false,
+            "name": "source_object_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "source_object_ref"
+          },
+          {
+            "key": false,
+            "name": "source_kind",
+            "nullable": false,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "package_revision_id",
+            "nullable": true,
+            "pg_type": "uuid",
+            "reference_kind": "package_revision_ref"
+          },
+          {
+            "key": false,
+            "name": "search_text",
+            "nullable": true,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "text_state",
+            "nullable": false,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "source_occurred_at",
+            "nullable": true,
+            "pg_type": "timestamptz",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "source_time_original",
+            "nullable": true,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "source_timezone",
+            "nullable": true,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "source_precision",
+            "nullable": false,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "recorded_at",
+            "nullable": false,
+            "pg_type": "timestamptz",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "actor_ref",
+            "nullable": true,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "actor_role",
+            "nullable": true,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "trust_label",
+            "nullable": true,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "occurrence_ref",
+            "nullable": true,
+            "pg_type": "uuid",
+            "reference_kind": "occurrence_ref_ref"
+          }
+        ],
+        "keys": [
+          "source_unit_id"
+        ]
+      },
+      "statement_sources": {
+        "columns": [
+          {
+            "key": true,
+            "name": "statement_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "statement_ref"
+          },
+          {
+            "key": true,
+            "name": "source_unit_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "source_unit_ref"
+          },
+          {
+            "key": false,
+            "name": "event_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "event_ref"
+          },
+          {
+            "key": false,
+            "name": "evidence_ref",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "evidence_ref_ref"
+          }
+        ],
+        "keys": [
+          "statement_id",
+          "source_unit_id"
+        ]
+      },
+      "statements": {
+        "columns": [
+          {
+            "key": true,
+            "name": "statement_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "statement_ref"
+          },
+          {
+            "key": false,
+            "name": "bead_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "bead_ref"
+          },
+          {
+            "key": false,
+            "name": "bead_version_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "bead_version_ref"
+          },
+          {
+            "key": false,
+            "name": "sequence",
+            "nullable": false,
+            "pg_type": "int8",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "kind",
+            "nullable": false,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "text",
+            "nullable": false,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "supersedes_statement_id",
+            "nullable": true,
+            "pg_type": "uuid",
+            "reference_kind": "statement_ref"
+          },
+          {
+            "key": false,
+            "name": "correction_reason",
+            "nullable": true,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "recorded_at",
+            "nullable": false,
+            "pg_type": "timestamptz",
+            "reference_kind": null
+          }
+        ],
+        "keys": [
+          "statement_id"
+        ]
+      },
+      "topics": {
+        "columns": [
+          {
+            "key": true,
+            "name": "topic_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "topic_ref"
+          },
+          {
+            "key": true,
+            "name": "topic_revision_id",
+            "nullable": false,
+            "pg_type": "uuid",
+            "reference_kind": "topic_revision_ref"
+          },
+          {
+            "key": false,
+            "name": "label",
+            "nullable": false,
+            "pg_type": "text",
+            "reference_kind": null
+          },
+          {
+            "key": false,
+            "name": "recorded_at",
+            "nullable": false,
+            "pg_type": "timestamptz",
+            "reference_kind": null
+          }
+        ],
+        "keys": [
+          "topic_id",
+          "topic_revision_id"
+        ]
+      }
+    },
+    "revision": 1,
+    "scalar_functions": [
+      "count",
+      "sum",
+      "avg",
+      "min",
+      "max",
+      "lower",
+      "upper",
+      "coalesce",
+      "nullif",
+      "date_trunc"
+    ],
+    "window_functions": [
+      "row_number",
+      "rank",
+      "dense_rank",
+      "lag",
+      "lead"
+    ]
+  },
   "note": "No SQL recall records are included in this preview.",
   "status": "not_implemented"
 }

@@ -32,7 +32,12 @@ class PublicBootstrapTests(unittest.TestCase):
         self.assertEqual(project["authors"], [{"name": "John Inniger"}])
         self.assertEqual(
             project["dependencies"],
-            ["psycopg[binary]==3.3.3", "pydantic==2.13.3", "pydantic-ai-slim==2.27.0"],
+            [
+                "psycopg[binary]==3.3.3",
+                "pydantic==2.13.3",
+                "pydantic-ai-slim==2.27.0",
+                "sqlglot==30.19.0",
+            ],
         )
         self.assertEqual(
             project["urls"]["Repository"], "https://github.com/JohnnyFiv3r/memoriesql"
@@ -150,9 +155,10 @@ class PublicBootstrapTests(unittest.TestCase):
         self.assertIn('python-version: ["3.13", "3.14"]', compatibility)
         # The installed acceptance runs as parallel shards launched by the
         # workflow shell; the script itself denies subprocesses.
-        self.assertIn('run_installed_acceptance.py --shard "$shard/$shards"', compatibility)
+        self.assertIn(
+            'run_installed_acceptance.py --shard "$shard/$shards"', compatibility
+        )
         self.assertIn('test "$failed" -eq 0', compatibility)
-
 
 
 if __name__ == "__main__":

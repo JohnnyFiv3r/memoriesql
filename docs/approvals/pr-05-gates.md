@@ -26,7 +26,15 @@ reverified OPEN/unmerged at its exact approved head before this isolated branch.
 This branch is stacked on that approved, unmerged dependency; it does not merge it.
 PR-03 owns migration 0030 and canonical lifecycle/projection. PR-05 reserves
 0031 onward and owns retrieval, results/provenance and investigations.
-Relation integration awaits PR-03 exact-head qualification.
+PR-03 lifecycle-v1 / migration-0030 is independently qualified at
+`2bacc4c949b0e7ec6a0485eb2a9b849e821f968c` (public #47, still unmerged),
+with exact-head CI run 36274831985 successful in all three lanes. Relation
+integration will explicitly depend on that head; this nondependent admission
+slice does not copy or replace canonical lifecycle.
+
+The native USERSET settings limitation and pending enforcement decision are
+recorded in `../verification/pr-05-admission-failures.md`. This does not amend
+the approved interface or the custody record; dependent execution remains gated.
 
 No release/version selection, publication, provider call/spend, owner-data access,
 deployment, production checkpoint or Desktop consumption is authorized.

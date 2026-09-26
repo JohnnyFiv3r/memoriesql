@@ -30,7 +30,7 @@ def main() -> int:
         name
         for name in sys.modules
         if name.split(".", 1)[0]
-        in {"psycopg", "pydantic", "pydantic_ai", "sqlalchemy"}
+        in {"psycopg", "pydantic", "pydantic_ai", "sqlalchemy", "sqlglot"}
     )
     if forbidden_imports:
         raise AssertionError(

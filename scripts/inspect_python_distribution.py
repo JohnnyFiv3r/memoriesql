@@ -31,6 +31,7 @@ DEPENDENCIES = [
     "Requires-Dist: psycopg[binary]==3.3.3",
     "Requires-Dist: pydantic==2.13.3",
     "Requires-Dist: pydantic-ai-slim==2.27.0",
+    "Requires-Dist: sqlglot==30.19.0",
 ]
 RESOURCE_FILES = {
     "memoriesql/infrastructure/postgres/_migration_inventory.json",

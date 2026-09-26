@@ -177,7 +177,7 @@ def expected_outputs() -> dict[Path, bytes]:
             for record in records
             if record["catalog"] == definition.kind
         ]
-        catalog = {
+        catalog: dict[str, object] = {
             "_generated": True,
             "canonical_sources": ["contracts/public-registry.json"],
             "entries": entries,
@@ -186,6 +186,10 @@ def expected_outputs() -> dict[Path, bytes]:
             "note": definition.note,
             "status": definition.status,
         }
+        if definition.kind == "sql_recall_operations":
+            logical = document.get("agent_sql_logical_catalog")
+            if logical is not None:
+                catalog["logical_catalog"] = logical
         outputs[OUTPUT_ROOT / definition.filename] = _json_bytes(catalog)
     return outputs
 
