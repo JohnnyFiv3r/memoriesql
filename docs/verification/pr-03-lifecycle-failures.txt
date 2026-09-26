@@ -2219,3 +2219,171 @@ AssertionError: 65 != 64
 Ran 59 tests in 0.444s
 
 FAILED (failures=1)
+
+
+=== Exact-head 1fe31b1 CI convergence failure; run36273282578 ===
+FAIL: test_all_runtime_imports_are_owned_by_the_installed_distribution (test_runtime_ownership.RuntimeOwnership.test_all_runtime_imports_are_owned_by_the_installed_distribution)
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:40:48.9792375Z ----------------------------------------------------------------------
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:40:48.9792986Z Traceback (most recent call last):
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:40:48.9803916Z   File "<installed-proof>/test_runtime_ownership.py", line 32, in test_all_runtime_imports_are_owned_by_the_installed_distribution
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:40:48.9805027Z     self.assertEqual(len(rows), 58)
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:40:48.9805475Z     ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:40:48.9805999Z AssertionError: 61 != 58
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:40:48.9806324Z
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:40:48.9806608Z ----------------------------------------------------------------------
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:40:48.9807378Z Ran 147 tests in 400.262s
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:40:48.9807624Z
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:40:48.9807781Z FAILED (failures=1)
+
+FAIL: test_another_tenant_cannot_govern_claims_relations_or_vocabulary (test_authored_relations.AuthoredRelations.test_another_tenant_cannot_govern_claims_relations_or_vocabulary)
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0482691Z ----------------------------------------------------------------------
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0483035Z Traceback (most recent call last):
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0484103Z   File "<installed-proof>/test_authored_relations.py", line 1229, in test_another_tenant_cannot_govern_claims_relations_or_vocabulary
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0485206Z     with self.assertRaises(psycopg.errors.InvalidAuthorizationSpecification):
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0485922Z          ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0486533Z AssertionError: InvalidAuthorizationSpecification not raised
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0486901Z
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0487061Z ======================================================================
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0488305Z FAIL: test_revoked_endpoint_or_session_hides_claims_and_relations_whole (test_authored_relations.AuthoredRelations.test_revoked_endpoint_or_session_hides_claims_and_relations_whole)
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0489384Z ----------------------------------------------------------------------
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0489735Z Traceback (most recent call last):
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0490668Z   File "<installed-proof>/test_authored_relations.py", line 1315, in test_revoked_endpoint_or_session_hides_claims_and_relations_whole
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0491792Z     with self.assertRaises(psycopg.errors.InvalidAuthorizationSpecification):
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0492529Z          ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0493164Z AssertionError: InvalidAuthorizationSpecification not raised
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0493589Z
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0493762Z ======================================================================
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0494997Z FAIL: test_wrong_bound_downgrade_and_out_of_range_are_atomic (test_installed_migrations.InstalledMigrations.test_wrong_bound_downgrade_and_out_of_range_are_atomic) (start=14, end=30)
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0496371Z ----------------------------------------------------------------------
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0496917Z Traceback (most recent call last):
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0497598Z   File "<installed-proof>/test_installed_migrations.py", line 147, in test_wrong_bound_downgrade_and_out_of_range_are_atomic
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0498187Z     self.assertRaises(runner.MigrationError),
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0498772Z     ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0499184Z AssertionError: MigrationError not raised
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0499382Z
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0499511Z ======================================================================
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0500204Z FAIL: test_wrong_bound_downgrade_and_out_of_range_are_atomic (test_installed_migrations.InstalledMigrations.test_wrong_bound_downgrade_and_out_of_range_are_atomic)
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0500910Z ----------------------------------------------------------------------
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0501249Z Traceback (most recent call last):
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0502125Z   File "<installed-proof>/test_installed_migrations.py", line 150, in test_wrong_bound_downgrade_and_out_of_range_are_atomic
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0503026Z     self.assertEqual(self.history(), before)
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0503503Z     ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0504593Z AssertionError: Lists differ: [(1, [2642 chars]utc)), (15, 'immutable_observation_commands', [3012 chars]tc))] != [(1, [2642 chars]utc))]
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0505350Z
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0505546Z First list contains 16 additional elements.
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0506005Z First extra element 14:
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0507247Z (15, 'immutable_observation_commands', 'e6f6d4dd1907917fd415ef0b8bede400e408381f347028ef33417421eb29c639', 1, datetime.datetime(2026, 9, 26, 21, 41, 16, 197514, tzinfo=datetime.timezone.utc))
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0508455Z
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0508754Z Diff is 6543 characters long. Set self.maxDiff to None to see it.
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0509374Z
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0509625Z ----------------------------------------------------------------------
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0510199Z Ran 125 tests in 677.968s
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0510460Z
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0510613Z FAILED (failures=4)
+
+FAIL: test_all_runtime_imports_are_owned_by_the_installed_distribution (test_runtime_ownership.RuntimeOwnership.test_all_runtime_imports_are_owned_by_the_installed_distribution)
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:41:12.1449206Z ----------------------------------------------------------------------
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:41:12.1449863Z Traceback (most recent call last):
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:41:12.1451021Z   File "<installed-proof>/test_runtime_ownership.py", line 32, in test_all_runtime_imports_are_owned_by_the_installed_distribution
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:41:12.1452139Z     self.assertEqual(len(rows), 58)
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:41:12.1452621Z     ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:41:12.1453078Z AssertionError: 61 != 58
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:41:12.1453353Z
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:41:12.1453623Z ----------------------------------------------------------------------
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:41:12.1454230Z Ran 147 tests in 418.973s
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:41:12.1454487Z
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:41:12.1454645Z FAILED (failures=1)
+
+FAIL: test_another_tenant_cannot_govern_claims_relations_or_vocabulary (test_authored_relations.AuthoredRelations.test_another_tenant_cannot_govern_claims_relations_or_vocabulary)
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0734867Z ----------------------------------------------------------------------
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0735216Z Traceback (most recent call last):
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0735950Z   File "<installed-proof>/test_authored_relations.py", line 1229, in test_another_tenant_cannot_govern_claims_relations_or_vocabulary
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0736965Z     with self.assertRaises(psycopg.errors.InvalidAuthorizationSpecification):
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0737445Z          ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0737871Z AssertionError: InvalidAuthorizationSpecification not raised
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0738152Z
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0738275Z ======================================================================
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0739078Z FAIL: test_revoked_endpoint_or_session_hides_claims_and_relations_whole (test_authored_relations.AuthoredRelations.test_revoked_endpoint_or_session_hides_claims_and_relations_whole)
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0739903Z ----------------------------------------------------------------------
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0740250Z Traceback (most recent call last):
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0740892Z   File "<installed-proof>/test_authored_relations.py", line 1315, in test_revoked_endpoint_or_session_hides_claims_and_relations_whole
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0741641Z     with self.assertRaises(psycopg.errors.InvalidAuthorizationSpecification):
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0742117Z          ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0742566Z AssertionError: InvalidAuthorizationSpecification not raised
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0742842Z
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0742959Z ======================================================================
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0743756Z FAIL: test_wrong_bound_downgrade_and_out_of_range_are_atomic (test_installed_migrations.InstalledMigrations.test_wrong_bound_downgrade_and_out_of_range_are_atomic) (start=14, end=30)
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0744576Z ----------------------------------------------------------------------
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0744914Z Traceback (most recent call last):
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0745499Z   File "<installed-proof>/test_installed_migrations.py", line 147, in test_wrong_bound_downgrade_and_out_of_range_are_atomic
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0746091Z     self.assertRaises(runner.MigrationError),
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0746394Z     ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0747079Z AssertionError: MigrationError not raised
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0747289Z
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0747411Z ======================================================================
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0748152Z FAIL: test_wrong_bound_downgrade_and_out_of_range_are_atomic (test_installed_migrations.InstalledMigrations.test_wrong_bound_downgrade_and_out_of_range_are_atomic)
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0748908Z ----------------------------------------------------------------------
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0749254Z Traceback (most recent call last):
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0749866Z   File "<installed-proof>/test_installed_migrations.py", line 150, in test_wrong_bound_downgrade_and_out_of_range_are_atomic
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0750447Z     self.assertEqual(self.history(), before)
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0750738Z     ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0751305Z AssertionError: Lists differ: [(1, [2642 chars]utc)), (15, 'immutable_observation_commands', [3012 chars]tc))] != [(1, [2642 chars]utc))]
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0751907Z
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0752027Z First list contains 16 additional elements.
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0752313Z First extra element 14:
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0753049Z (15, 'immutable_observation_commands', 'e6f6d4dd1907917fd415ef0b8bede400e408381f347028ef33417421eb29c639', 1, datetime.datetime(2026, 9, 26, 21, 41, 46, 133191, tzinfo=datetime.timezone.utc))
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0753745Z
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0753930Z Diff is 6543 characters long. Set self.maxDiff to None to see it.
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0754208Z
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0754355Z ----------------------------------------------------------------------
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0754702Z Ran 125 tests in 718.586s
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0754854Z
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0754947Z FAILED (failures=4)
+
+=== Exact-head local 313-sdist: backwards DB wall clock during correction preparation ===
+ERROR: test_lifecycle_unsupported_propagates_and_observing_union_has_no_aggregate_cap (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_unsupported_propagates_and_observing_union_has_no_aggregate_cap)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<installed-proof>/test_assessed_relation_lifecycle.py", line 1291, in test_lifecycle_unsupported_propagates_and_observing_union_has_no_aggregate_cap
+    observer = self.correction(original)
+  File "<installed-proof>/test_assessed_relation_lifecycle.py", line 543, in correction
+    target, claimed = helpers.enqueue_authorship(self, capture, accepted, pins=pins)
+                      ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<installed-proof>/test_immutable_observations.py", line 292, in enqueue_authorship
+    return target, self.claim()
+                   ~~~~~~~~~~^^
+  File "<installed-proof>/test_postgres_runtime.py", line 361, in claim
+    self.assertTrue(queue.start(claimed.fence, started_at=datetime.now(UTC)))
+                    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<installed-proof>/venv/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/postgres_semantic_queue.py", line 270, in start
+    row = self._connection.execute(
+          ~~~~~~~~~~~~~~~~~~~~~~~~^
+        """
+        ^^^
+    ...<4 lines>...
+        self._fence_parameters(fence) + (started_at,),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ).fetchone()
+    ^
+  File "<installed-proof>/venv/lib/python3.13/site-packages/psycopg/connection.py", line 300, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.CheckViolation: new row for relation "semantic_task_attempts" violates check constraint "semantic_task_attempts_time_order"
+DETAIL:  Failing row contains (633d6327-1c92-4fc5-8825-dfc8cc102e7f, ac0bc589-c6c6-4bb5-bb23-810757098861, 080ab211-d3a0-476f-a741-ac54fd3d97f5, 01a0dfb3-fedf-718b-b81e-6f89d4492faf, 01a0dfb3-ff0b-7ed3-bcdf-eac08e0c19da, 1, 1, b9a2ff9b-80e3-4692-93cb-1dfab79291fc, orchard.worker, orchard.instance, running, 1, 2, 44977ac3682b5d71d82329b2e33a18debd6ff613042d3f3941e5a378e1398858, 75175c93e3ca5ad0924bd4eef57bb68f5a1c91a782bc582801ff34816601b4fd, 058359bfe67e296c43177d3127dbf85d83e6c4552cc5528cc56e7ba5789509b4, fe581afb-c730-4020-b995-1f1e33bd9f46, 2026-09-26 21:51:50.53969+00, 2026-09-26 21:51:50.518323+00, 2026-09-26 21:51:50.53969+00, 2026-09-26 21:53:50.53969+00, 2026-09-26 21:56:50.53969+00, null, null, null, null, null, null, null, null).
+CONTEXT:  SQL statement "UPDATE memoriesql.semantic_task_attempts AS attempt
+       SET status = 'running', started_at = database_now
+     WHERE attempt.tenant_id = requested_tenant_id
+       AND attempt.task_id = requested_task_id
+       AND attempt.attempt_id = requested_attempt_id
+       AND attempt.lease_generation = requested_lease_generation
+       AND attempt.claimant_principal_id = context_record.principal_id
+       AND attempt.worker_id = requested_worker_id
+       AND attempt.worker_instance_id = requested_worker_instance_id
+       AND attempt.status = 'claimed'
+       AND attempt.lease_expires_at > database_now
+       AND attempt.deadline_at > database_now"
+PL/pgSQL function start_semantic_task_attempt(uuid,uuid,uuid,bigint,text,text,timestamp with time zone) line 70 at SQL statement
+
+----------------------------------------------------------------------
+Ran 38 tests in 418.079s
+
+FAILED (errors=1)

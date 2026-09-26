@@ -128,7 +128,8 @@ inferred from these counts.
 ## Preserved failures
 
 [Failure transcripts](pr-03-lifecycle-failures.txt) preserve earlier failures,
-with local path prefixes normalized only. They include real defects found in
+with local path prefixes and terminal blank-line whitespace normalized. They
+include real defects found in
 JSON normalization/concatenation, missing capability error classification,
 ephemeral-context foreign keys, legacy uncertainty reads and dependency records;
 fixture errors, stale artifact installation after a denied cache path, and an
@@ -150,6 +151,17 @@ Passing later checks do not erase these records. Historical PR #42/#45 failure
 evidence in the approved document remains untouched. A later local text-cleanup
 mistake removed part of a private inspection function; the reviewed installed
 function was restored before qualification, and the full suite is rerun.
+
+Exact-head CI at `1fe31b1` passed all lifecycle cases on both Python versions but
+failed stale convergence assertions: runtime inventory 58 versus 61 files,
+schema30 incorrectly treated as out of range, and legacy reads expecting raw
+authorization exceptions instead of the closed unavailable response. Only those
+test expectations are repaired; authority and production runtime are unchanged.
+The first local Python3.13 sdist route also failed during pre-existing correction
+task preparation: its database-recorded start time preceded claim time by
+21.367ms, violating schema0008's time-order constraint before the root-union read.
+That traceback is retained and the unchanged artifact is rerun alone. This slice
+does not harden the existing task queue against a backwards database wall clock.
 
 ## Exclusions and readiness
 

@@ -1226,8 +1226,10 @@ class AuthoredRelations(fixtures.LocalMentions):
         intruder = PostgresRelationLifecycle(
             self.db, credential_sha256=secret, workspace_id=self.workspace
         )
-        with self.assertRaises(psycopg.errors.InvalidAuthorizationSpecification):
-            intruder.inspect_relations(InspectBeadRelations(bead_id=uuid.uuid4()))
+        self.assertEqual(
+            intruder.inspect_relations(InspectBeadRelations(bead_id=uuid.uuid4())).outcome,
+            "unavailable",
+        )
         with self.assertRaises(psycopg.errors.InvalidAuthorizationSpecification):
             intruder.record_relation_event(RecordRelationEvent(
                 idempotency_key="orchard.cross.bound",
@@ -1312,8 +1314,7 @@ class AuthoredRelations(fixtures.LocalMentions):
         )
         # A revoked session cannot open an authorization context, so it reads and
         # governs nothing, even what it could read before.
-        with self.assertRaises(psycopg.errors.InvalidAuthorizationSpecification):
-            self.inspect(readable)
+        self.assertEqual(self.inspect(readable).outcome, "unavailable")
         with self.assertRaises(psycopg.errors.InvalidAuthorizationSpecification):
             self.lifecycle.record_claim_event(RecordClaimEvent(
                 idempotency_key="orchard.revoked.session",
