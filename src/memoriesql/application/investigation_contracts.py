@@ -598,22 +598,29 @@ def encode_result_scalar(value: Any) -> str | bool | None:
 
 def result_json_bytes(value: Any) -> bytes:
     """Canonical bytes of already typed wire data, never implicit SQL coercion."""
-    # The standard encoder rejects circular containers before our scalar walk.
-    encoded = canonical_json_bytes(value)
-    pending = [value]
-    while pending:
-        item = pending.pop()
-        if isinstance(item, str):
-            _text(item)
-        elif item is None or type(item) in {bool, int}:
-            pass
-        elif isinstance(item, dict):
-            if any(not isinstance(k, str) for k in item):
-                raise ValueError("JSON object keys must be text")
-            pending.extend(item.keys())
-            pending.extend(item.values())
-        elif isinstance(item, tuple | list):
-            pending.extend(item)
-        else:
+    active: set[int] = set()
+
+    def snapshot(item: Any) -> Any:
+        if type(item) is str:
+            return _text(item)
+        if item is None or type(item) in {bool, int}:
+            return item
+        if type(item) not in {dict, tuple, list}:
             raise ValueError("canonical JSON requires typed wire scalars")
-    return encoded
+        identity = id(item)
+        if identity in active:
+            raise ValueError("circular JSON container")
+        active.add(identity)
+        try:
+            if type(item) is dict:
+                if any(type(k) is not str for k in item):
+                    raise ValueError("JSON object keys must be text")
+                return {_text(k): snapshot(v) for k, v in item.items()}
+            return [snapshot(v) for v in item]
+        finally:
+            active.remove(identity)
+
+    try:
+        return canonical_json_bytes(snapshot(value))
+    except RecursionError:
+        raise ValueError("JSON serialization recursion unavailable") from None
