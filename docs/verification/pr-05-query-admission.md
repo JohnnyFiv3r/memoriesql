@@ -80,3 +80,13 @@ settlement/accounting, current authorization/erasure, restart, checkpoint/save/
 restore and measured W1–W7 workload fit are subsequent integrated obligations.
 No workload capacity, semantic quality, production candidate default or completed
 PR-05 delivery is certified by these compiler/privilege tests.
+
+Current naming reconciliation replaces unreleased owned abstractions with
+`AdmittedQuery` / `admit_query`; the qualification document's path is now
+`pr-05-query-admission.md`. Actual SQL grammar, SQLGlot AST names and admission
+behavior are unchanged. These are editorial source/API names, not a new feature
+brand. Earlier reviewed/qualified commit and artifact identities remain historical
+and do not qualify the renamed package bytes. The owner selected the settings
+boundary with effective credential isolation and honest cancellation/settlement;
+the amended complete InterfacePin still requires exact owner approval and matching
+custody before dependent executor work. No integrated safety claim follows.
