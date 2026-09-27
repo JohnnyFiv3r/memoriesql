@@ -340,6 +340,50 @@ class ResultPreparation(unittest.TestCase):
             ).replayed
         )
 
+    def test_discarded_key_refuses_original_and_changed_reservation_inputs(
+        self,
+    ) -> None:
+        step = uuid4()
+        original = self.reserve(step=step)
+        self.store.discard(
+            operation_ref=original.operation_ref,
+            ownership_ref=original.ownership_ref,
+        )
+        for fingerprint, capacity in (
+            (hashlib.sha256(b"fictional request").hexdigest(), 16384),
+            ("f" * 64, 16384),
+            (hashlib.sha256(b"fictional request").hexdigest(), 32768),
+        ):
+            with self.subTest(fingerprint=fingerprint, capacity=capacity):
+                with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+                    self.store.reserve(
+                        run_ref=self.run_ref,
+                        step_key=step,
+                        request_fingerprint=fingerprint,
+                        reservation_bytes=capacity,
+                    )
+        self.assertEqual(
+            self.scalar(
+                "SELECT count(*) FROM memoriesql.result_preparation_operations"
+            ),
+            1,
+        )
+        self.assertEqual(
+            self.scalar("SELECT state FROM memoriesql.result_preparation_operations"),
+            "discarded",
+        )
+        self.assertIsNone(
+            self.scalar(
+                "SELECT request_fingerprint FROM memoriesql.result_preparation_operations"
+            )
+        )
+        self.assertEqual(
+            self.scalar(
+                "SELECT allocation_bytes FROM memoriesql.result_preparation_operations"
+            ),
+            8192,
+        )
+
     def test_stale_snapshot_cannot_overadmit_after_allocation_lock_wait(self) -> None:
         self.reserve(capacity=64 * 1024 * 1024)
         with psycopg.connect(

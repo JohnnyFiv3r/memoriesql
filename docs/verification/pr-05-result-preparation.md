@@ -1,16 +1,19 @@
-# PR-05 private durable result preparation
+# PR-05 public-core internal result preparation
 
-This slice owns private preparation bytes and a durable operation journal. It is
+This public-core slice owns internal preparation bytes and a durable operation journal. It is
 not the available query/result interface. The whole amended approval and matching
 ea-3 are recorded in `../approvals/pr-05-settings-reconciliation.md`; both approved
 normative blobs remain unchanged. M0030 and its canonical lifecycle projection are
 an explicit owner-merged dependency, not reimplemented here.
 
-Dependency integration includes #47 merge `26bd1a5`, current main `5e07b89` and
-the coordinator's #48 integration `e9ebba2`. #47 merged into its stacked base;
-this integration does not claim that current main alone contains M0030. #49/#50
-are preserved as approved-head prerequisites. The inventory union includes every
-module from both lanes; only the explicit new preparation module is added here.
+Dependency integration includes #47 merge `26bd1a5` and the coordinator's #48
+integration `e9ebba2`, now on main through owner merge `d6e0c78`. #49/#50 merged
+into closed stacked bases, not main; main-targeted promotion #51 at `2bec770`
+contains their accepted bytes and is the explicit base of this slice. This PR is
+**not ready for owner merge while stacked**: after #51 merges, verify actual main
+ancestry, integrate if needed, retarget to main and qualify that final head.
+The inventory union preserves every module from both lanes; only the explicit
+new preparation module is added here.
 
 M0031 reserves one private ownership identity for an authenticated `(run,step)`
 and request fingerprint before execution. Exact retry returns that same journal
@@ -43,7 +46,10 @@ new fenced snapshot; there is no automatic query rerun. Reservation targets use
 the approved 64 MiB/result, 128 MiB/run and 512 MiB/workspace ceilings. Shared parents
 are retained once. Discard refunds body retention, preserves cumulative new
 allocation and charges the remaining journal. A held parent cannot be discarded;
-the private discard is neither governed erasure nor query cancellation settlement.
+the internal discard is neither governed erasure nor query cancellation settlement.
+Discarded keys refuse every reservation retry, including original inputs: cleanup
+removes the protected fingerprint, so no tombstone is reported as an exact-input
+replay or fresh execution grant. Repeating the owned discard remains idempotent.
 It cannot be used to refund work while any remote execution is unconfirmed.
 
 The current preparation charge is encoded partition bytes plus a minimum 8 KiB

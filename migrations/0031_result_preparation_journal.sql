@@ -117,7 +117,11 @@ BEGIN
    OR o.owner_user_id IS DISTINCT FROM COALESCE(c.on_behalf_of_user_id,c.user_id) THEN
    RAISE EXCEPTION 'result_preparation_unavailable' USING ERRCODE='42501';
   END IF;
-  IF o.state='discarded' THEN RETURN memoriesql.result_preparation_receipt_v1(o,true); END IF;
+  -- Cleanup removes the protected binding digest. A discarded key is never a
+  -- reservation replay or new execution grant, even for the original inputs.
+  IF o.state='discarded' THEN
+   RAISE EXCEPTION 'result_preparation_unavailable' USING ERRCODE='42501';
+  END IF;
   IF o.request_fingerprint<>fingerprint OR o.reservation_bytes<>capacity THEN
    RAISE EXCEPTION 'idempotency_conflict' USING ERRCODE='23505';
   END IF;

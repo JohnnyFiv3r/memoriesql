@@ -157,3 +157,8 @@ psycopg.ProgrammingError: only '%s', '%b', '%t' are allowed as placeholders, got
 Ran 20 tests in 9.798s
 
 FAILED (errors=1)
+2026-09-27 review-fix qualification attempt (not accepted):
+An attempted direct source PostgreSQL test import failed with MigrationError:
+"packaged migration inventory is unavailable". Source has no generated packaged
+inventory; no database test executed. Correct route: rebuild reviewed archives
+and run the guarded installed fixtures. No source-inventory injection was used.
