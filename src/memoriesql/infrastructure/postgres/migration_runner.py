@@ -80,11 +80,11 @@ def discover_migrations(
             if (
                 inventory["contract_version"] != 1
                 or inventory["default_policy"] != "deny"
-                or len(rows) != 31
+                or len(rows) != 32
             ):
                 raise ValueError("invalid migration inventory")
             expected_resources = {row["filename"]: row["sha256"] for row in rows}
-            if len(expected_resources) != 31 or any(
+            if len(expected_resources) != 32 or any(
                 not isinstance(name, str)
                 or MIGRATION_FILE.fullmatch(name) is None
                 or not isinstance(digest, str)

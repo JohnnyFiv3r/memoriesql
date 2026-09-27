@@ -125,6 +125,10 @@
     {
       "filename": "0031_result_preparation_journal.sql",
       "sha256": "6816fd026f8551358d7864e7ee2c84b9937f82e339add6619cb2aa5499c88622"
+    },
+    {
+      "filename": "0032_relation_sql_population.sql",
+      "sha256": "70e52188b5fea8c3fe8414ed3e278f73c93f64aca6daf74950dfacf8267231fc"
     }
   ]
 }

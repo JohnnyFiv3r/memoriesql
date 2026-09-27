@@ -198,6 +198,9 @@
     },
     {
       "path": "src/memoriesql/infrastructure/postgres/result_preparation.py"
+    },
+    {
+      "path": "src/memoriesql/infrastructure/postgres/relation_sql_population.py"
     }
   ]
 }
