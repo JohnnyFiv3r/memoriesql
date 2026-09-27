@@ -1,9 +1,13 @@
-# PR-05: agent-authored SELECT and reusable results — decision packet 3
+# PR-05: agent-authored SQL and reusable investigation results — decision packet 4
 
-Status: **completed interface proposal for exact approval; Phase A**, 2026-09-26.
-Product direction is approved; this proposed wire contract and policy candidates
-await exact approval and runtime qualification. This is the public proposal
-authority, not an installed capability, executable contract or frozen interface.
+Status: **settings-boundary amendment for exact-record approval**, 2026-09-26.
+The preceding complete interface record at `2baffc6` was owner-approved and matched
+independent custody ea-2. The owner subsequently selected the settings boundary
+below, with effective credential isolation and honest cancellation/settlement.
+This amended whole record still needs its own exact approval and matching custody
+reconciliation before dependent executor implementation. Existing internal SQL
+admission/privilege qualification does not implement or certify that executor.
+This is the public interface authority, not an installed retrieval capability.
 Public main was reverified as `e8cfa0df3c1f8109c199a8126c0556624bc421b6`
 (PR #45 accepted `2a5b9a6b3b1bcc3a3cbff21186ee95d85fea80a2`);
 the merged Desktop planning amendment as `84f93ec272cc1e868efffb0765b8366bdc5bf987`.
@@ -14,8 +18,12 @@ corpus, questions, gold, evidence artifacts or upstream source adaptation.
 
 ## Decision requested
 
-Approve this whole packet and its pinned relation dependency, including the
-explicit disclosure contexts and policy candidates in §5. The approved direction
+Approve the complete new pin for this whole packet and its unchanged pinned
+relation dependency. The substantive amendment is the settings/credential/deadline
+boundary in §2/§5 and its integrated acceptance cases in §6; the title change is
+editorial. SELECT remains the SQL keyword, never a feature or product brand.
+The unchanged disclosure contexts and policy targets retain their prior approval.
+The approved direction
 remains genuine composable SELECT, immutable reusable results, relation-ready
 recall and branching investigations. `11692c3`, its hash and its 48-hour policy
 are superseded. Only consequential policy alternatives appear below; parser pin,
@@ -48,7 +56,9 @@ approved record before any PR-05 runtime or candidate-condition implementation**
 Its attestation names the sealed holdout manifest digest, both conditions and
 unchanged threshold/profile manifests, without exposing questions or gold.
 The implementer neither creates nor reads that holdout. A prose merge, architecture
-approval, or green CI satisfies neither gate. Both gates are presently **pending**.
+approval, or green CI satisfies neither gate. Both original gates were verified
+for `2baffc6`; the complete amended pin and its matching custody are **pending**.
+Original ea-2 remains valid only for the original record, not this amendment.
 
 Approval digest procedure v2: `packet_sha256` is lowercase SHA-256 of the exact
 Git blob bytes at `<packet_commit>:docs/agent-sql-results-v1.md`, including its
@@ -366,7 +376,16 @@ AST admission restricts the language; database privileges independently prevent
 canonical writes and scope widening even in negative tests bypassing admission.
 Catalog-name admission prevents physical introspection; do not claim stock
 PostgreSQL hides every builtin system catalog from a compromised database client.
-Agents receive neither connection credentials nor a general database client.
+The sole trusted executor owns both connection classes. Agents receive neither
+connection credentials nor a general database client. Credential isolation must
+be enforced and qualified against the agent's actual shell, filesystem and process
+capabilities: its execution principal cannot recover either class of credentials
+from files/client configuration, environment, process inspection, inherited
+descriptors, child processes or IPC. Merely omitting secrets from a prompt is not
+isolation. If those actual capabilities permit recovery, provisioning is
+unavailable; do not claim the executor is safe. Use independently restricted
+database authority even when admission is bypassed; isolation does not replace
+the write, tenant, resource and scope protections above.
 
 Revalidate current permissions/policy under the canonical authority fence before
 committing/delivering any result or helper response. A concurrent revocation that
@@ -887,9 +906,9 @@ independent fact. Backup/WAL physical erasure follows governed storage lifecycle
 this interface promises immediate logical withdrawal, not instantaneous deletion
 of every physical replica. Failed cleanup remains owned and explicitly pending.
 
-The following values are **unapproved qualification candidates**, not product
-capacity guarantees or a settled single allowance. The amended workload set must
-justify them or replace them explicitly before exact policy approval. Larger
+The following values retain their **owner-approved qualification-target** status,
+not measured capacity guarantees. Useful workloads must actually fit the tier;
+material policy changes require renewed exact approval and matching custody. Larger
 allowances require operator admission; no automatic escalation or hidden reset.
 Separate query materialization/storage from preview/page delivery. Values are
 binary byte units:
@@ -904,7 +923,17 @@ binary byte units:
 | Transport | 16 MiB per run including metadata, cursors and redelivery; reserve 16 KiB for terminal diagnostics |
 | Retention admission | 64 MiB charged allocation/result, 128 MiB new allocation/run, 512 MiB retained unique allocation/workspace including saved closure; no independent result-count/ancestry cap; reserve before execution |
 | Checkpoint/control state | 32 KiB manifest, newest 20 automatic checkpoints/investigation for ≤30 days; named saves persist while saved under the same quota; history stubs/audits/holds are charged too |
-| Query settings | `work_mem=4MiB`, `hash_mem_multiplier=1`, `temp_file_limit=64MiB`, parallel query disabled, JIT off; restricted login cannot change them |
+| Query settings | `work_mem=4MiB`, `hash_mem_multiplier=1`, `temp_file_limit=64MiB`, parallel query disabled, JIT off; the agent cannot change them through the qualified executor boundary below |
+
+The sole trusted executor accepts only the closed admitted SELECT tree and no
+session-setting requests, revokes executable `set_config` and writes to
+`pg_settings`, and checks configured settings before dispatch. Effective
+credential isolation is required as specified in §2. PostgreSQL USERSET parameters
+remain changeable by a holder of raw login credentials; database ACLs do not make
+them immutable. A compromised raw login is outside this settings guarantee.
+Independent database protections against canonical writes, elevation and tenant/
+resource/scope widening remain mandatory and must pass admission-bypass tests.
+No hard CPU, I/O, examined-row or total-memory guarantee follows.
 
 These are the smallest recommended **qualification baseline**, not observed
 capacity. W2's 2,000 × 2 KiB is 3.906 MiB of rows; 40 pages of 50 fit 128 accesses
@@ -929,7 +958,8 @@ allocation/GC, p50/p95 duration, encoded transport, physical heap/index/WAL grow
 spills and canceled cleanup. Report all failures. Useful enumeration, aggregation,
 set/window and bounded-path investigations must actually complete within the
 approved tier; a correctly enforced timeout alone does not qualify them. Runtime
-measurements are pending because Phase A authorizes no PR-05 executor or fixtures.
+measurements are pending; internal compiler/privilege fixtures cannot substitute
+for integrated query, complete provenance and physical-storage measurements.
 If the tier fails, revise indexing/layout first; a material policy increase returns
 to exact owner approval and matching freeze. An explicitly operator-admitted
 larger tier is an alternative for larger workloads, never agent-selected fallback.
@@ -954,9 +984,15 @@ full reservation. Duration includes cancelled/failed/provenance work, repeated
 access and bookkeeping, with no free child work. Charge observed overrun and stop
 new admission while cleanup/settlement is uncertain. SQL LIMIT, EXPLAIN cost and
 returned-row count cannot fence scans, fanout, sorts or aggregates. Qualify timeouts
-with a supervisor that cancels, confirms rollback or terminates its owned backend,
-and drains trusted writes; foreground cancellation is not settlement. The deadline
-is an execution/cancellation fence, not a hard real-time kill guarantee.
+with an independent supervisor that initiates cancellation at the operation
+deadline regardless of client-side statement-timeout settings. Retain operation
+ownership, reservations and cumulative accounting until owned settlement: confirm
+rollback or termination of the identified backend and drain trusted writes.
+If that work remains uncertain, report settlement_pending and block new admission;
+do not refund the reservation or abandon the operation. A client timeout, elapsed
+deadline or cancellation request never proves remote PostgreSQL work has already
+stopped. The deadline is a cancellation trigger, not a hard real-time kill
+guarantee; confirmed observed overrun is still charged.
 
 PostgreSQL's [statement timeout](https://www.postgresql.org/docs/current/runtime-config-client.html)
 and [temporary-file bound](https://www.postgresql.org/docs/current/runtime-config-resource.html)
@@ -1004,6 +1040,19 @@ rows versus coverage unknown; dependency revocation during commit/delivery; and
 no canonical capture/authorship/task/usage side effects. Immutable facts are
 compared before and after restart; only named incidental identities/times may
 normalize in fictional replay. No test is a semantic-quality claim.
+
+Before claiming the integrated executor is safe, exercise the deployed agent's
+actual shell/filesystem/process capabilities against credential recovery and
+general-client access; prompt-only omission or mocked isolation is insufficient.
+Adversarial integrated cases must separately prove that admitted requests cannot
+alter session settings and that admission bypass cannot write, elevate or widen
+tenant/resource/scope access. Preserve a raw-login USERSET-success case as an
+explicit limitation. Independently observe cancellation initiation at the
+deadline, including blocked queries and altered client timeout settings; delayed
+remote stop, repeated cancellation, backend loss and lost responses must retain
+ownership/accounting and report settlement_pending until confirmed settlement.
+Neither a parser pass, privilege preflight nor correct timeout alone satisfies
+this integrated acceptance or the useful-workload fit requirement.
 
 Preserve EG-0001's **FTS/pg_trgm** and **optional in-Postgres vector candidate**
 conditions as separately named evaluation-only peers, with identical logical SQL,
