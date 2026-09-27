@@ -146,7 +146,13 @@ class InstalledMigrations(unittest.TestCase):
                 self.subTest(start=start, end=end),
                 self.assertRaises(runner.MigrationError),
             ):
-                self.migrate(start, end)
+                # Exercise one production call, not the positive-fixture helper
+                # that commits segments around cluster-wide role statements.
+                runner.migrate(
+                    self.connection,
+                    expected_current_version=start,
+                    target_version=end,
+                )
             self.assertEqual(self.history(), before)
         with self.connection.transaction():
             with self.assertRaises(runner.MigrationError):

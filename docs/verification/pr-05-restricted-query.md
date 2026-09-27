@@ -135,3 +135,14 @@ All three expanded restart processes passed. Final-head convergence is recorded
 separately on the PR.
 Original logs remain under ignored `build/pr05-restricted-evidence`; prior #52,
 #54 and #55 failures are preserved.
+
+The first complete installed profiles ran concurrently on one local host (six
+shards). Both preserved older short-deadline cancellation/expiry failures and a
+migration-negative fixture failure. M0033 introduces a role-defining boundary:
+the positive-fixture migration helper commits segments and therefore must not be
+used to test one production call's invalid-bound atomicity. That negative case
+now calls the production runner directly and keeps its unchanged-history assertion.
+Final qualification uses one interpreter profile at a time, retaining all three
+shards and all original deadlines. No runtime, policy or historical SQL is changed
+to excuse the timing failures; final results and original failed logs remain
+separate on the PR.
