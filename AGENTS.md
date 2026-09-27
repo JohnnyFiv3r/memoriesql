@@ -13,7 +13,10 @@ The authorized schema-34 slice builds private native bag-composition witnesses
 and atomically commits qualified result partitions with their original operation
 and invocation owner; see `docs/verification/pr-05-result-preparation.md`.
 These slices add no available result/disclosure API or qualified physical-storage
-profile. Preserve SQL 0001–0033 and earlier records;
+profile. The next authorized internal slice extends native witnesses to groups,
+HAVING/FILTER/DISTINCT and distinct/ALL set composition without a migration;
+see the continuation in that verification document. Preserve SQL 0001–0034
+and earlier records;
 canonical lifecycle/projection stays PR-03-owned. Remaining integrated PR-05
 delivery and useful workload qualification are required before availability.
 No release, publication or Desktop consumption is authorized by this slice.

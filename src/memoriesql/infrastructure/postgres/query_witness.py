@@ -8,6 +8,8 @@ shared by identity; duplicate output occurrences retain separate row ordinals.
 from __future__ import annotations
 
 import hashlib
+from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 from uuid import UUID, uuid5
@@ -32,13 +34,25 @@ class NativeWitnesses:
 
 class NativeWitnessBuilder:
     def __init__(
-        self, plan: WitnessPlan, population: PreparedRelationPopulation, frame_ref: UUID
+        self,
+        plan: WitnessPlan,
+        population: PreparedRelationPopulation,
+        frame_ref: UUID,
+        *,
+        check_work: Callable[[], None] | None = None,
     ) -> None:
         self.plan = plan
         self.frame_ref = frame_ref
+        self.check_work = check_work
         self.members: dict[tuple[str, bytes], UUID] = {}
         members: list[dict[str, Any]] = []
-        used = sorted({s["relation"] for s in plan.stages if s["operation"] == "scan"})
+        used = sorted(
+            {
+                s["relation"]
+                for s in plan.stages
+                if s["operation"] == "scan" and s.get("reachable", True)
+            }
+        )
         for name in used:
             schema = population.schemas[name]
             keys = schema.unique_keys[0]
@@ -47,6 +61,8 @@ class NativeWitnessBuilder:
                 for k in keys
             ]
             for row in population.rows[name]:
+                if check_work:
+                    check_work()
                 values = [encode_result_scalar(row[i]) for i in indices]
                 encoded = result_json_bytes(values)
                 ref = uuid5(frame_ref, name + ":" + encoded.decode("ascii"))
@@ -83,10 +99,14 @@ class NativeWitnessBuilder:
         }
         self.nodes: dict[UUID, dict[str, Any]] = {}
         self.row_refs: list[UUID] = []
+        self.tested_refs: list[UUID] = []
+        self.cache: dict[bytes, UUID] = {}
         self.encoded_bytes = len(result_json_bytes(self.base))
 
-    def add(self, trace: Any) -> UUID:
+    def add(self, trace: Any, *, published: bool = True) -> UUID:
         def bind(value: Any, depth: int) -> UUID:
+            if self.check_work:
+                self.check_work()
             if (
                 depth > 128
                 or not isinstance(value, list)
@@ -96,9 +116,13 @@ class NativeWitnessBuilder:
             ):
                 raise ValueError("invalid native witness")
             stage = self.plan.stages[value[0]]
+            cache_key = result_json_bytes(value)
+            if cache_key in self.cache:
+                return self.cache[cache_key]
             member_refs: list[str] = []
             inputs: list[str] = []
             absent: list[int] = []
+            details: dict[str, Any] = {}
             if stage["operation"] == "scan":
                 if (
                     len(value) != 2
@@ -111,6 +135,126 @@ class NativeWitnessBuilder:
                 if member is None:
                     raise ValueError("unknown frozen logical key")
                 member_refs.append(str(member))
+            elif stage["operation"] in {
+                "group",
+                "collapse",
+                "set_class",
+                "set_population",
+            }:
+                expected = (
+                    2
+                    if stage["operation"] == "collapse"
+                    else 7
+                    if stage["operation"] == "group"
+                    else 5
+                )
+                if len(value) != expected or not isinstance(value[1], list):
+                    raise ValueError("invalid native equivalence witness")
+                left = [str(bind(v, depth + 1)) for v in value[1]]
+                left_counts = Counter(left)
+                inputs.extend(left)
+                if stage["operation"] == "group":
+                    if (
+                        not isinstance(value[2], list)
+                        or len(value[2]) != len(stage["aggregates"])
+                        or type(value[3]) not in {bool, type(None)}
+                    ):
+                        raise ValueError("invalid native group witness")
+                    details["having_truth"] = value[3]
+                    details["projection_evaluated"] = value[3] is True
+                    for field, values in (
+                        ("native_group_key_values", value[5]),
+                        ("native_aggregate_values", value[6]),
+                    ):
+                        if not isinstance(values, list) or any(
+                            v is not None and not isinstance(v, str) for v in values
+                        ):
+                            raise ValueError("invalid native group values")
+                        details[field] = values
+                    aggregate_inputs = []
+                    for descriptor, entries in zip(
+                        stage["aggregates"], value[2], strict=True
+                    ):
+                        if not isinstance(entries, list) or len(entries) != len(left):
+                            raise ValueError("invalid native aggregate witness")
+                        bound_entries = []
+                        for entry in entries:
+                            if (
+                                not isinstance(entry, list)
+                                or len(entry) != 5
+                                or type(entry[1]) not in {bool, type(None)}
+                                or type(entry[2]) is not bool
+                                or (
+                                    entry[3] is not None
+                                    and (type(entry[3]) is not int or entry[3] < 1)
+                                )
+                                or type(entry[4]) not in {bool, type(None)}
+                            ):
+                                raise ValueError("invalid native contribution witness")
+                            contribution_ref = str(bind(entry[0], depth + 1))
+                            if contribution_ref not in left_counts or bool(
+                                descriptor["distinct_classes"]
+                            ) != (entry[3] is not None):
+                                raise ValueError("invalid native contribution class")
+                            if bool(descriptor["extremum"]) != (entry[4] is not None):
+                                raise ValueError(
+                                    "invalid native extremum qualification"
+                                )
+                            bound_entries.append(
+                                {
+                                    "input_ref": contribution_ref,
+                                    "filter_truth": entry[1],
+                                    "argument_nonnull": entry[2],
+                                    "argument_evaluated": entry[1] is True,
+                                    "equality_class": str(entry[3])
+                                    if entry[3] is not None
+                                    else None,
+                                    "extremum_winner": entry[4],
+                                }
+                            )
+                        if (
+                            Counter(e["input_ref"] for e in bound_entries)
+                            != left_counts
+                        ):
+                            raise ValueError("incomplete native aggregate population")
+                        aggregate_inputs.append(bound_entries)
+                    details["aggregate_inputs"] = aggregate_inputs
+                elif stage["operation"] in {"set_class", "set_population"}:
+                    skipped = bool(stage.get("right_skipped_if_left_empty"))
+                    if (
+                        not isinstance(value[2], list)
+                        or not isinstance(value[3], list)
+                        or len(value[3]) != 3
+                        or any(
+                            not (type(n) is int and n >= 0)
+                            and not (skipped and i == 1 and n is None)
+                            for i, n in enumerate(value[3])
+                        )
+                    ):
+                        raise ValueError("invalid native set counts")
+                    right = [str(bind(v, depth + 1)) for v in value[2]]
+                    if value[3][:2] != [len(left), None if skipped else len(right)] or (
+                        skipped and (left or right or value[3][2] != 0)
+                    ):
+                        raise ValueError("incomplete native set population")
+                    inputs.extend(right)
+                    details.update(
+                        left_input_refs=left,
+                        right_input_refs=right,
+                        left_multiplicity=value[3][0],
+                        right_multiplicity=value[3][1],
+                        output_multiplicity=value[3][2],
+                        **({"right_evaluated": False} if skipped else {}),
+                    )
+                if stage["operation"] != "collapse":
+                    if not isinstance(value[4], list) or any(
+                        v is not None and not isinstance(v, str) for v in value[4]
+                    ):
+                        raise ValueError("invalid native textual values")
+                    details["native_text_values"] = value[4]
+                multiplicities = Counter(inputs)
+                inputs = list(multiplicities)
+                details["input_multiplicities"] = list(multiplicities.values())
             else:
                 expected = 2 if stage["operation"] == "join" else 1
                 # A source project has exactly zero or one source. The generated
@@ -123,7 +267,9 @@ class NativeWitnessBuilder:
                         absent.append(index)
                     else:
                         inputs.append(str(bind(child, depth + 1)))
-            identity = result_json_bytes([value[0], inputs, member_refs, absent])
+            identity = result_json_bytes(
+                [value[0], inputs, member_refs, absent, details]
+            )
             ref = uuid5(self.frame_ref, identity.decode("ascii"))
             node = {
                 "node_ref": str(ref),
@@ -134,14 +280,19 @@ class NativeWitnessBuilder:
                 "multiplicities": [1] * len(member_refs),
                 "absent_inputs": absent,
                 "population_ref": str(self.population_ref),
+                **details,
             }
             if ref not in self.nodes:
                 self.nodes[ref] = node
                 self.encoded_bytes += len(result_json_bytes(node)) + 1
+            self.cache[cache_key] = ref
             return ref
 
         ref = bind(trace, 0)
-        self.row_refs.append(ref)
+        if published:
+            self.row_refs.append(ref)
+        else:
+            self.tested_refs.append(ref)
         self.encoded_bytes += 39
         return ref
 
@@ -151,6 +302,14 @@ class NativeWitnessBuilder:
                 **self.base,
                 "nodes": list(self.nodes.values()),
                 "row_provenance": [str(r) for r in self.row_refs],
+                **(
+                    {
+                        "composition_revision": 2,
+                        "tested_nodes": [str(r) for r in self.tested_refs],
+                    }
+                    if self.plan.ledger_rows
+                    else {}
+                ),
             }
         )
         return NativeWitnesses(

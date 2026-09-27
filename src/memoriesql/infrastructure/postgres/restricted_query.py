@@ -289,7 +289,16 @@ class PostgresRestrictedQuery:
                 else None
             )
             if plan:
-                witness_builder = NativeWitnessBuilder(plan, population, frame_ref)
+
+                def check_witness_work() -> None:
+                    if time.monotonic() >= deadline:
+                        raise _StopQuery("budget_exhausted")
+                    if cancellation is not None and cancellation.is_set():
+                        raise _StopQuery("cancelled")
+
+                witness_builder = NativeWitnessBuilder(
+                    plan, population, frame_ref, check_work=check_witness_work
+                )
                 encoded += witness_builder.encoded_bytes
             query_metadata = result_json_bytes(
                 {
@@ -422,10 +431,36 @@ class PostgresRestrictedQuery:
                 target=supervise, name="memoriesql-query-supervisor", daemon=False
             )
             worker.start()
+            if plan and plan.semantic_check:
+                # Planning only: preserve original PostgreSQL group/order errors.
+                # Estimates are neither read nor used as an authority/work fence.
+                # This uses the same restricted login, snapshot and deadline.
+                reader.execute("EXPLAIN (COSTS FALSE) " + query.sql, query.parameters)
             with reader.cursor(name="memoriesql_" + uuid4().hex) as cursor:
                 cursor.execute(plan.sql if plan else query.sql, query.parameters)
                 while batch := cursor.fetchmany(128):
                     for row in batch:
+                        if (
+                            plan
+                            and plan.ledger_rows
+                            and isinstance(row[-1], list)
+                            and row[-1]
+                            and row[-1][0] is None
+                        ):
+                            if (
+                                len(row[-1]) != 2
+                                or witness_builder is None
+                                or any(v is not None for v in row[:-1])
+                            ):
+                                raise ValueError(
+                                    "invalid native tested-population envelope"
+                                )
+                            before = witness_builder.encoded_bytes
+                            witness_builder.add(row[-1][1], published=False)
+                            encoded += witness_builder.encoded_bytes - before
+                            if encoded > max_output_bytes:
+                                raise _StopQuery("budget_exhausted")
+                            continue
                         native = row[:-1] if plan else row
                         encoded += (
                             len(
