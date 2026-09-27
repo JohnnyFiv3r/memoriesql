@@ -129,6 +129,10 @@
     {
       "filename": "0032_relation_sql_population.sql",
       "sha256": "70e52188b5fea8c3fe8414ed3e278f73c93f64aca6daf74950dfacf8267231fc"
+    },
+    {
+      "filename": "0033_restricted_query_invocations.sql",
+      "sha256": "4587c5ff968a1108ab71a64506525392f9d3fa16b4a57f3246a7b815c37b0b7e"
     }
   ]
 }

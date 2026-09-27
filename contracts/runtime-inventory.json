@@ -201,6 +201,9 @@
     },
     {
       "path": "src/memoriesql/infrastructure/postgres/relation_sql_population.py"
+    },
+    {
+      "path": "src/memoriesql/infrastructure/postgres/restricted_query.py"
     }
   ]
 }

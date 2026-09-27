@@ -11,7 +11,7 @@ import hashlib
 import json
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from decimal import Decimal
 from types import MappingProxyType
@@ -72,6 +72,7 @@ class PreparedRelationPopulation:
     dependency_manifest: bytes
     dependency_manifest_sha256: str
     preparation_bytes: int
+    source_context: bytes | None = None
 
 
 def _time(value: str) -> datetime:
@@ -280,6 +281,12 @@ def prepare_relation_population(
             if fetched is None or fetched[0] is None:
                 raise RelationPopulationError("unavailable")
             population = _prepare(fetched[0], byte_budget)
+            context = frame.execute(
+                "SELECT to_jsonb(c)::text FROM memoriesql.current_authorization_context() c"
+            ).fetchone()
+            if context is None:
+                raise RelationPopulationError("unavailable")
+            population = replace(population, source_context=context[0].encode("utf-8"))
             frame.execute(
                 "SELECT memoriesql.check_relation_sql_population_authority_v1()"
             )

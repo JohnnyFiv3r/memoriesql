@@ -4,11 +4,13 @@ The exact amended PR-05 interface and whole lifecycle dependency have owner
 approval and independently reconciled custody, recorded in
 `docs/approvals/pr-05-settings-reconciliation.md`. The landed forward schema-31
 slice adds public-core internal result preparation and ownership/allocation journal
-mechanics. The next authorized schema-32 slice prepares the nine assessed SQL
+mechanics. The landed schema-32 slice prepares the nine assessed SQL
 relations through PR-03's canonical projection and actual protected dependencies;
-see `docs/verification/pr-05-relation-sql-population.md`. Neither adds an available
-result/disclosure API, query executor or qualified physical-storage profile.
-Preserve SQL 0001–0031 and earlier records;
+see `docs/verification/pr-05-relation-sql-population.md`. The authorized schema-33
+slice adds an internal restricted-login SELECT bridge and owned invocation
+cancellation/settlement/recovery; see `docs/verification/pr-05-restricted-query.md`.
+These slices add no available result/disclosure API or qualified physical-storage
+profile. Preserve SQL 0001–0032 and earlier records;
 canonical lifecycle/projection stays PR-03-owned. Remaining integrated PR-05
 delivery and useful workload qualification are required before availability.
 No release, publication or Desktop consumption is authorized by this slice.
