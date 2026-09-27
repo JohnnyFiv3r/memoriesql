@@ -12,7 +12,7 @@ from dataclasses import asdict, replace
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, cast
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import psycopg
 
@@ -348,25 +348,140 @@ class DatabaseTimeRefusal(fixtures.CompleteInputExecution):
         self.run_owned(worker, run)
 
     def test_revocation_while_pending_cannot_settle_with_old_credentials(self) -> None:
+        self.revocation_boundary("before")
+
+    def test_revocation_after_context_returns_late_stale_fence(self) -> None:
+        self.revocation_boundary("after")
+
+    def revocation_boundary(self, boundary: str) -> None:
+        """Commit revocation on the chosen side of the real context call."""
         self.setup_execution()
         worker = self.active_worker()
         self.refuse_start(worker)
+        release = threading.Event()
+        gated = threading.Event()
+        local = threading.local()
+        transaction: list[tuple[int, int]] = []
+        original_persist = worker._persist_result
+        original_begin = PostgresAuthorizationPort.begin_context
+
+        def persist(*args: Any, **kwargs: Any) -> Any:
+            local.settlement = True
+            try:
+                return original_persist(*args, **kwargs)
+            finally:
+                local.settlement = False
+
+        worker._persist_result = persist
 
         async def run() -> None:
-            await asyncio.wait_for(worker.run_once(), 3)
-            first = self.attempt()
-            self.db.execute(
-                "UPDATE memoriesql.authentication_credentials SET status='revoked',revoked_at=clock_timestamp() WHERE principal_id=%s",
-                (self.worker_principal,),
+            loop = asyncio.get_running_loop()
+            entered = asyncio.Event()
+
+            def begin(port: Any, **kwargs: Any) -> Any:
+                if not getattr(local, "settlement", False) or gated.is_set():
+                    return original_begin(port, **kwargs)
+                gated.set()
+                transaction.append(
+                    port._connection.execute(
+                        "SELECT pg_backend_pid(),txid_current()"
+                    ).fetchone()
+                )
+                context = original_begin(port, **kwargs) if boundary == "after" else None
+                loop.call_soon_threadsafe(entered.set)
+                if not release.wait(5):
+                    raise AssertionError("fixture did not release context boundary")
+                return context if boundary == "after" else original_begin(port, **kwargs)
+
+            with patch.object(PostgresAuthorizationPort, "begin_context", begin):
+                foreground = asyncio.create_task(worker.run_once())
+                try:
+                    await asyncio.wait_for(entered.wait(), 3)
+                    pending = await asyncio.wait_for(foreground, 3)
+                    self.assertEqual(str(pending.cycle_status), "cleanup_pending")
+                    self.assertTrue(worker.cleanup_pending)
+                    first = self.attempt()
+                    deadline = worker._attempt_deadline_ns
+                    self.db.execute(
+                        "UPDATE memoriesql.authentication_credentials SET status='revoked',revoked_at=clock_timestamp() WHERE principal_id=%s",
+                        (self.worker_principal,),
+                    )
+                    self.clock(self.safe_time())
+                    release.set()
+                    ended = await asyncio.wait_for(worker.wait_for_cleanup(), 3)
+                    expected = (
+                        ("authorization_unavailable", None)
+                        if boundary == "before"
+                        else ("late_output_discarded", "stale_fence")
+                    )
+                    self.assertEqual((str(ended.cycle_status), ended.task_status), expected)
+                    self.assertEqual(self.attempt(), first)
+                    self.assertEqual(worker._attempt_deadline_ns, deadline)
+                    self.assertFalse(worker.cleanup_pending)
+                    self.assertFalse(worker._refusal_writes)
+                    self.assertEqual(
+                        self.row(
+                            "SELECT count(*) FROM memoriesql.authorization_contexts WHERE backend_pid=%s AND transaction_id=%s",
+                            transaction[0],
+                        ),
+                        (0 if boundary == "before" else 1,),
+                    )
+                    self.assert_not_dispatched()
+                finally:
+                    release.set()
+                    if not foreground.done():
+                        foreground.cancel()
+                    await asyncio.gather(foreground, return_exceptions=True)
+
+        self.run_owned(worker, run)
+
+    def test_unrelated_authentication_sql_error_after_context_is_visible(self) -> None:
+        self.authentication_error_boundary("after", "invalid authentication context")
+
+    def test_unrecognized_context_authentication_sql_error_is_visible(self) -> None:
+        self.authentication_error_boundary("before", "fictional unrelated auth error")
+
+    def authentication_error_boundary(self, boundary: str, message: str) -> None:
+        self.setup_execution()
+        worker = self.active_worker()
+        self.refuse_start(worker)
+        self.db.execute(
+            """CREATE FUNCTION public.fictional_auth_failure(text) RETURNS text
+            LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION '%', $1
+            USING ERRCODE='28000'; END $$"""
+        )
+        original = PostgresAuthorizationPort.begin_context
+
+        def fail(port: Any, **kwargs: Any) -> Any:
+            return port._connection.execute(
+                "SELECT public.fictional_auth_failure(%s)", (message,)
+            ).fetchone()
+
+        def reauthorize(queue: Any, *args: Any, **kwargs: Any) -> Any:
+            return fail(PostgresAuthorizationPort(queue._connection))
+
+        # Limit the injected failure to settlement, after claim/start refusal.
+        original_persist = worker._persist_result
+
+        def persist(*args: Any, **kwargs: Any) -> Any:
+            target, name, function = (
+                (PostgresAuthorizationPort, "begin_context", fail)
+                if boundary == "before"
+                else (PostgresSemanticTaskQueue, "reauthorize", reauthorize)
             )
-            self.clock(self.safe_time())
-            ended = await asyncio.wait_for(worker.wait_for_cleanup(), 3)
-            self.assertEqual(
-                (str(ended.cycle_status), ended.task_status),
-                ("late_output_discarded", "stale_fence"),
-            )
-            self.assertEqual(self.attempt(), first)
+            with patch.object(target, name, function):
+                return original_persist(*args, **kwargs)
+
+        worker._persist_result = persist
+
+        async def run() -> None:
+            with self.assertRaises(psycopg.errors.InvalidAuthorizationSpecification):
+                await worker.run_once()
+                await worker.wait_for_cleanup()
+            self.assertFalse(worker.cleanup_pending)
             self.assert_not_dispatched()
+            self.assertEqual(self.attempt()[0:3:2], ("claimed", None))
+            self.assertEqual(original, PostgresAuthorizationPort.begin_context)
 
         self.run_owned(worker, run)
 
