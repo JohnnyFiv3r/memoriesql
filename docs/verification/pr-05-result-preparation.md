@@ -14,7 +14,8 @@ M0031–M0033 and the canonical M0030 projector remain byte-identical dependenci
 The primary acceptance claim for M0034 is **atomic private persistence of native
 bag-result values and complete witnesses for the qualified composition cut,
 without repeating completed SELECT work**. The cut includes explicit projections,
-typed filters, key and outer joins, nonrecursive CTE/derived-table composition and
+typed filters, key and outer joins, nonrecursive CTE/derived-table composition,
+explicit LIMIT/OFFSET subsets and
 `UNION ALL`. PostgreSQL computes values and membership in one restricted-reader
 statement; Python binds emitted membership to exact frozen keys and shares DAG
 nodes. Duplicate tuples/branches retain distinct saved ordinals. Outer nonmatches
@@ -65,6 +66,13 @@ crash after sealing with no partial result, and restart/lost-response/concurrent
 redelivery without native redispatch. Installed qualification and exact-head CI
 belong on the PR. Earlier failed packaging/type/import/encoding fixtures remain
 recorded; no retry erases a failure or establishes measured useful workload fit.
+Broad review of `819e59a` identified missing OFFSET subset metadata and incorrect
+base-table/partial CTE/derived alias handling. Three seen regression cases fail at
+that exact installed head. The correction records both LIMIT and OFFSET with their
+ordering/exclusion basis, scans canonical keys behind base aliases, and pads
+partial alias lists before naming the hidden trace. All three corrected cases pass
+without rejecting previously admitted SQL. The superseded head's in-progress
+qualification is retained as historical evidence; it cannot qualify the repair.
 
 M0031 reserves one private ownership identity for an authenticated `(run,step)`
 and request fingerprint before execution. Exact retry returns that same journal

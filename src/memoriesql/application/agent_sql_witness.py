@@ -60,6 +60,15 @@ class _Compiler:
                 schema = self.relations[name]
                 keys = schema.unique_keys[0]
                 stage = self.stage("scan", relation=name, key_columns=list(keys))
+                inner = node.copy()
+                outer_alias = node.args.get("alias")
+                if outer_alias:
+                    outer_alias = outer_alias.copy()
+                    inner.args["alias"].set("columns", None)
+                else:
+                    outer_alias = exp.TableAlias(
+                        this=exp.to_identifier(alias, quoted=True)
+                    )
                 scan = exp.select(
                     *(
                         exp.column(c.name, table=alias, quoted=True)
@@ -75,21 +84,49 @@ class _Compiler:
                         self.hidden,
                         quoted=True,
                     ),
-                ).from_(node.copy())
+                ).from_(inner)
                 node = exp.Subquery(
                     this=scan,
-                    alias=exp.TableAlias(this=exp.to_identifier(alias, quoted=True)),
+                    alias=outer_alias,
                 )
+                self.alias_columns(node, [c.name for c in schema.columns])
             elif node.name not in ctes:
                 raise SqlAdmissionError("unsupported", "witness_source")
         else:
             raise SqlAdmissionError("unsupported", "witness_source")
         return node, exp.column(self.hidden, table=alias, quoted=True)
 
-    def alias_columns(self, node: exp.Expr) -> None:
+    def alias_columns(
+        self, node: exp.Expr, visible_names: list[str] | None = None
+    ) -> None:
         alias = node.args.get("alias")
         if alias and alias.args.get("columns"):
-            alias.append("columns", exp.to_identifier(self.hidden, quoted=True))
+            if visible_names is None:
+                output = node.this.unnest()
+                if not isinstance(output, exp.Select | exp.Union):
+                    raise SqlAdmissionError("unsupported", "witness_shape")
+                visible_names = [e.alias_or_name for e in output.selects[:-1]]
+            supplied = alias.args["columns"]
+            alias.set(
+                "columns",
+                [
+                    *supplied,
+                    *(
+                        exp.to_identifier(n, quoted=True)
+                        for n in visible_names[len(supplied) :]
+                    ),
+                    exp.to_identifier(self.hidden, quoted=True),
+                ],
+            )
+
+    def subset(self, node: exp.Expr) -> int:
+        return self.stage(
+            "limit",
+            limit=node.args["limit"].dump() if node.args.get("limit") else None,
+            offset=node.args["offset"].dump() if node.args.get("offset") else None,
+            order=node.args["order"].dump() if node.args.get("order") else None,
+            tie_basis="native_trace_v1",
+        )
 
     def query(self, node: exp.Expr, inherited: set[str]) -> exp.Expr:
         if isinstance(node, exp.Subquery):
@@ -129,8 +166,8 @@ class _Compiler:
                 )
                 node.set(key, wrapper)
             self.order(node)
-            if node.args.get("limit"):
-                stage = self.stage("limit", limit=node.args["limit"].dump())
+            if node.args.get("limit") or node.args.get("offset"):
+                stage = self.subset(node)
                 alias = "_mq_set"
                 names = [e.alias_or_name for e in node.selects[:-1]]
                 wrapper = exp.select(
@@ -183,10 +220,8 @@ class _Compiler:
             self.stage("project", expressions=[e.dump() for e in node.expressions]),
             trace,
         )
-        if node.args.get("limit"):
-            trace = self.tag(
-                self.stage("limit", limit=node.args["limit"].dump()), trace
-            )
+        if node.args.get("limit") or node.args.get("offset"):
+            trace = self.tag(self.subset(node), trace)
         node.append("expressions", exp.alias_(trace, self.hidden, quoted=True))
         self.order(node)
         return node

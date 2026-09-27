@@ -483,6 +483,98 @@ class QueryResultCommit(unittest.TestCase):
                     (30000,),
                 )
 
+    def test_offset_records_the_selected_subset_and_complete_exclusion_basis(
+        self,
+    ) -> None:
+        self.fixture.assertion()
+        request = self.request(
+            "SELECT statement_id FROM memory_v1.relation_statements ORDER BY statement_id OFFSET 1"
+        )
+        owner = self.reserve_request(request)
+        plain_owner = self.reserve_request(replace_request_step(request))
+        with self.population(request) as population:
+            plain = self.execute_request(
+                request, plain_owner, population, witnesses=False
+            )
+            execution = self.execute_request(request, owner, population)
+            self.assertEqual(plain.outcome, "complete", plain)
+            self.assertEqual(execution.outcome, "complete", execution)
+            self.assertEqual(execution.rows, plain.rows)
+            self.assertGreater(len(population.rows["memory_v1.relation_statements"]), 1)
+            self.assertEqual(
+                len(execution.rows),
+                len(population.rows["memory_v1.relation_statements"]) - 1,
+            )
+            graph = json.loads(execution.witnesses.bytes)
+            self.assertTrue(
+                any(
+                    s["operation"] == "limit" and s.get("offset")
+                    for s in graph["stages"]
+                )
+            )
+            self.assertEqual(
+                len(graph["members"]),
+                len(population.rows["memory_v1.relation_statements"]),
+            )
+            candidate = self.candidate(request, population, execution)
+            self.assertEqual(
+                json.loads(candidate.content.content)["coverage"]["population_basis"],
+                "limited_query",
+            )
+            with self.fixture.connection() as control:
+                self.adapter(control).commit(owner, candidate)
+
+    def test_base_table_alias_columns_preserve_canonical_member_keys(self) -> None:
+        self.fixture.assertion()
+        request = self.request(
+            "SELECT r.id,r.rationale FROM memory_v1.assessed_relations AS r(id) ORDER BY r.id"
+        )
+        owner = self.reserve_request(request)
+        plain_owner = self.reserve_request(replace_request_step(request))
+        with self.population(request) as population:
+            plain = self.execute_request(
+                request, plain_owner, population, witnesses=False
+            )
+            execution = self.execute_request(request, owner, population)
+            self.assertEqual(plain.outcome, "complete", plain)
+            self.assertEqual(execution.outcome, "complete", execution)
+            self.assertEqual(execution.rows, plain.rows)
+            graph = json.loads(execution.witnesses.bytes)
+            self.assertEqual(
+                next(
+                    s["key_columns"]
+                    for s in graph["stages"]
+                    if s["operation"] == "scan"
+                ),
+                ["relation_id"],
+            )
+
+    def test_partial_cte_and_derived_aliases_keep_trace_after_all_visible_columns(
+        self,
+    ) -> None:
+        self.fixture.assertion()
+        queries = [
+            "WITH c(id) AS (SELECT relation_id,rationale FROM memory_v1.assessed_relations) SELECT id,rationale FROM c ORDER BY id",
+            "SELECT d.id,d.rationale FROM (SELECT relation_id,rationale FROM memory_v1.assessed_relations) AS d(id) ORDER BY d.id",
+        ]
+        for query in queries:
+            request = self.request(query)
+            owner = self.reserve_request(request)
+            plain_owner = self.reserve_request(replace_request_step(request))
+            with self.population(request) as population:
+                plain = self.execute_request(
+                    request, plain_owner, population, witnesses=False
+                )
+                execution = self.execute_request(request, owner, population)
+                self.assertEqual(plain.outcome, "complete", plain)
+                self.assertEqual(execution.outcome, "complete", execution)
+                self.assertEqual(execution.rows, plain.rows)
+                self.assertEqual(execution.columns, plain.columns)
+            for slot in (owner, plain_owner):
+                self.store.discard(
+                    operation_ref=slot.operation_ref, ownership_ref=slot.ownership_ref
+                )
+
     def test_private_creations_have_no_reader_grant_and_are_immutable(self) -> None:
         self.fixture.assertion()
         request = self.request("SELECT relation_id FROM memory_v1.assessed_relations")
