@@ -163,8 +163,8 @@ agent-authored SQL recall, immutable reusable results and durable branching
 investigation checkpoints. The approved direction also prioritizes
 [assessed-relation lifecycle completion](docs/relation-assessment.md#forward-lifecycle-completion)
 for relation-aware retrieval. The original exact interface has owner approval and independent custody; its
-settings-boundary amendment still requires exact-record approval and matching
-custody reconciliation. Integrated executor safety and useful-workload fit remain
+settings-boundary amendment also has exact-record owner approval and matching
+independent custody reconciliation. Integrated executor safety and useful-workload fit remain
 unqualified; no executable recall capability is added to the published package.
 
 ## Architectural commitments

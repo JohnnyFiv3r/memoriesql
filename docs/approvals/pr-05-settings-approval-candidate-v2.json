@@ -13,7 +13,7 @@
       }
     ]
   },
-  "approval_ref": "REPLACE_WITH_DURABLE_REFERENCE_TO_EXACT_OWNER_APPROVAL",
+  "approval_ref": "https://github.com/JohnnyFiv3r/memoriesql/pull/49#issuecomment-5851352880",
   "amendments": [
     {
       "amendment_ref": "https://github.com/JohnnyFiv3r/memoriesql/pull/48#issuecomment-5851120561",

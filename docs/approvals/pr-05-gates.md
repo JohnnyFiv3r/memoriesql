@@ -44,9 +44,18 @@ becomes a production candidate default or hidden fallback.
 ## Subsequent settings-boundary reconciliation
 
 The owner selected the boundary and two clarifications, as recorded in public
-#48 comment 5851120561. The complete candidate is
-`pr-05-settings-approval-candidate-v2.json`; its exact-record approval_ref remains
-pending. See `pr-05-settings-reconciliation.md`. Original ea-2 matches only the
-original record. Exact new owner approval and matching content-free reconciliation
-from the existing custodian remain required before dependent executor work.
+#48 comment 5851120561, then explicitly approved the **whole** final candidate
+v2 record at `a1d3c0b`. That separate exact approval is durably recorded in public
+#49 comment 5851352880. Only approval_ref was replaced in
+`pr-05-settings-approval-candidate-v2.json`; both normative Git blobs and the
+complete superseded pin were reverified unchanged. See
+`pr-05-settings-reconciliation.md`. Original ea-2 matches only the original record.
+The complete new approved record was sent to the existing independent custodian.
+Its separately retained `pr-05-custody-ea-3.json` matches the entire record and
+unchanged frozen conditions/revisions/corpus linkage. Exact byte length is 12,916;
+SHA-256 is `12e802be3664a2c971ae144f692e993e43344e9d68dfff569cfc16f77547e60b`.
+Original ea-2, both normative blobs and all historical evidence remain unchanged.
+Both amendment gates are verified before dependent executor work; the original
+frozen_at remains 2026-09-26T22:01:04Z. Existing conditional owner authorization
+governs implementation, without expanded scope or semantic-quality certification.
 The accompanying unreleased naming cleanup is editorial, not executor permission.

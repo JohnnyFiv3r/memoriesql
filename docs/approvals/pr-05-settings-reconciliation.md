@@ -1,11 +1,40 @@
 # PR-05 settings amendment: exact-record handoff
 
-The candidate record is `pr-05-settings-approval-candidate-v2.json`. It pins the
+The approved record is `pr-05-settings-approval-candidate-v2.json` (the candidate
+filename is preserved). It pins the
 whole amended packet and whole unchanged lifecycle dependency at the same stable
 commit. Both SHA-256 values were computed from exact Git blob bytes, including
-final LF. This is a candidate for exact owner approval, not an approval record;
-its approval_ref placeholder must be replaced with the durable exact-record owner
-decision after that decision is received. Boundary selection cannot fill that gate.
+final LF. The owner approved the **whole** final v2 candidate at `a1d3c0b`, whose
+exact JSON blob SHA-256 is
+`498abf3d27a77c5b9084030116c9e06e8ce298a0771c0daf447cbe603050523d`.
+The attributable decision and complete approved record are recorded at
+https://github.com/JohnnyFiv3r/memoriesql/pull/49#issuecomment-5851352880.
+Only approval_ref was replaced in the candidate JSON. The approved packet,
+whole lifecycle dependency and original approval/custody bytes remain unchanged.
+This exact approval is distinct from the earlier boundary selection.
+
+Verified owner source: Scrum Master task `01a0676f-6eaa-7d70-b034-cb9be5832167`,
+turn `01a0e04a-e31a-74f3-856a-a49e9ddb0089`, user message
+`msg_01a0e04a-e3e5-76a2-8607-b5d03c07387f`,
+2026-09-27T00:36:39.525Z, exact utterance "Approved".
+The existing independent custodian supplied `pr-05-custody-ea-3.json`, exactly
+12,916 UTF-8 bytes with one final LF, SHA-256
+`12e802be3664a2c971ae144f692e993e43344e9d68dfff569cfc16f77547e60b`.
+The implementer verified those exact bytes, the entire approved record and
+superseded pin, both normative Git blobs, original ea-2 and unchanged frozen
+revisions/conditions/corpus linkage. Canonically serialized approved-record
+SHA-256 is `75d710cf604fff74977fca61042d0ead468647d1fc86a5e8de8da06b0f060b11`.
+Original frozen_at remains 2026-09-26T22:01:04Z; ea-3 issued_at is
+2026-09-27T00:44:15Z, a separate reconciliation rather than a new freeze.
+
+Authorized content-free delivery: implementation task
+`01a0de6f-e1f4-7db1-a354-73442876761b`, turn
+`01a0e04d-0852-7e82-a9ae-a7811b572dcd`, item
+`fco_01a0e052-2c03-7823-809b-dec71b61d010`,
+2026-09-27T00:45:15.984Z. No custodian private context/storage, unseen questions,
+gold, hints or access paths were inspected or received. Custody declares that
+shared-account agents are not distinct OS security principals; it does not claim
+technical filesystem isolation that was not established.
 
 The owner-selected boundary and both required clarifications are durably recorded
 at https://github.com/JohnnyFiv3r/memoriesql/pull/48#issuecomment-5851120561.
@@ -30,9 +59,10 @@ those owned symbol changes in the admission kernel.
 
 The original owner record and custody ea-2 are immutable historical gate evidence
 for their original whole pin. Neither silently extends to this amendment. The
-existing independent PR-04 custodian must receive the complete new approved v2
-record, verify every dependency and supply matching content-free custody
-reconciliation before dependent executor implementation. Do not ask for or receive
+separately retained ea-3 matches the complete new approved v2 record and reconciles
+it with unchanged frozen inputs; no evaluation-semantic conflict was identified.
+Both amendment gates are now verified before dependent executor implementation.
+Existing conditional owner authorization governs that work. Do not ask for or receive
 unseen questions, gold, hints or access paths. Corpus preparation, both EG-0001
 conditions, thresholds and prior failures remain the custodian's unchanged lane.
 
