@@ -40,3 +40,13 @@ No release/version selection, publication, provider call/spend, owner-data acces
 deployment, production checkpoint or Desktop consumption is authorized.
 Public release must precede Desktop consumption. Neither evaluation condition
 becomes a production candidate default or hidden fallback.
+
+## Subsequent settings-boundary reconciliation
+
+The owner selected the boundary and two clarifications, as recorded in public
+#48 comment 5851120561. The complete candidate is
+`pr-05-settings-approval-candidate-v2.json`; its exact-record approval_ref remains
+pending. See `pr-05-settings-reconciliation.md`. Original ea-2 matches only the
+original record. Exact new owner approval and matching content-free reconciliation
+from the existing custodian remain required before dependent executor work.
+The accompanying unreleased naming cleanup is editorial, not executor permission.
