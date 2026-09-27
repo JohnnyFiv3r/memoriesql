@@ -73,6 +73,10 @@ ordering/exclusion basis, scans canonical keys behind base aliases, and pads
 partial alias lists before naming the hidden trace. All three corrected cases pass
 without rejecting previously admitted SQL. The superseded head's in-progress
 qualification is retained as historical evidence; it cannot qualify the repair.
+That historical installed run also exposed stale resource assertions for 33
+migrations and 68 modules. They now require 34 migrations and 71 modules; the
+out-of-range refusal tests version 35. Its four failed assertions and all original
+logs remain preserved, rather than being reported as passing convergence.
 
 M0031 reserves one private ownership identity for an authenticated `(run,step)`
 and request fingerprint before execution. Exact retry returns that same journal
