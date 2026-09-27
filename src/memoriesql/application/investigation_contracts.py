@@ -12,7 +12,7 @@ import hashlib
 import json
 import math
 import re
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Annotated, Any, Literal
 from uuid import UUID
@@ -73,6 +73,12 @@ def _positive_int8(value: str) -> str:
     return value
 
 
+def _stored_time(value: str) -> str:
+    if not re.search(r"\.[0-9]{6}Z\Z", value):
+        raise ValueError("stored UTC timestamp requires six fractional digits")
+    return value
+
+
 Text = Annotated[str, StringConstraints(strict=True), AfterValidator(_text)]
 Ref = Annotated[
     str,
@@ -90,6 +96,7 @@ Hash = Annotated[
     ),
 ]
 Timestamp = Annotated[Text, AfterValidator(_utc)]
+StoredTimestamp = Annotated[Timestamp, AfterValidator(_stored_time)]
 PositiveInt8 = Annotated[Text, AfterValidator(_positive_int8)]
 Control = Annotated[int, Field(strict=True, ge=0)]
 Alias = Annotated[Text, Field(pattern=r"^[a-z][a-z0-9_]{0,31}$")]
@@ -422,6 +429,47 @@ class Finding(FrozenContractModel):
     evidence_refs: tuple[EvidenceRef, ...]
 
 
+class CheckpointRoot(FrozenContractModel):
+    result: ResultPin
+    frame_ref: Ref
+
+
+class CheckpointManifest(FrozenContractModel):
+    """Exact immutable content shape; valid shape does not publish or authorize."""
+
+    checkpoint_id: Ref
+    investigation_id: Ref
+    branch_id: Ref
+    sequence: PositiveInt8
+    investigation_sequence: PositiveInt8
+    predecessor: CheckpointPin | None
+    fork_origin: CheckpointPin | None
+    working_state_source: CheckpointPin | None
+    created_at: StoredTimestamp
+    automatic_expires_at: StoredTimestamp
+    question: Text
+    progress: Progress
+    findings: Annotated[tuple[Finding, ...], Field(max_length=16)]
+    roots: Annotated[tuple[CheckpointRoot, ...], Field(max_length=32)]
+
+    @model_validator(mode="after")
+    def content_allocation(self) -> CheckpointManifest:
+        _working_text(self.question, self.findings)
+        _unique_results(tuple(r.result for r in self.roots))
+        created = datetime.fromisoformat(self.created_at[:-1] + "+00:00")
+        expiry = datetime.fromisoformat(self.automatic_expires_at[:-1] + "+00:00")
+        if expiry != created + timedelta(days=30):
+            raise ValueError("automatic lifetime must remain 30 days")
+        if len(result_json_bytes(self.model_dump(mode="json"))) > 32768:
+            raise ValueError("canonical manifest allocation exceeded")
+        return self
+
+    def content_digest(self) -> str:
+        return hashlib.sha256(
+            result_json_bytes(self.model_dump(mode="json"))
+        ).hexdigest()
+
+
 def _unique_results(roots: tuple[ResultPin, ...]) -> None:
     if len({r.result_id for r in roots}) != len(roots):
         raise ValueError("duplicate result identities")
@@ -453,6 +501,29 @@ class CheckpointRequest(Request):
             raise ValueError("append requires investigation, branch and compared head")
         _working_text(self.question, self.findings)
         _unique_results(tuple(r.result for r in self.roots))
+        # Fixed-width refs/timestamps and minimum sequence lengths give a lower
+        # bound for the eventual canonical manifest. Access contexts are request
+        # inputs, not copied manifest content. The allocator must validate the
+        # actual CheckpointManifest again after it assigns sequences/metadata.
+        ref = "00000000-0000-0000-0000-000000000000"
+        CheckpointManifest(
+            checkpoint_id=ref,
+            investigation_id=ref,
+            branch_id=ref,
+            sequence="1",
+            investigation_sequence="1",
+            predecessor=self.expected_head,
+            fork_origin=None,
+            working_state_source=None,
+            created_at="2000-01-01T00:00:00.000000Z",
+            automatic_expires_at="2000-01-31T00:00:00.000000Z",
+            question=self.question,
+            progress=self.progress,
+            findings=self.findings,
+            roots=tuple(
+                CheckpointRoot(result=r.result, frame_ref=ref) for r in self.roots
+            ),
+        )
         return self
 
 

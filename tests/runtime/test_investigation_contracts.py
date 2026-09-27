@@ -16,6 +16,7 @@ from pydantic import ValidationError
 from memoriesql.application.agent_sql_admission import admit_query
 from memoriesql.application.agent_sql_catalog import SqlAdmissionError, SqlCatalog
 from memoriesql.application.investigation_contracts import (
+    CheckpointManifest,
     CheckpointRequest,
     InvestigationRequestError,
     QueryRequest,
@@ -435,6 +436,82 @@ class InvestigationContractTests(unittest.TestCase):
             envelope("restore_checkpoint", access=CP_ACCESS, selected_roots=[PIN, PIN])
         )
         self.assert_refused(envelope("restore_checkpoint", selected_roots=[]))
+
+    def test_checkpoint_nested_references_must_fit_canonical_manifest(self) -> None:
+        facts = [{"result_id": RESULT, "row_ref": str(n)} for n in range(1, 600)]
+        finding = {"text": "fictional facts", "facts": facts, "evidence_refs": []}
+        self.assert_refused(checkpoint(findings=[finding]))
+        evidence = {
+            "kind": "source",
+            "ref": RESULT,
+            "unit_ref": RUN,
+            "content_sha256": "a" * 64,
+        }
+        self.assert_refused(
+            checkpoint(
+                findings=[
+                    {
+                        "text": "fictional sources",
+                        "facts": [],
+                        "evidence_refs": [evidence] * 300,
+                    }
+                ]
+            )
+        )
+
+    def test_manifest_budget_excludes_request_only_contexts_and_rechecks_allocation(
+        self,
+    ) -> None:
+        roots = []
+        for n in range(1, 33):
+            pin = {"result_id": str(UUID(int=n)), "content_digest": "a" * 64}
+            context = {**CONTEXT, "root": pin}
+            roots.append({"result": pin, "access": context})
+        request = checkpoint(
+            question="界" * 1365,
+            progress={"status": "investigating", "note": "界" * 682},
+            findings=[{"text": "x" * 8192, "facts": [], "evidence_refs": []}],
+            roots=roots,
+        )
+        self.assertGreater(len(result_json_bytes(request)), 32768)
+        parsed = parse_investigation_request(wire(request))
+        assert isinstance(parsed, CheckpointRequest)
+        manifest_data = {
+            "checkpoint_id": CHECKPOINT,
+            "investigation_id": RUN,
+            "branch_id": STEP,
+            "sequence": "9223372036854775807",
+            "investigation_sequence": "9223372036854775807",
+            "predecessor": None,
+            "fork_origin": None,
+            "working_state_source": None,
+            "created_at": "2026-09-01T00:00:00.000000Z",
+            "automatic_expires_at": "2026-10-01T00:00:00.000000Z",
+            "question": request["question"],
+            "progress": request["progress"],
+            "findings": request["findings"],
+            "roots": [{"result": r["result"], "frame_ref": RUN} for r in roots],
+        }
+        manifest = CheckpointManifest.model_validate(manifest_data)
+        self.assertEqual(
+            manifest.content_digest(),
+            hashlib.sha256(result_json_bytes(manifest_data)).hexdigest(),
+        )
+        self.assertLessEqual(
+            len(result_json_bytes(manifest.model_dump(mode="json"))), 32768
+        )
+        too_large = copy.deepcopy(manifest_data)
+        too_large["findings"][0]["facts"] = [
+            {"result_id": RESULT, "row_ref": str(n)} for n in range(1, 600)
+        ]
+        with self.assertRaises(ValidationError):
+            CheckpointManifest.model_validate(too_large)
+        for change in (
+            {"created_at": "2026-09-01T00:00:00Z"},
+            {"automatic_expires_at": "2026-09-30T00:00:00.000000Z"},
+        ):
+            with self.assertRaises(ValidationError):
+                CheckpointManifest.model_validate({**manifest_data, **change})
 
     def test_native_scalar_profile_preserves_exact_types_and_clock_precision(
         self,

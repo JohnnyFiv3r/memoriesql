@@ -32,6 +32,15 @@ normalization is not an additional input restriction. Request fingerprints retai
 those supplied spellings. The initial extra input normalization was removed during
 qualification rather than silently reducing the approved query capability.
 
+Checkpoint request validation rejects content whose minimum canonical manifest
+already exceeds 32 KiB, including nested fact/evidence collections and JSON Unicode
+escape bytes. It does not count request-only access contexts as stored manifest
+content or impose a new reference-count ceiling. The closed `CheckpointManifest`
+also validates the exact full allocation after trusted sequences/metadata are
+assigned, with canonical timestamps, unchanged 30-day automatic lifetime and
+content digest. Passing the request's lower bound is not storage admission;
+the allocator must validate that final manifest before atomic publication.
+
 Seen fictional qualification covers all action kinds, held-ancestor/context
 substitution, context/cursor fingerprints, input/parent/live-frame rules, parameter
 types/arrays, helper bounds, save revisions and canonical golden bytes. Installed
