@@ -162,3 +162,8 @@ An attempted direct source PostgreSQL test import failed with MigrationError:
 "packaged migration inventory is unavailable". Source has no generated packaged
 inventory; no database test executed. Correct route: rebuild reviewed archives
 and run the guarded installed fixtures. No source-inventory injection was used.
+The first review-fix archive build then correctly refused migration source drift:
+the unreleased M0031 digest had not been refreshed after its SQL correction.
+Only the M0031 inventory entry was updated to its exact new bytes; all historical
+SQL 0001-0030 and their inventory entries remain unchanged. No failed archive
+was used as qualification evidence.
