@@ -32,13 +32,13 @@ def select_ci_run(
         for run in runs
         if run.get("head_sha") == sha
         and run.get("head_branch") == "main"
-        and run.get("event") == "push"
+        and run.get("event") == "workflow_dispatch"
         and run.get("path") == ".github/workflows/python-package.yml"
         and run.get("repository", {}).get("full_name") == REPOSITORY
         and run.get("repository", {}).get("id") == REPOSITORY_ID
     ]
     if not candidates:
-        raise ValueError("no package CI for this exact main commit")
+        raise ValueError("no explicitly requested qualification for this exact main commit")
     latest = max(candidates, key=lambda run: int(run["id"]))
     if latest.get("status") != "completed" or latest.get("conclusion") != "success":
         raise ValueError("latest exact-head package CI has not passed")
@@ -46,6 +46,26 @@ def select_ci_run(
     if run_id <= 0:
         raise ValueError("invalid package CI run ID")
     return run_id
+
+
+def verify_qualification_jobs(
+    document: dict[str, Any], *, run_id: int, sha: str
+) -> None:
+    """A green workflow with skipped database jobs cannot qualify a release."""
+    jobs = document.get("jobs", [])
+    required = {"package", "compatibility (3.13)", "compatibility (3.14)"}
+    if document.get("total_count") != len(jobs) or len(jobs) != len(required):
+        raise ValueError("incomplete or unexpected qualification job inventory")
+    if {job.get("name") for job in jobs} != required:
+        raise ValueError("qualification requires package and both supported interpreters")
+    for job in jobs:
+        if (
+            job.get("run_id") != run_id
+            or job.get("head_sha") != sha
+            or job.get("status") != "completed"
+            or job.get("conclusion") != "success"
+        ):
+            raise ValueError("every exact-run qualification job must actually pass")
 
 
 def verify_artifacts(
@@ -86,6 +106,10 @@ def main() -> None:
     ci.add_argument("--sha", required=True)
     ci.add_argument("--main-sha", required=True)
     ci.add_argument("--tag", required=True)
+    qualification = commands.add_parser("qualification")
+    qualification.add_argument("--jobs", type=Path, required=True)
+    qualification.add_argument("--run-id", type=int, required=True)
+    qualification.add_argument("--sha", required=True)
     artifacts = commands.add_parser("artifacts")
     artifacts.add_argument("directory", type=Path)
     artifacts.add_argument("--output", type=Path)
@@ -100,6 +124,11 @@ def main() -> None:
             version=project["version"],
         )
         print(f"run_id={run_id}")
+    elif args.command == "qualification":
+        verify_qualification_jobs(
+            json.loads(args.jobs.read_text()), run_id=args.run_id, sha=args.sha
+        )
+        print("exact-head installed qualification verified")
     else:
         inventory = json.loads(RELEASE_INVENTORY.read_text())
         paths = verify_artifacts(args.directory, inventory)

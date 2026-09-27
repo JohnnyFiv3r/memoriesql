@@ -116,7 +116,10 @@ class PublicBootstrapTests(unittest.TestCase):
         self.assertEqual(workflow.count("id-token: write"), 1)
         self.assertIn("scripts/verify_release.py ci", workflow)
         self.assertIn("scripts/verify_release.py artifacts", workflow)
-        self.assertNotIn("workflow_dispatch", workflow)
+        self.assertNotIn("workflow_dispatch", workflow.split("permissions:")[0])
+        self.assertIn("-f event=workflow_dispatch", workflow)
+        self.assertIn("scripts/verify_release.py qualification", workflow)
+        self.assertIn("-f filter=latest", workflow)
         self.assertNotIn("pull_request", workflow)
         self.assertNotIn("python -m build", workflow)
         self.assertNotIn("skip-existing", workflow)
@@ -159,6 +162,22 @@ class PublicBootstrapTests(unittest.TestCase):
             'run_installed_acceptance.py --shard "$shard/$shards"', compatibility
         )
         self.assertIn('test "$failed" -eq 0', compatibility)
+
+    def test_paid_matrix_is_explicit_and_automatic_checks_cancel_only_superseded(self) -> None:
+        workflow = (ROOT / ".github/workflows/python-package.yml").read_text()
+        package, compatibility = workflow.split("  compatibility:")
+        self.assertIn("  workflow_dispatch:", package)
+        self.assertIn("      expected_sha:", package)
+        self.assertIn("      owner_approval_ref:", package)
+        self.assertIn('test "$EXPECTED_SHA" = "$GITHUB_SHA"', package)
+        self.assertIn("OWNER_APPROVAL_REF//[[:space:]]/", package)
+        self.assertIn("if: github.event_name == 'workflow_dispatch'", compatibility)
+        self.assertIn("needs: package", compatibility)
+        self.assertIn("timeout-minutes: 60", compatibility)
+        self.assertIn("timeout-minutes: 15", package)
+        self.assertIn("github.event_name == 'workflow_dispatch' && github.run_id", package)
+        self.assertIn("github.event.pull_request.number || github.ref", package)
+        self.assertIn("cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}", package)
 
 
 if __name__ == "__main__":
