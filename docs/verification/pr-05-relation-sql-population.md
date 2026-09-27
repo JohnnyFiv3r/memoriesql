@@ -104,8 +104,9 @@ first run.
 Subsequent results are recorded separately on the PR. Historical #52/clock-refusal
 failures and evidence remain unchanged.
 
-The first full installed lane at f0e0495 failed on both interpreters because the
-ownership assertion still expected 66 runtime modules; the explicit inventory
-contains 67 after the new adapter. The assertion is updated to 67, retaining its
-owned-file/import/dependency checks. The original full logs remain retained and
-failed; a complete corrected-head lane is required before qualification.
+The first full installed lane at f0e0495 failed on both interpreters on two stale
+assertions: ownership expected 66 modules (now 67), and the out-of-range migration
+case requested 32 (now valid). The negative case now requests 33 and retains its
+atomic-history checks. All runtime/SQL bytes are unchanged by these test repairs.
+Original complete failed logs remain retained; a corrected-head full lane is
+required before qualification.
