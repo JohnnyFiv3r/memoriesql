@@ -191,6 +191,25 @@ class QueryWindowWitness(unittest.TestCase):
         )
         self.assertEqual(len(graph["row_provenance"]), 1)
 
+    def test_windowed_set_branches_keep_both_native_populations(self) -> None:
+        self.fixture.assertion()
+        graph = self.compare(
+            "SELECT relation_id,rank() OVER(ORDER BY state) AS place "
+            "FROM memory_v1.assessed_relations "
+            "UNION ALL "
+            "SELECT relation_id,rank() OVER(ORDER BY state) AS place "
+            "FROM memory_v1.assessed_relations ORDER BY relation_id",
+            commit=True,
+        )
+        self.assertEqual(len(graph["row_provenance"]), 2)
+        self.assertEqual(
+            len([n for n in graph["nodes"] if n["operation"] == "window_partition"]),
+            2,
+        )
+        self.assertEqual(
+            len([n for n in graph["nodes"] if n["operation"] == "set"]), 2
+        )
+
     def test_empty_window_keeps_protected_source_and_predicate(self) -> None:
         self.fixture.assertion()
         graph = self.compare(
@@ -209,6 +228,7 @@ class QueryWindowWitness(unittest.TestCase):
         for statement in (
             "SELECT r.relation_id,count(*) OVER(ORDER BY r.relation_id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS n FROM memory_v1.assessed_relations r",
             "SELECT r.relation_id,rank() OVER(ORDER BY r.state) AS place,row_number() OVER(ORDER BY r.relation_id) AS position FROM memory_v1.assessed_relations r",
+            "SELECT r.relation_id,rank() OVER(ORDER BY r.state) AS place FROM memory_v1.assessed_relations r ORDER BY r.state",
         ):
             with self.subTest(statement=statement):
                 h = self.harness
