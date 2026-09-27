@@ -55,6 +55,8 @@ def provision_fictional_reader(
         "row_number()",
         "rank()",
         "dense_rank()",
+        'jsonb_build_array("any")',
+        "int8(integer)",
     )
     proc_oids = [
         scalar("SELECT %s::regprocedure::oid", ("pg_catalog." + signature,))

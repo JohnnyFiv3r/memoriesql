@@ -71,6 +71,7 @@ class AdmittedQuery:
     relations: tuple[str, ...]
     derivation_program: dict[str, Any]
     recursion: RecursionBound | None
+    execution_tree: list[dict[str, Any]]
 
 
 @dataclass
@@ -1303,4 +1304,5 @@ def admit_query(
         tuple(sorted(binder.used_relations)),
         derivation,
         recursion,
+        tree.dump(),
     )

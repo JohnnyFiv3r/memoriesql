@@ -6,6 +6,7 @@ fixture, does no model work, and runs with checkout/provider access denied.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import sys
@@ -34,6 +35,15 @@ def main() -> None:
             from query_authority_fixture import provision_fictional_reader
             from test_assessed_relation_lifecycle import AssessedLifecycle
             from test_postgres_runtime import migrate
+        from memoriesql.application.agent_sql_catalog import SqlCatalog
+        from memoriesql.application.investigation_contracts import (
+            QueryRequest,
+            request_fingerprint,
+        )
+        from memoriesql.infrastructure.postgres.query_result_commit import (
+            InternalResultCandidate,
+            PostgresQueryResultCommit,
+        )
         from memoriesql.infrastructure.postgres.relation_sql_population import (
             prepare_relation_population,
         )
@@ -48,7 +58,7 @@ def main() -> None:
         fixture.setUp()
         try:
             bead, _, relation = fixture.assertion()
-            migrate(fixture.db, expected_current_version=30, target_version=33)
+            migrate(fixture.db, expected_current_version=30, target_version=34)
             reader_name = "pr05_restart_" + uuid4().hex
             profile = provision_fictional_reader(fixture.db, reader_name)
             run_ref, step_key = uuid4(), uuid4()
@@ -121,6 +131,73 @@ def main() -> None:
                     invocation_ref=str(native.invocation_ref),
                     profile=asdict(profile),
                 )
+                result_request = QueryRequest.model_validate(
+                    {
+                        "contract_version": 1,
+                        "run_ref": str(uuid4()),
+                        "step_key": str(uuid4()),
+                        "kind": "query",
+                        "catalog_hash": SqlCatalog.installed().hash,
+                        "sql": "SELECT relation_id,state FROM memory_v1.assessed_relations",
+                        "parameters": [],
+                        "inputs": [],
+                        "parents": [],
+                        "scope": {
+                            "source_refs": [],
+                            "known_at": population.known_at.isoformat().replace(
+                                "+00:00", "Z"
+                            ),
+                            "view": "historical",
+                        },
+                        "intent": "enumerate",
+                        "max_result_bytes": 64 * 1024 * 1024,
+                        "page_size": 2,
+                    }
+                )
+                with fixture.connection() as control:
+                    result_owner = PostgresResultPreparation(
+                        control,
+                        credential_sha256=fixture.secret_hash,
+                        workspace_id=fixture.workspace,
+                    ).reserve(
+                        run_ref=UUID(result_request.run_ref),
+                        step_key=UUID(result_request.step_key),
+                        request_fingerprint=request_fingerprint(result_request),
+                        reservation_bytes=result_request.max_result_bytes,
+                    )
+                    result_execution = executor.execute(
+                        fixture.db,
+                        population,
+                        result_owner,
+                        result_request.sql,
+                        collect_bag_witnesses=True,
+                    )
+                    candidate = InternalResultCandidate.construct(
+                        result_request,
+                        population,
+                        result_execution,
+                        policy_hash="5" * 64,
+                    )
+                    result_receipt = PostgresQueryResultCommit(
+                        control,
+                        credential_sha256=fixture.secret_hash,
+                        workspace_id=fixture.workspace,
+                    ).commit(result_owner, candidate)
+                    result_witness = {
+                        "request": result_request.model_dump(
+                            mode="json", exclude_unset=True
+                        ),
+                        "receipt": result_receipt,
+                        "content_sha256": hashlib.sha256(
+                            candidate.content.content
+                        ).hexdigest(),
+                        "witness_sha256": hashlib.sha256(
+                            candidate.content.witnesses
+                        ).hexdigest(),
+                        "dependencies_sha256": hashlib.sha256(
+                            candidate.content.dependencies
+                        ).hexdigest(),
+                    }
             # The transport result is deliberately unavailable to the recovering
             # caller. An independent proof witness retains it for byte comparison.
             path.write_text(
@@ -134,6 +211,7 @@ def main() -> None:
                         witness=receipt.model_dump(mode="json"),
                         projection_witness=projection_witness,
                         native_witness=native_witness,
+                        result_witness=result_witness,
                         task_count=fixture.row(
                             "SELECT count(*) FROM memoriesql.semantic_tasks"
                         )[0],
@@ -159,12 +237,19 @@ def main() -> None:
             InspectBeadRelationsV3,
             RecordAssessedRelationEvent,
         )
+        from memoriesql.application.investigation_contracts import (
+            QueryRequest,
+            request_fingerprint,
+        )
         from memoriesql.infrastructure.postgres.agent_sql_authority import (
             QualifiedView,
             QueryAuthorityProfile,
         )
         from memoriesql.infrastructure.postgres.assessed_relation_lifecycle import (
             PostgresAssessedRelationLifecycle,
+        )
+        from memoriesql.infrastructure.postgres.query_result_commit import (
+            PostgresQueryResultCommit,
         )
         from memoriesql.infrastructure.postgres.relation_sql_population import (
             prepare_relation_population,
@@ -298,6 +383,43 @@ def main() -> None:
             assert replay.outcome == "settlement_pending" and not replay.rows
             assert db.execute(
                 "SELECT count(*) FROM memoriesql_query.invocations"
+            ).fetchone() == (2,)
+            result = context["result_witness"]
+            request = QueryRequest.model_validate(result["request"])
+            result_owner = store.reserve(
+                run_ref=UUID(request.run_ref),
+                step_key=UUID(request.step_key),
+                request_fingerprint=request_fingerprint(request),
+                reservation_bytes=request.max_result_bytes,
+            )
+            assert result_owner.replayed and result_owner.state == "sealed"
+            creation = PostgresQueryResultCommit(
+                db,
+                credential_sha256=context["credential_sha256"],
+                workspace_id=UUID(context["workspace_id"]),
+            ).recover(result_owner)
+            assert creation == result["receipt"] | {"replayed": True}, creation
+            retained = db.execute(
+                "SELECT content_bytes,witness_bytes,dependency_bytes FROM memoriesql.result_preparation_artifacts WHERE artifact_ref=%s",
+                (creation["result_id"],),
+            ).fetchone()
+            assert retained is not None
+            for partition, key in zip(
+                retained,
+                ("content_sha256", "witness_sha256", "dependencies_sha256"),
+                strict=True,
+            ):
+                assert hashlib.sha256(partition).hexdigest() == result[key], key
+            replay = executor.execute(
+                db, population, result_owner, request.sql, collect_bag_witnesses=True
+            )
+            assert (
+                replay.outcome == "settlement_pending"
+                and not replay.rows
+                and replay.witnesses is None
+            )
+            assert db.execute(
+                "SELECT count(*) FROM memoriesql.query_result_creations"
             ).fetchone() == (1,)
             assert db.execute(
                 "SELECT count(*) FROM memoriesql_query.population_rows"
@@ -323,6 +445,9 @@ def main() -> None:
         )
         print(
             "original restricted invocation journal recovered; no SELECT rerun or available-result claim"
+        )
+        print(
+            "immutable result partitions and creation receipt survived a fresh process; no SELECT rerun or public disclosure"
         )
         print(
             json.dumps(

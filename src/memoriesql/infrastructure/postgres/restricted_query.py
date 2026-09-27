@@ -27,6 +27,7 @@ from memoriesql.application.agent_sql_catalog import (
     SqlColumn,
     SqlParameter,
 )
+from memoriesql.application.agent_sql_witness import compile_bag_witness
 from memoriesql.application.investigation_contracts import (
     encode_result_scalar,
     result_json_bytes,
@@ -35,6 +36,10 @@ from memoriesql.infrastructure.postgres.agent_sql_authority import (
     QueryAuthorityProfile,
     qualify_query_authority,
     verify_query_login,
+)
+from memoriesql.infrastructure.postgres.query_witness import (
+    NativeWitnessBuilder,
+    NativeWitnesses,
 )
 from memoriesql.infrastructure.postgres.relation_projection import (
     relation_projection_frame,
@@ -69,6 +74,10 @@ class NativeQueryExecution:
     cancellation_started_ms: int | None = None
     cancellation_request_failed: bool = False
     error: str | None = None
+    witnesses: NativeWitnesses | None = None
+    query_metadata: bytes | None = None
+    authority_profile_sha256: str | None = None
+    deadline_monotonic: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -226,6 +235,7 @@ class PostgresRestrictedQuery:
         budget_ms: int = 30000,
         max_output_bytes: int = 64 * 1024 * 1024,
         cancellation: threading.Event | None = None,
+        collect_bag_witnesses: bool = False,
     ) -> NativeQueryExecution:
         if (
             type(budget_ms) is not int
@@ -254,6 +264,10 @@ class PostgresRestrictedQuery:
         query = None
         stage_started = False
         stage_confirmed = False
+        witness_builder: NativeWitnessBuilder | None = None
+        witnesses: NativeWitnesses | None = None
+        frame_ref = uuid4()
+        query_metadata: bytes | None = None
         try:
             anchors = frozenset(
                 (column.type.reference_kind, str(value))
@@ -269,6 +283,24 @@ class PostgresRestrictedQuery:
                 raise SqlAdmissionError("unavailable", "catalog")
             if not set(query.relations) <= set(population.rows):
                 raise SqlAdmissionError("unsupported", "unprepared_relation")
+            plan = (
+                compile_bag_witness(query, dict(population.schemas))
+                if collect_bag_witnesses
+                else None
+            )
+            if plan:
+                witness_builder = NativeWitnessBuilder(plan, population, frame_ref)
+                encoded += witness_builder.encoded_bytes
+            query_metadata = result_json_bytes(
+                {
+                    "sql": sql,
+                    "parameters": [
+                        {"position": p.position, "type": p.type, "value": p.value}
+                        for p in parameters
+                    ],
+                    "derivation_program": query.derivation_program,
+                }
+            )
             encoded += len(result_json_bytes(query.derivation_program))
             if encoded > max_output_bytes:
                 raise _StopQuery("budget_exhausted")
@@ -334,7 +366,7 @@ class PostgresRestrictedQuery:
                 "issuer_pid": issuer.pid,
                 "issuer_start": issuer.started_at,
                 "issuer_transaction": issuer.virtual_transaction,
-                "frame_ref": str(uuid4()),
+                "frame_ref": str(frame_ref),
                 "catalog_hash": population.catalog_hash,
                 "policy_hash": self._policy_hash,
                 "scope_hash": population.dependency_manifest_sha256,
@@ -391,24 +423,34 @@ class PostgresRestrictedQuery:
             )
             worker.start()
             with reader.cursor(name="memoriesql_" + uuid4().hex) as cursor:
-                cursor.execute(query.sql, query.parameters)
+                cursor.execute(plan.sql if plan else query.sql, query.parameters)
                 while batch := cursor.fetchmany(128):
                     for row in batch:
+                        native = row[:-1] if plan else row
                         encoded += (
                             len(
                                 result_json_bytes(
-                                    [encode_result_scalar(v) for v in row]
+                                    [encode_result_scalar(v) for v in native]
                                 )
                             )
                             + 64
                         )
+                        if witness_builder is not None:
+                            before = witness_builder.encoded_bytes
+                            witness_builder.add(row[-1])
+                            encoded += witness_builder.encoded_bytes - before
                         if encoded > max_output_bytes:
                             raise _StopQuery("budget_exhausted")
-                        rows.append(tuple(row))
+                        rows.append(tuple(native))
                     if time.monotonic() >= deadline:
                         raise _StopQuery("budget_exhausted")
                     if cancellation is not None and cancellation.is_set():
                         raise _StopQuery("cancelled")
+            if witness_builder is not None:
+                witnesses = witness_builder.seal()
+                encoded += max(0, len(witnesses.bytes) - witness_builder.encoded_bytes)
+                if encoded > max_output_bytes:
+                    raise _StopQuery("budget_exhausted")
             source.execute(
                 "SELECT memoriesql.check_relation_sql_population_authority_v1()"
             )
@@ -524,4 +566,8 @@ class PostgresRestrictedQuery:
             observed_ms=observed,
             cancellation_started_ms=cancel_started[0] if cancel_started else None,
             cancellation_request_failed=cancel_failed.is_set(),
+            witnesses=witnesses,
+            query_metadata=query_metadata,
+            authority_profile_sha256=authority.profile_sha256,
+            deadline_monotonic=deadline,
         )

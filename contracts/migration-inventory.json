@@ -133,6 +133,10 @@
     {
       "filename": "0033_restricted_query_invocations.sql",
       "sha256": "4587c5ff968a1108ab71a64506525392f9d3fa16b4a57f3246a7b815c37b0b7e"
+    },
+    {
+      "filename": "0034_query_result_commit.sql",
+      "sha256": "4b8aee371b730e6dabe8c997dc1d72bfbb43cc009c7b9b7088989939392fa213"
     }
   ]
 }
