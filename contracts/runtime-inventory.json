@@ -195,6 +195,9 @@
     },
     {
       "path": "src/memoriesql/infrastructure/postgres/relation_projection.py"
+    },
+    {
+      "path": "src/memoriesql/infrastructure/postgres/result_preparation.py"
     }
   ]
 }

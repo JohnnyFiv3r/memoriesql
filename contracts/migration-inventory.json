@@ -121,6 +121,10 @@
     {
       "filename": "0030_assessed_relation_lifecycle.sql",
       "sha256": "14bbfe89729cec39aa60b4c15cb022d93e0cc3061d6129ed3476fd5b848d9d80"
+    },
+    {
+      "filename": "0031_result_preparation_journal.sql",
+      "sha256": "cda6d57d8a5d601b3bc57d4f8553819576e7eaca5d33d56021738591a984041c"
     }
   ]
 }

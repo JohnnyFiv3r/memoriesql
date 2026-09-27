@@ -1,5 +1,15 @@
 # Contributor guidance
 
+The exact amended PR-05 interface and whole lifecycle dependency have owner
+approval and independently reconciled custody, recorded in
+`docs/approvals/pr-05-settings-reconciliation.md`. The authorized forward schema-31
+slice adds private durable result preparation and ownership/allocation journal
+mechanics only. It adds no available result/disclosure API, query executor or
+qualified physical-storage profile. Preserve SQL 0001–0030 and earlier records;
+canonical lifecycle/projection stays PR-03-owned. Remaining integrated PR-05
+delivery and useful workload qualification are required before availability.
+No release, publication or Desktop consumption is authorized by this slice.
+
 This repository is the staged public boundary for the memoriesQL open core. Keep changes provider-neutral, deterministic, content-blind, and default-deny.
 
 - `contracts/public-registry.json` is the sole authority for generated catalogs.
