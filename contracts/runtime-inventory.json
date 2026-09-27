@@ -192,6 +192,9 @@
     },
     {
       "path": "src/memoriesql/infrastructure/postgres/relation_projection.py"
+    },
+    {
+      "path": "src/memoriesql/application/investigation_contracts.py"
     }
   ]
 }
