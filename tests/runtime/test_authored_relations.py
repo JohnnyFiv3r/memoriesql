@@ -933,6 +933,16 @@ class AuthoredRelations(fixtures.LocalMentions):
         self.assertEqual(roots(summary, before), {(self.source,)})
 
     def test_known_time_and_late_arrival_inherit_source_clocks(self) -> None:
+        self.assert_known_time_and_late_arrival()
+
+    def test_known_time_cutoff_does_not_use_a_future_client_clock(self) -> None:
+        # A host-clock cutoff after both operations would admit the late claim.
+        # Only this fixture's client clock changes; database/runtime clocks do not.
+        with patch(f"{__name__}.datetime", wraps=datetime) as client_clock:
+            client_clock.now.return_value = self.row("SELECT clock_timestamp()")[0] + timedelta(days=1)
+            self.assert_known_time_and_late_arrival()
+
+    def assert_known_time_and_late_arrival(self) -> None:
         monday = datetime(2026, 9, 21, 9, 0, tzinfo=UTC)
         sunday = monday - timedelta(days=1)
         ids: dict[str, str] = {}
@@ -942,7 +952,9 @@ class AuthoredRelations(fixtures.LocalMentions):
             occurred_at=monday,
             plan=lambda extras, bead, _: ids.setdefault("open", self.add_claim(extras, bead, "orchard gate", "position", "open")),
         )
-        before = datetime.now(UTC)
+        # author() has committed. Knowledge time and this cutoff share the DB
+        # clock domain; there is no required ordering with the client's clock.
+        before = self.row("SELECT clock_timestamp()")[0]
 
         def late_plan(extras: dict[str, Any], bead: dict[str, Any], candidates: list[Any]) -> None:
             ids["closed"] = self.add_claim(extras, bead, "orchard gate", "position", "closed")
@@ -969,12 +981,24 @@ class AuthoredRelations(fixtures.LocalMentions):
             (closed_claim.source_time.time_basis, closed_claim.source_time.time_precision),
             ("unit_source_time", "second"),
         )
-        self.assertGreater(closed_claim.recorded_at, open_claim.recorded_at)
         earlier = self.inspect(gate, known_at=before)
-        self.assertEqual((earlier.relations, len(earlier.claims)), ((), 1))
         not_yet = self.inspect(late, known_at=before)
+        trace = {
+            "cutoff": before.isoformat(),
+            "first_recorded_at": open_claim.recorded_at.isoformat(),
+            "late_recorded_at": closed_claim.recorded_at.isoformat(),
+            "earlier_outcome": earlier.outcome,
+            "earlier_known_at": str(earlier.known_at),
+            "late_outcome": not_yet.outcome,
+        }
+        print("fictional knowledge-clock trace " + json.dumps(trace, sort_keys=True))
+        self.assertGreater(closed_claim.recorded_at, open_claim.recorded_at, trace)
+        self.assertGreaterEqual(before, open_claim.recorded_at, trace)
+        self.assertLess(before, closed_claim.recorded_at, trace)
+        self.assertEqual(earlier.outcome, "available", trace)
+        self.assertEqual((earlier.relations, len(earlier.claims)), ((), 1), trace)
         self.assertEqual(
-            (not_yet.outcome, not_yet.relations_capable, not_yet.claims), ("available", False, ())
+            (not_yet.outcome, not_yet.relations_capable, not_yet.claims), ("available", False, ()), trace
         )
         first = self.inspect(late)
         again = self.inspect(late, known_at=first.known_at)
