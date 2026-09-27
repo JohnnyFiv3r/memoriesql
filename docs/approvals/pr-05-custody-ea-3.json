@@ -1,0 +1,236 @@
+{
+  "access_separation": {
+    "distinct_os_principals_claimed": false,
+    "limitation": "Agents sharing the same operating-system account are not distinct filesystem security principals.",
+    "outside_all_implementation_repositories": true,
+    "owner_only_read_only_filesystem_modes": true,
+    "pack_content_confined_to_independent_custodian_context": true,
+    "questions_gold_hints_or_private_access_paths_shared": false
+  },
+  "algorithm": "sha256",
+  "approved_interface_record": {
+    "amendments": [
+      {
+        "amendment_ref": "https://github.com/JohnnyFiv3r/memoriesql/pull/48#issuecomment-5851120561",
+        "supersedes": {
+          "algorithm": "sha256",
+          "dependencies": [
+            {
+              "commit": "2baffc688291dbfdeccaa46f7ca05f6e9ef0e12c",
+              "path": "docs/relation-assessment.md",
+              "sha256": "69a0d985466c6610a3a2abc73bcef9242749ff9535cb709e32867c7e06414d2a"
+            }
+          ],
+          "packet_commit": "2baffc688291dbfdeccaa46f7ca05f6e9ef0e12c",
+          "packet_path": "docs/agent-sql-results-v1.md",
+          "packet_sha256": "ba9e94b75b581949ff55e9b06b7271e2d4d0c79d6423e1dc6184d72245c585bb"
+        }
+      }
+    ],
+    "approval_ref": "https://github.com/JohnnyFiv3r/memoriesql/pull/49#issuecomment-5851352880",
+    "interface": {
+      "algorithm": "sha256",
+      "dependencies": [
+        {
+          "commit": "b3865f307b50bd94681b387ad0f3b16fbb20213a",
+          "path": "docs/relation-assessment.md",
+          "sha256": "69a0d985466c6610a3a2abc73bcef9242749ff9535cb709e32867c7e06414d2a"
+        }
+      ],
+      "packet_commit": "b3865f307b50bd94681b387ad0f3b16fbb20213a",
+      "packet_path": "docs/agent-sql-results-v1.md",
+      "packet_sha256": "78bbc04eaeffd0fd47b0576e270f25eaa30e07a90b42e53d27e64308dfd8269e"
+    },
+    "version": 2
+  },
+  "attestation_revision": "ea-3",
+  "compatibility": {
+    "both_conditions_receive_same_amended_runtime_boundary": true,
+    "deadline_and_settlement": "Deadline initiates independent cancellation; ownership, reservations, overrun accounting and uncertain-settlement admission blocks persist until confirmed settlement. No timeout, client response or cancellation request proves remote work stopped.",
+    "evaluation_conditions_rankings_model_settings_numeric_limits_thresholds_and_scoring_unchanged": true,
+    "frozen_policy_alignment": "Existing result timeout remains a grading failure threshold. Existing owned-settlement, unknown-not-zero, no-budget-refund, classified fault and raw-evidence preservation rules already require truthful pending states; no scoring relaxation or new semantic judgment follows.",
+    "method": "Review of the complete original-to-amended normative blob diff against frozen preregistration, threshold and profile policies; exact inventory hash verification. No unseen content is disclosed or retuned.",
+    "naming": "Editorial owned SQL/query/investigation terminology only; actual SQL SELECT and public wire/evaluation semantics unchanged.",
+    "new_normative_dependency_added": false,
+    "qualification_limit": "Integrated credential isolation, database restrictions, cancellation/settlement and useful-workload capacity are implementation-owned proof obligations, not claims established by this custody reconciliation.",
+    "questions_gold_interpretations_populations_evidence_bindings_and_historical_failures_unchanged": true,
+    "result": "compatible_without_frozen_material_changes",
+    "retuning_or_new_freeze_required": false,
+    "semantic_conflicts_found": [],
+    "settings_and_credentials": "Only the qualified trusted executor controls settings; actual agent shell/filesystem/process capabilities must not recover credentials. Raw-login USERSET mutability remains an explicit limitation. Independent database write/elevation/tenant/resource/scope protections remain mandatory.",
+    "whole_lifecycle_dependency_byte_identical": true
+  },
+  "custodian": {
+    "role": "independent PR-04 evaluation custodian",
+    "task_id": "01a0d40a-b91a-73a0-b5b3-8067f150c880"
+  },
+  "evaluation_approval": {
+    "final_route_approval": {
+      "at": "2026-09-26T21:44:04.956Z",
+      "item_id": "01a0dfac-e45d-7a12-bf72-096d5910444a",
+      "message_id": "msg_01a0dfac-e45c-7412-aafe-63c5947adbbd",
+      "turn_id": "01a0dfac-e394-7e70-8bc8-1f062e924487"
+    },
+    "owner_amendment": {
+      "at": "2026-09-26T20:32:23.434Z",
+      "message_id": "msg_01a0df6b-418a-71d3-8094-bec17b38c29b",
+      "turn_id": "01a0df6b-3ee2-7440-8f84-0084ef0b1760"
+    },
+    "source_task_id": "01a0676f-6eaa-7d70-b034-cb9be5832167",
+    "status": "approved_for_custody_freeze; original owner messages and decision context verified; unchanged v3 plus supplemental approval"
+  },
+  "evaluation_conditions": [
+    {
+      "name": "fixed PostgreSQL FTS/pg_trgm",
+      "profile_id": "fts-trgm-v1",
+      "profile_manifest_revision": "ep-1",
+      "profile_manifest_sha256": "1b7086621dcb6a508114cb5bf4bcbbe6380d0e594b9da4827ca51be7e47125c6",
+      "role": "evaluation-only lexical peer"
+    },
+    {
+      "name": "optional in-Postgres vector condition",
+      "profile_id": "fts-trgm-vector-v1",
+      "profile_manifest_revision": "ep-1",
+      "profile_manifest_sha256": "1b7086621dcb6a508114cb5bf4bcbbe6380d0e594b9da4827ca51be7e47125c6",
+      "role": "evaluation-only lexical-plus-exact-vector peer"
+    }
+  ],
+  "execution": {
+    "database_or_checkpoint_execution": false,
+    "evaluation_runs": 0,
+    "implementation": false,
+    "model_calls": 0,
+    "spending": false
+  },
+  "exposure_incidents": [],
+  "format": "pr04-independent-custody-reconciliation-v1",
+  "frozen_at": "2026-09-26T22:01:04Z",
+  "interface_amendment_approval": {
+    "approval_ref": "https://github.com/JohnnyFiv3r/memoriesql/pull/49#issuecomment-5851352880",
+    "approved_candidate_commit": "a1d3c0b8b3df2642f0ab75612b6342facc44c592",
+    "approved_candidate_path": "docs/approvals/pr-05-settings-approval-candidate-v2.json",
+    "approved_candidate_sha256": "498abf3d27a77c5b9084030116c9e06e8ce298a0771c0daf447cbe603050523d",
+    "approved_record_digest_serialization": "UTF-8 without BOM; JSON ensure_ascii=False, sort_keys=True, indent=2; LF; one final LF",
+    "approved_record_sha256": "75d710cf604fff74977fca61042d0ead468647d1fc86a5e8de8da06b0f060b11",
+    "candidate_change_to_form_approved_record": "approval_ref only",
+    "durable_comment_provenance": {
+      "author": "JohnnyFiv3r",
+      "body_utf8_sha256": "98c63700fee1a6dd2ff005b77312c7799baaa3cdaf1aef92f5a99b15e620e40c",
+      "comment_id": 5851352880,
+      "created_at": "2026-09-27T00:42:22Z",
+      "retained_api_response_sha256": "c6568a1f0c1859f1ad3ab85fd7a8fce6f22184c3827fd1f7f3979420a81f7031",
+      "updated_at": "2026-09-27T00:42:22Z"
+    },
+    "owner_source": {
+      "at": "2026-09-27T00:36:39.525Z",
+      "complete_record_decision_context_independently_verified": true,
+      "exact_text": "Approved",
+      "message_id": "msg_01a0e04a-e3e5-76a2-8607-b5d03c07387f",
+      "task_id": "01a0676f-6eaa-7d70-b034-cb9be5832167",
+      "turn_id": "01a0e04a-e31a-74f3-856a-a49e9ddb0089"
+    }
+  },
+  "issued_at": "2026-09-27T00:44:15Z",
+  "matched_opportunities_and_budgets": true,
+  "model_reproducibility": {
+    "discovery_sha256": "cd544df7b4003b692513f5dfde6439e4570bb63be284ea6f5a32c360e5d47471",
+    "reasoning_effort": "high",
+    "remote_immutable_backend_revision": "unavailable",
+    "scope": "Owner-approved observable-configuration reproducibility; hidden backend updates cannot be ruled out; detectable drift and fallback rejected.",
+    "selector": "gpt-5.6-terra"
+  },
+  "original_freeze_interface_record": {
+    "amendments": [],
+    "approval_ref": "https://github.com/JohnnyFiv3r/memoriesql/pull/46#issuecomment-5849423968",
+    "interface": {
+      "algorithm": "sha256",
+      "dependencies": [
+        {
+          "commit": "2baffc688291dbfdeccaa46f7ca05f6e9ef0e12c",
+          "path": "docs/relation-assessment.md",
+          "sha256": "69a0d985466c6610a3a2abc73bcef9242749ff9535cb709e32867c7e06414d2a"
+        }
+      ],
+      "packet_commit": "2baffc688291dbfdeccaa46f7ca05f6e9ef0e12c",
+      "packet_path": "docs/agent-sql-results-v1.md",
+      "packet_sha256": "ba9e94b75b581949ff55e9b06b7271e2d4d0c79d6423e1dc6184d72245c585bb"
+    },
+    "version": 2
+  },
+  "preregistration_complete": true,
+  "prior_exposed_pack_reused": false,
+  "reconciles": {
+    "attestation_revision": "ea-2",
+    "attestation_sha256": "501ee401c88f4926431f8eb5f2e27b78082649a2949de7005bca17ce54b53711",
+    "frozen_at": "2026-09-26T22:01:04Z",
+    "historical_record_preserved": true,
+    "original_ea2_still_attests_only_its_original_interface": true
+  },
+  "reconciliation_scope": "Separately retained compatibility reconciliation for the exactly owner-approved settings/credential/deadline amendment and editorial owned naming. No new freeze; original pack bindings and all original evidence remain unchanged.",
+  "revisions": {
+    "approved_policy": {
+      "revision": "pr05-evaluation-preregistration-v3",
+      "sha256": "6bdf6b0e790cb7b0ef71337de5b494f03913ec5c47cb3c1d746686594bc545db"
+    },
+    "pack": {
+      "digest_scope": "frozen inventory of exact constituent bytes",
+      "revision": "ef-1",
+      "sha256": "e6e7844592ae4694266b9890f328e90f19f2795eeb1c38f7b28d786ba46fabdd"
+    },
+    "preregistration": {
+      "revision": "er-1",
+      "sha256": "21d6ce7a08eaa084a779db175f0e68fabffa9e42c0f1961c2b25495bb70ce9a9"
+    },
+    "profiles": {
+      "revision": "ep-1",
+      "sha256": "1b7086621dcb6a508114cb5bf4bcbbe6380d0e594b9da4827ca51be7e47125c6"
+    },
+    "supplemental_approval": {
+      "revision": "pr04-custody-policy-approval-v1",
+      "sha256": "3b0170773413c9e772abb93c3f93de92cdeb9d7fe6cd59894eab8891eac47a00"
+    },
+    "thresholds": {
+      "revision": "et-1",
+      "sha256": "cb8d09abf5cd4eaf632eb142c88a7a0cdc12dbfd88c67b63d32d788dc227a236"
+    }
+  },
+  "scope": "Matching custody reconciliation only. Original freeze and all evidence remain historical and intact. Existing conditional owner authorization governs implementation only after the recipient verifies this record; this attestation grants no expanded authority. No semantic-quality or integrated-runtime-safety certification, architecture selection, live qualification/evaluation, inference, spending, merge, release/publication, deployment, owner-data access, production checkpoint, Desktop consumption or CLI expansion is authorized by this reconciliation.",
+  "seen_and_unseen_results_separate": true,
+  "serialization": {
+    "encoding": "UTF-8 without BOM",
+    "final_newline": true,
+    "hash_scope": "Exact complete JSON document bytes; detached SHA-256 is not embedded in this document.",
+    "json": "Python json.dumps ensure_ascii=False, sort_keys=True, indent=2",
+    "line_endings": "LF"
+  },
+  "source_attributed_loadable_corpus": {
+    "evidence_commit": "84f93ec272cc1e868efffb0765b8366bdc5bf987",
+    "evidence_repository": "JohnnyFiv3r/memoriesql-desktop",
+    "foundation_proof_revision": "pr04-replay-proof-v1",
+    "foundation_proof_sha256": "0581e6e0d0a7372517e7a07cdf96689ff5a602abec9083090dd0483b1ac468db",
+    "installed_dependency_in_retained_proof": "memoriesql==0.0.12",
+    "profiles": [
+      "foundation-v1",
+      "relations-v1"
+    ],
+    "qualification_of_new_interface_or_unseen_evaluation_executed": false,
+    "ready": true,
+    "relation_proof_revision": "pr04-relation-replay-proof-v1",
+    "relation_proof_sha256": "55a6dd09889a2c044e7516523c9432a5bf38b89dd61a2ed3dbe9b9dfb1900f74",
+    "retained_source_fidelity_repeat_resume_clean_replay": "passed",
+    "scope": "Delivered PR-04 capture-native foundation and supported relation replay corpus; retained evidence, not a new database run or qualification of unreleased PR-05 runtime.",
+    "source_inventory_sha256": "e3d98a0995bc9d9b060247eaaa7b5e56af2bc2f59a126368c7fe2a39f922d10a"
+  },
+  "status": "reconciled_frozen_inputs_unchanged",
+  "threshold_and_profile_preservation": {
+    "applicability_and_additions": "Applicable historical rules retained; denominator mappings, comparison safeguards, condition parameters and execution controls use the owner-approved v3 reconciliation plus recorded supplemental approval. Historical experiment configurations are not transplanted as qualification evidence.",
+    "generated_answers_select_architecture": false,
+    "historical_accepted_numeric_floors_preserved": true,
+    "historical_numeric_policy_sha256": "c743c867ab7d35a845fa9ce0d1d1a0af08a219534dc2e632fa467043bff45105",
+    "inconclusive_outcome_permitted": true,
+    "owner_approved_amendments_preserved": true,
+    "post_result_threshold_or_profile_changes": false,
+    "unchanged_since_original_freeze": true
+  },
+  "vector_preparation": "Input, model provenance and recipe frozen; vector outputs not computed. Separately authorized preparation must retain output digests and receipts."
+}
