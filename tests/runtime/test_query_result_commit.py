@@ -355,7 +355,7 @@ class QueryResultCommit(unittest.TestCase):
     ) -> None:
         self.fixture.assertion()
         request = self.request(
-            "SELECT relation_id,row_number() OVER (ORDER BY relation_id) AS n FROM memory_v1.assessed_relations"
+            "SELECT relation_id,count(*) OVER (ORDER BY relation_id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS n FROM memory_v1.assessed_relations"
         )
         owner = self.reserve_request(request)
         with (
