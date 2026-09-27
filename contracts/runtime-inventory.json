@@ -186,6 +186,15 @@
     },
     {
       "path": "src/memoriesql/application/investigation_contracts.py"
+    },
+    {
+      "path": "src/memoriesql/application/assessed_relation_lifecycle.py"
+    },
+    {
+      "path": "src/memoriesql/infrastructure/postgres/assessed_relation_lifecycle.py"
+    },
+    {
+      "path": "src/memoriesql/infrastructure/postgres/relation_projection.py"
     }
   ]
 }
