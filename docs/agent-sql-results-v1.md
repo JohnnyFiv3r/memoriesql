@@ -20,8 +20,10 @@ corpus, questions, gold, evidence artifacts or upstream source adaptation.
 
 Approve the complete new pin for this whole packet and its unchanged pinned
 relation dependency. The substantive amendment is the settings/credential/deadline
-boundary in §2/§5 and its integrated acceptance cases in §6; the title change is
-editorial. SELECT remains the SQL keyword, never a feature or product brand.
+boundary in §2/§5 and its integrated acceptance cases in §6. The title and
+unreleased owned abstraction/file naming changes are editorial: use SQL/query/
+recall/investigation terminology, retaining actual SQL SELECT syntax and upstream
+AST names. SELECT is never a memoriesQL feature or product brand.
 The unchanged disclosure contexts and policy targets retain their prior approval.
 The approved direction
 remains genuine composable SELECT, immutable reusable results, relation-ready

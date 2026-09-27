@@ -14,7 +14,7 @@ import psycopg
 from psycopg import sql
 from psycopg.conninfo import make_conninfo
 
-from memoriesql.application.agent_sql_admission import RecursionBound, admit_select
+from memoriesql.application.agent_sql_admission import RecursionBound, admit_query
 from memoriesql.application.agent_sql_catalog import (
     SqlCatalog,
     SqlColumn,
@@ -154,7 +154,7 @@ class AgentSqlNative(unittest.TestCase):
     def execute(
         self, query: str, parameters: tuple[SqlParameter, ...] = (), **context: Any
     ) -> list[tuple[Any, ...]]:
-        admitted = admit_select(query, parameters, **context)
+        admitted = admit_query(query, parameters, **context)
         with self.db.cursor() as cursor:
             cursor.execute(admitted.sql, admitted.parameters)
             assert cursor.description
@@ -206,7 +206,7 @@ class AgentSqlNative(unittest.TestCase):
         )
         rows = self.execute("SELECT $1 AS text UNION SELECT $2 AS text", params)
         self.assertEqual(set(rows), {("i",), ("İ",)})
-        admitted = admit_select("SELECT lower($1) AS text", (params[0],))
+        admitted = admit_query("SELECT lower($1) AS text", (params[0],))
         rows = self.db.execute(
             "SELECT pg_collation_for(q.text) FROM (" + admitted.sql + ") q",
             admitted.parameters,

@@ -63,7 +63,7 @@ class RecursionBound:
 
 
 @dataclass(frozen=True)
-class AdmittedSelect:
+class AdmittedQuery:
     sql: str
     parameters: dict[str, Any]
     columns: tuple[SqlColumn, ...]
@@ -344,7 +344,7 @@ class _Binder:
             if with_.args.get("recursive") and not self.recursion_seen:
                 _refuse(with_, "recursion", "invalid_request")
         if isinstance(node, exp.Select):
-            result = self.select(node, outer, local)
+            result = self.projection(node, outer, local)
         elif isinstance(node, exp.Union | exp.Intersect | exp.Except):
             left = self.query(node.this, outer, local)
             right = self.query(node.expression, outer, local)
@@ -431,7 +431,7 @@ class _Binder:
             )
         _refuse(node, "from_source")
 
-    def select(
+    def projection(
         self, node: exp.Select, outer: _Scope | None, ctes: dict[str, SqlRelation]
     ) -> SqlRelation:
         scope = _Scope({}, outer)
@@ -1210,7 +1210,7 @@ def _lower(tree: exp.Expr, parameters: dict[int, BoundParameter]) -> dict[str, A
     return values
 
 
-def admit_select(
+def admit_query(
     sql: str,
     parameters: tuple[SqlParameter, ...] = (),
     *,
@@ -1219,7 +1219,7 @@ def admit_select(
     evaluation_admitted: bool = False,
     recursion: RecursionBound | None = None,
     catalog: SqlCatalog | None = None,
-) -> AdmittedSelect:
+) -> AdmittedQuery:
     """The caller is the trusted host; agent wire requests never set admission context."""
     if version("sqlglot") != PARSER_VERSION:
         raise SqlAdmissionError("unavailable", "parser_version")
@@ -1295,7 +1295,7 @@ def admit_select(
         )
     except UnsupportedError:
         raise SqlAdmissionError("unsupported", "emission") from None
-    return AdmittedSelect(
+    return AdmittedQuery(
         emitted,
         values,
         output.columns,
