@@ -6,7 +6,7 @@ policy applies to this public repository; Desktop has its own workflow policy.
 | Stage | Required evidence | Execution |
 | --- | --- | --- |
 | Every PR/main push | `package`: database-free tests, contracts, boundary, lint/types, build/inspection and deterministic rebuild | Automatic hosted check |
-| Before implementation handoff | Full installed acceptance, package isolation, sdist-to-wheel equality and both fresh-process restart proofs on Python 3.13 and 3.14 | Local, disposable PostgreSQL |
+| Before implementation handoff | Full installed acceptance, package isolation, sdist-to-wheel equality and fresh-process relation, fold and clock-recovery proofs on Python 3.13 and 3.14 | Local, disposable PostgreSQL |
 | Explicit independent qualification | Same full matrix and exact-head archives | Owner-authorized manual hosted run |
 | Release | Latest explicitly requested successful full run at exact current release main; actual successful package/3.13/3.14 jobs and approved archive hashes | Separate owner-approved release procedure |
 
@@ -40,8 +40,9 @@ of truth, including its full `compatibility` job, not a hand-picked subset:
    and both inventories into the fresh temporary test directory exactly as in
    the workflow. Run package isolation and release installation with `python -I`;
    run **all three acceptance shards**, collecting every exit status; then run
-   assessed-relation and fold-recovery `prepare`, `recover`, `cleanup` in separate
-   processes. Do not run just source imports or the database-free discovery suite.
+   assessed-relation, fold-recovery and database-time-recovery `prepare`, `recover`,
+   `cleanup` in separate processes. Do not run just source imports or the
+   database-free discovery suite.
 5. Retain complete stdout/stderr, interpreter/PostgreSQL versions, commands,
    timestamps, test counts/skips, all exit statuses, source SHA, artifact sizes
    and SHA-256 values. Link the evidence from the handoff. Preserve failures and

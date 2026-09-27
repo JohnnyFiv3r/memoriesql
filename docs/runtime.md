@@ -241,3 +241,27 @@ reason is not kept and settlement is unchanged. The contract functions' own
 class-22 refusals are fixed strings; PostgreSQL's type checks can quote the
 offending value from the authored output. Application roles cannot read the
 table.
+
+The forward clock-refusal repair recognizes only PostgreSQL's
+`memoriesql.semantic_task_attempts.semantic_task_attempts_time_order` check
+failure, after the transaction rolls back. At startup it dispatches nothing;
+after output application it preserves the rollback and never repeats authoring.
+It retains the same owned attempt and retries only failure settlement, with
+fresh authorization and fences each time. A valid settlement reports `failed`
+with `worker.database_time_order_refused` and retry class `never`; cancellation
+uses the existing cancelled outcome. Other database errors remain observable.
+
+Each recovery transaction uses the existing refusal-record timeout (two seconds
+by default), capped by the original remaining run/worker deadline. Recovery
+also has a monotonic elapsed budget frozen at claim; repeated cancellation
+cannot reset it or skip the configured control cadence. Resolution tightens that
+same deadline to a valid narrower requested budget, retaining consumed time.
+`cleanup_pending`
+means an actually owned cycle is still active, not a completed settlement.
+An exhausted or failed cycle leaves recovery to the existing fenced reaper after
+lease/deadline expiry. No timestamp is clamped, lease extended or authority
+restored. Database transaction limits do not bound connection establishment or
+client threads outside PostgreSQL: those remain owned until they return.
+The disposable producer-clock tests and separate-process restart proof exercise
+refusal, recovery and stale-write rejection; they do not identify the cause of
+the original observed database clock regression or promise host clock stability.
