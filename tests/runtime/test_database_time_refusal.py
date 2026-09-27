@@ -353,7 +353,13 @@ class DatabaseTimeRefusal(fixtures.CompleteInputExecution):
     def test_revocation_after_context_returns_late_stale_fence(self) -> None:
         self.revocation_boundary("after")
 
-    def revocation_boundary(self, boundary: str) -> None:
+    def test_cancelled_revocation_before_context_keeps_owned_cleanup(self) -> None:
+        self.revocation_boundary("before", cancel=True)
+
+    def test_cancelled_revocation_after_context_keeps_owned_cleanup(self) -> None:
+        self.revocation_boundary("after", cancel=True)
+
+    def revocation_boundary(self, boundary: str, *, cancel: bool = False) -> None:
         """Commit revocation on the chosen side of the real context call."""
         self.setup_execution()
         worker = self.active_worker()
@@ -407,8 +413,16 @@ class DatabaseTimeRefusal(fixtures.CompleteInputExecution):
                         (self.worker_principal,),
                     )
                     self.clock(self.safe_time())
+                    if cancel:
+                        self.assertTrue(worker._cycle_task.cancel())
+                        await asyncio.sleep(0)
                     release.set()
                     ended = await asyncio.wait_for(worker.wait_for_cleanup(), 3)
+                    if cancel:
+                        # The owned cycle retains and returns its cancellation
+                        # receipt after draining the started database operation.
+                        self.assertEqual(ended, worker._cancellation_receipt)
+                        self.assertEqual(worker._cycle_task.cancelling(), 1)
                     expected = (
                         ("authorization_unavailable", None)
                         if boundary == "before"
@@ -427,6 +441,35 @@ class DatabaseTimeRefusal(fixtures.CompleteInputExecution):
                         (0 if boundary == "before" else 1,),
                     )
                     self.assert_not_dispatched()
+                    # A denied worker cannot settle. A separately authorized
+                    # reaper can recover only after the original stored expiry.
+                    self.clock(first[4] + timedelta(seconds=1))
+                    with self.connection() as connection, connection.transaction():
+                        connection.execute("SET LOCAL ROLE memoriesql_worker")
+                        original_begin(
+                            PostgresAuthorizationPort(connection),
+                            credential_sha256=self.attestor_secret,
+                            requested_workspace_id=self.workspace,
+                        )
+                        queue = PostgresSemanticTaskQueue(connection)
+                        at = self.row("SELECT at FROM public.fictional_queue_clock")[0]
+                        self.assertEqual(
+                            queue.reap_expired(
+                                worker_id="orchard.reaper", limit=1, reaped_at=at
+                            ),
+                            1,
+                        )
+                        self.assertEqual(
+                            queue.reap_expired(
+                                worker_id="orchard.reaper", limit=1, reaped_at=at
+                            ),
+                            0,
+                        )
+                    self.assertEqual(self.attempt()[0], "lease_lost")
+                    self.assertEqual(self.attempt()[1], first[1])
+                    self.assertEqual(self.attempt()[4:6], first[4:6])
+                    self.assertEqual(self.attempt()[7:], first[7:])
+                    self.assert_not_dispatched()
                 finally:
                     release.set()
                     if not foreground.done():
@@ -440,6 +483,9 @@ class DatabaseTimeRefusal(fixtures.CompleteInputExecution):
 
     def test_unrecognized_context_authentication_sql_error_is_visible(self) -> None:
         self.authentication_error_boundary("before", "fictional unrelated auth error")
+
+    def test_same_message_from_unrelated_context_function_is_visible(self) -> None:
+        self.authentication_error_boundary("before", "invalid authentication context")
 
     def authentication_error_boundary(self, boundary: str, message: str) -> None:
         self.setup_execution()
