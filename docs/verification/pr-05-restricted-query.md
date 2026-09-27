@@ -121,6 +121,20 @@ data, release/version/publication, Desktop consumption or owner checkpoint occur
 
 ## Preserved development failures
 
+The complete Python 3.13 attempt at `9aa2ab2f3fdb0d6eb06683276d397e3d3adf3008`
+retains 491 successful executions and one canonical recovery error out of 492;
+all 13 restricted-query cases passed. Its unchanged receipt SHA-256 is
+`ad0c36290f397afb52e5b5ad13121b4052802efbf9a00cac8a95bf199e97ffd4`.
+The separate owner-authorized repair in #57 was accepted as public main
+`4edc4eb4f057d2419031cd175409dba1b62d5af7`, containing qualified repair head
+`11549c88cacfcd43bf043d68e31ec4babdcc583b`. This branch integrates that actual
+merge without modifying its worker, regressions or verification note. No
+restricted-query runtime, SQL, policy, deadline or authority boundary changes
+as part of the integration. Fresh qualification of the integrated head and its
+archives is recorded separately on #56; the failed attempt remains historical.
+The completed broad and focused reviews of #56, and broad repair review of #57,
+remain the bounded review record rather than restarting review of unchanged code.
+
 The first focused launcher used isolated module invocation without copying a
 discovery runner into its guarded test root, so two loader placeholders failed.
 After correcting the launch, the first installed run preserved four failures and

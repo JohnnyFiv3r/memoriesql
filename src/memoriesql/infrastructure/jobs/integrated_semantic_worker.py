@@ -1970,7 +1970,7 @@ class IntegratedSemanticWorker:
         try:
             return self._transaction(operation, timeout_ms=timeout_ms), True
         except PermissionError:
-            return "stale_fence", False
+            return "authorization_unavailable", False
 
     def _settle_preflight_failure(
         self,
@@ -2013,7 +2013,7 @@ class IntegratedSemanticWorker:
             provider_reason_code=readiness.reason_code,
             task_id=claimed.fence.task_id,
             attempt_id=claimed.fence.attempt_id,
-            task_status=outcome_status,
+            task_status=outcome_status if authorization_available else None,
             result_status=status,
         )
 
@@ -2066,10 +2066,20 @@ class IntegratedSemanticWorker:
                         (str(timeout_ms),),
                     )
                 connection.execute("SET LOCAL ROLE memoriesql_worker")
-                context = PostgresAuthorizationPort(connection).begin_context(
-                    credential_sha256=self._identity.credential_sha256,
-                    requested_workspace_id=self._identity.workspace_id,
-                )
+                try:
+                    context = PostgresAuthorizationPort(connection).begin_context(
+                        credential_sha256=self._identity.credential_sha256,
+                        requested_workspace_id=self._identity.workspace_id,
+                    )
+                except psycopg_errors.InvalidAuthorizationSpecification as error:
+                    if not _authentication_context_refused(error):
+                        raise
+                    # Leave the transaction scope first: no failed-context write
+                    # or settlement may commit. Later operation errors are not
+                    # normalized by this context-opening boundary.
+                    raise PermissionError(
+                        "authentication context is unavailable"
+                    ) from error
                 return operation(PostgresSemanticTaskQueue(connection), context)
 
 
@@ -2086,6 +2096,22 @@ def _attempt_time_order_refused(error: Exception) -> bool:
         and error.diag.schema_name == "memoriesql"
         and error.diag.table_name == "semantic_task_attempts"
         and error.diag.constraint_name == "semantic_task_attempts_time_order"
+    )
+
+
+def _authentication_context_refused(
+    error: psycopg_errors.InvalidAuthorizationSpecification,
+) -> bool:
+    """Recognize only the immutable kernel's direct context refusal."""
+    origin = (error.diag.context or "").splitlines()
+    return (
+        error.sqlstate == "28000"
+        and error.diag.message_primary == "invalid authentication context"
+        and bool(origin)
+        and origin[0].startswith(
+            "PL/pgSQL function begin_authorization_context(text,uuid) line "
+        )
+        and origin[0].endswith(" at RAISE")
     )
 
 
