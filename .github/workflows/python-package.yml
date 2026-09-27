@@ -4,16 +4,41 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact commit approved for paid hosted qualification
+        required: true
+        type: string
+      owner_approval_ref:
+        description: Reference to the owner's approval for this hosted run
+        required: true
+        type: string
 
 permissions:
   contents: read
 
+# Automatic pushes supersede only their own PR/ref. Paid, owner-requested runs
+# have independent groups and are never cancelled by an unrelated push.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
+
 jobs:
   package:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     env:
       PYTHONPATH: src
     steps:
+      - name: Validate explicit hosted qualification request
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          OWNER_APPROVAL_REF: ${{ inputs.owner_approval_ref }}
+        run: |
+          test "$EXPECTED_SHA" = "$GITHUB_SHA"
+          test -n "${OWNER_APPROVAL_REF//[[:space:]]/}"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -75,8 +100,12 @@ jobs:
           retention-days: 30
 
   compatibility:
+    # Skipped on normal PR/main pushes. A green package check is not installed
+    # qualification; see docs/ci-policy.md for mandatory local evidence.
+    if: github.event_name == 'workflow_dispatch'
     needs: package
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:

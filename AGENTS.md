@@ -21,6 +21,20 @@ This repository is the staged public boundary for the memoriesQL open core. Keep
 - Every contribution must carry a Developer Certificate of Origin sign-off.
 - Open requested PRs in non-draft state, subscribe to their comments, and address, answer, and resolve actionable review threads. Require CI on the final PR commit. For this bootstrap, request one broad review and at most one focused rereview; do not merge, publish, or change repository visibility without owner authorization.
 
+## Owner-approved CI cost policy
+
+Routine PR/main pushes run only the required `package` job (database-free tests,
+lint/types, contracts, boundary and deterministic package checks). Full installed
+database qualification on Python 3.13 and 3.14 remains mandatory locally, with
+exact-head artifacts, hashes and logs retained. See `docs/ci-policy.md`.
+Paid hosted compatibility runs require explicit owner approval for that run;
+do not dispatch or retry one automatically. Superseded automatic checks cancel;
+manual qualification runs remain separate. Skipped matrix jobs are not proof.
+Release verification requires an explicitly requested full qualification run at
+exact release main, including successful jobs for both interpreters. Cheap CI,
+local evidence and this cost-policy authorization alone authorize no release or
+paid hosted matrix. Preserve unique in-progress runs and historical failures.
+
 The 2026-09-26 owner amendment prioritizes governed assessed-relation lifecycle
 and expands the PR-05 proposal to qualified SQL composition and durable branching
 investigations. See `docs/relation-assessment.md#forward-lifecycle-completion` and
