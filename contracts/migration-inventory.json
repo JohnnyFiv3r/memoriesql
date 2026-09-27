@@ -117,6 +117,10 @@
     {
       "filename": "0029_relation_assessment.sql",
       "sha256": "c073c47cce7b022ab5dfd94b86639705af2e5193ac79735c0ccb48ad00a22df9"
+    },
+    {
+      "filename": "0030_assessed_relation_lifecycle.sql",
+      "sha256": "14bbfe89729cec39aa60b4c15cb022d93e0cc3061d6129ed3476fd5b848d9d80"
     }
   ]
 }

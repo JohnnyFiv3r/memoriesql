@@ -8,7 +8,13 @@ from typing import Any
 from uuid import UUID
 
 from psycopg import Connection
-from psycopg.errors import InsufficientPrivilege, LockNotAvailable, QueryCanceled
+from psycopg.errors import (
+    InsufficientPrivilege,
+    InvalidAuthorizationSpecification,
+    LockNotAvailable,
+    NoDataFound,
+    QueryCanceled,
+)
 from psycopg.pq import TransactionStatus
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel
@@ -28,6 +34,9 @@ from memoriesql.application.relation_inspection import (
 )
 from memoriesql.application.semantic_task_contracts import canonical_json_bytes
 from memoriesql.infrastructure.postgres.authorization import PostgresAuthorizationPort
+from memoriesql.infrastructure.postgres.relation_projection import (
+    read_relation_projection,
+)
 
 INSPECTION_RESPONSE_BYTES = 524288
 COMMAND_RESPONSE_BYTES = 16384
@@ -63,7 +72,7 @@ class PostgresRelationAssessments:
                 bound=INSPECTION_RESPONSE_BYTES,
                 statement_timeout_ms=2500,
             )
-        except InsufficientPrivilege:
+        except (InsufficientPrivilege, InvalidAuthorizationSpecification, NoDataFound):
             return BeadRelationsInspectionV2(outcome="unavailable")
         except (QueryCanceled, LockNotAvailable):
             return BeadRelationsInspectionV2(outcome="budget_exhausted")
@@ -79,7 +88,7 @@ class PostgresRelationAssessments:
                 bound=INSPECTION_RESPONSE_BYTES,
                 statement_timeout_ms=2500,
             )
-        except InsufficientPrivilege:
+        except (InsufficientPrivilege, InvalidAuthorizationSpecification, NoDataFound):
             return RelationVocabularyInspection(outcome="unavailable")
 
     def _transaction[ResultT: BaseModel](
@@ -94,6 +103,14 @@ class PostgresRelationAssessments:
         payload = type(request).model_validate(request.model_dump(mode="json"))
         if self._connection.info.transaction_status != TransactionStatus.IDLE:
             raise RuntimeError("relation assessment requires transaction ownership")
+        if "inspect_bead_relations" in query:
+            projected = read_relation_projection(
+                self._connection, credential_sha256=self._credential, workspace_id=self._workspace,
+                query=query, payload=payload.model_dump(mode="json"),
+            )
+            if len(canonical_json_bytes(projected)) > bound:
+                raise ValueError("relation inspection response exceeds bound")
+            return result_type.model_validate(projected)
         with self._connection.transaction():
             self._connection.execute("SET TRANSACTION ISOLATION LEVEL READ COMMITTED")
             self._connection.execute(

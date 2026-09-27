@@ -183,6 +183,15 @@
     },
     {
       "path": "src/memoriesql/infrastructure/postgres/agent_sql_authority.py"
+    },
+    {
+      "path": "src/memoriesql/application/assessed_relation_lifecycle.py"
+    },
+    {
+      "path": "src/memoriesql/infrastructure/postgres/assessed_relation_lifecycle.py"
+    },
+    {
+      "path": "src/memoriesql/infrastructure/postgres/relation_projection.py"
     }
   ]
 }
