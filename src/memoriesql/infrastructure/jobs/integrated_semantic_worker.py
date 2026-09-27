@@ -603,6 +603,7 @@ class IntegratedSemanticWorker:
         cancellation_error: asyncio.CancelledError,
         *,
         output_contract_hash: str,
+        time_refusal: Exception | None = None,
     ) -> Never:
         self._cancellation_receipt = await self._settle_preflight_failure_off_loop(
             claimed,
@@ -610,6 +611,7 @@ class IntegratedSemanticWorker:
             error_code="worker.cancelled",
             output_contract_hash=output_contract_hash,
             status=SemanticResultStatus.CANCELLED,
+            time_refusal=time_refusal,
         )
         raise cancellation_error
 
@@ -833,6 +835,12 @@ class IntegratedSemanticWorker:
                 readiness,
                 start_cancellation,
                 output_contract_hash=definition.output_contract.schema_hash,
+                time_refusal=(
+                    start_outcome.error
+                    if start_outcome.error is not None
+                    and _attempt_time_order_refused(start_outcome.error)
+                    else None
+                ),
             )
         if start_outcome.error is not None:
             if _attempt_time_order_refused(start_outcome.error):
@@ -1205,6 +1213,16 @@ class IntegratedSemanticWorker:
             )
         )
         if persist_cancellation is not None:
+            if persist_outcome.error is not None and _attempt_time_order_refused(
+                persist_outcome.error
+            ):
+                await self._settle_cancellation_before_propagation(
+                    claimed,
+                    readiness,
+                    persist_cancellation,
+                    output_contract_hash=definition.output_contract.schema_hash,
+                    time_refusal=persist_outcome.error,
+                )
             raise persist_cancellation
         if persist_outcome.error is not None:
             if _attempt_time_order_refused(persist_outcome.error):

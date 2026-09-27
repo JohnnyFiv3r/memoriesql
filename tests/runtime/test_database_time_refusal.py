@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import threading
 import time
 import unittest
 from dataclasses import replace
@@ -279,6 +280,65 @@ class DatabaseTimeRefusal(fixtures.CompleteInputExecution):
                 ("worker.cancelled", "never"),
             )
             self.assert_not_dispatched()
+
+        self.run_owned(worker, run)
+
+    def test_cancellation_during_downstream_refused_write_keeps_recovery_owned(
+        self,
+    ) -> None:
+        self.setup_execution()
+        worker = self.active_worker()
+        entered, release = threading.Event(), threading.Event()
+        original = worker._persist_result
+
+        def persist(claimed: Any, result: Any, *args: Any, **kwargs: Any) -> Any:
+            if str(result.status) == "succeeded":
+                self.clock(self.attempt()[1] - timedelta(milliseconds=3))
+                entered.set()
+                if not release.wait(5):
+                    raise AssertionError("fixture did not release the output write")
+            return original(claimed, result, *args, **kwargs)
+
+        worker._persist_result = persist
+
+        async def run() -> None:
+            observed = self.observe_settlement(worker, asyncio.get_running_loop())
+            foreground = asyncio.create_task(worker.run_once())
+            try:
+                self.assertTrue(await asyncio.to_thread(entered.wait, 5))
+                deadline = worker._attempt_deadline_ns
+                calls = len(self.received)
+                self.assertGreater(calls, 0)
+                foreground.cancel()
+                await asyncio.wait_for(worker._cleanup_started.wait(), 3)
+                release.set()
+                with self.assertRaises(asyncio.CancelledError):
+                    await foreground
+                await asyncio.wait_for(observed.wait(), 3)
+                self.assertTrue(worker.cleanup_pending)
+                first = self.attempt()
+                self.assertEqual(first[0], "running")
+                self.assertEqual(worker._attempt_deadline_ns, deadline)
+                self.assert_no_meaning()
+                self.clock(self.safe_time())
+                settled = await asyncio.wait_for(worker.wait_for_cleanup(), 3)
+                self.assertEqual(settled.task_status, "cancelled")
+                self.assertEqual(len(self.received), calls)
+                self.assertEqual(self.attempt()[1], first[1])
+                self.assertEqual(self.attempt()[4:6], first[4:6])
+                self.assertEqual(self.attempt()[7:], first[7:])
+                self.assertEqual(
+                    self.row(
+                        "SELECT error_code,retry_class FROM memoriesql.semantic_task_attempts"
+                    ),
+                    ("worker.cancelled", "never"),
+                )
+                self.assert_no_meaning()
+            finally:
+                release.set()
+                if not foreground.done():
+                    foreground.cancel()
+                await asyncio.gather(foreground, return_exceptions=True)
 
         self.run_owned(worker, run)
 
