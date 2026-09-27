@@ -73,7 +73,8 @@ stop retains staging and the reservation, and blocks preparation seal/discard.
 Settlement purges staging only after the identified transaction is absent.
 
 A supervisor initiates owned cancellation independently of PostgreSQL's statement
-timeout and the query thread. Fixed settings include 4 MiB work_mem, 64 MiB
+timeout and the query thread. Fixed settings include pg_catalog-only search_path
+(logical relations are schema-qualified), 4 MiB work_mem, 64 MiB
 temp_file_limit, no parallel workers/JIT, 500 ms lock timeout and a remaining
 statement timeout. Connection/factory delays and cancellation delivery are not
 hard elapsed-time guarantees. The owned control statement has a 500 ms bound;

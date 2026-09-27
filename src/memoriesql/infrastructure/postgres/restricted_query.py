@@ -107,6 +107,7 @@ def _configure_reader(reader: Connection[Any], remaining_ms: int) -> None:
     # These are trusted fixed settings, never part of the admitted SQL surface.
     reader.execute("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY")
     for statement in (
+        "SET LOCAL search_path=pg_catalog",
         "SET LOCAL work_mem='4MB'",
         "SET LOCAL hash_mem_multiplier=1",
         "SET LOCAL max_parallel_workers_per_gather=0",
@@ -116,6 +117,7 @@ def _configure_reader(reader: Connection[Any], remaining_ms: int) -> None:
     ):
         reader.execute(statement)
     expected = {
+        "search_path": "pg_catalog",
         "work_mem": "4MB",
         "hash_mem_multiplier": "1",
         "max_parallel_workers_per_gather": "0",
