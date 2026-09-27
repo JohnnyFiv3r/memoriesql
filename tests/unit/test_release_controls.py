@@ -24,6 +24,7 @@ from scripts.verify_release import (
     REPOSITORY_ID,
     select_ci_run,
     verify_artifacts,
+    verify_qualification_jobs,
 )
 
 SHA = "a" * 40
@@ -34,7 +35,7 @@ def good_run() -> dict[str, Any]:
         "id": 123,
         "head_sha": SHA,
         "head_branch": "main",
-        "event": "push",
+        "event": "workflow_dispatch",
         "path": ".github/workflows/python-package.yml",
         "repository": {"full_name": REPOSITORY, "id": REPOSITORY_ID},
         "status": "completed",
@@ -79,6 +80,7 @@ class ReleaseControlTests(unittest.TestCase):
             ("head_sha", "b" * 40),
             ("head_branch", "feature"),
             ("event", "pull_request"),
+            ("event", "push"),
             ("path", ".github/workflows/other.yml"),
             ("repository", {"full_name": REPOSITORY, "id": 999}),
             ("repository", {"full_name": "unapproved/repository", "id": REPOSITORY_ID}),
@@ -95,6 +97,52 @@ class ReleaseControlTests(unittest.TestCase):
             newer = good_run() | {"id": 124, "status": status, "conclusion": conclusion}
             with self.subTest(status=status), self.assertRaises(ValueError):
                 select([good_run(), newer])
+
+    def test_automatic_green_run_is_not_release_qualification(self) -> None:
+        automatic = good_run() | {"id": 124, "event": "push"}
+        with self.assertRaises(ValueError):
+            select([automatic])
+        self.assertEqual(select([good_run(), automatic]), 123)
+
+    def test_requires_both_interpreters_to_actually_pass_at_selected_head(self) -> None:
+        jobs = [
+            {
+                "name": name,
+                "run_id": 123,
+                "head_sha": SHA,
+                "status": "completed",
+                "conclusion": "success",
+            }
+            for name in ("package", "compatibility (3.13)", "compatibility (3.14)")
+        ]
+        verify_qualification_jobs({"total_count": 3, "jobs": jobs}, run_id=123, sha=SHA)
+        for index in range(3):
+            for field, wrong in (
+                ("run_id", 124),
+                ("head_sha", "b" * 40),
+                ("status", "in_progress"),
+                ("conclusion", "skipped"),
+                ("conclusion", "cancelled"),
+                ("conclusion", "failure"),
+                ("conclusion", None),
+                ("name", "unrelated"),
+            ):
+                altered = deepcopy(jobs)
+                altered[index][field] = wrong
+                with self.subTest(index=index, field=field, wrong=wrong):
+                    with self.assertRaises(ValueError):
+                        verify_qualification_jobs(
+                            {"total_count": 3, "jobs": altered}, run_id=123, sha=SHA
+                        )
+        for invalid in (
+            {},
+            {"total_count": 3, "jobs": jobs[:2]},
+            {"total_count": 2, "jobs": jobs[:2]},
+            {"total_count": 3, "jobs": [jobs[0], jobs[1], jobs[1]]},
+            {"total_count": 4, "jobs": jobs + [jobs[0]]},
+        ):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                verify_qualification_jobs(invalid, run_id=123, sha=SHA)
 
     def test_verifies_exact_files_and_ignores_non_authoritative_ci_receipt(
         self,
