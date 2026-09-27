@@ -9,13 +9,13 @@ relations through PR-03's canonical projection and actual protected dependencies
 see `docs/verification/pr-05-relation-sql-population.md`. The authorized schema-33
 slice adds an internal restricted-login SELECT bridge and owned invocation
 cancellation/settlement/recovery; see `docs/verification/pr-05-restricted-query.md`.
-The authorized schema-34 slice builds private native bag-composition witnesses
+The authorized schema-34 slice builds private native bag, group and set witnesses
 and atomically commits qualified result partitions with their original operation
 and invocation owner; see `docs/verification/pr-05-result-preparation.md`.
 These slices add no available result/disclosure API or qualified physical-storage
-profile. The next authorized internal slice extends native witnesses to groups,
-HAVING/FILTER/DISTINCT and distinct/ALL set composition without a migration;
-see the continuation in that verification document. Preserve SQL 0001–0034
+profile. The current no-migration internal continuation qualifies a subset of
+ranking and neighbor window witnesses; see that verification document for the
+precise cut and remaining approved shapes. Preserve SQL 0001–0034
 and earlier records;
 canonical lifecycle/projection stays PR-03-owned. Remaining integrated PR-05
 delivery and useful workload qualification are required before availability.
