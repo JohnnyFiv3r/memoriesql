@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import gc
 import threading
 import unittest
 from collections.abc import Awaitable, Callable
@@ -633,6 +634,7 @@ class AccountingLoopShutdown(unittest.TestCase):
                 observed: list[str] = []
                 cancellations: list[asyncio.CancelledError] = []
                 errors: list[BaseException] = []
+                owned_tasks: list[asyncio.Task[None]] = []
                 failure = RuntimeError("fictional ledger unavailable")
 
                 def write(value: str) -> None:
@@ -665,10 +667,17 @@ class AccountingLoopShutdown(unittest.TestCase):
 
                 async def scenario() -> None:
                     context.set("fictional context")
-                    asyncio.create_task(observe_shutdown())
-                    asyncio.create_task(record())
+                    # asyncio retains only weak task references. Keep the
+                    # observer alive: its finally must mean Runner shutdown,
+                    # not garbage collection while the write remains active.
+                    owned_tasks.extend((
+                        asyncio.create_task(observe_shutdown()),
+                        asyncio.create_task(record()),
+                    ))
                     while not entered.is_set():
                         await asyncio.sleep(0.001)
+                    gc.collect()
+                    self.assertFalse(shutdown.is_set())
                     # Return with the write active: Runner cancels ALL pending Tasks.
 
                 def run() -> None:
