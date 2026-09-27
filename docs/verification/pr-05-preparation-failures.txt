@@ -1,0 +1,159 @@
+Historical seen-fictional preparation qualification failures; not acceptance.
+Initial product artifacts: dad07e55d233525779a8b32d65b3f7a9ef9aa246.
+The first strict type check caught self.run shadowing unittest.TestCase.run;
+renamed to run_ref. A copied Python -I harness initially lacked its copied-test
+path: ModuleNotFoundError: No module named run_installed_acceptance. No tests ran;
+the guard remains enforced after adding only the disposable test directory.
+
+Installed focused run: 20 cases, five fixture errors. Correct immutable storage
+refusal returned SQLSTATE 55000; reconnect DSNs deliberately redact passwords;
+personal-local bootstrap correctly refuses a second active workspace. Repairs
+change only fixtures: expected refusal class, explicit disposable fixture DSN,
+and existing public second_tenant fixture pattern. No canonical behavior changes.
+
+test_application_cannot_read_tables_or_update_sealed_content (test_result_preparation.ResultPreparation.test_application_cannot_read_tables_or_update_sealed_content) ... ERROR
+test_concurrent_identical_reservations_have_one_owned_journal_entry (test_result_preparation.ResultPreparation.test_concurrent_identical_reservations_have_one_owned_journal_entry) ... ERROR
+test_crashes_between_body_holds_and_receipt_never_publish_partial_preparation (test_result_preparation.ResultPreparation.test_crashes_between_body_holds_and_receipt_never_publish_partial_preparation) ... ok
+test_invalid_parent_digest_or_ownership_and_null_cannot_seal_or_discard (test_result_preparation.ResultPreparation.test_invalid_parent_digest_or_ownership_and_null_cannot_seal_or_discard) ... ok
+test_overflow_retains_owned_reservation_and_discard_never_resets_new_allocation (test_result_preparation.ResultPreparation.test_overflow_retains_owned_reservation_and_discard_never_resets_new_allocation) ... ok
+test_parent_holds_and_deep_continuation_preserve_original_bodies (test_result_preparation.ResultPreparation.test_parent_holds_and_deep_continuation_preserve_original_bodies) ... ok
+test_private_storage_needs_authentication_and_qualified_shared_frame (test_result_preparation.ResultPreparation.test_private_storage_needs_authentication_and_qualified_shared_frame) ... ok
+test_raw_digest_mismatch_rolls_back_before_any_artifact_or_receipt (test_result_preparation.ResultPreparation.test_raw_digest_mismatch_rolls_back_before_any_artifact_or_receipt) ... ok
+test_raw_unprivileged_login_cannot_call_bookkeeping_or_elevate (test_result_preparation.ResultPreparation.test_raw_unprivileged_login_cannot_call_bookkeeping_or_elevate) ... ok
+test_request_content_or_parent_substitution_never_overwrites_sealed_bytes (test_result_preparation.ResultPreparation.test_request_content_or_parent_substitution_never_overwrites_sealed_bytes) ... ok
+test_restart_and_lost_response_recover_original_private_identity_without_query (test_result_preparation.ResultPreparation.test_restart_and_lost_response_recover_original_private_identity_without_query) ... ERROR
+test_second_tenant_cannot_guess_owned_reservation_or_reuse_foreign_parent (test_result_preparation.ResultPreparation.test_second_tenant_cannot_guess_owned_reservation_or_reuse_foreign_parent) ... ERROR
+test_stale_snapshot_cannot_overadmit_after_allocation_lock_wait (test_result_preparation.ResultPreparation.test_stale_snapshot_cannot_overadmit_after_allocation_lock_wait) ... ERROR
+test_byte_bound_is_checked_before_decoding_untrusted_large_content (test_result_preparation_encoding.PreparationEncoding.test_byte_bound_is_checked_before_decoding_untrusted_large_content) ... ok
+test_exact_canonical_partitions_and_immutable_inputs (test_result_preparation_encoding.PreparationEncoding.test_exact_canonical_partitions_and_immutable_inputs) ... ok
+test_manually_constructed_unsafe_or_noncanonical_bytes_are_refused (test_result_preparation_encoding.PreparationEncoding.test_manually_constructed_unsafe_or_noncanonical_bytes_are_refused) ... ok
+test_native_float_or_unknown_object_is_never_coerced (test_result_preparation_encoding.PreparationEncoding.test_native_float_or_unknown_object_is_never_coerced) ... ok
+test_partition_boundaries_are_part_of_private_digest (test_result_preparation_encoding.PreparationEncoding.test_partition_boundaries_are_part_of_private_digest) ... ok
+test_all_runtime_imports_are_owned_by_the_installed_distribution (test_runtime_ownership.RuntimeOwnership.test_all_runtime_imports_are_owned_by_the_installed_distribution) ... ok
+test_frozen_canonical_task_and_executor_behavior_hashes (test_runtime_ownership.RuntimeOwnership.test_frozen_canonical_task_and_executor_behavior_hashes) ... ok
+
+======================================================================
+ERROR: test_application_cannot_read_tables_or_update_sealed_content (test_result_preparation.ResultPreparation.test_application_cannot_read_tables_or_update_sealed_content)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/fictional-qualification/test_result_preparation.py", line 482, in test_application_cannot_read_tables_or_update_sealed_content
+    self.db.execute(
+    ~~~~~~~~~~~~~~~^
+        "UPDATE memoriesql.result_preparation_artifacts SET content_bytes='changed'::bytea"
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/fictional-qualification/venv/lib/python3.13/site-packages/psycopg/connection.py", line 300, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.ObjectNotInPrerequisiteState: memoriesql.result_preparation_artifacts is append-only
+CONTEXT:  PL/pgSQL function memoriesql.reject_immutable_change() line 3 at RAISE
+
+======================================================================
+ERROR: test_concurrent_identical_reservations_have_one_owned_journal_entry (test_result_preparation.ResultPreparation.test_concurrent_identical_reservations_have_one_owned_journal_entry)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/fictional-qualification/test_result_preparation.py", line 387, in test_concurrent_identical_reservations_have_one_owned_journal_entry
+    receipts = [f.result(timeout=10) for f in futures]
+                ~~~~~~~~^^^^^^^^^^^^
+  File "/supported-python-3.13/lib/python3.13/concurrent/futures/_base.py", line 456, in result
+    return self.__get_result()
+           ~~~~~~~~~~~~~~~~~^^
+  File "/supported-python-3.13/lib/python3.13/concurrent/futures/_base.py", line 401, in __get_result
+    raise self._exception
+  File "/supported-python-3.13/lib/python3.13/concurrent/futures/thread.py", line 59, in run
+    result = self.fn(*self.args, **self.kwargs)
+  File "/fictional-qualification/test_result_preparation.py", line 370, in reserve
+    with psycopg.connect(self.db.info.dsn, autocommit=True) as db:
+         ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/fictional-qualification/venv/lib/python3.13/site-packages/psycopg/connection.py", line 122, in connect
+    raise last_ex.with_traceback(None)
+psycopg.OperationalError: connection failed: connection to server at "127.0.0.1", port 60405 failed: fe_sendauth: no password supplied
+
+======================================================================
+ERROR: test_restart_and_lost_response_recover_original_private_identity_without_query (test_result_preparation.ResultPreparation.test_restart_and_lost_response_recover_original_private_identity_without_query)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/fictional-qualification/test_result_preparation.py", line 107, in test_restart_and_lost_response_recover_original_private_identity_without_query
+    with psycopg.connect(self.db.info.dsn, autocommit=True) as restarted:
+         ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/fictional-qualification/venv/lib/python3.13/site-packages/psycopg/connection.py", line 122, in connect
+    raise last_ex.with_traceback(None)
+psycopg.OperationalError: connection failed: connection to server at "127.0.0.1", port 60405 failed: fe_sendauth: no password supplied
+
+======================================================================
+ERROR: test_second_tenant_cannot_guess_owned_reservation_or_reuse_foreign_parent (test_result_preparation.ResultPreparation.test_second_tenant_cannot_guess_owned_reservation_or_reuse_foreign_parent)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/fictional-qualification/test_result_preparation.py", line 431, in test_second_tenant_cannot_guess_owned_reservation_or_reuse_foreign_parent
+    self.db.execute(
+    ~~~~~~~~~~~~~~~^
+        "SELECT memoriesql.bootstrap_personal_local(%s,%s,%s,%s,%s,%s,%s,%s,%s,'memoriesql.local',%s,'Other fictional tenant',%s,%s,%s)",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<6 lines>...
+        ),
+        ^^
+    )
+    ^
+  File "/fictional-qualification/venv/lib/python3.13/site-packages/psycopg/connection.py", line 300, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.ObjectNotInPrerequisiteState: personal-local authority is already bootstrapped
+CONTEXT:  PL/pgSQL function bootstrap_personal_local(uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,text,text,text,text,timestamp with time zone,timestamp with time zone) line 7 at RAISE
+
+======================================================================
+ERROR: test_stale_snapshot_cannot_overadmit_after_allocation_lock_wait (test_result_preparation.ResultPreparation.test_stale_snapshot_cannot_overadmit_after_allocation_lock_wait)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/fictional-qualification/test_result_preparation.py", line 342, in test_stale_snapshot_cannot_overadmit_after_allocation_lock_wait
+    with psycopg.connect(self.db.info.dsn, autocommit=True) as stale:
+         ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/fictional-qualification/venv/lib/python3.13/site-packages/psycopg/connection.py", line 122, in connect
+    raise last_ex.with_traceback(None)
+psycopg.OperationalError: connection failed: connection to server at "127.0.0.1", port 60405 failed: fe_sendauth: no password supplied
+
+----------------------------------------------------------------------
+Ran 20 tests in 9.521s
+
+FAILED (errors=5)
+
+Repaired fixture run: 19 passed; one ACL assertion used an unbound SQL LIKE
+wildcard with parameter formatting. Fixed only that test to bind its pattern.
+test_application_cannot_read_tables_or_update_sealed_content (test_result_preparation.ResultPreparation.test_application_cannot_read_tables_or_update_sealed_content) ... ERROR
+test_concurrent_identical_reservations_have_one_owned_journal_entry (test_result_preparation.ResultPreparation.test_concurrent_identical_reservations_have_one_owned_journal_entry) ... ok
+test_crashes_between_body_holds_and_receipt_never_publish_partial_preparation (test_result_preparation.ResultPreparation.test_crashes_between_body_holds_and_receipt_never_publish_partial_preparation) ... ok
+test_invalid_parent_digest_or_ownership_and_null_cannot_seal_or_discard (test_result_preparation.ResultPreparation.test_invalid_parent_digest_or_ownership_and_null_cannot_seal_or_discard) ... ok
+test_overflow_retains_owned_reservation_and_discard_never_resets_new_allocation (test_result_preparation.ResultPreparation.test_overflow_retains_owned_reservation_and_discard_never_resets_new_allocation) ... ok
+test_parent_holds_and_deep_continuation_preserve_original_bodies (test_result_preparation.ResultPreparation.test_parent_holds_and_deep_continuation_preserve_original_bodies) ... ok
+test_private_storage_needs_authentication_and_qualified_shared_frame (test_result_preparation.ResultPreparation.test_private_storage_needs_authentication_and_qualified_shared_frame) ... ok
+test_raw_digest_mismatch_rolls_back_before_any_artifact_or_receipt (test_result_preparation.ResultPreparation.test_raw_digest_mismatch_rolls_back_before_any_artifact_or_receipt) ... ok
+test_raw_unprivileged_login_cannot_call_bookkeeping_or_elevate (test_result_preparation.ResultPreparation.test_raw_unprivileged_login_cannot_call_bookkeeping_or_elevate) ... ok
+test_request_content_or_parent_substitution_never_overwrites_sealed_bytes (test_result_preparation.ResultPreparation.test_request_content_or_parent_substitution_never_overwrites_sealed_bytes) ... ok
+test_restart_and_lost_response_recover_original_private_identity_without_query (test_result_preparation.ResultPreparation.test_restart_and_lost_response_recover_original_private_identity_without_query) ... ok
+test_second_tenant_cannot_guess_owned_reservation_or_reuse_foreign_parent (test_result_preparation.ResultPreparation.test_second_tenant_cannot_guess_owned_reservation_or_reuse_foreign_parent) ... ok
+test_stale_snapshot_cannot_overadmit_after_allocation_lock_wait (test_result_preparation.ResultPreparation.test_stale_snapshot_cannot_overadmit_after_allocation_lock_wait) ... ok
+test_byte_bound_is_checked_before_decoding_untrusted_large_content (test_result_preparation_encoding.PreparationEncoding.test_byte_bound_is_checked_before_decoding_untrusted_large_content) ... ok
+test_exact_canonical_partitions_and_immutable_inputs (test_result_preparation_encoding.PreparationEncoding.test_exact_canonical_partitions_and_immutable_inputs) ... ok
+test_manually_constructed_unsafe_or_noncanonical_bytes_are_refused (test_result_preparation_encoding.PreparationEncoding.test_manually_constructed_unsafe_or_noncanonical_bytes_are_refused) ... ok
+test_native_float_or_unknown_object_is_never_coerced (test_result_preparation_encoding.PreparationEncoding.test_native_float_or_unknown_object_is_never_coerced) ... ok
+test_partition_boundaries_are_part_of_private_digest (test_result_preparation_encoding.PreparationEncoding.test_partition_boundaries_are_part_of_private_digest) ... ok
+test_all_runtime_imports_are_owned_by_the_installed_distribution (test_runtime_ownership.RuntimeOwnership.test_all_runtime_imports_are_owned_by_the_installed_distribution) ... ok
+test_frozen_canonical_task_and_executor_behavior_hashes (test_runtime_ownership.RuntimeOwnership.test_frozen_canonical_task_and_executor_behavior_hashes) ... ok
+
+======================================================================
+ERROR: test_application_cannot_read_tables_or_update_sealed_content (test_result_preparation.ResultPreparation.test_application_cannot_read_tables_or_update_sealed_content)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/fictional-qualification/test_result_preparation.py", line 585, in test_application_cannot_read_tables_or_update_sealed_content
+    public_grants = self.scalar(
+        "SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace CROSS JOIN LATERAL aclexplode(COALESCE(p.proacl,acldefault('f',p.proowner))) a WHERE n.nspname='memoriesql' AND p.proname LIKE '%result_preparation%v1' AND a.grantee=0 AND a.privilege_type='EXECUTE'"
+    )
+  File "/fictional-qualification/test_result_preparation.py", line 96, in scalar
+    row = self.db.execute(query, values).fetchone()
+          ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "/fictional-qualification/venv/lib/python3.13/site-packages/psycopg/connection.py", line 300, in execute
+    raise ex.with_traceback(None)
+psycopg.ProgrammingError: only '%s', '%b', '%t' are allowed as placeholders, got '%r'
+
+----------------------------------------------------------------------
+Ran 20 tests in 9.798s
+
+FAILED (errors=1)

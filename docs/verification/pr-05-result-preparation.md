@@ -6,6 +6,12 @@ ea-3 are recorded in `../approvals/pr-05-settings-reconciliation.md`; both appro
 normative blobs remain unchanged. M0030 and its canonical lifecycle projection are
 an explicit owner-merged dependency, not reimplemented here.
 
+Dependency integration includes #47 merge `26bd1a5`, current main `5e07b89` and
+the coordinator's #48 integration `e9ebba2`. #47 merged into its stacked base;
+this integration does not claim that current main alone contains M0030. #49/#50
+are preserved as approved-head prerequisites. The inventory union includes every
+module from both lanes; only the explicit new preparation module is added here.
+
 M0031 reserves one private ownership identity for an authenticated `(run,step)`
 and request fingerprint before execution. Exact retry returns that same journal
 identity; different semantic inputs conflict. No query dispatch or ownership
@@ -57,8 +63,12 @@ allocation. Installed wheel/sdist and exact-head CI receipts belong on the PR.
 
 The first strict-type check caught a test fixture accidentally shadowing
 `unittest.TestCase.run`; the fixture field was renamed to `run_ref` before any
-database acceptance. The failure was not considered a passing test or runtime
-capacity evidence. Existing historical failures and all SQL 0001–0030 bytes remain.
+database acceptance. Installed fixture failures and corrections are retained in
+`pr-05-preparation-failures.txt`: password-redacted reconnects, the immutable-change
+error class, repeating the one-time bootstrap and a LIKE placeholder. The fixtures
+were repaired without changing canonical behavior. No failure was considered
+passing acceptance or runtime capacity evidence. Existing historical failures and
+all SQL 0001–0030 bytes remain.
 
 Remaining delivery includes admitted SELECT execution, complete compositional
 witness generation, atomically available immutable results, paging/hydration,

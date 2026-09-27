@@ -26,9 +26,9 @@ from memoriesql.infrastructure.postgres.result_preparation import (
 )
 
 if TYPE_CHECKING:
-    from tests.runtime.test_postgres_runtime import PostgresRuntime, migrate
+    from tests.runtime import test_postgres_runtime as fixtures
 else:
-    from test_postgres_runtime import PostgresRuntime, migrate
+    import test_postgres_runtime as fixtures
 
 
 @unittest.skipUnless(
@@ -36,12 +36,12 @@ else:
 )
 class ResultPreparation(unittest.TestCase):
     def setUp(self) -> None:
-        self.fixture = PostgresRuntime()
+        self.fixture = fixtures.PostgresRuntime()
         self.fixture.setUp()
         self.addCleanup(self.fixture.doCleanups)
         self.db = self.fixture.db
         self.tenant, self.workspace = self.fixture.tenant, self.fixture.workspace
-        migrate(self.db, expected_current_version=14, target_version=31)
+        fixtures.migrate(self.db, expected_current_version=14, target_version=31)
         self.store = self.adapter(self.db)
         self.run_ref = uuid4()
         self.content = PreparedContent.encode(
@@ -104,7 +104,10 @@ class ResultPreparation(unittest.TestCase):
         slot = self.reserve(step=step)
         artifact, receipt = self.seal(slot)
         self.assertEqual(receipt.state, "sealed")
-        with psycopg.connect(self.db.info.dsn, autocommit=True) as restarted:
+        with psycopg.connect(
+            make_conninfo(self.fixture.admin, dbname=self.fixture.database),
+            autocommit=True,
+        ) as restarted:
             recovered = self.adapter(restarted).reserve(
                 run_ref=self.run_ref,
                 step_key=step,
@@ -339,7 +342,10 @@ class ResultPreparation(unittest.TestCase):
 
     def test_stale_snapshot_cannot_overadmit_after_allocation_lock_wait(self) -> None:
         self.reserve(capacity=64 * 1024 * 1024)
-        with psycopg.connect(self.db.info.dsn, autocommit=True) as stale:
+        with psycopg.connect(
+            make_conninfo(self.fixture.admin, dbname=self.fixture.database),
+            autocommit=True,
+        ) as stale:
             with self.assertRaises(psycopg.errors.SerializationFailure):
                 with relation_projection_frame(
                     stale,
@@ -367,7 +373,10 @@ class ResultPreparation(unittest.TestCase):
         step = uuid4()
 
         def reserve() -> Any:
-            with psycopg.connect(self.db.info.dsn, autocommit=True) as db:
+            with psycopg.connect(
+                make_conninfo(self.fixture.admin, dbname=self.fixture.database),
+                autocommit=True,
+            ) as db:
                 store = self.adapter(db)
                 barrier.wait(timeout=5)
                 for _ in range(3):
@@ -426,18 +435,109 @@ class ResultPreparation(unittest.TestCase):
         parent, _ = self.seal(slot)
         ids = [uuid4() for _ in range(9)]
         secret = hashlib.sha256(b"other fictional tenant").hexdigest()
-        with self.db.transaction():
-            self.db.execute("SET LOCAL ROLE memoriesql_application")
-            self.db.execute(
-                "SELECT memoriesql.bootstrap_personal_local(%s,%s,%s,%s,%s,%s,%s,%s,%s,'memoriesql.local',%s,'Other fictional tenant',%s,%s,%s)",
+        (
+            tenant,
+            user,
+            identity,
+            principal,
+            workspace,
+            scope,
+            policy,
+            credential,
+            session,
+        ) = ids
+        now = self.fixture.now
+        # Public fixture pattern: test_authored_relations.second_tenant. Canonical
+        # personal-local bootstrap intentionally admits one active workspace;
+        # only the fictional test administrator creates this second tenant.
+        rows = (
+            ("users", (tenant, user, "active", "Other fictional tenant", now, None)),
+            (
+                "auth_identities",
                 (
-                    *ids,
-                    str(ids[2]),
-                    secret,
-                    self.fixture.now,
-                    self.fixture.now + timedelta(hours=1),
+                    tenant,
+                    identity,
+                    user,
+                    "memoriesql.local",
+                    str(identity),
+                    "local_interactive",
+                    "active",
+                    now,
+                    None,
                 ),
-            )
+            ),
+            (
+                "principals",
+                (tenant, principal, "human", user, user, "active", now, None),
+            ),
+            ("workspaces", (tenant, workspace, "personal_local", user, "active", now)),
+            (
+                "workspace_memberships",
+                (
+                    tenant,
+                    workspace,
+                    principal,
+                    "personal_owner",
+                    "active",
+                    1,
+                    now,
+                    now,
+                    None,
+                ),
+            ),
+            (
+                "access_scopes",
+                (
+                    tenant,
+                    workspace,
+                    scope,
+                    user,
+                    "owner_private",
+                    policy,
+                    "active",
+                    now,
+                ),
+            ),
+            (
+                "access_policy_revisions",
+                (
+                    tenant,
+                    workspace,
+                    scope,
+                    policy,
+                    1,
+                    "owner_private",
+                    user,
+                    "Fictional default scope",
+                    principal,
+                    now,
+                ),
+            ),
+            (
+                "authentication_credentials",
+                (
+                    tenant,
+                    credential,
+                    principal,
+                    "local_session",
+                    secret,
+                    "active",
+                    now,
+                    now + timedelta(hours=1),
+                    None,
+                ),
+            ),
+            ("local_auth_sessions", (tenant, session, credential, identity, now)),
+        )
+        with self.db.transaction():
+            for table, values in rows:
+                self.db.execute(
+                    sql.SQL("INSERT INTO memoriesql.{} VALUES ({})").format(
+                        sql.Identifier(table),
+                        sql.SQL(",").join(sql.Placeholder() for _ in values),
+                    ),
+                    values,
+                )
         other = PostgresResultPreparation(
             self.db, credential_sha256=secret, workspace_id=ids[4]
         )
@@ -478,12 +578,13 @@ class ResultPreparation(unittest.TestCase):
                                 sql.Identifier(table)
                             )
                         )
-        with self.assertRaises(psycopg.errors.RaiseException):
+        with self.assertRaises(psycopg.errors.ObjectNotInPrerequisiteState):
             self.db.execute(
                 "UPDATE memoriesql.result_preparation_artifacts SET content_bytes='changed'::bytea"
             )
         public_grants = self.scalar(
-            "SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace CROSS JOIN LATERAL aclexplode(COALESCE(p.proacl,acldefault('f',p.proowner))) a WHERE n.nspname='memoriesql' AND p.proname LIKE '%result_preparation%v1' AND a.grantee=0 AND a.privilege_type='EXECUTE'"
+            "SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace CROSS JOIN LATERAL aclexplode(COALESCE(p.proacl,acldefault('f',p.proowner))) a WHERE n.nspname='memoriesql' AND p.proname LIKE %s AND a.grantee=0 AND a.privilege_type='EXECUTE'",
+            ("%result_preparation%v1",),
         )
         self.assertEqual(public_grants, 0)
 
