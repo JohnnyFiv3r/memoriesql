@@ -69,7 +69,7 @@ class InstalledMigrations(unittest.TestCase):
         }
         self.assertIn(Path(runner.__file__).resolve(), owned)
         stream = runner.discover_migrations()
-        self.assertEqual(len(stream), 32)
+        self.assertEqual(len(stream), 33)
         for migration in stream:
             self.assertIn(Path(str(migration.path)).resolve(), owned)
             self.assertEqual(
@@ -141,12 +141,18 @@ class InstalledMigrations(unittest.TestCase):
     def test_wrong_bound_downgrade_and_out_of_range_are_atomic(self) -> None:
         self.migrate(0, 14)
         before = self.history()
-        for start, end in ((13, 14), (14, 13), (14, 33), (14, -1)):
+        for start, end in ((13, 14), (14, 13), (14, 34), (14, -1)):
             with (
                 self.subTest(start=start, end=end),
                 self.assertRaises(runner.MigrationError),
             ):
-                self.migrate(start, end)
+                # Exercise one production call, not the positive-fixture helper
+                # that commits segments around cluster-wide role statements.
+                runner.migrate(
+                    self.connection,
+                    expected_current_version=start,
+                    target_version=end,
+                )
             self.assertEqual(self.history(), before)
         with self.connection.transaction():
             with self.assertRaises(runner.MigrationError):
