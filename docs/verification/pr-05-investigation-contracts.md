@@ -26,6 +26,11 @@ circular containers. It preserves Unicode bytes, signed float zero, exact
 decimal values and UTC microseconds; no serializer/profile change is introduced.
 SQL parameter parsing grants no anchor admission. The independently authorized
 anchor set is still required by the separate kernel.
+Input parameter spellings admitted by the existing kernel remain admitted,
+including numeric scale/exponent forms and int8 negative zero; result-output
+normalization is not an additional input restriction. Request fingerprints retain
+those supplied spellings. The initial extra input normalization was removed during
+qualification rather than silently reducing the approved query capability.
 
 Seen fictional qualification covers all action kinds, held-ancestor/context
 substitution, context/cursor fingerprints, input/parent/live-frame rules, parameter

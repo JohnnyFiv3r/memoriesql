@@ -254,11 +254,6 @@ class WireParameter(FrozenContractModel):
                 _value(physical, value)
             except SqlAdmissionError:
                 raise InvestigationRequestError("type") from None
-            if physical == "int8" and value is not None:
-                _int8(str(value))
-            if physical == "numeric" and value is not None:
-                if encode_result_scalar(Decimal(str(value))) != value:
-                    raise InvestigationRequestError("type")
         # No anchor admission is inferred here. The trusted bridge subsequently
         # calls catalog.parameters with independently authorized anchors.
         return SqlParameter(self.position, self.type, self.value)
