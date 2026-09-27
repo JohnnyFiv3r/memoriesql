@@ -38,6 +38,7 @@ jobs:
           python scripts/generate_relation_profile_contract.py --check
           python scripts/generate_bead_classification_contract.py --check
           python scripts/generate_relation_assessment_contract.py --check
+          python scripts/generate_assessed_relation_lifecycle_contract.py --check
           python scripts/generate_stored_bead_inspection_contract.py --check
           python scripts/generate_catalogs.py --check
           python scripts/verify_public_boundary.py
@@ -132,7 +133,7 @@ jobs:
             test_root="$(mktemp -d)"
             python -m venv "$test_root/venv"
             "$test_root/venv/bin/python" -m pip install --no-index --find-links build/dependencies "$artifact"
-            cp scripts/run_installed_acceptance.py scripts/prove_package_isolation.py scripts/prove_release_installation.py scripts/prove_fold_recovery_restart.py "$test_root/"
+            cp scripts/run_installed_acceptance.py scripts/prove_package_isolation.py scripts/prove_release_installation.py scripts/prove_fold_recovery_restart.py scripts/prove_assessed_relation_restart.py "$test_root/"
             cp contracts/runtime-inventory.json contracts/public-registry.json "$test_root/"
             cp tests/migrations/*.py tests/runtime/*.py tests/unit/test_contract_catalog_preview.py tests/fixtures/*.json "$test_root/"
             (cd "$test_root" && venv/bin/python -I prove_package_isolation.py && venv/bin/python -I prove_release_installation.py)
@@ -149,6 +150,7 @@ jobs:
               echo "::endgroup::"
             done
             test "$failed" -eq 0
+            (cd "$test_root" && venv/bin/python -I prove_assessed_relation_restart.py prepare && venv/bin/python -I prove_assessed_relation_restart.py recover && venv/bin/python -I prove_assessed_relation_restart.py cleanup)
             (cd "$test_root" && venv/bin/python -I prove_fold_recovery_restart.py prepare && venv/bin/python -I prove_fold_recovery_restart.py recover && venv/bin/python -I prove_fold_recovery_restart.py cleanup)
           done
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

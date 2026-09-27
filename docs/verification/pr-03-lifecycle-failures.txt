@@ -1,0 +1,2389 @@
+===== compile-final.log =====
+0001_create_schema_history.sql
+0002_create_source_ledger.sql
+0003_create_receipts_and_outbox.sql
+0004_create_thin_observation_views.sql
+0005_create_principals_and_access_scopes.sql
+0006_force_resource_authorization.sql
+0007_create_stable_semantic_identity.sql
+0008_create_semantic_task_queue.sql
+0009_integrate_semantic_worker.sql
+0010_quality_first_usage_accounting.sql
+0011_canonical_observation_transactions.sql
+0012_capture_envelopes_and_inbox.sql
+0013_durable_source_range_capture.sql
+0014_transcript_span_fold.sql
+0015_immutable_observation_commands.sql
+0016_complete_input_evidence_packages.sql
+0017_logical_unit_materialization.sql
+0018_complete_input_execution.sql
+0019_transcript_fold_recovery.sql
+0020_author_controlled_source_revisiting.sql
+0021_source_stable_occurrence_identity.sql
+0022_authored_local_entity_mentions.sql
+0023_attributable_bead_classification.sql
+0024_bounded_stored_bead_inspection.sql
+0025_declared_evidence_scopes.sql
+0026_supervised_managed_dispatch.sql
+0027_authored_claims_and_relations.sql
+0028_semantic_attempt_refusals.sql
+0029_relation_assessment.sql
+0030_assessed_relation_lifecycle.sql
+Traceback (most recent call last):
+  File "/private/tmp/pr03-proof/migrate.py", line 10, in <module>
+    with c.transaction(): c.execute(p.read_text())
+                          ~~~~~~~~~^^^^^^^^^^^^^^^
+  File "<installed-env>/lib/python3.13/site-packages/psycopg/connection.py", line 300, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.UndefinedColumn: column r.authoring_bead_version_id does not exist
+LINE 61: ...bead_id=r.authoring_bead_id AND v.bead_version_id=r.authorin...
+                                                              ^
+
+===== focused-01.log =====
+Traceback (most recent call last):
+  File "<copied-tests>/run.py", line 2, in <module>
+    from run_installed_acceptance import install_guard
+ModuleNotFoundError: No module named 'run_installed_acceptance'
+
+===== focused-02.log =====
+test_lifecycle_transitions_replay_preservation_and_read_agreement (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_transitions_replay_preservation_and_read_agreement) ... unknown PostgreSQL timezone: 'Etc/UTC'; will use UTC
+FAIL
+test_lifecycle_roots_uncertainty_asof_and_terminal_replay (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_roots_uncertainty_asof_and_terminal_replay) ... ERROR
+test_lifecycle_same_bead_roots_are_unsupported (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_same_bead_roots_are_unsupported) ... ERROR
+test_lifecycle_unaccepted_and_structural_refusals (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_unaccepted_and_structural_refusals) ... FAIL
+test_lifecycle_hash_matches_python_exact_bytes (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_hash_matches_python_exact_bytes) ... FAIL
+
+======================================================================
+ERROR: test_lifecycle_roots_uncertainty_asof_and_terminal_replay (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_roots_uncertainty_asof_and_terminal_replay)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 108, in test_lifecycle_roots_uncertainty_asof_and_terminal_replay
+    self.assertEqual(accepted.relations[0].roots_status, 'qualified')
+                     ^^^^^^^^^^^^^^^^^^
+  File "<installed-env>/lib/python3.13/site-packages/pydantic/main.py", line 1042, in __getattr__
+    raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}')
+AttributeError: 'RelationInspectionRefusal' object has no attribute 'relations'
+
+======================================================================
+ERROR: test_lifecycle_same_bead_roots_are_unsupported (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_same_bead_roots_are_unsupported)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 129, in test_lifecycle_same_bead_roots_are_unsupported
+    row = self.read(source).relations[0]
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<installed-env>/lib/python3.13/site-packages/pydantic/main.py", line 1042, in __getattr__
+    raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}')
+AttributeError: 'RelationInspectionRefusal' object has no attribute 'relations'
+
+======================================================================
+FAIL: test_lifecycle_transitions_replay_preservation_and_read_agreement (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_transitions_replay_preservation_and_read_agreement)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 73, in test_lifecycle_transitions_replay_preservation_and_read_agreement
+    stale = self.command(source, relation, 'dispute', 'stale')
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 59, in command
+    self.assertIsInstance(row, BeadRelationsInspectionV3, row)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: RelationInspectionRefusal(contract_version=3, outcome='refused', error='schema_mismatch') is not an instance of <class 'memoriesql.application.assessed_relation_lifecycle.BeadRelationsInspectionV3'> : contract_version=3 outcome='refused' error='schema_mismatch'
+
+======================================================================
+FAIL: test_lifecycle_unaccepted_and_structural_refusals (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_unaccepted_and_structural_refusals)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 140, in test_lifecycle_unaccepted_and_structural_refusals
+    self.assertEqual(self.governance.record_event(self.command(source, relation, 'dispute', 'd1')).error, 'transition_invalid')
+                                                  ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 59, in command
+    self.assertIsInstance(row, BeadRelationsInspectionV3, row)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: RelationInspectionRefusal(contract_version=3, outcome='refused', error='schema_mismatch') is not an instance of <class 'memoriesql.application.assessed_relation_lifecycle.BeadRelationsInspectionV3'> : contract_version=3 outcome='refused' error='schema_mismatch'
+
+======================================================================
+FAIL: test_lifecycle_hash_matches_python_exact_bytes (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_hash_matches_python_exact_bytes)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 152, in test_lifecycle_hash_matches_python_exact_bytes
+    self.assertEqual(self.db.execute('SELECT memoriesql.lifecycle_hash_v1(%s)', (Jsonb(value),)).fetchone()[0], expected)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: '893f0ea2c9a185b4f8c938aa3bff78b4eedb1f9b2a1e63f33595c704e5f3b309' != '51b780263c771713363b699208548bafb45a1791b79c3528f751c89547aaab40'
+- 893f0ea2c9a185b4f8c938aa3bff78b4eedb1f9b2a1e63f33595c704e5f3b309
++ 51b780263c771713363b699208548bafb45a1791b79c3528f751c89547aaab40
+
+
+----------------------------------------------------------------------
+Ran 5 tests in 20.510s
+
+FAILED (failures=3, errors=2)
+
+===== focused-03.log =====
+test_lifecycle_transitions_replay_preservation_and_read_agreement (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_transitions_replay_preservation_and_read_agreement) ... unknown PostgreSQL timezone: 'Etc/UTC'; will use UTC
+ok
+test_lifecycle_roots_uncertainty_asof_and_terminal_replay (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_roots_uncertainty_asof_and_terminal_replay) ... ERROR
+test_lifecycle_same_bead_roots_are_unsupported (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_same_bead_roots_are_unsupported) ... ERROR
+test_lifecycle_unaccepted_and_structural_refusals (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_unaccepted_and_structural_refusals) ... FAIL
+test_lifecycle_hash_matches_python_exact_bytes (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_hash_matches_python_exact_bytes) ... ok
+
+======================================================================
+ERROR: test_lifecycle_roots_uncertainty_asof_and_terminal_replay (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_roots_uncertainty_asof_and_terminal_replay)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 112, in test_lifecycle_roots_uncertainty_asof_and_terminal_replay
+    row = self.read(source).relations[0]
+          ~~~~~~~~~^^^^^^^^
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 56, in read
+    return self.governance.inspect_relations(InspectBeadRelationsV3(contract_version=3, bead_id=bead, known_at=known))
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/postgres/assessed_relation_lifecycle.py", line 92, in inspect_relations
+    return TypeAdapter(InspectionResult).validate_python(row)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "<installed-env>/lib/python3.13/site-packages/pydantic/type_adapter.py", line 441, in validate_python
+    return self.validator.validate_python(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        object,
+        ^^^^^^^
+    ...<6 lines>...
+        by_name=by_name,
+        ^^^^^^^^^^^^^^^^
+    )
+    ^
+pydantic_core._pydantic_core.ValidationError: 20 validation errors for union[BeadRelationsInspectionV3,RelationInspectionUnavailable,RelationInspectionRefusal]
+BeadRelationsInspectionV3.relations.0.evidence.1
+  Value error, unqualified evidence requires complete gaps [type=value_error, input_value={'roots_status': 'indeter...s_gap_relation_ids': []}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/value_error
+RelationInspectionUnavailable.outcome
+  Input should be 'unavailable' or 'budget_exhausted' [type=literal_error, input_value='available', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/literal_error
+RelationInspectionUnavailable.frame
+  Extra inputs are not permitted [type=extra_forbidden, input_value={'known_at': '2026-09-26T...11ba873c2f11161202b945'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+RelationInspectionUnavailable.bead_id
+  Extra inputs are not permitted [type=extra_forbidden, input_value='01a0df5b-0310-71aa-abc7-37430a0abef7', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+RelationInspectionUnavailable.known_at
+  Extra inputs are not permitted [type=extra_forbidden, input_value='2026-09-26T20:14:42.883774Z', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+RelationInspectionUnavailable.relations
+  Extra inputs are not permitted [type=extra_forbidden, input_value=[{'kind': 'assessed', 'ba...40c-9ae5-27655e74a291'}], input_type=list]
+    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+RelationInspectionUnavailable.relation_tasks
+  Extra inputs are not permitted [type=extra_forbidden, input_value=[{'status': 'succeeded', ...6de-b11f-1a755573d3c3'}], input_type=list]
+    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+RelationInspectionUnavailable.relation_types
+  Extra inputs are not permitted [type=extra_forbidden, input_value=[{'key': 'derived_from', ...nce_expectation': None}], input_type=list]
+    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+RelationInspectionUnavailable.pair_dispositions
+  Extra inputs are not permitted [type=extra_forbidden, input_value=[{'reason': None, 'task_i...40c-9ae5-27655e74a291'}], input_type=list]
+    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+RelationInspectionUnavailable.candidate_assessments
+  Extra inputs are not permitted [type=extra_forbidden, input_value=[], input_type=list]
+    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+RelationInspectionRefusal.outcome
+  Input should be 'refused' [type=literal_error, input_value='available', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/literal_error
+RelationInspectionRefusal.error
+  Field required [type=missing, input_value={'frame': {'known_at': '2...didate_assessments': []}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+RelationInspectionRefusal.frame
+  Extra inputs are not permitted [type=extra_forbidden, input_value={'known_at': '2026-09-26T...11ba873c2f11161202b945'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+RelationInspectionRefusal.bead_id
+  Extra inputs are not permitted [type=extra_forbidden, input_value='01a0df5b-0310-71aa-abc7-37430a0abef7', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+RelationInspectionRefusal.known_at
+  Extra inputs are not permitted [type=extra_forbidden, input_value='2026-09-26T20:14:42.883774Z', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+RelationInspectionRefusal.relations
+  Extra inputs are not permitted [type=extra_forbidden, input_value=[{'kind': 'assessed', 'ba...40c-9ae5-27655e74a291'}], input_type=list]
+    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+RelationInspectionRefusal.relation_tasks
+  Extra inputs are not permitted [type=extra_forbidden, input_value=[{'status': 'succeeded', ...6de-b11f-1a755573d3c3'}], input_type=list]
+    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+RelationInspectionRefusal.relation_types
+  Extra inputs are not permitted [type=extra_forbidden, input_value=[{'key': 'derived_from', ...nce_expectation': None}], input_type=list]
+    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+RelationInspectionRefusal.pair_dispositions
+  Extra inputs are not permitted [type=extra_forbidden, input_value=[{'reason': None, 'task_i...40c-9ae5-27655e74a291'}], input_type=list]
+    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+RelationInspectionRefusal.candidate_assessments
+  Extra inputs are not permitted [type=extra_forbidden, input_value=[], input_type=list]
+    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+
+======================================================================
+ERROR: test_lifecycle_same_bead_roots_are_unsupported (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_same_bead_roots_are_unsupported)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 130, in test_lifecycle_same_bead_roots_are_unsupported
+    row = self.read(source).relations[0]
+          ~~~~~~~~~^^^^^^^^
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 56, in read
+    return self.governance.inspect_relations(InspectBeadRelationsV3(contract_version=3, bead_id=bead, known_at=known))
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/postgres/assessed_relation_lifecycle.py", line 92, in inspect_relations
+    return TypeAdapter(InspectionResult).validate_python(row)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "<installed-env>/lib/python3.13/site-packages/pydantic/type_adapter.py", line 441, in validate_python
+    return self.validator.validate_python(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        object,
+        ^^^^^^^
+    ...<6 lines>...
+        by_name=by_name,
+        ^^^^^^^^^^^^^^^^
+    )
+    ^
+pydantic_core._pydantic_core.ValidationError: 21 validation errors for union[BeadRelationsInspectionV3,RelationInspectionUnavailable,RelationInspectionRefusal]
+BeadRelationsInspectionV3.relations.0.evidence.0
+  Value error, unqualified evidence requires complete gaps [type=value_error, input_value={'roots_status': 'unsuppo...s_gap_relation_ids': []}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/value_error
+BeadRelationsInspectionV3.relations.0.evidence.1
+  Value error, unqualified evidence requires complete gaps [type=value_error, input_value={'roots_status': 'unsuppo...s_gap_relation_ids': []}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/value_error
+RelationInspectionUnavailable.outcome
+  Input should be 'unavailable' or 'budget_exhausted' [type=literal_error, input_value='available', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/literal_error
+RelationInspectionUnavailable.frame
+  Extra inputs are not permitted [type=extra_forbidden, input_value={'known_at': '2026-09-26T...11ba873c2f11161202b945'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+RelationInspectionUnavailable.bead_id
+  Extra inputs are not permitted [type=extra_forbidden, input_value='01a0df5b-1782-7d03-abbc-090c381395f3', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+RelationInspectionUnavailable.known_at
+  Extra inputs are not permitted [type=extra_forbidden, input_value='2026-09-26T20:14:46.865565Z', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+RelationInspectionUnavailable.relations
+  Extra inputs are not permitted [type=extra_forbidden, input_value=[{'kind': 'assessed', 'ba...361-8ea6-f183a6948608'}], input_type=list]
+    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+RelationInspectionUnavailable.relation_tasks
+  Extra inputs are not permitted [type=extra_forbidden, input_value=[{'status': 'succeeded', ...361-8ea6-f183a6948608'}], input_type=list]
+    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+RelationInspectionUnavailable.relation_types
+  Extra inputs are not permitted [type=extra_forbidden, input_value=[{'key': 'derived_from', ...nce_expectation': None}], input_type=list]
+    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+RelationInspectionUnavailable.pair_dispositions
+  Extra inputs are not permitted [type=extra_forbidden, input_value=[{'reason': None, 'task_i...361-8ea6-f183a6948608'}], input_type=list]
+    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+RelationInspectionUnavailable.candidate_assessments
+  Extra inputs are not permitted [type=extra_forbidden, input_value=[], input_type=list]
+    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+RelationInspectionRefusal.outcome
+  Input should be 'refused' [type=literal_error, input_value='available', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/literal_error
+RelationInspectionRefusal.error
+  Field required [type=missing, input_value={'frame': {'known_at': '2...didate_assessments': []}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+RelationInspectionRefusal.frame
+  Extra inputs are not permitted [type=extra_forbidden, input_value={'known_at': '2026-09-26T...11ba873c2f11161202b945'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+RelationInspectionRefusal.bead_id
+  Extra inputs are not permitted [type=extra_forbidden, input_value='01a0df5b-1782-7d03-abbc-090c381395f3', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+RelationInspectionRefusal.known_at
+  Extra inputs are not permitted [type=extra_forbidden, input_value='2026-09-26T20:14:46.865565Z', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+RelationInspectionRefusal.relations
+  Extra inputs are not permitted [type=extra_forbidden, input_value=[{'kind': 'assessed', 'ba...361-8ea6-f183a6948608'}], input_type=list]
+    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+RelationInspectionRefusal.relation_tasks
+  Extra inputs are not permitted [type=extra_forbidden, input_value=[{'status': 'succeeded', ...361-8ea6-f183a6948608'}], input_type=list]
+    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+RelationInspectionRefusal.relation_types
+  Extra inputs are not permitted [type=extra_forbidden, input_value=[{'key': 'derived_from', ...nce_expectation': None}], input_type=list]
+    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+RelationInspectionRefusal.pair_dispositions
+  Extra inputs are not permitted [type=extra_forbidden, input_value=[{'reason': None, 'task_i...361-8ea6-f183a6948608'}], input_type=list]
+    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+RelationInspectionRefusal.candidate_assessments
+  Extra inputs are not permitted [type=extra_forbidden, input_value=[], input_type=list]
+    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+
+======================================================================
+FAIL: test_lifecycle_unaccepted_and_structural_refusals (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_unaccepted_and_structural_refusals)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 147, in test_lifecycle_unaccepted_and_structural_refusals
+    self.assertEqual(response, dict(contract_version=1,outcome='refused',error=error))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'error': 'transition_invalid', 'outcome': 'refused', 'contract_version': 1} != {'contract_version': 1, 'outcome': 'refused', 'error': 'invalid_request'}
+- {'contract_version': 1, 'error': 'transition_invalid', 'outcome': 'refused'}
+?                                   -----------
+
++ {'contract_version': 1, 'error': 'invalid_request', 'outcome': 'refused'}
+?                                          ++++++++
+
+
+----------------------------------------------------------------------
+Ran 5 tests in 22.298s
+
+FAILED (failures=1, errors=2)
+
+===== focused-04.log =====
+test_lifecycle_transitions_replay_preservation_and_read_agreement (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_transitions_replay_preservation_and_read_agreement) ... unknown PostgreSQL timezone: 'Etc/UTC'; will use UTC
+ERROR
+test_lifecycle_roots_uncertainty_asof_and_terminal_replay (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_roots_uncertainty_asof_and_terminal_replay) ... ERROR
+test_lifecycle_same_bead_roots_are_unsupported (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_same_bead_roots_are_unsupported) ... ERROR
+test_lifecycle_unaccepted_and_structural_refusals (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_unaccepted_and_structural_refusals) ... ok
+test_lifecycle_hash_matches_python_exact_bytes (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_hash_matches_python_exact_bytes) ... ok
+
+======================================================================
+ERROR: test_lifecycle_transitions_replay_preservation_and_read_agreement (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_transitions_replay_preservation_and_read_agreement)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 79, in test_lifecycle_transitions_replay_preservation_and_read_agreement
+    self.assertEqual(self.governance.record_event(stale).error, 'head_conflict')
+                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/postgres/assessed_relation_lifecycle.py", line 57, in record_event
+    PostgresAuthorizationPort(self._connection).begin_context(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        credential_sha256=self._credential,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        requested_workspace_id=self._workspace,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/postgres/authorization.py", line 27, in begin_context
+    row = self._connection.execute(
+          ~~~~~~~~~~~~~~~~~~~~~~~~^
+        """
+        ^^^
+    ...<12 lines>...
+        (credential_sha256, requested_workspace_id),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ).fetchone()
+    ^
+  File "<installed-env>/lib/python3.13/site-packages/psycopg/connection.py", line 300, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.ForeignKeyViolation: update or delete on table "authorization_contexts" violates foreign key constraint "assessed_relation_events_authorization_context_id_fkey" on table "assessed_relation_events"
+DETAIL:  Key (context_id)=(01a0df5b-e5bc-7649-a445-ea10022986b2) is still referenced from table "assessed_relation_events".
+CONTEXT:  SQL statement "DELETE FROM memoriesql.authorization_contexts AS old_context
+     WHERE old_context.backend_pid = pg_backend_pid()
+        OR old_context.expires_at <= statement_timestamp()
+        OR NOT EXISTS (
+            SELECT 1
+            FROM pg_catalog.pg_stat_activity AS activity
+            WHERE activity.pid = old_context.backend_pid
+        )"
+PL/pgSQL function begin_authorization_context(text,uuid) line 116 at SQL statement
+
+======================================================================
+ERROR: test_lifecycle_roots_uncertainty_asof_and_terminal_replay (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_roots_uncertainty_asof_and_terminal_replay)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 112, in test_lifecycle_roots_uncertainty_asof_and_terminal_replay
+    row = self.read(source).relations[0]
+          ~~~~~~~~~^^^^^^^^
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 56, in read
+    return self.governance.inspect_relations(InspectBeadRelationsV3(contract_version=3, bead_id=bead, known_at=known))
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/postgres/assessed_relation_lifecycle.py", line 83, in inspect_relations
+    row = read_relation_projection(
+        self._connection,
+    ...<3 lines>...
+        payload=payload.model_dump(mode="json"),
+    )
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/postgres/relation_projection.py", line 31, in read_relation_projection
+    PostgresAuthorizationPort(connection).begin_context(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        credential_sha256=credential_sha256,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        requested_workspace_id=workspace_id,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/postgres/authorization.py", line 27, in begin_context
+    row = self._connection.execute(
+          ~~~~~~~~~~~~~~~~~~~~~~~~^
+        """
+        ^^^
+    ...<12 lines>...
+        (credential_sha256, requested_workspace_id),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ).fetchone()
+    ^
+  File "<installed-env>/lib/python3.13/site-packages/psycopg/connection.py", line 300, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.ForeignKeyViolation: update or delete on table "authorization_contexts" violates foreign key constraint "assessed_relation_events_authorization_context_id_fkey" on table "assessed_relation_events"
+DETAIL:  Key (context_id)=(01a0df5b-f9ff-72d0-992d-f13b621ab7c7) is still referenced from table "assessed_relation_events".
+CONTEXT:  SQL statement "DELETE FROM memoriesql.authorization_contexts AS old_context
+     WHERE old_context.backend_pid = pg_backend_pid()
+        OR old_context.expires_at <= statement_timestamp()
+        OR NOT EXISTS (
+            SELECT 1
+            FROM pg_catalog.pg_stat_activity AS activity
+            WHERE activity.pid = old_context.backend_pid
+        )"
+PL/pgSQL function begin_authorization_context(text,uuid) line 116 at SQL statement
+
+======================================================================
+ERROR: test_lifecycle_same_bead_roots_are_unsupported (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_same_bead_roots_are_unsupported)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 137, in test_lifecycle_same_bead_roots_are_unsupported
+    self.assertEqual(self.read(source).relations[0].roots_status, 'indeterminate')
+                     ~~~~~~~~~^^^^^^^^
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 56, in read
+    return self.governance.inspect_relations(InspectBeadRelationsV3(contract_version=3, bead_id=bead, known_at=known))
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/postgres/assessed_relation_lifecycle.py", line 83, in inspect_relations
+    row = read_relation_projection(
+        self._connection,
+    ...<3 lines>...
+        payload=payload.model_dump(mode="json"),
+    )
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/postgres/relation_projection.py", line 31, in read_relation_projection
+    PostgresAuthorizationPort(connection).begin_context(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        credential_sha256=credential_sha256,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        requested_workspace_id=workspace_id,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/postgres/authorization.py", line 27, in begin_context
+    row = self._connection.execute(
+          ~~~~~~~~~~~~~~~~~~~~~~~~^
+        """
+        ^^^
+    ...<12 lines>...
+        (credential_sha256, requested_workspace_id),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ).fetchone()
+    ^
+  File "<installed-env>/lib/python3.13/site-packages/psycopg/connection.py", line 300, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.ForeignKeyViolation: update or delete on table "authorization_contexts" violates foreign key constraint "assessed_relation_events_authorization_context_id_fkey" on table "assessed_relation_events"
+DETAIL:  Key (context_id)=(01a0df5c-09f8-7bcf-850b-ab4b40e06944) is still referenced from table "assessed_relation_events".
+CONTEXT:  SQL statement "DELETE FROM memoriesql.authorization_contexts AS old_context
+     WHERE old_context.backend_pid = pg_backend_pid()
+        OR old_context.expires_at <= statement_timestamp()
+        OR NOT EXISTS (
+            SELECT 1
+            FROM pg_catalog.pg_stat_activity AS activity
+            WHERE activity.pid = old_context.backend_pid
+        )"
+PL/pgSQL function begin_authorization_context(text,uuid) line 116 at SQL statement
+
+----------------------------------------------------------------------
+Ran 5 tests in 20.851s
+
+FAILED (errors=3)
+
+===== focused-05.log =====
+test_lifecycle_transitions_replay_preservation_and_read_agreement (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_transitions_replay_preservation_and_read_agreement) ... unknown PostgreSQL timezone: 'Etc/UTC'; will use UTC
+ok
+test_lifecycle_roots_uncertainty_asof_and_terminal_replay (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_roots_uncertainty_asof_and_terminal_replay) ... FAIL
+test_lifecycle_same_bead_roots_are_unsupported (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_same_bead_roots_are_unsupported) ... ok
+test_lifecycle_unaccepted_and_structural_refusals (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_unaccepted_and_structural_refusals) ... ok
+test_lifecycle_hash_matches_python_exact_bytes (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_hash_matches_python_exact_bytes) ... ok
+
+======================================================================
+FAIL: test_lifecycle_roots_uncertainty_asof_and_terminal_replay (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_roots_uncertainty_asof_and_terminal_replay)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 116, in test_lifecycle_roots_uncertainty_asof_and_terminal_replay
+    self.assertEqual(self.inspect(source).outcome, 'unavailable')
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'available' != 'unavailable'
+- available
++ unavailable
+? ++
+
+
+----------------------------------------------------------------------
+Ran 5 tests in 22.413s
+
+FAILED (failures=1)
+
+===== focused-06.log =====
+test_lifecycle_transitions_replay_preservation_and_read_agreement (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_transitions_replay_preservation_and_read_agreement) ... unknown PostgreSQL timezone: 'Etc/UTC'; will use UTC
+ok
+test_lifecycle_roots_uncertainty_asof_and_terminal_replay (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_roots_uncertainty_asof_and_terminal_replay) ... ERROR
+test_lifecycle_same_bead_roots_are_unsupported (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_same_bead_roots_are_unsupported) ... ok
+test_lifecycle_unaccepted_and_structural_refusals (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_unaccepted_and_structural_refusals) ... ok
+test_lifecycle_hash_matches_python_exact_bytes (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_hash_matches_python_exact_bytes) ... ok
+test_lifecycle_concurrent_distinct_and_identical_keys (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_concurrent_distinct_and_identical_keys) ... ok
+test_lifecycle_time_idempotency_and_receipt_scope (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_time_idempotency_and_receipt_scope) ... ok
+test_lifecycle_nonhuman_and_revoked_authority_refuse_without_disclosure (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_nonhuman_and_revoked_authority_refuse_without_disclosure) ... ERROR
+test_lifecycle_corrected_endpoint_refuses_confirmation_and_changes_head (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_corrected_endpoint_refuses_confirmation_and_changes_head) ... FAIL
+test_lifecycle_replacement_is_terminal_and_preserves_retired_history (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_replacement_is_terminal_and_preserves_retired_history) ... ok
+
+======================================================================
+ERROR: test_lifecycle_roots_uncertainty_asof_and_terminal_replay (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_roots_uncertainty_asof_and_terminal_replay)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 214, in test_lifecycle_roots_uncertainty_asof_and_terminal_replay
+    self.assertEqual(row.evidence[0].roots_gap_relation_ids[0].reason, "withdrawn")
+                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^
+IndexError: tuple index out of range
+
+======================================================================
+ERROR: test_lifecycle_nonhuman_and_revoked_authority_refuse_without_disclosure (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_nonhuman_and_revoked_authority_refuse_without_disclosure)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 392, in test_lifecycle_nonhuman_and_revoked_authority_refuse_without_disclosure
+    self.db.execute(
+    ~~~~~~~~~~~~~~~^
+        "SELECT memoriesql.pair_local_client(%s,%s,%s,%s,%s,'background_service',%s,%s,%s,%s,%s)",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<11 lines>...
+        ),
+        ^^
+    )
+    ^
+  File "<installed-env>/lib/python3.13/site-packages/psycopg/connection.py", line 300, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.CheckViolation: pairing principal kind and role do not match
+CONTEXT:  PL/pgSQL function pair_local_client(uuid,uuid,uuid,uuid,text,text,text[],uuid[],text,timestamp with time zone,timestamp with time zone) line 17 at RAISE
+
+======================================================================
+FAIL: test_lifecycle_corrected_endpoint_refuses_confirmation_and_changes_head (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_corrected_endpoint_refuses_confirmation_and_changes_head)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 474, in test_lifecycle_corrected_endpoint_refuses_confirmation_and_changes_head
+    successor = self.correction(source)
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 455, in correction
+    target, claimed = helpers.enqueue_authorship(self, capture, accepted, pins=pins)
+                      ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<copied-tests>/test_immutable_observations.py", line 292, in enqueue_authorship
+    return target, self.claim()
+                   ~~~~~~~~~~^^
+  File "<copied-tests>/test_postgres_runtime.py", line 360, in claim
+    self.assertIsNotNone(claimed)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+AssertionError: unexpectedly None
+
+----------------------------------------------------------------------
+Ran 10 tests in 50.939s
+
+FAILED (failures=1, errors=2)
+
+===== focused-07.log =====
+test_lifecycle_roots_uncertainty_asof_and_terminal_replay (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_roots_uncertainty_asof_and_terminal_replay) ... unknown PostgreSQL timezone: 'Etc/UTC'; will use UTC
+ok
+test_lifecycle_nonhuman_and_revoked_authority_refuse_without_disclosure (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_nonhuman_and_revoked_authority_refuse_without_disclosure) ... ERROR
+test_lifecycle_corrected_endpoint_refuses_confirmation_and_changes_head (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_corrected_endpoint_refuses_confirmation_and_changes_head) ... ok
+
+======================================================================
+ERROR: test_lifecycle_nonhuman_and_revoked_authority_refuse_without_disclosure (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_nonhuman_and_revoked_authority_refuse_without_disclosure)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 392, in test_lifecycle_nonhuman_and_revoked_authority_refuse_without_disclosure
+    self.db.execute(
+    ~~~~~~~~~~~~~~~^
+        "SELECT memoriesql.pair_local_client(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<11 lines>...
+        ),
+        ^^
+    )
+    ^
+  File "<installed-env>/lib/python3.13/site-packages/psycopg/connection.py", line 300, in execute
+    raise ex.with_traceback(None)
+psycopg.ProgrammingError: the query has 11 placeholders but 10 parameters were passed
+
+----------------------------------------------------------------------
+Ran 3 tests in 16.326s
+
+FAILED (errors=1)
+
+===== focused-08.log =====
+test_lifecycle_nonhuman_and_revoked_authority_refuse_without_disclosure (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_nonhuman_and_revoked_authority_refuse_without_disclosure) ... unknown PostgreSQL timezone: 'Etc/UTC'; will use UTC
+ERROR
+test_lifecycle_delegated_human_and_origin_revocation (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_delegated_human_and_origin_revocation) ... ERROR
+test_lifecycle_basis_read_without_write_and_basis_correction (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_basis_read_without_write_and_basis_correction) ... ERROR
+
+======================================================================
+ERROR: test_lifecycle_nonhuman_and_revoked_authority_refuse_without_disclosure (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_nonhuman_and_revoked_authority_refuse_without_disclosure)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 399, in test_lifecycle_nonhuman_and_revoked_authority_refuse_without_disclosure
+    self.db.execute(
+    ~~~~~~~~~~~~~~~^
+        "SELECT memoriesql.pair_local_client(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<16 lines>...
+        ),
+        ^^
+    )
+    ^
+  File "<installed-env>/lib/python3.13/site-packages/psycopg/connection.py", line 300, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.CheckViolation: pairing capability exceeds the paired role
+CONTEXT:  PL/pgSQL function pair_local_client(uuid,uuid,uuid,uuid,text,text,text[],uuid[],text,timestamp with time zone,timestamp with time zone) line 31 at RAISE
+
+======================================================================
+ERROR: test_lifecycle_delegated_human_and_origin_revocation (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_delegated_human_and_origin_revocation)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 621, in test_lifecycle_delegated_human_and_origin_revocation
+    principal, secret = self.second_human()
+                        ~~~~~~~~~~~~~~~~~^^
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 606, in second_human
+    self.db.execute(
+    ~~~~~~~~~~~~~~~^
+        "SELECT memoriesql.create_access_grant(%s,%s,%s,%s,%s,%s)",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+        ),
+        ^^
+    )
+    ^
+  File "<installed-env>/lib/python3.13/site-packages/psycopg/connection.py", line 300, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.InsufficientPrivilege: grant creation is not authorized
+CONTEXT:  PL/pgSQL function create_access_grant(uuid,uuid,uuid,text[],timestamp with time zone,timestamp with time zone) line 34 at RAISE
+
+======================================================================
+ERROR: test_lifecycle_basis_read_without_write_and_basis_correction (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_basis_read_without_write_and_basis_correction)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 667, in test_lifecycle_basis_read_without_write_and_basis_correction
+    basis = self.bead(
+        "Fictional attribution explicitly connects endpoints.",
+        key="basis",
+        source=source,
+    )
+  File "<copied-tests>/test_relation_assessment.py", line 170, in bead
+    return self.author("\n".join(texts), key, plan=statements, source=source)
+           ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<copied-tests>/test_authored_relations.py", line 194, in author
+    bound = self.unit(text, key, source=source, occurred_at=occurred_at)
+  File "<copied-tests>/test_authored_relations.py", line 136, in unit
+    part = self.part(text).model_copy(
+           ~~~~~~~~~^^^^^^
+  File "<copied-tests>/test_evidence_packages.py", line 101, in part
+    receipt = self.raw.capture(command, recorded_at=datetime.now(UTC))
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/postgres/source_range.py", line 108, in capture
+    receipt = PostgresSourceRangeCapture(self._connection).capture(
+        command,
+        recorded_at=recorded_at,
+    )
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/postgres/source_range.py", line 34, in capture
+    row = self._connection.execute(
+          ~~~~~~~~~~~~~~~~~~~~~~~~^
+        "SELECT memoriesql.capture_source_range(%s, %s)",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+        ),
+        ^^
+    ).fetchone()
+    ^
+  File "<installed-env>/lib/python3.13/site-packages/psycopg/connection.py", line 300, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.InsufficientPrivilege: source-range capture is outside authorization
+CONTEXT:  PL/pgSQL function capture_source_range(jsonb,timestamp with time zone) line 242 at RAISE
+
+----------------------------------------------------------------------
+Ran 3 tests in 13.569s
+
+FAILED (errors=3)
+
+===== focused-09.log =====
+test_lifecycle_nonhuman_and_revoked_authority_refuse_without_disclosure (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_nonhuman_and_revoked_authority_refuse_without_disclosure) ... ERROR
+test_lifecycle_delegated_human_and_origin_revocation (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_delegated_human_and_origin_revocation) ... ERROR
+test_lifecycle_basis_read_without_write_and_basis_correction (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_basis_read_without_write_and_basis_correction) ... unknown PostgreSQL timezone: 'Etc/UTC'; will use UTC
+ok
+
+======================================================================
+ERROR: test_lifecycle_nonhuman_and_revoked_authority_refuse_without_disclosure (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_nonhuman_and_revoked_authority_refuse_without_disclosure)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 402, in test_lifecycle_nonhuman_and_revoked_authority_refuse_without_disclosure
+    source, _, relation = self.assertion()
+                          ~~~~~~~~~~~~~~^^
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 46, in assertion
+    if scope is not None:
+       ^^^^^
+NameError: name 'scope' is not defined. Did you mean: 'self.scope'?
+
+======================================================================
+ERROR: test_lifecycle_delegated_human_and_origin_revocation (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_delegated_human_and_origin_revocation)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 642, in test_lifecycle_delegated_human_and_origin_revocation
+    source, _, relation = self.assertion(scope=scope, source_object=source_object)
+                          ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: AssessedLifecycle.assertion() got an unexpected keyword argument 'scope'
+
+----------------------------------------------------------------------
+Ran 3 tests in 8.463s
+
+FAILED (errors=2)
+
+===== focused-10.log =====
+test_lifecycle_nonhuman_and_revoked_authority_refuse_without_disclosure (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_nonhuman_and_revoked_authority_refuse_without_disclosure) ... unknown PostgreSQL timezone: 'Etc/UTC'; will use UTC
+ERROR
+test_lifecycle_delegated_human_and_origin_revocation (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_delegated_human_and_origin_revocation) ... ERROR
+
+======================================================================
+ERROR: test_lifecycle_nonhuman_and_revoked_authority_refuse_without_disclosure (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_nonhuman_and_revoked_authority_refuse_without_disclosure)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 429, in test_lifecycle_nonhuman_and_revoked_authority_refuse_without_disclosure
+    for x in self.db.execute(
+             ~~~~~~~~~~~~~~~^
+        "SELECT capability_key FROM memoriesql.role_capabilities WHERE role_key=%s AND capability_key IN ('memory.maintain','memory.query','source.read')",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<6 lines>...
+        ),
+        ^^
+    ).fetchall()
+    ^
+  File "<installed-env>/lib/python3.13/site-packages/psycopg/connection.py", line 300, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.InsufficientPrivilege: permission denied for table role_capabilities
+
+======================================================================
+ERROR: test_lifecycle_delegated_human_and_origin_revocation (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_delegated_human_and_origin_revocation)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 654, in test_lifecycle_delegated_human_and_origin_revocation
+    first = other.record_event(cmd)
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/postgres/assessed_relation_lifecycle.py", line 57, in record_event
+    PostgresAuthorizationPort(self._connection).begin_context(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        credential_sha256=self._credential,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        requested_workspace_id=self._workspace,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/postgres/authorization.py", line 27, in begin_context
+    row = self._connection.execute(
+          ~~~~~~~~~~~~~~~~~~~~~~~~^
+        """
+        ^^^
+    ...<12 lines>...
+        (credential_sha256, requested_workspace_id),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ).fetchone()
+    ^
+  File "<installed-env>/lib/python3.13/site-packages/psycopg/connection.py", line 300, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.InvalidAuthorizationSpecification: invalid authentication context
+CONTEXT:  PL/pgSQL function begin_authorization_context(text,uuid) line 68 at RAISE
+
+----------------------------------------------------------------------
+Ran 2 tests in 10.166s
+
+FAILED (errors=2)
+
+===== focused-13.log =====
+test_lifecycle_protected_manifest_and_same_cutoff_visibility (unittest.loader._FailedTest.test_lifecycle_protected_manifest_and_same_cutoff_visibility) ... ERROR
+test_lifecycle_evidence_refusals_receipt_incomplete_and_budget (unittest.loader._FailedTest.test_lifecycle_evidence_refusals_receipt_incomplete_and_budget) ... ERROR
+test_lifecycle_revocation_wins_waiting_read_and_write_fence (unittest.loader._FailedTest.test_lifecycle_revocation_wins_waiting_read_and_write_fence) ... ERROR
+test_lifecycle_endpoint_write_membership_principal_and_evidence_authority (unittest.loader._FailedTest.test_lifecycle_endpoint_write_membership_principal_and_evidence_authority) ... ERROR
+test_lifecycle_basis_correction_and_transitive_successors (unittest.loader._FailedTest.test_lifecycle_basis_correction_and_transitive_successors) ... ERROR
+test_lifecycle_cycle_reservations_survive_dispute_until_withdrawal (unittest.loader._FailedTest.test_lifecycle_cycle_reservations_survive_dispute_until_withdrawal) ... ERROR
+test_lifecycle_unsupported_propagates_and_observing_union_has_no_aggregate_cap (unittest.loader._FailedTest.test_lifecycle_unsupported_propagates_and_observing_union_has_no_aggregate_cap) ... ERROR
+
+======================================================================
+ERROR: test_lifecycle_protected_manifest_and_same_cutoff_visibility (unittest.loader._FailedTest.test_lifecycle_protected_manifest_and_same_cutoff_visibility)
+----------------------------------------------------------------------
+AttributeError: type object 'AssessedLifecycle' has no attribute 'test_lifecycle_protected_manifest_and_same_cutoff_visibility'
+
+======================================================================
+ERROR: test_lifecycle_evidence_refusals_receipt_incomplete_and_budget (unittest.loader._FailedTest.test_lifecycle_evidence_refusals_receipt_incomplete_and_budget)
+----------------------------------------------------------------------
+AttributeError: type object 'AssessedLifecycle' has no attribute 'test_lifecycle_evidence_refusals_receipt_incomplete_and_budget'
+
+======================================================================
+ERROR: test_lifecycle_revocation_wins_waiting_read_and_write_fence (unittest.loader._FailedTest.test_lifecycle_revocation_wins_waiting_read_and_write_fence)
+----------------------------------------------------------------------
+AttributeError: type object 'AssessedLifecycle' has no attribute 'test_lifecycle_revocation_wins_waiting_read_and_write_fence'
+
+======================================================================
+ERROR: test_lifecycle_endpoint_write_membership_principal_and_evidence_authority (unittest.loader._FailedTest.test_lifecycle_endpoint_write_membership_principal_and_evidence_authority)
+----------------------------------------------------------------------
+AttributeError: type object 'AssessedLifecycle' has no attribute 'test_lifecycle_endpoint_write_membership_principal_and_evidence_authority'
+
+======================================================================
+ERROR: test_lifecycle_basis_correction_and_transitive_successors (unittest.loader._FailedTest.test_lifecycle_basis_correction_and_transitive_successors)
+----------------------------------------------------------------------
+AttributeError: type object 'AssessedLifecycle' has no attribute 'test_lifecycle_basis_correction_and_transitive_successors'
+
+======================================================================
+ERROR: test_lifecycle_cycle_reservations_survive_dispute_until_withdrawal (unittest.loader._FailedTest.test_lifecycle_cycle_reservations_survive_dispute_until_withdrawal)
+----------------------------------------------------------------------
+AttributeError: type object 'AssessedLifecycle' has no attribute 'test_lifecycle_cycle_reservations_survive_dispute_until_withdrawal'
+
+======================================================================
+ERROR: test_lifecycle_unsupported_propagates_and_observing_union_has_no_aggregate_cap (unittest.loader._FailedTest.test_lifecycle_unsupported_propagates_and_observing_union_has_no_aggregate_cap)
+----------------------------------------------------------------------
+AttributeError: type object 'AssessedLifecycle' has no attribute 'test_lifecycle_unsupported_propagates_and_observing_union_has_no_aggregate_cap'
+
+----------------------------------------------------------------------
+Ran 7 tests in 0.001s
+
+FAILED (errors=7)
+
+===== focused-14.log =====
+test_lifecycle_protected_manifest_and_same_cutoff_visibility (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_protected_manifest_and_same_cutoff_visibility) ... unknown PostgreSQL timezone: 'Etc/UTC'; will use UTC
+ERROR
+test_lifecycle_evidence_refusals_receipt_incomplete_and_budget (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_evidence_refusals_receipt_incomplete_and_budget) ... ERROR
+test_lifecycle_revocation_wins_waiting_read_and_write_fence (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_revocation_wins_waiting_read_and_write_fence) ... FAIL
+test_lifecycle_endpoint_write_membership_principal_and_evidence_authority (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_endpoint_write_membership_principal_and_evidence_authority) ... ok
+test_lifecycle_basis_correction_and_transitive_successors (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_basis_correction_and_transitive_successors) ... ERROR
+test_lifecycle_cycle_reservations_survive_dispute_until_withdrawal (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_cycle_reservations_survive_dispute_until_withdrawal) ... FAIL
+test_lifecycle_unsupported_propagates_and_observing_union_has_no_aggregate_cap (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_unsupported_propagates_and_observing_union_has_no_aggregate_cap) ... ERROR
+
+======================================================================
+ERROR: test_lifecycle_protected_manifest_and_same_cutoff_visibility (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_protected_manifest_and_same_cutoff_visibility)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 843, in test_lifecycle_protected_manifest_and_same_cutoff_visibility
+    frame = self.protected_frame(source)
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 826, in protected_frame
+    self.db.execute(
+    ~~~~~~~~~~~~~~~^
+        "CREATE OR REPLACE FUNCTION public.fictional_relation_frame(request jsonb) RETURNS jsonb LANGUAGE sql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,memoriesql AS 'SELECT memoriesql.relation_inspection_frame_v1(request)'; GRANT EXECUTE ON FUNCTION public.fictional_relation_frame(jsonb) TO memoriesql_application"
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "<installed-env>/lib/python3.13/site-packages/psycopg/connection.py", line 300, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.UndefinedFunction: function memoriesql.relation_inspection_frame_v1(jsonb) does not exist
+LINE 1: ... SET search_path=pg_catalog,memoriesql AS 'SELECT memoriesql...
+                                                             ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+
+======================================================================
+ERROR: test_lifecycle_evidence_refusals_receipt_incomplete_and_budget (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_evidence_refusals_receipt_incomplete_and_budget)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 944, in test_lifecycle_evidence_refusals_receipt_incomplete_and_budget
+    self.assertEqual(result["error"], "invalid_request", result)
+                     ~~~~~~^^^^^^^^^
+KeyError: 'error'
+
+======================================================================
+ERROR: test_lifecycle_basis_correction_and_transitive_successors (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_basis_correction_and_transitive_successors)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 1087, in test_lifecycle_basis_correction_and_transitive_successors
+    further = self.correction(successor)
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 485, in correction
+    accepted = PostgresCanonicalTransactions(self.db).accept_source_event_v2(
+        capture, recorded_at=datetime.now(UTC)
+    )
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/postgres/canonical_transactions.py", line 44, in accept_source_event_v2
+    return self._accept_source_event(command, recorded_at=recorded_at)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/postgres/canonical_transactions.py", line 52, in _accept_source_event
+    row = self._connection.execute(
+          ~~~~~~~~~~~~~~~~~~~~~~~~^
+        """
+        ^^^
+    ...<6 lines>...
+        ),
+        ^^
+    ).fetchone()
+    ^
+  File "<installed-env>/lib/python3.13/site-packages/psycopg/connection.py", line 300, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.UniqueViolation: idempotency_conflict
+CONTEXT:  PL/pgSQL function accept_source_event(jsonb,timestamp with time zone) line 231 at RAISE
+
+======================================================================
+ERROR: test_lifecycle_unsupported_propagates_and_observing_union_has_no_aggregate_cap (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_unsupported_propagates_and_observing_union_has_no_aggregate_cap)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 1168, in test_lifecycle_unsupported_propagates_and_observing_union_has_no_aggregate_cap
+    self.db.execute(
+    ~~~~~~~~~~~~~~~^
+        "INSERT INTO memoriesql.beads(tenant_id,workspace_id,access_scope_id,bead_id,event_id,source_unit_id,created_at) SELECT tenant_id,workspace_id,access_scope_id,uuidv7(),event_id,source_unit_id,clock_timestamp() FROM memoriesql.beads CROSS JOIN generate_series(1,128) WHERE bead_id=%s",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        (original,),
+        ^^^^^^^^^^^^
+    )
+    ^
+  File "<installed-env>/lib/python3.13/site-packages/psycopg/connection.py", line 300, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.UniqueViolation: duplicate key value violates unique constraint "beads_one_initial_per_source_unit_uq"
+DETAIL:  Key (tenant_id, source_unit_id)=(25565252-cfc7-428b-8616-942da0cf4408, 01a0df6d-6a01-7d7f-9cb0-818d33bd2d54) already exists.
+
+======================================================================
+FAIL: test_lifecycle_revocation_wins_waiting_read_and_write_fence (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_revocation_wins_waiting_read_and_write_fence)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 1015, in test_lifecycle_revocation_wins_waiting_read_and_write_fence
+    self.assertLess(
+    ~~~~~~~~~~~~~~~^
+        monotonic(),
+        ^^^^^^^^^^^^
+        deadline,
+        ^^^^^^^^^
+        "both operations must actually wait behind the authority fence",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: 3530381.812474958 not less than 3530381.808356166 : both operations must actually wait behind the authority fence
+
+======================================================================
+FAIL: test_lifecycle_cycle_reservations_survive_dispute_until_withdrawal (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_cycle_reservations_survive_dispute_until_withdrawal)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 1141, in test_lifecycle_cycle_reservations_survive_dispute_until_withdrawal
+    self.assertEqual(self.read(source).relations[0].support_eligible, False)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: True != False
+
+----------------------------------------------------------------------
+Ran 7 tests in 41.878s
+
+FAILED (failures=2, errors=4)
+
+===== focused-15.log =====
+test_lifecycle_protected_manifest_and_same_cutoff_visibility (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_protected_manifest_and_same_cutoff_visibility) ... ERROR
+test_lifecycle_evidence_refusals_receipt_incomplete_and_budget (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_evidence_refusals_receipt_incomplete_and_budget) ... ERROR
+test_lifecycle_revocation_wins_waiting_read_and_write_fence (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_revocation_wins_waiting_read_and_write_fence) ... ERROR
+test_lifecycle_basis_correction_and_transitive_successors (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_basis_correction_and_transitive_successors) ... ERROR
+test_lifecycle_unsupported_propagates_and_observing_union_has_no_aggregate_cap (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_unsupported_propagates_and_observing_union_has_no_aggregate_cap) ... ERROR
+
+======================================================================
+ERROR: test_lifecycle_protected_manifest_and_same_cutoff_visibility (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_protected_manifest_and_same_cutoff_visibility)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 35, in setUp
+    migrate(self.db, expected_current_version=29, target_version=30)
+    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<copied-tests>/test_postgres_runtime.py", line 85, in migrate
+    return _released_migrate(
+        connection,
+        expected_current_version=expected_current_version,
+        target_version=target_version,
+    )
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/postgres/migration_runner.py", line 232, in migrate
+    cursor.execute(migration.sql, prepare=False)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<installed-env>/lib/python3.13/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.SyntaxError: syntax error at end of input
+LINE 178: ...ASE WHEN jsonb_typeof(request->'evidence')='array' THEN json...
+                                                               ^
+
+======================================================================
+ERROR: test_lifecycle_evidence_refusals_receipt_incomplete_and_budget (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_evidence_refusals_receipt_incomplete_and_budget)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 35, in setUp
+    migrate(self.db, expected_current_version=29, target_version=30)
+    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<copied-tests>/test_postgres_runtime.py", line 85, in migrate
+    return _released_migrate(
+        connection,
+        expected_current_version=expected_current_version,
+        target_version=target_version,
+    )
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/postgres/migration_runner.py", line 232, in migrate
+    cursor.execute(migration.sql, prepare=False)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<installed-env>/lib/python3.13/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.SyntaxError: syntax error at end of input
+LINE 178: ...ASE WHEN jsonb_typeof(request->'evidence')='array' THEN json...
+                                                               ^
+
+======================================================================
+ERROR: test_lifecycle_revocation_wins_waiting_read_and_write_fence (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_revocation_wins_waiting_read_and_write_fence)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 35, in setUp
+    migrate(self.db, expected_current_version=29, target_version=30)
+    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<copied-tests>/test_postgres_runtime.py", line 85, in migrate
+    return _released_migrate(
+        connection,
+        expected_current_version=expected_current_version,
+        target_version=target_version,
+    )
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/postgres/migration_runner.py", line 232, in migrate
+    cursor.execute(migration.sql, prepare=False)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<installed-env>/lib/python3.13/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.SyntaxError: syntax error at end of input
+LINE 178: ...ASE WHEN jsonb_typeof(request->'evidence')='array' THEN json...
+                                                               ^
+
+======================================================================
+ERROR: test_lifecycle_basis_correction_and_transitive_successors (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_basis_correction_and_transitive_successors)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 35, in setUp
+    migrate(self.db, expected_current_version=29, target_version=30)
+    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<copied-tests>/test_postgres_runtime.py", line 85, in migrate
+    return _released_migrate(
+        connection,
+        expected_current_version=expected_current_version,
+        target_version=target_version,
+    )
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/postgres/migration_runner.py", line 232, in migrate
+    cursor.execute(migration.sql, prepare=False)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<installed-env>/lib/python3.13/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.SyntaxError: syntax error at end of input
+LINE 178: ...ASE WHEN jsonb_typeof(request->'evidence')='array' THEN json...
+                                                               ^
+
+======================================================================
+ERROR: test_lifecycle_unsupported_propagates_and_observing_union_has_no_aggregate_cap (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_unsupported_propagates_and_observing_union_has_no_aggregate_cap)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 35, in setUp
+    migrate(self.db, expected_current_version=29, target_version=30)
+    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<copied-tests>/test_postgres_runtime.py", line 85, in migrate
+    return _released_migrate(
+        connection,
+        expected_current_version=expected_current_version,
+        target_version=target_version,
+    )
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/postgres/migration_runner.py", line 232, in migrate
+    cursor.execute(migration.sql, prepare=False)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<installed-env>/lib/python3.13/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.SyntaxError: syntax error at end of input
+LINE 178: ...ASE WHEN jsonb_typeof(request->'evidence')='array' THEN json...
+                                                               ^
+
+----------------------------------------------------------------------
+Ran 5 tests in 5.112s
+
+FAILED (errors=5)
+
+===== focused-16.log =====
+test_lifecycle_protected_manifest_and_same_cutoff_visibility (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_protected_manifest_and_same_cutoff_visibility) ... unknown PostgreSQL timezone: 'Etc/UTC'; will use UTC
+ERROR
+test_lifecycle_evidence_refusals_receipt_incomplete_and_budget (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_evidence_refusals_receipt_incomplete_and_budget) ... ERROR
+test_lifecycle_revocation_wins_waiting_read_and_write_fence (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_revocation_wins_waiting_read_and_write_fence) ... ok
+test_lifecycle_basis_correction_and_transitive_successors (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_basis_correction_and_transitive_successors) ... ERROR
+test_lifecycle_unsupported_propagates_and_observing_union_has_no_aggregate_cap (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_unsupported_propagates_and_observing_union_has_no_aggregate_cap) ... ERROR
+
+======================================================================
+ERROR: test_lifecycle_protected_manifest_and_same_cutoff_visibility (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_protected_manifest_and_same_cutoff_visibility)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 959, in test_lifecycle_protected_manifest_and_same_cutoff_visibility
+    old_snapshot["response"]["known_at"], fresh["response"]["known_at"]
+    ~~~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'response'
+
+======================================================================
+ERROR: test_lifecycle_evidence_refusals_receipt_incomplete_and_budget (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_evidence_refusals_receipt_incomplete_and_budget)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 1006, in test_lifecycle_evidence_refusals_receipt_incomplete_and_budget
+    self.db.execute(
+    ~~~~~~~~~~~~~~~^
+        "UPDATE memoriesql.idempotency_receipts SET response_receipt='{}' WHERE idempotency_receipt_id=%s",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        (first.idempotency_receipt_id,),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "<installed-env>/lib/python3.13/site-packages/psycopg/connection.py", line 300, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.ObjectNotInPrerequisiteState: terminal idempotency receipt outcomes are immutable
+CONTEXT:  PL/pgSQL function protect_idempotency_identity() line 27 at RAISE
+
+======================================================================
+ERROR: test_lifecycle_basis_correction_and_transitive_successors (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_basis_correction_and_transitive_successors)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 1144, in test_lifecycle_basis_correction_and_transitive_successors
+    further = self.correction(successor)
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 491, in correction
+    accepted = PostgresCanonicalTransactions(self.db).accept_source_event_v2(
+        capture, recorded_at=datetime.now(UTC)
+    )
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/postgres/canonical_transactions.py", line 44, in accept_source_event_v2
+    return self._accept_source_event(command, recorded_at=recorded_at)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/postgres/canonical_transactions.py", line 52, in _accept_source_event
+    row = self._connection.execute(
+          ~~~~~~~~~~~~~~~~~~~~~~~~^
+        """
+        ^^^
+    ...<6 lines>...
+        ),
+        ^^
+    ).fetchone()
+    ^
+  File "<installed-env>/lib/python3.13/site-packages/psycopg/connection.py", line 300, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.SerializationFailure: checkpoint_conflict
+CONTEXT:  PL/pgSQL function accept_source_event(jsonb,timestamp with time zone) line 653 at RAISE
+
+======================================================================
+ERROR: test_lifecycle_unsupported_propagates_and_observing_union_has_no_aggregate_cap (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_unsupported_propagates_and_observing_union_has_no_aggregate_cap)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 1229, in test_lifecycle_unsupported_propagates_and_observing_union_has_no_aggregate_cap
+    self.db.execute(
+    ~~~~~~~~~~~~~~~^
+        "INSERT INTO memoriesql.beads(tenant_id,workspace_id,access_scope_id,bead_id,event_id,source_unit_id,created_at,origin_kind) SELECT tenant_id,workspace_id,access_scope_id,uuidv7(),event_id,source_unit_id,clock_timestamp(),'correction' FROM memoriesql.beads CROSS JOIN generate_series(1,128) WHERE bead_id=%s",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        (original,),
+        ^^^^^^^^^^^^
+    )
+    ^
+  File "<installed-env>/lib/python3.13/site-packages/psycopg/connection.py", line 300, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.CheckViolation: correction bead requires accepted semantics and explicit targets
+CONTEXT:  PL/pgSQL function assert_correction_bead_ready() line 8 at RAISE
+
+----------------------------------------------------------------------
+Ran 5 tests in 29.653s
+
+FAILED (errors=4)
+
+===== focused-18.log =====
+test_lifecycle_transitions_replay_preservation_and_read_agreement (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_transitions_replay_preservation_and_read_agreement) ... unknown PostgreSQL timezone: 'Etc/UTC'; will use UTC
+ok
+test_lifecycle_correction_wins_competing_confirmation (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_correction_wins_competing_confirmation) ... ok
+test_lifecycle_replacement_wins_concurrent_withdrawal (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_replacement_wins_concurrent_withdrawal) ... FAIL
+test_lifecycle_withdrawal_wins_replacement_and_losing_apply_preserves_beads (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_withdrawal_wins_replacement_and_losing_apply_preserves_beads) ... ERROR
+test_lifecycle_governance_evidence_does_not_change_roots_and_revocation_refuses_replay (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_governance_evidence_does_not_change_roots_and_revocation_refuses_replay) ... ok
+
+======================================================================
+ERROR: test_lifecycle_withdrawal_wins_replacement_and_losing_apply_preserves_beads (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_withdrawal_wins_replacement_and_losing_apply_preserves_beads)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 1448, in test_lifecycle_withdrawal_wins_replacement_and_losing_apply_preserves_beads
+    self.replacement_race(False)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 1415, in replacement_race
+    self.run_relations(
+    ~~~~~~~~~~~~~~~~~~^
+        expect="succeeded" if replacement_wins else "failed_terminal"
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "<copied-tests>/test_relation_assessment.py", line 434, in run_relations
+    receipt = asyncio.run(self.relation_worker().run_once())
+  File "<user-home>/.local/share/uv/python/cpython-3.13.5-macos-aarch64-none/lib/python3.13/asyncio/runners.py", line 195, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "<user-home>/.local/share/uv/python/cpython-3.13.5-macos-aarch64-none/lib/python3.13/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "<user-home>/.local/share/uv/python/cpython-3.13.5-macos-aarch64-none/lib/python3.13/asyncio/base_events.py", line 725, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 606, in run_once
+    return cycle.result()
+           ~~~~~~~~~~~~^^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 649, in _owned_cycle
+    receipt = await self._run_once()
+              ^^^^^^^^^^^^^^^^^^^^^^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 1150, in _run_once
+    raise persist_outcome.error
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 453, in capture
+    return _DatabaseCallOutcome(value=operation())
+                                      ~~~~~~~~~^^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 1115, in <lambda>
+    lambda: self._persist_result(
+            ~~~~~~~~~~~~~~~~~~~~^
+        claimed,
+        ^^^^^^^^
+    ...<2 lines>...
+        recorded_at=datetime.now(UTC),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 1853, in _persist_result
+    return self._transaction(operation), True
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 1953, in _transaction
+    return operation(PostgresSemanticTaskQueue(connection), context)
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 1837, in operation
+    return sink.persist(
+           ~~~~~~~~~~~~^
+        queue,
+        ^^^^^^
+    ...<2 lines>...
+        recorded_at=recorded_at,
+        ^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 243, in persist
+    return queue.record_canonical_result(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        fence,
+        ^^^^^^
+        result,
+        ^^^^^^^
+        recorded_at=recorded_at,
+        ^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 1409, in intercept
+    self.assertEqual(futures[0].result().state, "retracted")
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<installed-env>/lib/python3.13/site-packages/pydantic/main.py", line 1042, in __getattr__
+    raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}')
+AttributeError: 'AssessedRelationEventRefusal' object has no attribute 'state'
+
+======================================================================
+FAIL: test_lifecycle_replacement_wins_concurrent_withdrawal (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_replacement_wins_concurrent_withdrawal)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 1440, in test_lifecycle_replacement_wins_concurrent_withdrawal
+    self.replacement_race(True)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 1415, in replacement_race
+    self.run_relations(
+    ~~~~~~~~~~~~~~~~~~^
+        expect="succeeded" if replacement_wins else "failed_terminal"
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "<copied-tests>/test_relation_assessment.py", line 434, in run_relations
+    receipt = asyncio.run(self.relation_worker().run_once())
+  File "<user-home>/.local/share/uv/python/cpython-3.13.5-macos-aarch64-none/lib/python3.13/asyncio/runners.py", line 195, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "<user-home>/.local/share/uv/python/cpython-3.13.5-macos-aarch64-none/lib/python3.13/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "<user-home>/.local/share/uv/python/cpython-3.13.5-macos-aarch64-none/lib/python3.13/asyncio/base_events.py", line 725, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 606, in run_once
+    return cycle.result()
+           ~~~~~~~~~~~~^^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 649, in _owned_cycle
+    receipt = await self._run_once()
+              ^^^^^^^^^^^^^^^^^^^^^^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 1150, in _run_once
+    raise persist_outcome.error
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 453, in capture
+    return _DatabaseCallOutcome(value=operation())
+                                      ~~~~~~~~~^^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 1115, in <lambda>
+    lambda: self._persist_result(
+            ~~~~~~~~~~~~~~~~~~~~^
+        claimed,
+        ^^^^^^^^
+    ...<2 lines>...
+        recorded_at=datetime.now(UTC),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 1853, in _persist_result
+    return self._transaction(operation), True
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 1953, in _transaction
+    return operation(PostgresSemanticTaskQueue(connection), context)
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 1837, in operation
+    return sink.persist(
+           ~~~~~~~~~~~~^
+        queue,
+        ^^^^^^
+    ...<2 lines>...
+        recorded_at=recorded_at,
+        ^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 243, in persist
+    return queue.record_canonical_result(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        fence,
+        ^^^^^^
+        result,
+        ^^^^^^^
+        recorded_at=recorded_at,
+        ^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 1406, in intercept
+    self.assertLess(monotonic(), deadline)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 3531019.892289333 not less than 3531019.8916175407
+
+----------------------------------------------------------------------
+Ran 5 tests in 35.446s
+
+FAILED (failures=1, errors=1)
+
+===== focused-19.log =====
+test_lifecycle_replacement_wins_concurrent_withdrawal (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_replacement_wins_concurrent_withdrawal) ... unknown PostgreSQL timezone: 'Etc/UTC'; will use UTC
+FAIL
+test_lifecycle_withdrawal_wins_replacement_and_losing_apply_preserves_beads (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_withdrawal_wins_replacement_and_losing_apply_preserves_beads) ... FAIL
+
+======================================================================
+FAIL: test_lifecycle_replacement_wins_concurrent_withdrawal (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_replacement_wins_concurrent_withdrawal)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 1446, in test_lifecycle_replacement_wins_concurrent_withdrawal
+    self.replacement_race(True)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 1420, in replacement_race
+    self.run_relations(
+    ~~~~~~~~~~~~~~~~~~^
+        expect="succeeded" if replacement_wins else "failed_terminal"
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "<copied-tests>/test_relation_assessment.py", line 434, in run_relations
+    receipt = asyncio.run(self.relation_worker().run_once())
+  File "<user-home>/.local/share/uv/python/cpython-3.13.5-macos-aarch64-none/lib/python3.13/asyncio/runners.py", line 195, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "<user-home>/.local/share/uv/python/cpython-3.13.5-macos-aarch64-none/lib/python3.13/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "<user-home>/.local/share/uv/python/cpython-3.13.5-macos-aarch64-none/lib/python3.13/asyncio/base_events.py", line 725, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 606, in run_once
+    return cycle.result()
+           ~~~~~~~~~~~~^^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 649, in _owned_cycle
+    receipt = await self._run_once()
+              ^^^^^^^^^^^^^^^^^^^^^^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 1150, in _run_once
+    raise persist_outcome.error
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 453, in capture
+    return _DatabaseCallOutcome(value=operation())
+                                      ~~~~~~~~~^^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 1115, in <lambda>
+    lambda: self._persist_result(
+            ~~~~~~~~~~~~~~~~~~~~^
+        claimed,
+        ^^^^^^^^
+    ...<2 lines>...
+        recorded_at=datetime.now(UTC),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 1853, in _persist_result
+    return self._transaction(operation), True
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 1953, in _transaction
+    return operation(PostgresSemanticTaskQueue(connection), context)
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 1837, in operation
+    return sink.persist(
+           ~~~~~~~~~~~~^
+        queue,
+        ^^^^^^
+    ...<2 lines>...
+        recorded_at=recorded_at,
+        ^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 243, in persist
+    return queue.record_canonical_result(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        fence,
+        ^^^^^^
+        result,
+        ^^^^^^^
+        recorded_at=recorded_at,
+        ^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 1406, in intercept
+    self.assertLess(monotonic(), deadline)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 3531152.186515291 not less than 3531152.183710083
+
+======================================================================
+FAIL: test_lifecycle_withdrawal_wins_replacement_and_losing_apply_preserves_beads (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_withdrawal_wins_replacement_and_losing_apply_preserves_beads)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 1451, in test_lifecycle_withdrawal_wins_replacement_and_losing_apply_preserves_beads
+    self.replacement_race(False)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 1420, in replacement_race
+    self.run_relations(
+    ~~~~~~~~~~~~~~~~~~^
+        expect="succeeded" if replacement_wins else "failed_terminal"
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "<copied-tests>/test_relation_assessment.py", line 434, in run_relations
+    receipt = asyncio.run(self.relation_worker().run_once())
+  File "<user-home>/.local/share/uv/python/cpython-3.13.5-macos-aarch64-none/lib/python3.13/asyncio/runners.py", line 195, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "<user-home>/.local/share/uv/python/cpython-3.13.5-macos-aarch64-none/lib/python3.13/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "<user-home>/.local/share/uv/python/cpython-3.13.5-macos-aarch64-none/lib/python3.13/asyncio/base_events.py", line 725, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 606, in run_once
+    return cycle.result()
+           ~~~~~~~~~~~~^^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 649, in _owned_cycle
+    receipt = await self._run_once()
+              ^^^^^^^^^^^^^^^^^^^^^^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 1150, in _run_once
+    raise persist_outcome.error
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 453, in capture
+    return _DatabaseCallOutcome(value=operation())
+                                      ~~~~~~~~~^^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 1115, in <lambda>
+    lambda: self._persist_result(
+            ~~~~~~~~~~~~~~~~~~~~^
+        claimed,
+        ^^^^^^^^
+    ...<2 lines>...
+        recorded_at=datetime.now(UTC),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 1853, in _persist_result
+    return self._transaction(operation), True
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 1953, in _transaction
+    return operation(PostgresSemanticTaskQueue(connection), context)
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 1837, in operation
+    return sink.persist(
+           ~~~~~~~~~~~~^
+        queue,
+        ^^^^^^
+    ...<2 lines>...
+        recorded_at=recorded_at,
+        ^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 243, in persist
+    return queue.record_canonical_result(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        fence,
+        ^^^^^^
+        result,
+        ^^^^^^^
+        recorded_at=recorded_at,
+        ^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 1409, in intercept
+    self.assertIsInstance(
+    ~~~~~~~~~~~~~~~~~~~~~^
+        futures[0].result(),
+        ^^^^^^^^^^^^^^^^^^^^
+        AssessedRelationEventReceipt,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        futures[0].result(),
+        ^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: AssessedRelationEventRefusal(contract_version=1, outcome='refused', error='budget_exhausted') is not an instance of <class 'memoriesql.application.assessed_relation_lifecycle.AssessedRelationEventReceipt'> : contract_version=1 outcome='refused' error='budget_exhausted'
+
+----------------------------------------------------------------------
+Ran 2 tests in 14.627s
+
+FAILED (failures=2)
+
+===== focused-20.log =====
+test_lifecycle_replacement_wins_concurrent_withdrawal (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_replacement_wins_concurrent_withdrawal) ... unknown PostgreSQL timezone: 'Etc/UTC'; will use UTC
+FAIL
+
+======================================================================
+FAIL: test_lifecycle_replacement_wins_concurrent_withdrawal (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_replacement_wins_concurrent_withdrawal)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 1447, in test_lifecycle_replacement_wins_concurrent_withdrawal
+    self.replacement_race(True)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 1421, in replacement_race
+    self.run_relations(
+    ~~~~~~~~~~~~~~~~~~^
+        expect="succeeded" if replacement_wins else "failed_terminal"
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "<copied-tests>/test_relation_assessment.py", line 434, in run_relations
+    receipt = asyncio.run(self.relation_worker().run_once())
+  File "<user-home>/.local/share/uv/python/cpython-3.13.5-macos-aarch64-none/lib/python3.13/asyncio/runners.py", line 195, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "<user-home>/.local/share/uv/python/cpython-3.13.5-macos-aarch64-none/lib/python3.13/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "<user-home>/.local/share/uv/python/cpython-3.13.5-macos-aarch64-none/lib/python3.13/asyncio/base_events.py", line 725, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 606, in run_once
+    return cycle.result()
+           ~~~~~~~~~~~~^^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 649, in _owned_cycle
+    receipt = await self._run_once()
+              ^^^^^^^^^^^^^^^^^^^^^^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 1150, in _run_once
+    raise persist_outcome.error
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 453, in capture
+    return _DatabaseCallOutcome(value=operation())
+                                      ~~~~~~~~~^^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 1115, in <lambda>
+    lambda: self._persist_result(
+            ~~~~~~~~~~~~~~~~~~~~^
+        claimed,
+        ^^^^^^^^
+    ...<2 lines>...
+        recorded_at=datetime.now(UTC),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 1853, in _persist_result
+    return self._transaction(operation), True
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 1953, in _transaction
+    return operation(PostgresSemanticTaskQueue(connection), context)
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 1837, in operation
+    return sink.persist(
+           ~~~~~~~~~~~~^
+        queue,
+        ^^^^^^
+    ...<2 lines>...
+        recorded_at=recorded_at,
+        ^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 243, in persist
+    return queue.record_canonical_result(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        fence,
+        ^^^^^^
+        result,
+        ^^^^^^^
+        recorded_at=recorded_at,
+        ^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 1406, in intercept
+    self.assertLess(monotonic(), deadline)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 3531215.149945333 not less than 3531215.14842975
+
+----------------------------------------------------------------------
+Ran 1 test in 7.259s
+
+FAILED (failures=1)
+
+===== focused-21.log =====
+test_lifecycle_replacement_wins_concurrent_withdrawal (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_replacement_wins_concurrent_withdrawal) ... unknown PostgreSQL timezone: 'Etc/UTC'; will use UTC
+FAIL
+
+======================================================================
+FAIL: test_lifecycle_replacement_wins_concurrent_withdrawal (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_replacement_wins_concurrent_withdrawal)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 1447, in test_lifecycle_replacement_wins_concurrent_withdrawal
+    self.replacement_race(True)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 1421, in replacement_race
+    self.run_relations(
+    ~~~~~~~~~~~~~~~~~~^
+        expect="succeeded" if replacement_wins else "failed_terminal"
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "<copied-tests>/test_relation_assessment.py", line 434, in run_relations
+    receipt = asyncio.run(self.relation_worker().run_once())
+  File "<user-home>/.local/share/uv/python/cpython-3.13.5-macos-aarch64-none/lib/python3.13/asyncio/runners.py", line 195, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "<user-home>/.local/share/uv/python/cpython-3.13.5-macos-aarch64-none/lib/python3.13/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "<user-home>/.local/share/uv/python/cpython-3.13.5-macos-aarch64-none/lib/python3.13/asyncio/base_events.py", line 725, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 606, in run_once
+    return cycle.result()
+           ~~~~~~~~~~~~^^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 649, in _owned_cycle
+    receipt = await self._run_once()
+              ^^^^^^^^^^^^^^^^^^^^^^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 1150, in _run_once
+    raise persist_outcome.error
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 453, in capture
+    return _DatabaseCallOutcome(value=operation())
+                                      ~~~~~~~~~^^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 1115, in <lambda>
+    lambda: self._persist_result(
+            ~~~~~~~~~~~~~~~~~~~~^
+        claimed,
+        ^^^^^^^^
+    ...<2 lines>...
+        recorded_at=datetime.now(UTC),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 1853, in _persist_result
+    return self._transaction(operation), True
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 1953, in _transaction
+    return operation(PostgresSemanticTaskQueue(connection), context)
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 1837, in operation
+    return sink.persist(
+           ~~~~~~~~~~~~^
+        queue,
+        ^^^^^^
+    ...<2 lines>...
+        recorded_at=recorded_at,
+        ^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 243, in persist
+    return queue.record_canonical_result(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        fence,
+        ^^^^^^
+        result,
+        ^^^^^^^
+        recorded_at=recorded_at,
+        ^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 1406, in intercept
+    self.assertLess(monotonic(), deadline,queue._connection.execute("SELECT pid,wait_event_type,wait_event,left(query,160) FROM pg_stat_activity WHERE datname=current_database()").fetchall())
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 3531291.709908625 not less than 3531291.701833875 : [(7490, None, None, '<insufficient privilege>'), (7416, None, None, '<insufficient privilege>')]
+
+----------------------------------------------------------------------
+Ran 1 test in 7.368s
+
+FAILED (failures=1)
+
+===== focused-22.log =====
+test_lifecycle_replacement_wins_concurrent_withdrawal (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_replacement_wins_concurrent_withdrawal) ... unknown PostgreSQL timezone: 'Etc/UTC'; will use UTC
+FAIL
+
+======================================================================
+FAIL: test_lifecycle_replacement_wins_concurrent_withdrawal (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_replacement_wins_concurrent_withdrawal)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 1445, in test_lifecycle_replacement_wins_concurrent_withdrawal
+    self.replacement_race(True)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 1419, in replacement_race
+    self.run_relations(
+    ~~~~~~~~~~~~~~~~~~^
+        expect="succeeded" if replacement_wins else "failed_terminal"
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "<copied-tests>/test_relation_assessment.py", line 434, in run_relations
+    receipt = asyncio.run(self.relation_worker().run_once())
+  File "<user-home>/.local/share/uv/python/cpython-3.13.5-macos-aarch64-none/lib/python3.13/asyncio/runners.py", line 195, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "<user-home>/.local/share/uv/python/cpython-3.13.5-macos-aarch64-none/lib/python3.13/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "<user-home>/.local/share/uv/python/cpython-3.13.5-macos-aarch64-none/lib/python3.13/asyncio/base_events.py", line 725, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 606, in run_once
+    return cycle.result()
+           ~~~~~~~~~~~~^^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 649, in _owned_cycle
+    receipt = await self._run_once()
+              ^^^^^^^^^^^^^^^^^^^^^^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 1150, in _run_once
+    raise persist_outcome.error
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 453, in capture
+    return _DatabaseCallOutcome(value=operation())
+                                      ~~~~~~~~~^^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 1115, in <lambda>
+    lambda: self._persist_result(
+            ~~~~~~~~~~~~~~~~~~~~^
+        claimed,
+        ^^^^^^^^
+    ...<2 lines>...
+        recorded_at=datetime.now(UTC),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 1853, in _persist_result
+    return self._transaction(operation), True
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 1953, in _transaction
+    return operation(PostgresSemanticTaskQueue(connection), context)
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 1837, in operation
+    return sink.persist(
+           ~~~~~~~~~~~~^
+        queue,
+        ^^^^^^
+    ...<2 lines>...
+        recorded_at=recorded_at,
+        ^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/integrated_semantic_worker.py", line 243, in persist
+    return queue.record_canonical_result(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        fence,
+        ^^^^^^
+        result,
+        ^^^^^^^
+        recorded_at=recorded_at,
+        ^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 1404, in intercept
+    self.assertLess(monotonic(), deadline,self.db.execute("SELECT pid,wait_event_type,wait_event,left(query,160) FROM pg_stat_activity WHERE datname=current_database()").fetchall())
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 3531351.472821333 not less than 3531351.467808291 : [(7496, None, None, 'SELECT pid,wait_event_type,wait_event,left(query,160) FROM pg_stat_activity WHERE datname=current_database()'), (7569, 'Client', 'ClientRead', 'SELECT pg_advisory_xact_lock_shared(hashtextextended($1,0)),pg_advisory_xact_lock(hashtextextended($2,0))'), (7570, 'Lock', 'transactionid', '\n            SELECT\n                tenant_id,\n                workspace_id,\n                principal_id,\n                principal_kind,\n                user_')]
+
+----------------------------------------------------------------------
+Ran 1 test in 7.277s
+
+FAILED (failures=1)
+
+===== focused-24.log =====
+Traceback (most recent call last):
+  File "<copied-tests>/run.py", line 4, in <module>
+    from run_installed_acceptance import install_guard
+ModuleNotFoundError: No module named 'run_installed_acceptance'
+
+===== future-unit-before-fix-2.log =====
+test_lifecycle_true_no_observer_fallback_and_future_unit_refusal (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_true_no_observer_fallback_and_future_unit_refusal) ... unknown PostgreSQL timezone: 'Etc/UTC'; will use UTC
+FAIL
+
+======================================================================
+FAIL: test_lifecycle_true_no_observer_fallback_and_future_unit_refusal (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_true_no_observer_fallback_and_future_unit_refusal)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 1610, in test_lifecycle_true_no_observer_fallback_and_future_unit_refusal
+    with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: InsufficientPrivilege not raised
+
+----------------------------------------------------------------------
+Ran 1 test in 1.183s
+
+FAILED (failures=1)
+
+===== future-unit-before-fix.log =====
+test_lifecycle_true_no_observer_fallback_and_future_unit_refusal (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_true_no_observer_fallback_and_future_unit_refusal) ... ERROR
+
+======================================================================
+ERROR: test_lifecycle_true_no_observer_fallback_and_future_unit_refusal (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_true_no_observer_fallback_and_future_unit_refusal)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 1566, in test_lifecycle_true_no_observer_fallback_and_future_unit_refusal
+    self.accept(command)
+    ~~~~~~~~~~~^^^^^^^^^
+  File "<copied-tests>/test_postgres_runtime.py", line 257, in accept
+    return PostgresCanonicalTransactions(self.db).accept_source_event(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        command, recorded_at=self.now
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/postgres/canonical_transactions.py", line 36, in accept_source_event
+    return self._accept_source_event(command, recorded_at=recorded_at)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<installed-env>/lib/python3.13/site-packages/memoriesql/infrastructure/postgres/canonical_transactions.py", line 52, in _accept_source_event
+    row = self._connection.execute(
+          ~~~~~~~~~~~~~~~~~~~~~~~~^
+        """
+        ^^^
+    ...<6 lines>...
+        ),
+        ^^
+    ).fetchone()
+    ^
+  File "<installed-env>/lib/python3.13/site-packages/psycopg/connection.py", line 300, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.CheckViolation: subordinate source unit 75852cde-a312-4f6e-9585-f57993556080 requires a parent
+CONTEXT:  PL/pgSQL function require_open_source_unit_receipt() line 10 at RAISE
+SQL statement "INSERT INTO memoriesql.source_units (
+                tenant_id, workspace_id, access_scope_id, source_unit_id,
+                event_id, parent_unit_id, unit_kind, is_observation,
+                external_unit_id, unit_ordinal, unit_source_occurred_at,
+                unit_source_occurred_end_at, unit_time_precision,
+                time_start_seconds, time_end_seconds, content_text,
+                content_hash, structure, hydration_ref, schema_version,
+                created_at, processing_receipt_id
+            ) VALUES (
+                command_tenant_id, command_workspace_id,
+                command_access_scope_id,
+                (unit_item ->> 'source_unit_id')::uuid, command_event_id,
+                NULLIF(unit_item ->> 'parent_unit_id', '')::uuid,
+                unit_item ->> 'unit_kind',
+                (unit_item ->> 'is_observation')::boolean,
+                unit_item ->> 'external_unit_id',
+                (unit_item ->> 'unit_ordinal')::bigint,
+                NULLIF(unit_item ->> 'unit_source_occurred_at', '')::timestamptz,
+                NULLIF(unit_item ->> 'unit_source_occurred_end_at', '')::timestamptz,
+                NULLIF(unit_item ->> 'unit_time_precision', ''),
+                NULLIF(unit_item ->> 'time_start_seconds', '')::numeric,
+                NULLIF(unit_item ->> 'time_end_seconds', '')::numeric,
+                NULLIF(unit_item ->> 'content_text', ''),
+                unit_item ->> 'content_hash',
+                COALESCE((SELECT jsonb_object_agg(value ->> 'key', value ->> 'value')
+                    FROM jsonb_array_elements(unit_item -> 'structure')
+                        AS attribute(value)), '{}'::jsonb),
+                NULLIF(unit_item ->> 'hydration_ref', ''),
+                (unit_item ->> 'schema_version')::integer,
+                database_now, new_receipt_id
+            )"
+PL/pgSQL function accept_source_event(jsonb,timestamp with time zone) line 434 at SQL statement
+
+----------------------------------------------------------------------
+Ran 1 test in 1.181s
+
+FAILED (errors=1)
+
+===== install-11.log =====
+error: failed to open file `<user-home>/.cache/uv/sdists-v9/.git`: Operation not permitted (os error 1)
+
+===== restart-final-313-wheel-prepare.log =====
+Traceback (most recent call last):
+  File "/private/tmp/pr03-proof/final-313-wheel/prove_assessed_relation_restart.py", line 136, in <module>
+    main()
+    ~~~~^^
+  File "/private/tmp/pr03-proof/final-313-wheel/prove_assessed_relation_restart.py", line 31, in main
+    fixture.setUp()
+    ~~~~~~~~~~~~~^^
+  File "/private/tmp/pr03-proof/final-313-wheel/test_assessed_relation_lifecycle.py", line 35, in setUp
+    migrate(self.db, expected_current_version=29, target_version=30)
+    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/pr03-proof/final-313-wheel/test_postgres_runtime.py", line 85, in migrate
+    return _released_migrate(
+        connection,
+        expected_current_version=expected_current_version,
+        target_version=target_version,
+    )
+  File "/private/tmp/pr03-proof/final-313-wheel/venv/lib/python3.13/site-packages/memoriesql/infrastructure/postgres/migration_runner.py", line 232, in migrate
+    cursor.execute(migration.sql, prepare=False)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/pr03-proof/final-313-wheel/venv/lib/python3.13/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.UndefinedColumn: column r.authoring_bead_version_id does not exist
+LINE 61: ...bead_id=r.authoring_bead_id AND v.bead_version_id=r.authorin...
+                                                              ^
+
+===== review-regressions-before-fix.log =====
+test_lifecycle_legacy_authored_mixed_cycle_reservation_and_release (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_legacy_authored_mixed_cycle_reservation_and_release) ... unknown PostgreSQL timezone: 'Etc/UTC'; will use UTC
+ok
+test_lifecycle_legacy_permitted_revision_cannot_close_forbidden_pin (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_legacy_permitted_revision_cannot_close_forbidden_pin) ... ok
+test_lifecycle_separate_evidence_needs_query_raw_read_without_maintain (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_separate_evidence_needs_query_raw_read_without_maintain) ... FAIL
+
+======================================================================
+FAIL: test_lifecycle_separate_evidence_needs_query_raw_read_without_maintain (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_separate_evidence_needs_query_raw_read_without_maintain)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 1765, in test_lifecycle_separate_evidence_needs_query_raw_read_without_maintain
+    self.assertIsInstance(receipt, AssessedRelationEventReceipt, receipt)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: AssessedRelationEventRefusal(contract_version=1, outcome='refused', error='unavailable') is not an instance of <class 'memoriesql.application.assessed_relation_lifecycle.AssessedRelationEventReceipt'> : contract_version=1 outcome='refused' error='unavailable'
+
+----------------------------------------------------------------------
+Ran 3 tests in 23.070s
+
+FAILED (failures=1)
+
+===== root-bound-01.log =====
+test_lifecycle_actual_128_and_129_bead_root_bound (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_actual_128_and_129_bead_root_bound) ... unknown PostgreSQL timezone: 'Etc/UTC'; will use UTC
+ERROR
+
+======================================================================
+ERROR: test_lifecycle_actual_128_and_129_bead_root_bound (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_actual_128_and_129_bead_root_bound)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<copied-tests>/test_assessed_relation_lifecycle.py", line 758, in test_lifecycle_actual_128_and_129_bead_root_bound
+        evidence=(),
+                ^^^^
+    ...<2 lines>...
+    )
+    ^
+  File "<copied-tests>/test_logical_unit_materialization.py", line 104, in row
+    row = self.db.execute(query, params).fetchone()
+          ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "<installed-env>/lib/python3.13/site-packages/psycopg/connection.py", line 300, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.InsufficientPrivilege: permission denied for function qualified_bead_roots_v1
+
+----------------------------------------------------------------------
+Ran 1 test in 185.960s
+
+FAILED (errors=1)
+
+===== type-01.log =====
+src/memoriesql/infrastructure/postgres/assessed_relation_lifecycle.py:69: error: Need type annotation for "result"  [var-annotated]
+src/memoriesql/infrastructure/postgres/assessed_relation_lifecycle.py:70: error: Returning Any from function declared to return "AssessedRelationEventReceipt | AssessedRelationEventRefusal"  [no-any-return]
+Found 2 errors in 1 file (checked 3 source files)
+
+===== type-02.log =====
+src/memoriesql/infrastructure/postgres/relation_lifecycle.py:131: error: Incompatible types in assignment (expression has type "Any | None", variable has type "dict[str, Any]")  [assignment]
+src/memoriesql/infrastructure/postgres/relation_lifecycle.py:134: error: Invalid index type "int" for "dict[str, Any]"; expected type "str"  [index]
+src/memoriesql/infrastructure/postgres/relation_lifecycle.py:136: error: Invalid index type "int" for "dict[str, Any]"; expected type "str"  [index]
+src/memoriesql/infrastructure/postgres/relation_lifecycle.py:138: error: Invalid index type "int" for "dict[str, Any]"; expected type "str"  [index]
+src/memoriesql/infrastructure/postgres/relation_assessment.py:120: error: Incompatible types in assignment (expression has type "Any | None", variable has type "dict[str, Any]")  [assignment]
+src/memoriesql/infrastructure/postgres/relation_assessment.py:123: error: Invalid index type "int" for "dict[str, Any]"; expected type "str"  [index]
+src/memoriesql/infrastructure/postgres/relation_assessment.py:125: error: Invalid index type "int" for "dict[str, Any]"; expected type "str"  [index]
+src/memoriesql/infrastructure/postgres/relation_assessment.py:127: error: Invalid index type "int" for "dict[str, Any]"; expected type "str"  [index]
+tests/runtime/test_assessed_relation_lifecycle.py:53: error: Value of type "tuple[Any, ...] | None" is not indexable  [index]
+tests/runtime/test_assessed_relation_lifecycle.py:58: error: Signature of "command" incompatible with supertype "tests.runtime.test_postgres_runtime.PostgresRuntime"  [override]
+tests/runtime/test_assessed_relation_lifecycle.py:58: note:      Superclass:
+tests/runtime/test_assessed_relation_lifecycle.py:58: note:          def command(self) -> AcceptSourceEventCommand
+tests/runtime/test_assessed_relation_lifecycle.py:58: note:      Subclass:
+tests/runtime/test_assessed_relation_lifecycle.py:58: note:          def command(self, bead: UUID, relation: UUID, action: str, key: str, **extra: Any) -> RecordAssessedRelationEvent
+tests/runtime/test_assessed_relation_lifecycle.py:71: error: Value of type "tuple[Any, ...] | None" is not indexable  [index]
+tests/runtime/test_assessed_relation_lifecycle.py:73: error: Value of type "tuple[Any, ...] | None" is not indexable  [index]
+tests/runtime/test_assessed_relation_lifecycle.py:78: error: Item "AssessedRelationEventRefusal" of "AssessedRelationEventReceipt | AssessedRelationEventRefusal" has no attribute "state"  [union-attr]
+tests/runtime/test_assessed_relation_lifecycle.py:79: error: Item "AssessedRelationEventReceipt" of "AssessedRelationEventReceipt | AssessedRelationEventRefusal" has no attribute "error"  [union-attr]
+tests/runtime/test_assessed_relation_lifecycle.py:80: error: Item "AssessedRelationEventRefusal" of "AssessedRelationEventReceipt | AssessedRelationEventRefusal" has no attribute "relation_event_id"  [union-attr]
+tests/runtime/test_assessed_relation_lifecycle.py:85: error: Item "AssessedRelationEventRefusal" of "AssessedRelationEventReceipt | AssessedRelationEventRefusal" has no attribute "state"  [union-attr]
+tests/runtime/test_assessed_relation_lifecycle.py:92: error: Item "AssessedRelationEventRefusal" of "AssessedRelationEventReceipt | AssessedRelationEventRefusal" has no attribute "replayed"  [union-attr]
+tests/runtime/test_assessed_relation_lifecycle.py:93: error: Item "AssessedRelationEventRefusal" of "AssessedRelationEventReceipt | AssessedRelationEventRefusal" has no attribute "relation_event_id"  [union-attr]
+tests/runtime/test_assessed_relation_lifecycle.py:96: error: Item "AssessedRelationEventReceipt" of "AssessedRelationEventReceipt | AssessedRelationEventRefusal" has no attribute "error"  [union-attr]
+tests/runtime/test_assessed_relation_lifecycle.py:98: error: Value of type "tuple[Any, ...] | None" is not indexable  [index]
+tests/runtime/test_assessed_relation_lifecycle.py:99: error: Value of type "tuple[Any, ...] | None" is not indexable  [index]
+tests/runtime/test_assessed_relation_lifecycle.py:120: error: Item "AssessedRelationEventRefusal" of "AssessedRelationEventReceipt | AssessedRelationEventRefusal" has no attribute "state"  [union-attr]
+tests/runtime/test_assessed_relation_lifecycle.py:122: error: Item "AssessedRelationEventRefusal" of "AssessedRelationEventReceipt | AssessedRelationEventRefusal" has no attribute "state"  [union-attr]
+tests/runtime/test_assessed_relation_lifecycle.py:126: error: Item "AssessedRelationEventRefusal" of "AssessedRelationEventReceipt | AssessedRelationEventRefusal" has no attribute "state"  [union-attr]
+tests/runtime/test_assessed_relation_lifecycle.py:141: error: Item "AssessedRelationEventReceipt" of "AssessedRelationEventReceipt | AssessedRelationEventRefusal" has no attribute "error"  [union-attr]
+tests/runtime/test_assessed_relation_lifecycle.py:146: error: Value of type "tuple[Any, ...] | None" is not indexable  [index]
+tests/runtime/test_assessed_relation_lifecycle.py:146: error: No overload variant of "__or__" of "dict" matches argument type "object"  [operator]
+tests/runtime/test_assessed_relation_lifecycle.py:146: note: Possible overload variants:
+tests/runtime/test_assessed_relation_lifecycle.py:146: note:     def __or__(self, dict[str, Any], /) -> dict[str, Any]
+tests/runtime/test_assessed_relation_lifecycle.py:146: note:     def [_T1, _T2] __or__(self, dict[_T1, _T2], /) -> dict[str | _T1, Any | _T2]
+tests/runtime/test_assessed_relation_lifecycle.py:148: error: Value of type "tuple[Any, ...] | None" is not indexable  [index]
+tests/runtime/test_assessed_relation_lifecycle.py:153: error: Value of type "tuple[Any, ...] | None" is not indexable  [index]
+Found 29 errors in 3 files (checked 134 source files)
+
+===== type-03.log =====
+tests/unit/test_assessed_relation_lifecycle_contract.py:51: error: Unsupported operand types for * ("object" and "int")  [operator]
+tests/unit/test_assessed_relation_lifecycle_contract.py:54: error: No overload variant of "__or__" of "dict" matches argument type "object"  [operator]
+tests/unit/test_assessed_relation_lifecycle_contract.py:54: note: Possible overload variants:
+tests/unit/test_assessed_relation_lifecycle_contract.py:54: note:     def __or__(self, dict[str, object], /) -> dict[str, object]
+tests/unit/test_assessed_relation_lifecycle_contract.py:54: note:     def [_T1, _T2] __or__(self, dict[_T1, _T2], /) -> dict[str | _T1, object]
+tests/runtime/test_assessed_relation_lifecycle.py:467: error: Returning Any from function declared to return "UUID"  [no-any-return]
+Found 3 errors in 2 files (checked 135 source files)
+
+===== type-11.log =====
+tests/runtime/test_assessed_relation_lifecycle.py:992: error: Item "AssessedRelationEventRefusal" of "AssessedRelationEventReceipt | AssessedRelationEventRefusal" has no attribute "state"  [union-attr]
+scripts/prove_assessed_relation_restart.py:106: error: Value of type "tuple[Any, ...] | None" is not indexable  [index]
+scripts/prove_assessed_relation_restart.py:112: error: Value of type "tuple[Any, ...] | None" is not indexable  [index]
+scripts/prove_assessed_relation_restart.py:118: error: Value of type "tuple[Any, ...] | None" is not indexable  [index]
+Found 4 errors in 2 files (checked 136 source files)
+
+===== type-final-2.log =====
+tests/runtime/test_assessed_relation_lifecycle.py:1571: error: Value of type "Any | None" is not indexable  [index]
+tests/runtime/test_assessed_relation_lifecycle.py:1581: error: Item "AssessedRelationEventRefusal" of "AssessedRelationEventReceipt | AssessedRelationEventRefusal" has no attribute "state"  [union-attr]
+tests/runtime/test_assessed_relation_lifecycle.py:1582: error: Value of type "Any | None" is not indexable  [index]
+Found 3 errors in 1 file (checked 136 source files)
+
+===== unit-01.log =====
+test_catalog_wrapper_metadata_comes_from_registry (tests.contract.test_export_denial.ExportDenialTests.test_catalog_wrapper_metadata_comes_from_registry) ... ok
+test_generated_catalog_directory_denies_unregistered_output (tests.contract.test_export_denial.ExportDenialTests.test_generated_catalog_directory_denies_unregistered_output) ... ok
+test_record_directory_denies_unregistered_files_and_symlinks (tests.contract.test_export_denial.ExportDenialTests.test_record_directory_denies_unregistered_files_and_symlinks) ... ok
+test_registry_denies_invalid_catalog_declarations (tests.contract.test_export_denial.ExportDenialTests.test_registry_denies_invalid_catalog_declarations) ... ok
+test_unregistered_empty_catalog_is_denied (tests.contract.test_export_denial.ExportDenialTests.test_unregistered_empty_catalog_is_denied) ... ok
+test_boundary_scan_is_clean (tests.contract.test_public_bootstrap.PublicBootstrapTests.test_boundary_scan_is_clean) ... ERROR
+test_candidate_ci_matches_committed_inventory (tests.contract.test_public_bootstrap.PublicBootstrapTests.test_candidate_ci_matches_committed_inventory) ... ok
+test_ci_verifies_only_current_release_and_supported_interpreters (tests.contract.test_public_bootstrap.PublicBootstrapTests.test_ci_verifies_only_current_release_and_supported_interpreters) ... ok
+test_generated_catalogs_have_no_drift (tests.contract.test_public_bootstrap.PublicBootstrapTests.test_generated_catalogs_have_no_drift) ... ok
+test_metadata_is_exact_pre_alpha_public_preview (tests.contract.test_public_bootstrap.PublicBootstrapTests.test_metadata_is_exact_pre_alpha_public_preview) ... ok
+test_public_docs_state_scope_and_compatibility (tests.contract.test_public_bootstrap.PublicBootstrapTests.test_public_docs_state_scope_and_compatibility) ... ok
+test_publisher_has_narrow_owner_approved_controls (tests.contract.test_public_bootstrap.PublicBootstrapTests.test_publisher_has_narrow_owner_approved_controls) ... ok
+test_registry_is_explicit_complete_and_default_deny (tests.contract.test_public_bootstrap.PublicBootstrapTests.test_registry_is_explicit_complete_and_default_deny) ... FAIL
+test_source_version_fallback_matches_numeric_release (tests.contract.test_public_bootstrap.PublicBootstrapTests.test_source_version_fallback_matches_numeric_release) ... ok
+test_closed_required_fields_and_canonical_request (tests.unit.test_assessed_relation_lifecycle_contract.Contract.test_closed_required_fields_and_canonical_request) ... ok
+test_apply_command_binds_the_exact_canonical_payload (tests.unit.test_authored_relations_contract.AuthoredRelationsContract.test_apply_command_binds_the_exact_canonical_payload) ... ok
+test_claims_and_updates_bind_authored_statements_only (tests.unit.test_authored_relations_contract.AuthoredRelationsContract.test_claims_and_updates_bind_authored_statements_only) ... ok
+test_confidence_is_a_two_decimal_diagnostic (tests.unit.test_authored_relations_contract.AuthoredRelationsContract.test_confidence_is_a_two_decimal_diagnostic) ... ok
+test_coverage_requires_exactly_one_assessment_per_related_candidate (tests.unit.test_authored_relations_contract.AuthoredRelationsContract.test_coverage_requires_exactly_one_assessment_per_related_candidate) ... ok
+test_empty_bundle_is_valid_and_optional (tests.unit.test_authored_relations_contract.AuthoredRelationsContract.test_empty_bundle_is_valid_and_optional) ... ok
+test_lifecycle_commands_name_exactly_their_related_records (tests.unit.test_authored_relations_contract.AuthoredRelationsContract.test_lifecycle_commands_name_exactly_their_related_records) ... ok
+test_sql_pins_match_the_revision_six_contract (tests.unit.test_authored_relations_contract.AuthoredRelationsContract.test_sql_pins_match_the_revision_six_contract) ... ok
+test_whole_output_is_bounded_at_32768_canonical_bytes (tests.unit.test_authored_relations_contract.AuthoredRelationsContract.test_whole_output_is_bounded_at_32768_canonical_bytes) ... ok
+test_catalog_read_has_no_external_discovery_or_network_path (tests.unit.test_contract_catalog_preview.ContractCatalogPreviewTests.test_catalog_read_has_no_external_discovery_or_network_path) ... ok
+test_cli_emits_machine_readable_inventory_and_exact_entry (tests.unit.test_contract_catalog_preview.ContractCatalogPreviewTests.test_cli_emits_machine_readable_inventory_and_exact_entry) ... ok
+test_exact_lookups_fail_closed (tests.unit.test_contract_catalog_preview.ContractCatalogPreviewTests.test_exact_lookups_fail_closed) ... ok
+test_filtering_preserves_generated_status (tests.unit.test_contract_catalog_preview.ContractCatalogPreviewTests.test_filtering_preserves_generated_status) ... ok
+test_fixed_catalog_inventory_is_useful_and_truthful (tests.unit.test_contract_catalog_preview.ContractCatalogPreviewTests.test_fixed_catalog_inventory_is_useful_and_truthful) ... ok
+test_explicit_stream_rejects_invalid_entries (tests.unit.test_migration_runner.MigrationStreamTests.test_explicit_stream_rejects_invalid_entries) ... ok
+test_history_rejects_changed_name_hash_gap_and_ahead (tests.unit.test_migration_runner.MigrationStreamTests.test_history_rejects_changed_name_hash_gap_and_ahead) ... ok
+test_missing_package_never_uses_working_directory (tests.unit.test_migration_runner.MigrationStreamTests.test_missing_package_never_uses_working_directory) ... ok
+test_a_reconsideration_carries_only_unaccepted_proposals (tests.unit.test_relation_assessment_contract.RelationAssessmentContract.test_a_reconsideration_carries_only_unaccepted_proposals) ... ok
+test_activation_names_distinct_beads_and_one_revision_per_key (tests.unit.test_relation_assessment_contract.RelationAssessmentContract.test_activation_names_distinct_beads_and_one_revision_per_key) ... ok
+test_agreement_is_on_the_exact_assertion_and_direction (tests.unit.test_relation_assessment_contract.RelationAssessmentContract.test_agreement_is_on_the_exact_assertion_and_direction) ... ok
+test_an_unavailable_read_discloses_nothing (tests.unit.test_relation_assessment_contract.RelationAssessmentContract.test_an_unavailable_read_discloses_nothing) ... ok
+test_apply_command_binds_the_exact_canonical_payload (tests.unit.test_relation_assessment_contract.RelationAssessmentContract.test_apply_command_binds_the_exact_canonical_payload) ... ok
+test_every_pinned_pair_is_disposed_and_related_needs_a_proposal (tests.unit.test_relation_assessment_contract.RelationAssessmentContract.test_every_pinned_pair_is_disposed_and_related_needs_a_proposal) ... ok
+test_every_proposal_is_judged_once_by_a_distinct_run (tests.unit.test_relation_assessment_contract.RelationAssessmentContract.test_every_proposal_is_judged_once_by_a_distinct_run) ... ok
+test_proposals_bind_distinct_existing_statements_with_attribution (tests.unit.test_relation_assessment_contract.RelationAssessmentContract.test_proposals_bind_distinct_existing_statements_with_attribution) ... ok
+test_sql_pins_match_the_relation_assessment_contract (tests.unit.test_relation_assessment_contract.RelationAssessmentContract.test_sql_pins_match_the_relation_assessment_contract) ... ok
+test_attribution_names_the_pinned_upstream_without_links (tests.unit.test_relation_profile.RelationProfileTests.test_attribution_names_the_pinned_upstream_without_links) ... ok
+test_family_never_reaches_the_authoring_contract (tests.unit.test_relation_profile.RelationProfileTests.test_family_never_reaches_the_authoring_contract) ... ok
+test_profile_maps_exactly_the_eleven_built_in_predicates (tests.unit.test_relation_profile.RelationProfileTests.test_profile_maps_exactly_the_eleven_built_in_predicates) ... ok
+test_accepts_successful_exact_head_ci (tests.unit.test_release_controls.ReleaseControlTests.test_accepts_successful_exact_head_ci) ... ok
+test_authored_sdist_bytes_are_checked_even_without_wheel_effect (tests.unit.test_release_controls.ReleaseControlTests.test_authored_sdist_bytes_are_checked_even_without_wheel_effect) ... ok
+test_candidate_identity (tests.unit.test_release_controls.ReleaseControlTests.test_candidate_identity) ... ok
+test_development_inventory_rejects_wrong_commit (tests.unit.test_release_controls.ReleaseControlTests.test_development_inventory_rejects_wrong_commit) ... ok
+test_development_receipt_cannot_authorize_release_artifacts (tests.unit.test_release_controls.ReleaseControlTests.test_development_receipt_cannot_authorize_release_artifacts) ... ok
+test_no_fallback_to_old_green_run (tests.unit.test_release_controls.ReleaseControlTests.test_no_fallback_to_old_green_run) ... ok
+test_only_current_version_is_eligible_even_with_matching_tag (tests.unit.test_release_controls.ReleaseControlTests.test_only_current_version_is_eligible_even_with_matching_tag) ... ok
+test_rejects_changed_or_duplicated_inventory_filenames (tests.unit.test_release_controls.ReleaseControlTests.test_rejects_changed_or_duplicated_inventory_filenames) ... ok
+test_rejects_missing_extra_tampered_and_linked_files (tests.unit.test_release_controls.ReleaseControlTests.test_rejects_missing_extra_tampered_and_linked_files) ... ok
+test_rejects_other_inventory_versions (tests.unit.test_release_controls.ReleaseControlTests.test_rejects_other_inventory_versions) ... ok
+test_rejects_wrong_ci_identity_and_missing_ci (tests.unit.test_release_controls.ReleaseControlTests.test_rejects_wrong_ci_identity_and_missing_ci) ... ok
+test_rejects_wrong_head_tag_and_version (tests.unit.test_release_controls.ReleaseControlTests.test_rejects_wrong_head_tag_and_version) ... ok
+test_verifies_exact_files_and_ignores_non_authoritative_ci_receipt (tests.unit.test_release_controls.ReleaseControlTests.test_verifies_exact_files_and_ignores_non_authoritative_ci_receipt) ... ok
+test_differing_references_are_rebound_and_reported (tests.unit.test_run_reference_stamping.StampStatementRunReferenceTests.test_differing_references_are_rebound_and_reported) ... ok
+test_matching_references_and_other_shapes_pass_through (tests.unit.test_run_reference_stamping.StampStatementRunReferenceTests.test_matching_references_and_other_shapes_pass_through) ... ok
+test_closure_denies_unlisted_imports_and_dependencies (tests.unit.test_runtime_export.RuntimeExport.test_closure_denies_unlisted_imports_and_dependencies) ... ok
+
+======================================================================
+ERROR: test_boundary_scan_is_clean (tests.contract.test_public_bootstrap.PublicBootstrapTests.test_boundary_scan_is_clean)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<source-checkout>/tests/contract/test_public_bootstrap.py", line 67, in test_boundary_scan_is_clean
+    result = verify()
+  File "<source-checkout>/scripts/verify_public_boundary.py", line 46, in verify
+    raise ValueError("historical migration byte drift")
+ValueError: historical migration byte drift
+
+======================================================================
+FAIL: test_registry_is_explicit_complete_and_default_deny (tests.contract.test_public_bootstrap.PublicBootstrapTests.test_registry_is_explicit_complete_and_default_deny)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<source-checkout>/tests/contract/test_public_bootstrap.py", line 48, in test_registry_is_explicit_complete_and_default_deny
+    self.assertEqual(len(records), 64)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+AssertionError: 65 != 64
+
+----------------------------------------------------------------------
+Ran 59 tests in 0.431s
+
+FAILED (failures=1, errors=1)
+
+===== unit-02.log =====
+test_catalog_wrapper_metadata_comes_from_registry (tests.contract.test_export_denial.ExportDenialTests.test_catalog_wrapper_metadata_comes_from_registry) ... ok
+test_generated_catalog_directory_denies_unregistered_output (tests.contract.test_export_denial.ExportDenialTests.test_generated_catalog_directory_denies_unregistered_output) ... ok
+test_record_directory_denies_unregistered_files_and_symlinks (tests.contract.test_export_denial.ExportDenialTests.test_record_directory_denies_unregistered_files_and_symlinks) ... ok
+test_registry_denies_invalid_catalog_declarations (tests.contract.test_export_denial.ExportDenialTests.test_registry_denies_invalid_catalog_declarations) ... ok
+test_unregistered_empty_catalog_is_denied (tests.contract.test_export_denial.ExportDenialTests.test_unregistered_empty_catalog_is_denied) ... ok
+test_boundary_scan_is_clean (tests.contract.test_public_bootstrap.PublicBootstrapTests.test_boundary_scan_is_clean) ... FAIL
+test_candidate_ci_matches_committed_inventory (tests.contract.test_public_bootstrap.PublicBootstrapTests.test_candidate_ci_matches_committed_inventory) ... ok
+test_ci_verifies_only_current_release_and_supported_interpreters (tests.contract.test_public_bootstrap.PublicBootstrapTests.test_ci_verifies_only_current_release_and_supported_interpreters) ... ok
+test_generated_catalogs_have_no_drift (tests.contract.test_public_bootstrap.PublicBootstrapTests.test_generated_catalogs_have_no_drift) ... ok
+test_metadata_is_exact_pre_alpha_public_preview (tests.contract.test_public_bootstrap.PublicBootstrapTests.test_metadata_is_exact_pre_alpha_public_preview) ... ok
+test_public_docs_state_scope_and_compatibility (tests.contract.test_public_bootstrap.PublicBootstrapTests.test_public_docs_state_scope_and_compatibility) ... ok
+test_publisher_has_narrow_owner_approved_controls (tests.contract.test_public_bootstrap.PublicBootstrapTests.test_publisher_has_narrow_owner_approved_controls) ... ok
+test_registry_is_explicit_complete_and_default_deny (tests.contract.test_public_bootstrap.PublicBootstrapTests.test_registry_is_explicit_complete_and_default_deny) ... FAIL
+test_source_version_fallback_matches_numeric_release (tests.contract.test_public_bootstrap.PublicBootstrapTests.test_source_version_fallback_matches_numeric_release) ... ok
+test_closed_required_fields_and_canonical_request (tests.unit.test_assessed_relation_lifecycle_contract.Contract.test_closed_required_fields_and_canonical_request) ... ok
+test_apply_command_binds_the_exact_canonical_payload (tests.unit.test_authored_relations_contract.AuthoredRelationsContract.test_apply_command_binds_the_exact_canonical_payload) ... ok
+test_claims_and_updates_bind_authored_statements_only (tests.unit.test_authored_relations_contract.AuthoredRelationsContract.test_claims_and_updates_bind_authored_statements_only) ... ok
+test_confidence_is_a_two_decimal_diagnostic (tests.unit.test_authored_relations_contract.AuthoredRelationsContract.test_confidence_is_a_two_decimal_diagnostic) ... ok
+test_coverage_requires_exactly_one_assessment_per_related_candidate (tests.unit.test_authored_relations_contract.AuthoredRelationsContract.test_coverage_requires_exactly_one_assessment_per_related_candidate) ... ok
+test_empty_bundle_is_valid_and_optional (tests.unit.test_authored_relations_contract.AuthoredRelationsContract.test_empty_bundle_is_valid_and_optional) ... ok
+test_lifecycle_commands_name_exactly_their_related_records (tests.unit.test_authored_relations_contract.AuthoredRelationsContract.test_lifecycle_commands_name_exactly_their_related_records) ... ok
+test_sql_pins_match_the_revision_six_contract (tests.unit.test_authored_relations_contract.AuthoredRelationsContract.test_sql_pins_match_the_revision_six_contract) ... ok
+test_whole_output_is_bounded_at_32768_canonical_bytes (tests.unit.test_authored_relations_contract.AuthoredRelationsContract.test_whole_output_is_bounded_at_32768_canonical_bytes) ... ok
+test_catalog_read_has_no_external_discovery_or_network_path (tests.unit.test_contract_catalog_preview.ContractCatalogPreviewTests.test_catalog_read_has_no_external_discovery_or_network_path) ... ok
+test_cli_emits_machine_readable_inventory_and_exact_entry (tests.unit.test_contract_catalog_preview.ContractCatalogPreviewTests.test_cli_emits_machine_readable_inventory_and_exact_entry) ... ok
+test_exact_lookups_fail_closed (tests.unit.test_contract_catalog_preview.ContractCatalogPreviewTests.test_exact_lookups_fail_closed) ... ok
+test_filtering_preserves_generated_status (tests.unit.test_contract_catalog_preview.ContractCatalogPreviewTests.test_filtering_preserves_generated_status) ... ok
+test_fixed_catalog_inventory_is_useful_and_truthful (tests.unit.test_contract_catalog_preview.ContractCatalogPreviewTests.test_fixed_catalog_inventory_is_useful_and_truthful) ... ok
+test_explicit_stream_rejects_invalid_entries (tests.unit.test_migration_runner.MigrationStreamTests.test_explicit_stream_rejects_invalid_entries) ... ok
+test_history_rejects_changed_name_hash_gap_and_ahead (tests.unit.test_migration_runner.MigrationStreamTests.test_history_rejects_changed_name_hash_gap_and_ahead) ... ok
+test_missing_package_never_uses_working_directory (tests.unit.test_migration_runner.MigrationStreamTests.test_missing_package_never_uses_working_directory) ... ok
+test_a_reconsideration_carries_only_unaccepted_proposals (tests.unit.test_relation_assessment_contract.RelationAssessmentContract.test_a_reconsideration_carries_only_unaccepted_proposals) ... ok
+test_activation_names_distinct_beads_and_one_revision_per_key (tests.unit.test_relation_assessment_contract.RelationAssessmentContract.test_activation_names_distinct_beads_and_one_revision_per_key) ... ok
+test_agreement_is_on_the_exact_assertion_and_direction (tests.unit.test_relation_assessment_contract.RelationAssessmentContract.test_agreement_is_on_the_exact_assertion_and_direction) ... ok
+test_an_unavailable_read_discloses_nothing (tests.unit.test_relation_assessment_contract.RelationAssessmentContract.test_an_unavailable_read_discloses_nothing) ... ok
+test_apply_command_binds_the_exact_canonical_payload (tests.unit.test_relation_assessment_contract.RelationAssessmentContract.test_apply_command_binds_the_exact_canonical_payload) ... ok
+test_every_pinned_pair_is_disposed_and_related_needs_a_proposal (tests.unit.test_relation_assessment_contract.RelationAssessmentContract.test_every_pinned_pair_is_disposed_and_related_needs_a_proposal) ... ok
+test_every_proposal_is_judged_once_by_a_distinct_run (tests.unit.test_relation_assessment_contract.RelationAssessmentContract.test_every_proposal_is_judged_once_by_a_distinct_run) ... ok
+test_proposals_bind_distinct_existing_statements_with_attribution (tests.unit.test_relation_assessment_contract.RelationAssessmentContract.test_proposals_bind_distinct_existing_statements_with_attribution) ... ok
+test_sql_pins_match_the_relation_assessment_contract (tests.unit.test_relation_assessment_contract.RelationAssessmentContract.test_sql_pins_match_the_relation_assessment_contract) ... ok
+test_attribution_names_the_pinned_upstream_without_links (tests.unit.test_relation_profile.RelationProfileTests.test_attribution_names_the_pinned_upstream_without_links) ... ok
+test_family_never_reaches_the_authoring_contract (tests.unit.test_relation_profile.RelationProfileTests.test_family_never_reaches_the_authoring_contract) ... ok
+test_profile_maps_exactly_the_eleven_built_in_predicates (tests.unit.test_relation_profile.RelationProfileTests.test_profile_maps_exactly_the_eleven_built_in_predicates) ... ok
+test_accepts_successful_exact_head_ci (tests.unit.test_release_controls.ReleaseControlTests.test_accepts_successful_exact_head_ci) ... ok
+test_authored_sdist_bytes_are_checked_even_without_wheel_effect (tests.unit.test_release_controls.ReleaseControlTests.test_authored_sdist_bytes_are_checked_even_without_wheel_effect) ... ok
+test_candidate_identity (tests.unit.test_release_controls.ReleaseControlTests.test_candidate_identity) ... ok
+test_development_inventory_rejects_wrong_commit (tests.unit.test_release_controls.ReleaseControlTests.test_development_inventory_rejects_wrong_commit) ... ok
+test_development_receipt_cannot_authorize_release_artifacts (tests.unit.test_release_controls.ReleaseControlTests.test_development_receipt_cannot_authorize_release_artifacts) ... ok
+test_no_fallback_to_old_green_run (tests.unit.test_release_controls.ReleaseControlTests.test_no_fallback_to_old_green_run) ... ok
+test_only_current_version_is_eligible_even_with_matching_tag (tests.unit.test_release_controls.ReleaseControlTests.test_only_current_version_is_eligible_even_with_matching_tag) ... ok
+test_rejects_changed_or_duplicated_inventory_filenames (tests.unit.test_release_controls.ReleaseControlTests.test_rejects_changed_or_duplicated_inventory_filenames) ... ok
+test_rejects_missing_extra_tampered_and_linked_files (tests.unit.test_release_controls.ReleaseControlTests.test_rejects_missing_extra_tampered_and_linked_files) ... ok
+test_rejects_other_inventory_versions (tests.unit.test_release_controls.ReleaseControlTests.test_rejects_other_inventory_versions) ... ok
+test_rejects_wrong_ci_identity_and_missing_ci (tests.unit.test_release_controls.ReleaseControlTests.test_rejects_wrong_ci_identity_and_missing_ci) ... ok
+test_rejects_wrong_head_tag_and_version (tests.unit.test_release_controls.ReleaseControlTests.test_rejects_wrong_head_tag_and_version) ... ok
+test_verifies_exact_files_and_ignores_non_authoritative_ci_receipt (tests.unit.test_release_controls.ReleaseControlTests.test_verifies_exact_files_and_ignores_non_authoritative_ci_receipt) ... ok
+test_differing_references_are_rebound_and_reported (tests.unit.test_run_reference_stamping.StampStatementRunReferenceTests.test_differing_references_are_rebound_and_reported) ... ok
+test_matching_references_and_other_shapes_pass_through (tests.unit.test_run_reference_stamping.StampStatementRunReferenceTests.test_matching_references_and_other_shapes_pass_through) ... ok
+test_closure_denies_unlisted_imports_and_dependencies (tests.unit.test_runtime_export.RuntimeExport.test_closure_denies_unlisted_imports_and_dependencies) ... ok
+
+======================================================================
+FAIL: test_boundary_scan_is_clean (tests.contract.test_public_bootstrap.PublicBootstrapTests.test_boundary_scan_is_clean)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<source-checkout>/tests/contract/test_public_bootstrap.py", line 68, in test_boundary_scan_is_clean
+    self.assertEqual(result["record_count"], 64)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 65 != 64
+
+======================================================================
+FAIL: test_registry_is_explicit_complete_and_default_deny (tests.contract.test_public_bootstrap.PublicBootstrapTests.test_registry_is_explicit_complete_and_default_deny)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<source-checkout>/tests/contract/test_public_bootstrap.py", line 49, in test_registry_is_explicit_complete_and_default_deny
+    self.assertEqual(len({record["id"] for record in records}), 64)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 65 != 64
+
+----------------------------------------------------------------------
+Ran 59 tests in 0.440s
+
+FAILED (failures=2)
+
+===== unit-03.log =====
+test_catalog_wrapper_metadata_comes_from_registry (tests.contract.test_export_denial.ExportDenialTests.test_catalog_wrapper_metadata_comes_from_registry) ... ok
+test_generated_catalog_directory_denies_unregistered_output (tests.contract.test_export_denial.ExportDenialTests.test_generated_catalog_directory_denies_unregistered_output) ... ok
+test_record_directory_denies_unregistered_files_and_symlinks (tests.contract.test_export_denial.ExportDenialTests.test_record_directory_denies_unregistered_files_and_symlinks) ... ok
+test_registry_denies_invalid_catalog_declarations (tests.contract.test_export_denial.ExportDenialTests.test_registry_denies_invalid_catalog_declarations) ... ok
+test_unregistered_empty_catalog_is_denied (tests.contract.test_export_denial.ExportDenialTests.test_unregistered_empty_catalog_is_denied) ... ok
+test_boundary_scan_is_clean (tests.contract.test_public_bootstrap.PublicBootstrapTests.test_boundary_scan_is_clean) ... ok
+test_candidate_ci_matches_committed_inventory (tests.contract.test_public_bootstrap.PublicBootstrapTests.test_candidate_ci_matches_committed_inventory) ... ok
+test_ci_verifies_only_current_release_and_supported_interpreters (tests.contract.test_public_bootstrap.PublicBootstrapTests.test_ci_verifies_only_current_release_and_supported_interpreters) ... ok
+test_generated_catalogs_have_no_drift (tests.contract.test_public_bootstrap.PublicBootstrapTests.test_generated_catalogs_have_no_drift) ... ok
+test_metadata_is_exact_pre_alpha_public_preview (tests.contract.test_public_bootstrap.PublicBootstrapTests.test_metadata_is_exact_pre_alpha_public_preview) ... ok
+test_public_docs_state_scope_and_compatibility (tests.contract.test_public_bootstrap.PublicBootstrapTests.test_public_docs_state_scope_and_compatibility) ... ok
+test_publisher_has_narrow_owner_approved_controls (tests.contract.test_public_bootstrap.PublicBootstrapTests.test_publisher_has_narrow_owner_approved_controls) ... ok
+test_registry_is_explicit_complete_and_default_deny (tests.contract.test_public_bootstrap.PublicBootstrapTests.test_registry_is_explicit_complete_and_default_deny) ... FAIL
+test_source_version_fallback_matches_numeric_release (tests.contract.test_public_bootstrap.PublicBootstrapTests.test_source_version_fallback_matches_numeric_release) ... ok
+test_closed_required_fields_and_canonical_request (tests.unit.test_assessed_relation_lifecycle_contract.Contract.test_closed_required_fields_and_canonical_request) ... ok
+test_apply_command_binds_the_exact_canonical_payload (tests.unit.test_authored_relations_contract.AuthoredRelationsContract.test_apply_command_binds_the_exact_canonical_payload) ... ok
+test_claims_and_updates_bind_authored_statements_only (tests.unit.test_authored_relations_contract.AuthoredRelationsContract.test_claims_and_updates_bind_authored_statements_only) ... ok
+test_confidence_is_a_two_decimal_diagnostic (tests.unit.test_authored_relations_contract.AuthoredRelationsContract.test_confidence_is_a_two_decimal_diagnostic) ... ok
+test_coverage_requires_exactly_one_assessment_per_related_candidate (tests.unit.test_authored_relations_contract.AuthoredRelationsContract.test_coverage_requires_exactly_one_assessment_per_related_candidate) ... ok
+test_empty_bundle_is_valid_and_optional (tests.unit.test_authored_relations_contract.AuthoredRelationsContract.test_empty_bundle_is_valid_and_optional) ... ok
+test_lifecycle_commands_name_exactly_their_related_records (tests.unit.test_authored_relations_contract.AuthoredRelationsContract.test_lifecycle_commands_name_exactly_their_related_records) ... ok
+test_sql_pins_match_the_revision_six_contract (tests.unit.test_authored_relations_contract.AuthoredRelationsContract.test_sql_pins_match_the_revision_six_contract) ... ok
+test_whole_output_is_bounded_at_32768_canonical_bytes (tests.unit.test_authored_relations_contract.AuthoredRelationsContract.test_whole_output_is_bounded_at_32768_canonical_bytes) ... ok
+test_catalog_read_has_no_external_discovery_or_network_path (tests.unit.test_contract_catalog_preview.ContractCatalogPreviewTests.test_catalog_read_has_no_external_discovery_or_network_path) ... ok
+test_cli_emits_machine_readable_inventory_and_exact_entry (tests.unit.test_contract_catalog_preview.ContractCatalogPreviewTests.test_cli_emits_machine_readable_inventory_and_exact_entry) ... ok
+test_exact_lookups_fail_closed (tests.unit.test_contract_catalog_preview.ContractCatalogPreviewTests.test_exact_lookups_fail_closed) ... ok
+test_filtering_preserves_generated_status (tests.unit.test_contract_catalog_preview.ContractCatalogPreviewTests.test_filtering_preserves_generated_status) ... ok
+test_fixed_catalog_inventory_is_useful_and_truthful (tests.unit.test_contract_catalog_preview.ContractCatalogPreviewTests.test_fixed_catalog_inventory_is_useful_and_truthful) ... ok
+test_explicit_stream_rejects_invalid_entries (tests.unit.test_migration_runner.MigrationStreamTests.test_explicit_stream_rejects_invalid_entries) ... ok
+test_history_rejects_changed_name_hash_gap_and_ahead (tests.unit.test_migration_runner.MigrationStreamTests.test_history_rejects_changed_name_hash_gap_and_ahead) ... ok
+test_missing_package_never_uses_working_directory (tests.unit.test_migration_runner.MigrationStreamTests.test_missing_package_never_uses_working_directory) ... ok
+test_a_reconsideration_carries_only_unaccepted_proposals (tests.unit.test_relation_assessment_contract.RelationAssessmentContract.test_a_reconsideration_carries_only_unaccepted_proposals) ... ok
+test_activation_names_distinct_beads_and_one_revision_per_key (tests.unit.test_relation_assessment_contract.RelationAssessmentContract.test_activation_names_distinct_beads_and_one_revision_per_key) ... ok
+test_agreement_is_on_the_exact_assertion_and_direction (tests.unit.test_relation_assessment_contract.RelationAssessmentContract.test_agreement_is_on_the_exact_assertion_and_direction) ... ok
+test_an_unavailable_read_discloses_nothing (tests.unit.test_relation_assessment_contract.RelationAssessmentContract.test_an_unavailable_read_discloses_nothing) ... ok
+test_apply_command_binds_the_exact_canonical_payload (tests.unit.test_relation_assessment_contract.RelationAssessmentContract.test_apply_command_binds_the_exact_canonical_payload) ... ok
+test_every_pinned_pair_is_disposed_and_related_needs_a_proposal (tests.unit.test_relation_assessment_contract.RelationAssessmentContract.test_every_pinned_pair_is_disposed_and_related_needs_a_proposal) ... ok
+test_every_proposal_is_judged_once_by_a_distinct_run (tests.unit.test_relation_assessment_contract.RelationAssessmentContract.test_every_proposal_is_judged_once_by_a_distinct_run) ... ok
+test_proposals_bind_distinct_existing_statements_with_attribution (tests.unit.test_relation_assessment_contract.RelationAssessmentContract.test_proposals_bind_distinct_existing_statements_with_attribution) ... ok
+test_sql_pins_match_the_relation_assessment_contract (tests.unit.test_relation_assessment_contract.RelationAssessmentContract.test_sql_pins_match_the_relation_assessment_contract) ... ok
+test_attribution_names_the_pinned_upstream_without_links (tests.unit.test_relation_profile.RelationProfileTests.test_attribution_names_the_pinned_upstream_without_links) ... ok
+test_family_never_reaches_the_authoring_contract (tests.unit.test_relation_profile.RelationProfileTests.test_family_never_reaches_the_authoring_contract) ... ok
+test_profile_maps_exactly_the_eleven_built_in_predicates (tests.unit.test_relation_profile.RelationProfileTests.test_profile_maps_exactly_the_eleven_built_in_predicates) ... ok
+test_accepts_successful_exact_head_ci (tests.unit.test_release_controls.ReleaseControlTests.test_accepts_successful_exact_head_ci) ... ok
+test_authored_sdist_bytes_are_checked_even_without_wheel_effect (tests.unit.test_release_controls.ReleaseControlTests.test_authored_sdist_bytes_are_checked_even_without_wheel_effect) ... ok
+test_candidate_identity (tests.unit.test_release_controls.ReleaseControlTests.test_candidate_identity) ... ok
+test_development_inventory_rejects_wrong_commit (tests.unit.test_release_controls.ReleaseControlTests.test_development_inventory_rejects_wrong_commit) ... ok
+test_development_receipt_cannot_authorize_release_artifacts (tests.unit.test_release_controls.ReleaseControlTests.test_development_receipt_cannot_authorize_release_artifacts) ... ok
+test_no_fallback_to_old_green_run (tests.unit.test_release_controls.ReleaseControlTests.test_no_fallback_to_old_green_run) ... ok
+test_only_current_version_is_eligible_even_with_matching_tag (tests.unit.test_release_controls.ReleaseControlTests.test_only_current_version_is_eligible_even_with_matching_tag) ... ok
+test_rejects_changed_or_duplicated_inventory_filenames (tests.unit.test_release_controls.ReleaseControlTests.test_rejects_changed_or_duplicated_inventory_filenames) ... ok
+test_rejects_missing_extra_tampered_and_linked_files (tests.unit.test_release_controls.ReleaseControlTests.test_rejects_missing_extra_tampered_and_linked_files) ... ok
+test_rejects_other_inventory_versions (tests.unit.test_release_controls.ReleaseControlTests.test_rejects_other_inventory_versions) ... ok
+test_rejects_wrong_ci_identity_and_missing_ci (tests.unit.test_release_controls.ReleaseControlTests.test_rejects_wrong_ci_identity_and_missing_ci) ... ok
+test_rejects_wrong_head_tag_and_version (tests.unit.test_release_controls.ReleaseControlTests.test_rejects_wrong_head_tag_and_version) ... ok
+test_verifies_exact_files_and_ignores_non_authoritative_ci_receipt (tests.unit.test_release_controls.ReleaseControlTests.test_verifies_exact_files_and_ignores_non_authoritative_ci_receipt) ... ok
+test_differing_references_are_rebound_and_reported (tests.unit.test_run_reference_stamping.StampStatementRunReferenceTests.test_differing_references_are_rebound_and_reported) ... ok
+test_matching_references_and_other_shapes_pass_through (tests.unit.test_run_reference_stamping.StampStatementRunReferenceTests.test_matching_references_and_other_shapes_pass_through) ... ok
+test_closure_denies_unlisted_imports_and_dependencies (tests.unit.test_runtime_export.RuntimeExport.test_closure_denies_unlisted_imports_and_dependencies) ... ok
+
+======================================================================
+FAIL: test_registry_is_explicit_complete_and_default_deny (tests.contract.test_public_bootstrap.PublicBootstrapTests.test_registry_is_explicit_complete_and_default_deny)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<source-checkout>/tests/contract/test_public_bootstrap.py", line 60, in test_registry_is_explicit_complete_and_default_deny
+    self.assertEqual(sum(counts.values()), 64)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 65 != 64
+
+----------------------------------------------------------------------
+Ran 59 tests in 0.444s
+
+FAILED (failures=1)
+
+
+=== Exact-head 1fe31b1 CI convergence failure; run36273282578 ===
+FAIL: test_all_runtime_imports_are_owned_by_the_installed_distribution (test_runtime_ownership.RuntimeOwnership.test_all_runtime_imports_are_owned_by_the_installed_distribution)
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:40:48.9792375Z ----------------------------------------------------------------------
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:40:48.9792986Z Traceback (most recent call last):
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:40:48.9803916Z   File "<installed-proof>/test_runtime_ownership.py", line 32, in test_all_runtime_imports_are_owned_by_the_installed_distribution
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:40:48.9805027Z     self.assertEqual(len(rows), 58)
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:40:48.9805475Z     ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:40:48.9805999Z AssertionError: 61 != 58
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:40:48.9806324Z
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:40:48.9806608Z ----------------------------------------------------------------------
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:40:48.9807378Z Ran 147 tests in 400.262s
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:40:48.9807624Z
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:40:48.9807781Z FAILED (failures=1)
+
+FAIL: test_another_tenant_cannot_govern_claims_relations_or_vocabulary (test_authored_relations.AuthoredRelations.test_another_tenant_cannot_govern_claims_relations_or_vocabulary)
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0482691Z ----------------------------------------------------------------------
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0483035Z Traceback (most recent call last):
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0484103Z   File "<installed-proof>/test_authored_relations.py", line 1229, in test_another_tenant_cannot_govern_claims_relations_or_vocabulary
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0485206Z     with self.assertRaises(psycopg.errors.InvalidAuthorizationSpecification):
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0485922Z          ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0486533Z AssertionError: InvalidAuthorizationSpecification not raised
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0486901Z
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0487061Z ======================================================================
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0488305Z FAIL: test_revoked_endpoint_or_session_hides_claims_and_relations_whole (test_authored_relations.AuthoredRelations.test_revoked_endpoint_or_session_hides_claims_and_relations_whole)
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0489384Z ----------------------------------------------------------------------
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0489735Z Traceback (most recent call last):
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0490668Z   File "<installed-proof>/test_authored_relations.py", line 1315, in test_revoked_endpoint_or_session_hides_claims_and_relations_whole
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0491792Z     with self.assertRaises(psycopg.errors.InvalidAuthorizationSpecification):
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0492529Z          ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0493164Z AssertionError: InvalidAuthorizationSpecification not raised
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0493589Z
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0493762Z ======================================================================
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0494997Z FAIL: test_wrong_bound_downgrade_and_out_of_range_are_atomic (test_installed_migrations.InstalledMigrations.test_wrong_bound_downgrade_and_out_of_range_are_atomic) (start=14, end=30)
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0496371Z ----------------------------------------------------------------------
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0496917Z Traceback (most recent call last):
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0497598Z   File "<installed-proof>/test_installed_migrations.py", line 147, in test_wrong_bound_downgrade_and_out_of_range_are_atomic
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0498187Z     self.assertRaises(runner.MigrationError),
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0498772Z     ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0499184Z AssertionError: MigrationError not raised
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0499382Z
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0499511Z ======================================================================
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0500204Z FAIL: test_wrong_bound_downgrade_and_out_of_range_are_atomic (test_installed_migrations.InstalledMigrations.test_wrong_bound_downgrade_and_out_of_range_are_atomic)
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0500910Z ----------------------------------------------------------------------
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0501249Z Traceback (most recent call last):
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0502125Z   File "<installed-proof>/test_installed_migrations.py", line 150, in test_wrong_bound_downgrade_and_out_of_range_are_atomic
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0503026Z     self.assertEqual(self.history(), before)
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0503503Z     ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0504593Z AssertionError: Lists differ: [(1, [2642 chars]utc)), (15, 'immutable_observation_commands', [3012 chars]tc))] != [(1, [2642 chars]utc))]
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0505350Z
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0505546Z First list contains 16 additional elements.
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0506005Z First extra element 14:
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0507247Z (15, 'immutable_observation_commands', 'e6f6d4dd1907917fd415ef0b8bede400e408381f347028ef33417421eb29c639', 1, datetime.datetime(2026, 9, 26, 21, 41, 16, 197514, tzinfo=datetime.timezone.utc))
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0508455Z
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0508754Z Diff is 6543 characters long. Set self.maxDiff to None to see it.
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0509374Z
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0509625Z ----------------------------------------------------------------------
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0510199Z Ran 125 tests in 677.968s
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0510460Z
+compatibility (3.13)	Prove the reviewed installation with checkout access denied	2026-09-26T21:45:26.0510613Z FAILED (failures=4)
+
+FAIL: test_all_runtime_imports_are_owned_by_the_installed_distribution (test_runtime_ownership.RuntimeOwnership.test_all_runtime_imports_are_owned_by_the_installed_distribution)
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:41:12.1449206Z ----------------------------------------------------------------------
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:41:12.1449863Z Traceback (most recent call last):
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:41:12.1451021Z   File "<installed-proof>/test_runtime_ownership.py", line 32, in test_all_runtime_imports_are_owned_by_the_installed_distribution
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:41:12.1452139Z     self.assertEqual(len(rows), 58)
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:41:12.1452621Z     ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:41:12.1453078Z AssertionError: 61 != 58
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:41:12.1453353Z
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:41:12.1453623Z ----------------------------------------------------------------------
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:41:12.1454230Z Ran 147 tests in 418.973s
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:41:12.1454487Z
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:41:12.1454645Z FAILED (failures=1)
+
+FAIL: test_another_tenant_cannot_govern_claims_relations_or_vocabulary (test_authored_relations.AuthoredRelations.test_another_tenant_cannot_govern_claims_relations_or_vocabulary)
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0734867Z ----------------------------------------------------------------------
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0735216Z Traceback (most recent call last):
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0735950Z   File "<installed-proof>/test_authored_relations.py", line 1229, in test_another_tenant_cannot_govern_claims_relations_or_vocabulary
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0736965Z     with self.assertRaises(psycopg.errors.InvalidAuthorizationSpecification):
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0737445Z          ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0737871Z AssertionError: InvalidAuthorizationSpecification not raised
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0738152Z
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0738275Z ======================================================================
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0739078Z FAIL: test_revoked_endpoint_or_session_hides_claims_and_relations_whole (test_authored_relations.AuthoredRelations.test_revoked_endpoint_or_session_hides_claims_and_relations_whole)
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0739903Z ----------------------------------------------------------------------
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0740250Z Traceback (most recent call last):
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0740892Z   File "<installed-proof>/test_authored_relations.py", line 1315, in test_revoked_endpoint_or_session_hides_claims_and_relations_whole
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0741641Z     with self.assertRaises(psycopg.errors.InvalidAuthorizationSpecification):
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0742117Z          ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0742566Z AssertionError: InvalidAuthorizationSpecification not raised
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0742842Z
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0742959Z ======================================================================
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0743756Z FAIL: test_wrong_bound_downgrade_and_out_of_range_are_atomic (test_installed_migrations.InstalledMigrations.test_wrong_bound_downgrade_and_out_of_range_are_atomic) (start=14, end=30)
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0744576Z ----------------------------------------------------------------------
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0744914Z Traceback (most recent call last):
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0745499Z   File "<installed-proof>/test_installed_migrations.py", line 147, in test_wrong_bound_downgrade_and_out_of_range_are_atomic
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0746091Z     self.assertRaises(runner.MigrationError),
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0746394Z     ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0747079Z AssertionError: MigrationError not raised
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0747289Z
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0747411Z ======================================================================
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0748152Z FAIL: test_wrong_bound_downgrade_and_out_of_range_are_atomic (test_installed_migrations.InstalledMigrations.test_wrong_bound_downgrade_and_out_of_range_are_atomic)
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0748908Z ----------------------------------------------------------------------
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0749254Z Traceback (most recent call last):
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0749866Z   File "<installed-proof>/test_installed_migrations.py", line 150, in test_wrong_bound_downgrade_and_out_of_range_are_atomic
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0750447Z     self.assertEqual(self.history(), before)
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0750738Z     ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0751305Z AssertionError: Lists differ: [(1, [2642 chars]utc)), (15, 'immutable_observation_commands', [3012 chars]tc))] != [(1, [2642 chars]utc))]
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0751907Z
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0752027Z First list contains 16 additional elements.
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0752313Z First extra element 14:
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0753049Z (15, 'immutable_observation_commands', 'e6f6d4dd1907917fd415ef0b8bede400e408381f347028ef33417421eb29c639', 1, datetime.datetime(2026, 9, 26, 21, 41, 46, 133191, tzinfo=datetime.timezone.utc))
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0753745Z
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0753930Z Diff is 6543 characters long. Set self.maxDiff to None to see it.
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0754208Z
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0754355Z ----------------------------------------------------------------------
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0754702Z Ran 125 tests in 718.586s
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0754854Z
+compatibility (3.14)	Prove the reviewed installation with checkout access denied	2026-09-26T21:46:11.0754947Z FAILED (failures=4)
+
+=== Exact-head local 313-sdist: backwards DB wall clock during correction preparation ===
+ERROR: test_lifecycle_unsupported_propagates_and_observing_union_has_no_aggregate_cap (test_assessed_relation_lifecycle.AssessedLifecycle.test_lifecycle_unsupported_propagates_and_observing_union_has_no_aggregate_cap)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "<installed-proof>/test_assessed_relation_lifecycle.py", line 1291, in test_lifecycle_unsupported_propagates_and_observing_union_has_no_aggregate_cap
+    observer = self.correction(original)
+  File "<installed-proof>/test_assessed_relation_lifecycle.py", line 543, in correction
+    target, claimed = helpers.enqueue_authorship(self, capture, accepted, pins=pins)
+                      ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<installed-proof>/test_immutable_observations.py", line 292, in enqueue_authorship
+    return target, self.claim()
+                   ~~~~~~~~~~^^
+  File "<installed-proof>/test_postgres_runtime.py", line 361, in claim
+    self.assertTrue(queue.start(claimed.fence, started_at=datetime.now(UTC)))
+                    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<installed-proof>/venv/lib/python3.13/site-packages/memoriesql/infrastructure/jobs/postgres_semantic_queue.py", line 270, in start
+    row = self._connection.execute(
+          ~~~~~~~~~~~~~~~~~~~~~~~~^
+        """
+        ^^^
+    ...<4 lines>...
+        self._fence_parameters(fence) + (started_at,),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ).fetchone()
+    ^
+  File "<installed-proof>/venv/lib/python3.13/site-packages/psycopg/connection.py", line 300, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.CheckViolation: new row for relation "semantic_task_attempts" violates check constraint "semantic_task_attempts_time_order"
+DETAIL:  Failing row contains (633d6327-1c92-4fc5-8825-dfc8cc102e7f, ac0bc589-c6c6-4bb5-bb23-810757098861, 080ab211-d3a0-476f-a741-ac54fd3d97f5, 01a0dfb3-fedf-718b-b81e-6f89d4492faf, 01a0dfb3-ff0b-7ed3-bcdf-eac08e0c19da, 1, 1, b9a2ff9b-80e3-4692-93cb-1dfab79291fc, orchard.worker, orchard.instance, running, 1, 2, 44977ac3682b5d71d82329b2e33a18debd6ff613042d3f3941e5a378e1398858, 75175c93e3ca5ad0924bd4eef57bb68f5a1c91a782bc582801ff34816601b4fd, 058359bfe67e296c43177d3127dbf85d83e6c4552cc5528cc56e7ba5789509b4, fe581afb-c730-4020-b995-1f1e33bd9f46, 2026-09-26 21:51:50.53969+00, 2026-09-26 21:51:50.518323+00, 2026-09-26 21:51:50.53969+00, 2026-09-26 21:53:50.53969+00, 2026-09-26 21:56:50.53969+00, null, null, null, null, null, null, null, null).
+CONTEXT:  SQL statement "UPDATE memoriesql.semantic_task_attempts AS attempt
+       SET status = 'running', started_at = database_now
+     WHERE attempt.tenant_id = requested_tenant_id
+       AND attempt.task_id = requested_task_id
+       AND attempt.attempt_id = requested_attempt_id
+       AND attempt.lease_generation = requested_lease_generation
+       AND attempt.claimant_principal_id = context_record.principal_id
+       AND attempt.worker_id = requested_worker_id
+       AND attempt.worker_instance_id = requested_worker_instance_id
+       AND attempt.status = 'claimed'
+       AND attempt.lease_expires_at > database_now
+       AND attempt.deadline_at > database_now"
+PL/pgSQL function start_semantic_task_attempt(uuid,uuid,uuid,bigint,text,text,timestamp with time zone) line 70 at SQL statement
+
+----------------------------------------------------------------------
+Ran 38 tests in 418.079s
+
+FAILED (errors=1)
