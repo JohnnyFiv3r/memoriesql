@@ -165,6 +165,10 @@ investigation checkpoints. The approved direction also prioritizes
 for relation-aware retrieval. The original exact interface has owner approval and independent custody; its
 settings-boundary amendment also has exact-record owner approval and matching
 independent custody reconciliation. Integrated executor safety and useful-workload fit remain
+implementation obligations. Internal closed request/context models and canonical
+typed serialization are described in
+[investigation contract qualification](docs/verification/pr-05-investigation-contracts.md);
+these do not execute queries or persist results/investigations. Retrieval remains
 unqualified; no executable recall capability is added to the published package.
 
 ## Architectural commitments

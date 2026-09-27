@@ -183,6 +183,9 @@
     },
     {
       "path": "src/memoriesql/infrastructure/postgres/agent_sql_authority.py"
+    },
+    {
+      "path": "src/memoriesql/application/investigation_contracts.py"
     }
   ]
 }
