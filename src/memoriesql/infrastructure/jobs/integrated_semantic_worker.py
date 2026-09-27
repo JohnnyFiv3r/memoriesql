@@ -426,6 +426,7 @@ class IntegratedSemanticWorker:
         self._foreground_active = False
         self._cleanup_started = asyncio.Event()
         self._cleanup_deadline = 0.0
+        self._attempt_deadline_ns = 0
         self._cleanup_heartbeat: asyncio.Task[None] | None = None
         self._pending_receipt: SemanticWorkerCycleReceipt | None = None
         self._cancellation_receipt: SemanticWorkerCycleReceipt | None = None
@@ -477,22 +478,82 @@ class IntegratedSemanticWorker:
         error_code: str,
         output_contract_hash: str,
         status: SemanticResultStatus = SemanticResultStatus.FAILED,
+        time_refusal: Exception | None = None,
     ) -> SemanticWorkerCycleReceipt:
-        outcome, delayed_cancellation = await self._run_database_call(
-            lambda: self._settle_preflight_failure(
-                claimed,
-                readiness,
-                error_code=error_code,
-                output_contract_hash=output_contract_hash,
-                status=status,
+        recovering = time_refusal is not None
+        if recovering:
+            self._start_cleanup_wait()
+        cancellation: asyncio.CancelledError | None = None
+        while True:
+            remaining_ns = self._attempt_deadline_ns - time.monotonic_ns()
+            if recovering and remaining_ns <= 0:
+                assert time_refusal is not None
+                if cancellation is not None:
+                    raise cancellation from time_refusal
+                raise time_refusal
+            outcome, delayed_cancellation = await self._run_database_call(
+                lambda: self._settle_preflight_failure(
+                    claimed,
+                    readiness,
+                    error_code=error_code,
+                    output_contract_hash=output_contract_hash,
+                    status=status,
+                    timeout_ms=(
+                        max(
+                            1,
+                            min(
+                                int(self._config.refusal_record_timeout_seconds * 1000),
+                                remaining_ns // 1_000_000,
+                            ),
+                        )
+                        if recovering
+                        else None
+                    ),
+                )
             )
-        )
-        if delayed_cancellation is not None:
-            raise delayed_cancellation
-        if outcome.error is not None:
-            raise outcome.error
-        assert outcome.value is not None
-        return outcome.value
+            if delayed_cancellation is not None:
+                cancellation = delayed_cancellation
+            if outcome.error is None:
+                assert outcome.value is not None
+                if cancellation is not None:
+                    self._cancellation_receipt = outcome.value
+                    raise cancellation
+                return outcome.value
+            if not _attempt_time_order_refused(outcome.error):
+                if cancellation is not None:
+                    raise cancellation from outcome.error
+                raise outcome.error
+            time_refusal = outcome.error
+            # The refused transaction has rolled back, including any canonical
+            # output and events. Keep this attempt owned and retry only its
+            # failure settlement, never the author/executor or the claim.
+            self._start_cleanup_wait()
+            remaining = (self._attempt_deadline_ns - time.monotonic_ns()) / 1e9
+            if remaining <= 0:
+                # No false settlement: the existing fenced reaper owns recovery
+                # after expiry if the clock/authority never becomes usable here.
+                if cancellation is not None:
+                    raise cancellation from outcome.error
+                raise outcome.error
+            recovering = True
+            if cancellation is not None:
+                status, error_code = SemanticResultStatus.CANCELLED, "worker.cancelled"
+            # Cancellation cannot reset or skip the existing control cadence,
+            # nor start overlapping calls. The original elapsed budget persists.
+            pause = asyncio.create_task(
+                asyncio.sleep(
+                    min(self._config.cancellation_poll_interval_seconds, remaining)
+                )
+            )
+            while not pause.done():
+                try:
+                    await asyncio.wait((pause,))
+                except asyncio.CancelledError as error:
+                    cancellation = error
+                    status, error_code = (
+                        SemanticResultStatus.CANCELLED,
+                        "worker.cancelled",
+                    )
 
     async def _record_refusal_off_loop(
         self,
@@ -542,6 +603,7 @@ class IntegratedSemanticWorker:
         cancellation_error: asyncio.CancelledError,
         *,
         output_contract_hash: str,
+        time_refusal: Exception | None = None,
     ) -> Never:
         self._cancellation_receipt = await self._settle_preflight_failure_off_loop(
             claimed,
@@ -549,6 +611,7 @@ class IntegratedSemanticWorker:
             error_code="worker.cancelled",
             output_contract_hash=output_contract_hash,
             status=SemanticResultStatus.CANCELLED,
+            time_refusal=time_refusal,
         )
         raise cancellation_error
 
@@ -692,6 +755,7 @@ class IntegratedSemanticWorker:
         return outcome.value  # type: ignore[return-value]
 
     async def _run_once(self) -> SemanticWorkerCycleReceipt:
+        attempt_started_ns = time.monotonic_ns()
         readiness = self._readiness_provider()
         self._pending_receipt = SemanticWorkerCycleReceipt(
             cycle_status=WorkerCycleStatus.CLEANUP_PENDING,
@@ -708,6 +772,23 @@ class IntegratedSemanticWorker:
         claim_outcome, claim_cancellation = await self._run_database_call(
             lambda: self._claim(datetime.now(UTC))
         )
+        claimed = claim_outcome.value
+        definition = self._definition_for(claimed) if claimed is not None else None
+        if claimed is not None:
+            # Freeze elapsed recovery time once, including cancellation after
+            # claim. Every SQL operation still checks current wall-clock authority.
+            seconds = min(
+                self._config.deadline_seconds,
+                max(
+                    0.0,
+                    claimed.fence.deadline_at.timestamp()
+                    - datetime.now(UTC).timestamp(),
+                ),
+                definition.run_budget.wall_clock_seconds
+                if definition
+                else self._config.deadline_seconds,
+            )
+            self._attempt_deadline_ns = attempt_started_ns + int(seconds * 1e9)
         if claim_cancellation is not None:
             if claim_outcome.value is not None:
                 await self._settle_cancellation_before_propagation(
@@ -719,7 +800,6 @@ class IntegratedSemanticWorker:
             raise claim_cancellation
         if claim_outcome.error is not None:
             raise claim_outcome.error
-        claimed = claim_outcome.value
         if claimed is None:
             return SemanticWorkerCycleReceipt(
                 cycle_status=WorkerCycleStatus.IDLE,
@@ -731,7 +811,6 @@ class IntegratedSemanticWorker:
             task_id=claimed.fence.task_id,
             attempt_id=claimed.fence.attempt_id,
         )
-        definition = self._definition_for(claimed)
         sink = self._outcome_sinks.resolve(claimed.target_kind)
         if definition is None:
             return await self._settle_preflight_failure_off_loop(
@@ -756,8 +835,22 @@ class IntegratedSemanticWorker:
                 readiness,
                 start_cancellation,
                 output_contract_hash=definition.output_contract.schema_hash,
+                time_refusal=(
+                    start_outcome.error
+                    if start_outcome.error is not None
+                    and _attempt_time_order_refused(start_outcome.error)
+                    else None
+                ),
             )
         if start_outcome.error is not None:
+            if _attempt_time_order_refused(start_outcome.error):
+                return await self._settle_preflight_failure_off_loop(
+                    claimed,
+                    readiness,
+                    error_code="worker.database_time_order_refused",
+                    output_contract_hash=definition.output_contract.schema_hash,
+                    time_refusal=start_outcome.error,
+                )
             raise start_outcome.error
         started = start_outcome.value
         if not started:
@@ -888,6 +981,12 @@ class IntegratedSemanticWorker:
                 error_code="worker.task_resolution_failed",
                 output_contract_hash=definition.output_contract.schema_hash,
             )
+
+        self._attempt_deadline_ns = min(
+            self._attempt_deadline_ns,
+            attempt_started_ns
+            + resolved.effective_budget.wall_clock_seconds * 1_000_000_000,
+        )
 
         try:
             cancellation_grace_seconds = self._executor.cancellation_grace_seconds(
@@ -1120,8 +1219,26 @@ class IntegratedSemanticWorker:
             )
         )
         if persist_cancellation is not None:
+            if persist_outcome.error is not None and _attempt_time_order_refused(
+                persist_outcome.error
+            ):
+                await self._settle_cancellation_before_propagation(
+                    claimed,
+                    readiness,
+                    persist_cancellation,
+                    output_contract_hash=definition.output_contract.schema_hash,
+                    time_refusal=persist_outcome.error,
+                )
             raise persist_cancellation
         if persist_outcome.error is not None:
+            if _attempt_time_order_refused(persist_outcome.error):
+                return await self._settle_preflight_failure_off_loop(
+                    claimed,
+                    readiness,
+                    error_code="worker.database_time_order_refused",
+                    output_contract_hash=definition.output_contract.schema_hash,
+                    time_refusal=persist_outcome.error,
+                )
             if result.status == SemanticResultStatus.SUCCEEDED and isinstance(
                 persist_outcome.error, psycopg_errors.DataError
             ):
@@ -1764,6 +1881,7 @@ class IntegratedSemanticWorker:
         sink: SemanticOutcomeSink,
         *,
         recorded_at: datetime,
+        timeout_ms: int | None = None,
     ) -> tuple[str, bool]:
         def operation(
             queue: PostgresSemanticTaskQueue,
@@ -1850,7 +1968,7 @@ class IntegratedSemanticWorker:
             )
 
         try:
-            return self._transaction(operation), True
+            return self._transaction(operation, timeout_ms=timeout_ms), True
         except PermissionError:
             return "stale_fence", False
 
@@ -1862,6 +1980,7 @@ class IntegratedSemanticWorker:
         error_code: str,
         output_contract_hash: str,
         status: SemanticResultStatus = SemanticResultStatus.FAILED,
+        timeout_ms: int | None = None,
     ) -> SemanticWorkerCycleReceipt:
         retry_class = retry_class_for_status(status)
         assert retry_class is not None
@@ -1880,6 +1999,7 @@ class IntegratedSemanticWorker:
             result,
             SyntheticNonAuthoritativeOutcomeSink(),
             recorded_at=datetime.now(UTC),
+            timeout_ms=timeout_ms,
         )
         return SemanticWorkerCycleReceipt(
             cycle_status=(
@@ -1957,6 +2077,16 @@ class IntegratedSemanticWorker:
 class _PreparationFailure:
     status: SemanticResultStatus
     error_code: str
+
+
+def _attempt_time_order_refused(error: Exception) -> bool:
+    """Identify this DB refusal, not its unobserved clock/environment cause."""
+    return (
+        isinstance(error, psycopg_errors.CheckViolation)
+        and error.diag.schema_name == "memoriesql"
+        and error.diag.table_name == "semantic_task_attempts"
+        and error.diag.constraint_name == "semantic_task_attempts_time_order"
+    )
 
 
 def _preparation_failure(
