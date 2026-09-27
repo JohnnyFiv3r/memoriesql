@@ -204,6 +204,15 @@
     },
     {
       "path": "src/memoriesql/infrastructure/postgres/restricted_query.py"
+    },
+    {
+      "path": "src/memoriesql/application/agent_sql_witness.py"
+    },
+    {
+      "path": "src/memoriesql/infrastructure/postgres/query_witness.py"
+    },
+    {
+      "path": "src/memoriesql/infrastructure/postgres/query_result_commit.py"
     }
   ]
 }

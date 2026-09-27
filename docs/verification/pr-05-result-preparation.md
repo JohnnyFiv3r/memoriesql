@@ -1,19 +1,70 @@
 # PR-05 public-core internal result preparation
 
-This public-core slice owns internal preparation bytes and a durable operation journal. It is
-not the available query/result interface. The whole amended approval and matching
+This public-core lane owns internal preparation, native membership witnesses and
+atomic result construction. It is not the available query/result interface. The whole amended approval and matching
 ea-3 are recorded in `../approvals/pr-05-settings-reconciliation.md`; both approved
 normative blobs remain unchanged. M0030 and its canonical lifecycle projection are
 an explicit owner-merged dependency, not reimplemented here.
 
-Dependency integration includes #47 merge `26bd1a5` and the coordinator's #48
-integration `e9ebba2`, now on main through owner merge `d6e0c78`. #49/#50 merged
-into closed stacked bases, not main; main-targeted promotion #51 at `2bec770`
-contains their accepted bytes and is the explicit base of this slice. This PR is
-**not ready for owner merge while stacked**: after #51 merges, verify actual main
-ancestry, integrate if needed, retarget to main and qualify that final head.
-The inventory union preserves every module from both lanes; only the explicit
-new preparation module is added here.
+M0034 is based on public main `cba4389ac937a17191aa84698b6be18b318dfd6b`,
+including owner-merged #56 accepted head `5fb326ca886a84402ce86fa8ee95790d5e1476c9`.
+PR-03 confirmed M0034 allocation, with no overlapping lifecycle migration.
+M0031–M0033 and the canonical M0030 projector remain byte-identical dependencies.
+
+The primary acceptance claim for M0034 is **atomic private persistence of native
+bag-result values and complete witnesses for the qualified composition cut,
+without repeating completed SELECT work**. The cut includes explicit projections,
+typed filters, key and outer joins, nonrecursive CTE/derived-table composition and
+`UNION ALL`. PostgreSQL computes values and membership in one restricted-reader
+statement; Python binds emitted membership to exact frozen keys and shares DAG
+nodes. Duplicate tuples/branches retain distinct saved ordinals. Outer nonmatches
+and empty outputs retain the searched population, predicate and protected closure.
+No Python SQL interpreter, original unchecked SQL, guessed contributor or empty
+witness substitute is used. The admitted full private SELECT surface is unchanged.
+Group/distinct, other sets, windows, correlated subqueries and recursion still
+need their own witness-publication qualification; they cannot use this internal
+commit path. This is a delivery milestone, not a reduction of the approved interface.
+
+Typed ordered rows, original validated request/fingerprint, admitted program,
+catalog/policy/independently checked privilege-profile pins, frame, coverage,
+complete logical row population, exact canonical lifecycle bytes and evidence
+bindings are sealed together. Canonical lifecycle records retain their original
+numeric encoding in byte-preserving partitions, not a JSON float round-trip.
+The result-json-v1 digest covers immutable schema/rows/query/frame/lineage/coverage
+and witness hash; it excludes creation/delivery receipts and changing work state.
+These private records are not yet the available wire response or admitted evidence.
+
+Publication uses a fresh short trusted authority transaction while the original
+source frame is held. Its repeatable-read snapshot cannot see a journal created
+later by M0033, so publication independently checks that settled invocation and
+the exact original issuer PID/start/virtual-transaction epoch. It also checks owner,
+credential, query key/fingerprint, manifest and byte/digest pins. Sealing, result
+identity and creation receipt commit atomically through M0031's single store;
+there is no second body/allocation ledger. The acknowledgement follows commit.
+The original deadline governs construction/publication; the next SQL statement's
+timeout is set before dispatch. Publication records elapsed wall time since native
+settlement separately. This is neither CPU/I/O measurement nor complete run work
+accounting. A failed/uncertain write never grants ownership takeover or new SELECT.
+Exact redelivery and authenticated private creation-receipt recovery require no
+original snapshot or query rerun; they grant no result-byte disclosure. An unfinished
+commit after the original source frame ends remains unavailable/pending.
+
+Creation stores a fixed 30-day standalone deadline. No paging, standalone access,
+expiry cleanup, saved-input/parent composition, checkpoint/named-save/restore hold,
+whole retained-closure reauthorization or governed erasure API is available here.
+Private owned receipt recovery is executor bookkeeping, never a model-facing
+metadata route. Availability remains gated by all those surfaces, complete witness
+qualification, actual host credential isolation, durable cumulative accounting,
+physical storage qualification and useful W1–W7 fit. Existing M0031 parent holds
+remain unchanged; M0034 does not claim to deliver refinement or expansion.
+
+Seen fictional acceptance checks native bag multiplicity, both sides of outer
+nonmatches, empty-filter population/predicate preservation, digest/frame/fingerprint
+refusal, original-frame loss, deadline exhaustion, immutable bodies/receipt ACLs,
+crash after sealing with no partial result, and restart/lost-response/concurrent
+redelivery without native redispatch. Installed qualification and exact-head CI
+belong on the PR. Earlier failed packaging/type/import/encoding fixtures remain
+recorded; no retry erases a failure or establishes measured useful workload fit.
 
 M0031 reserves one private ownership identity for an authenticated `(run,step)`
 and request fingerprint before execution. Exact retry returns that same journal
@@ -76,8 +127,8 @@ were repaired without changing canonical behavior. No failure was considered
 passing acceptance or runtime capacity evidence. Existing historical failures and
 all SQL 0001–0030 bytes remain.
 
-Remaining delivery includes admitted SELECT execution, complete compositional
-witness generation, atomically available immutable results, paging/hydration,
+Remaining integrated delivery includes the remaining logical populations and
+witness shapes, atomically available immutable results, paging/hydration,
 current whole-closure authorization and revocation/erasure, explicit contexts and
 checkpoint/save/restore holds, concurrency/settlement/work/storage and measured
 useful W1–W7 fit. No observation-only substitute or lifecycle duplication, model/
