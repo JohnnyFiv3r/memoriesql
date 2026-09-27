@@ -354,7 +354,9 @@ class QueryResultCommit(unittest.TestCase):
         self,
     ) -> None:
         self.fixture.assertion()
-        request = self.request("SELECT count(*) AS n FROM memory_v1.assessed_relations")
+        request = self.request(
+            "SELECT relation_id,row_number() OVER (ORDER BY relation_id) AS n FROM memory_v1.assessed_relations"
+        )
         owner = self.reserve_request(request)
         with (
             self.population(request) as population,

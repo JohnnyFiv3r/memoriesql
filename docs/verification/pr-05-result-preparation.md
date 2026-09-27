@@ -22,9 +22,68 @@ nodes. Duplicate tuples/branches retain distinct saved ordinals. Outer nonmatche
 and empty outputs retain the searched population, predicate and protected closure.
 No Python SQL interpreter, original unchecked SQL, guessed contributor or empty
 witness substitute is used. The admitted full private SELECT surface is unchanged.
-Group/distinct, other sets, windows, correlated subqueries and recursion still
-need their own witness-publication qualification; they cannot use this internal
-commit path. This is a delivery milestone, not a reduction of the approved interface.
+At that bag-only cut, groups/distinct, other sets, windows, correlated subqueries
+and recursion still required their own witness-publication qualification. The
+continuation below extends the internal cut without narrowing full admission. This is a delivery milestone, not a reduction of the approved interface.
+
+The next authorized continuation starts at owner-merged #58, public main
+`725b31eaf31df4542faf42036166e12e41578ac0`, whose tree equals accepted
+`f5049fc9d1415bc44c313bffce0c4721bcdc11f4`. Its primary acceptance claim is
+**complete native group and set witnesses composed with atomic private result
+persistence under the original work bound**. PR-03 confirmed no overlapping
+lifecycle work or migration allocation; this continuation adds no migration.
+The accepted-head bag qualification remains historical evidence for that slice,
+not qualification of the continuation.
+
+PostgreSQL computes GROUP BY, HAVING, FILTER, COUNT/COUNT DISTINCT, SUM/AVG,
+MIN/MAX, SELECT DISTINCT, UNION, INTERSECT and EXCEPT (including ALL) over the
+same frozen frame. Native equivalence classes retain null/collation equality,
+all collapsed contributors and left/right/output bag multiplicities. Group
+records retain every member, argument/filter eligibility, COUNT DISTINCT classes,
+all extremum ties, native group keys/aggregate values and HAVING truth. Rejected
+groups and zero-output set classes remain tested dependencies; both empty set
+branches record a zero population rather than an invented null tuple. Native
+empty-left INTERSECT/EXCEPT skips the unneeded right arm, including its ledgers;
+the witness records `right_evaluated: false` and an unknown right multiplicity,
+never a fabricated zero or evaluation of skipped arguments. Its frozen source
+population/program remain protected dependencies. Tuple,
+distinct bead and canonical independent-root counts remain separate facts.
+Scoped SQL aggregates create no canonical observation, evidence or corroboration.
+
+Materialized private CTEs and ledger rows share the one restricted SELECT and
+original deadline/reservation. Native output ordinals preserve the sealed order;
+ledger rows cannot masquerade as output nulls. Unused CTEs are pruned without
+forcing their arguments. FILTER arguments and HAVING projections retain native
+short-circuit behavior. A restricted, deadline-bound `EXPLAIN (COSTS FALSE)` of
+the admitted program checks original PostgreSQL phase validity; no estimate is
+read, used as enforcement or presented as a work guarantee. Actual execution,
+independent login/function privileges, authority fencing and cancellation remain
+the boundary. Missing helper privileges refuse instead of granting or falling
+back. Witness binding checks the same deadline/cancellation, shares exact-key DAG
+nodes and charges encoded provenance together with values before any publication.
+
+The private `native-bag-v1` graph has additive `composition_revision: 2` and
+`tested_nodes` for these shapes; no public wire contract changes. M0034 commits
+complete body/witness partitions atomically and recovers exact receipts without
+redispatch. Windows, correlated/subquery membership, recursion, saved-input reuse,
+paging/hydration, disclosure contexts and checkpoint/save/restore remain pending.
+Whole-result authorization, revocation/erasure, host isolation, durable cumulative
+work/physical-storage accounting and useful W1–W7 fit still gate public availability.
+Correct exhaustion and small fictional native-composition cases do not establish
+those workload or capacity claims. No policy ceiling or approved blob changes.
+
+Seen acceptance compares native values/schema/order to the witnessed statement,
+then independently checks contributions and multiplicities, empty/all-null facts,
+rejected groups, filtered unknown truth, compositional groups/sets, pinned C
+collation/numeric equality, original native errors, unused CTEs, missing privilege,
+cancellation/exhaustion during binding, atomic replay and fresh-process recovery.
+Qualification receipts belong on the PR. All development failures remain retained,
+including missing closed-profile helper privileges, an untyped helper-zero
+comparison, collation-name harvesting, lost bare projection names and an invalid
+fixture that attempted arithmetic on a semantic revision reference, a stress
+fixture exceeding the existing 16 relation-reference ceiling, and forcing a
+natively skipped empty-left set arm. These were
+repaired without broad grants, admission reduction or resetting consumed work.
 
 Typed ordered rows, original validated request/fingerprint, admitted program,
 catalog/policy/independently checked privilege-profile pins, frame, coverage,

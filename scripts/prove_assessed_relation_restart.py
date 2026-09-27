@@ -138,7 +138,7 @@ def main() -> None:
                         "step_key": str(uuid4()),
                         "kind": "query",
                         "catalog_hash": SqlCatalog.installed().hash,
-                        "sql": "SELECT relation_id,state FROM memory_v1.assessed_relations",
+                        "sql": "SELECT relation_id,count(*) FILTER(WHERE support_eligible) AS n FROM memory_v1.assessed_relations GROUP BY relation_id ORDER BY relation_id",
                         "parameters": [],
                         "inputs": [],
                         "parents": [],
