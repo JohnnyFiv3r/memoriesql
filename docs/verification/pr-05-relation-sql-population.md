@@ -103,3 +103,9 @@ explicit agent scalar cast is correctly refused). Seven other cases passed the
 first run.
 Subsequent results are recorded separately on the PR. Historical #52/clock-refusal
 failures and evidence remain unchanged.
+
+The first full installed lane at f0e0495 failed on both interpreters because the
+ownership assertion still expected 66 runtime modules; the explicit inventory
+contains 67 after the new adapter. The assertion is updated to 67, retaining its
+owned-file/import/dependency checks. The original full logs remain retained and
+failed; a complete corrected-head lane is required before qualification.
