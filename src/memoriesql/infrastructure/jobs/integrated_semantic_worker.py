@@ -982,6 +982,12 @@ class IntegratedSemanticWorker:
                 output_contract_hash=definition.output_contract.schema_hash,
             )
 
+        self._attempt_deadline_ns = min(
+            self._attempt_deadline_ns,
+            attempt_started_ns
+            + resolved.effective_budget.wall_clock_seconds * 1_000_000_000,
+        )
+
         try:
             cancellation_grace_seconds = self._executor.cancellation_grace_seconds(
                 max_delegate_calls=resolved.effective_budget.max_delegate_calls

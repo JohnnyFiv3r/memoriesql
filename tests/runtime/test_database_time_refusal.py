@@ -8,22 +8,27 @@ import json
 import threading
 import time
 import unittest
-from dataclasses import replace
-from datetime import datetime, timedelta
+from dataclasses import asdict, replace
+from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, cast
+from unittest.mock import Mock
 
 import psycopg
 
 from memoriesql.infrastructure.jobs.postgres_semantic_queue import (
     PostgresSemanticTaskQueue,
+    SemanticAuthorizationSnapshot,
 )
 from memoriesql.infrastructure.postgres.authorization import PostgresAuthorizationPort
 
 if TYPE_CHECKING:
     from tests.runtime import test_complete_input_execution as fixtures
+    from tests.runtime.test_executor import fixture as generic_execution
     from tests.runtime.test_postgres_runtime import migrate
 else:
     import test_complete_input_execution as fixtures
+    from test_executor import fixture as generic_execution
     from test_postgres_runtime import migrate
 
 
@@ -476,6 +481,84 @@ class DatabaseTimeRefusal(fixtures.CompleteInputExecution):
             self.assertEqual(row, ("stale_fence",))
         self.assertEqual(self.attempt(), after)
         self.assert_not_dispatched()
+
+    def test_valid_requested_budget_does_not_restore_recovery_capacity(self) -> None:
+        self.setup_execution()
+        worker = self.active_worker()
+        claimed = worker._claim(datetime.now(UTC))
+        self.assertIsNotNone(claimed)
+        self.clock(self.attempt()[1] - timedelta(milliseconds=3))
+        with self.assertRaises(psycopg.errors.CheckViolation) as refused:
+            worker._start(claimed.fence, datetime.now(UTC))
+        first = self.attempt()
+
+        # The generic envelope admits requested budgets, unlike the complete-
+        # input task. Its trusted queue/accounting are isolated fictional ports;
+        # the refusal is real PostgreSQL, and SQL/auth are proved above.
+        executor, resolved, _deps, ports = generic_execution()
+        requested = resolved.definition.run_budget.model_copy(
+            update={"wall_clock_seconds": 1}
+        )
+        self.assertTrue(requested.is_not_wider_than(resolved.definition.run_budget))
+        task_input = resolved.task_input.model_copy(
+            update={
+                "task_id": str(claimed.fence.task_id),
+                "requested_budget": requested,
+            }
+        )
+        worker._semantic_registry = executor.semantic_registry
+        worker._composition_provider = executor._composition_provider
+        worker._executor = executor
+        worker._model_accounting = ports
+        worker._claim = Mock(
+            return_value=SimpleNamespace(
+                **(
+                    asdict(claimed)
+                    | {
+                        "fence": claimed.fence,
+                        "task_kind": resolved.definition.task_kind,
+                        "contract_revision": resolved.definition.contract_revision,
+                        "task_contract_hash": resolved.definition.contract_hash,
+                        "semantic_registry_hash": executor.semantic_registry.registry_hash,
+                        "target_kind": "synthetic_receipt",
+                    }
+                )
+            )
+        )
+        worker._start = Mock(return_value=True)
+        worker._hydrate = Mock(
+            return_value=(
+                task_input,
+                SemanticAuthorizationSnapshot(
+                    self.worker_principal, None, 1, self.scope
+                ),
+                {"tree-count": ports.content},
+            )
+        )
+        worker._heartbeat = Mock(return_value=True)
+        worker._attempt_is_live = Mock(return_value=True)
+        worker._record_run_event = Mock(return_value=True)
+        worker._persist_result = Mock(side_effect=refused.exception)
+
+        async def run() -> None:
+            try:
+                pending = await asyncio.wait_for(worker.run_once(), 3)
+                self.assertEqual(str(pending.cycle_status), "cleanup_pending")
+                calls = len(ports.intents)
+                self.assertGreater(calls, 0)
+                with self.assertRaises(psycopg.errors.CheckViolation):
+                    await asyncio.wait_for(worker.wait_for_cleanup(), 2)
+                self.assertEqual(len(ports.intents), calls)
+                self.assertFalse(worker.cleanup_pending)
+                self.assertEqual(self.attempt(), first)
+                self.assert_no_meaning()
+            finally:
+                # A pre-fix negative probe must not leave its longer cycle alive.
+                worker._attempt_deadline_ns = time.monotonic_ns() - 1
+                if worker._cycle_task is not None:
+                    await asyncio.gather(worker._cycle_task, return_exceptions=True)
+
+        asyncio.run(run())
 
 
 def load_tests(loader: Any, standard_tests: Any, pattern: Any) -> Any:

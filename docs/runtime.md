@@ -254,7 +254,9 @@ uses the existing cancelled outcome. Other database errors remain observable.
 Each recovery transaction uses the existing refusal-record timeout (two seconds
 by default), capped by the original remaining run/worker deadline. Recovery
 also has a monotonic elapsed budget frozen at claim; repeated cancellation
-cannot reset it or skip the configured control cadence. `cleanup_pending`
+cannot reset it or skip the configured control cadence. Resolution tightens that
+same deadline to a valid narrower requested budget, retaining consumed time.
+`cleanup_pending`
 means an actually owned cycle is still active, not a completed settlement.
 An exhausted or failed cycle leaves recovery to the existing fenced reaper after
 lease/deadline expiry. No timestamp is clamped, lease extended or authority
