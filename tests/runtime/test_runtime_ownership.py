@@ -29,10 +29,15 @@ class RuntimeOwnership(unittest.TestCase):
             assert module.__file__ is not None
             origin = Path(module.__file__).resolve()
             self.assertIn(origin, owned)
-        self.assertEqual(len(rows), 58)
+        self.assertEqual(len(rows), 64)
         self.assertEqual(
             distribution.requires,
-            ["psycopg[binary]==3.3.3", "pydantic==2.13.3", "pydantic-ai-slim==2.27.0"],
+            [
+                "psycopg[binary]==3.3.3",
+                "pydantic==2.13.3",
+                "pydantic-ai-slim==2.27.0",
+                "sqlglot==30.19.0",
+            ],
         )
 
     def test_frozen_canonical_task_and_executor_behavior_hashes(self) -> None:

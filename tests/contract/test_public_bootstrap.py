@@ -32,7 +32,12 @@ class PublicBootstrapTests(unittest.TestCase):
         self.assertEqual(project["authors"], [{"name": "John Inniger"}])
         self.assertEqual(
             project["dependencies"],
-            ["psycopg[binary]==3.3.3", "pydantic==2.13.3", "pydantic-ai-slim==2.27.0"],
+            [
+                "psycopg[binary]==3.3.3",
+                "pydantic==2.13.3",
+                "pydantic-ai-slim==2.27.0",
+                "sqlglot==30.19.0",
+            ],
         )
         self.assertEqual(
             project["urls"]["Repository"], "https://github.com/JohnnyFiv3r/memoriesql"
@@ -45,8 +50,8 @@ class PublicBootstrapTests(unittest.TestCase):
 
     def test_registry_is_explicit_complete_and_default_deny(self) -> None:
         records = load_registry()
-        self.assertEqual(len(records), 64)
-        self.assertEqual(len({record["id"] for record in records}), 64)
+        self.assertEqual(len(records), 65)
+        self.assertEqual(len({record["id"] for record in records}), 65)
         catalogs = load_catalog_definitions()
         self.assertEqual(tuple(item.kind for item in catalogs), CATALOG_KINDS)
         counts = {item.kind: 0 for item in catalogs}
@@ -54,10 +59,10 @@ class PublicBootstrapTests(unittest.TestCase):
             counts[str(record["catalog"])] += 1
             self.assertEqual(record["classification"], "proposed_open_core")
             self.assertEqual(record["package_disposition"], "include")
-        self.assertEqual(counts["json_schema"], 58)
+        self.assertEqual(counts["json_schema"], 59)
         self.assertEqual(counts["python"], 5)
         self.assertEqual(counts["connector"], 1)
-        self.assertEqual(sum(counts.values()), 64)
+        self.assertEqual(sum(counts.values()), 65)
 
     def test_generated_catalogs_have_no_drift(self) -> None:
         for path, expected in expected_outputs().items():
@@ -65,7 +70,7 @@ class PublicBootstrapTests(unittest.TestCase):
 
     def test_boundary_scan_is_clean(self) -> None:
         result = verify()
-        self.assertEqual(result["record_count"], 64)
+        self.assertEqual(result["record_count"], 65)
         self.assertEqual(result["default_policy"], "deny")
         self.assertEqual(result["private_boundary_leaks"], [])
 
@@ -150,9 +155,10 @@ class PublicBootstrapTests(unittest.TestCase):
         self.assertIn('python-version: ["3.13", "3.14"]', compatibility)
         # The installed acceptance runs as parallel shards launched by the
         # workflow shell; the script itself denies subprocesses.
-        self.assertIn('run_installed_acceptance.py --shard "$shard/$shards"', compatibility)
+        self.assertIn(
+            'run_installed_acceptance.py --shard "$shard/$shards"', compatibility
+        )
         self.assertIn('test "$failed" -eq 0', compatibility)
-
 
 
 if __name__ == "__main__":

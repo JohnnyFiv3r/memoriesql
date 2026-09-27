@@ -13,7 +13,7 @@ SHIPPED_NON_RUNTIME = {
     "src/memoriesql/cli.py",
     "src/memoriesql/contracts/__init__.py",
 }
-ALLOWED_EXTERNAL = {"psycopg", "pydantic", "pydantic_ai"}
+ALLOWED_EXTERNAL = {"psycopg", "pydantic", "pydantic_ai", "sqlglot"}
 
 
 def verify(root: Path = ROOT) -> dict[str, int]:

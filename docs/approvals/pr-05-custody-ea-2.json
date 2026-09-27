@@ -1,0 +1,154 @@
+{
+  "access_separation": {
+    "distinct_os_principals_claimed": false,
+    "limitation": "Agents sharing the same operating-system account are not distinct filesystem security principals.",
+    "outside_all_implementation_repositories": true,
+    "owner_only_read_only_filesystem_modes": true,
+    "pack_content_confined_to_independent_custodian_context": true,
+    "questions_gold_hints_or_private_access_paths_shared": false
+  },
+  "algorithm": "sha256",
+  "approved_interface_record": {
+    "amendments": [],
+    "approval_ref": "https://github.com/JohnnyFiv3r/memoriesql/pull/46#issuecomment-5849423968",
+    "interface": {
+      "algorithm": "sha256",
+      "dependencies": [
+        {
+          "commit": "2baffc688291dbfdeccaa46f7ca05f6e9ef0e12c",
+          "path": "docs/relation-assessment.md",
+          "sha256": "69a0d985466c6610a3a2abc73bcef9242749ff9535cb709e32867c7e06414d2a"
+        }
+      ],
+      "packet_commit": "2baffc688291dbfdeccaa46f7ca05f6e9ef0e12c",
+      "packet_path": "docs/agent-sql-results-v1.md",
+      "packet_sha256": "ba9e94b75b581949ff55e9b06b7271e2d4d0c79d6423e1dc6184d72245c585bb"
+    },
+    "version": 2
+  },
+  "attestation_revision": "ea-2",
+  "custodian": {
+    "role": "independent PR-04 evaluation custodian",
+    "task_id": "01a0d40a-b91a-73a0-b5b3-8067f150c880"
+  },
+  "evaluation_approval": {
+    "final_route_approval": {
+      "at": "2026-09-26T21:44:04.956Z",
+      "item_id": "01a0dfac-e45d-7a12-bf72-096d5910444a",
+      "message_id": "msg_01a0dfac-e45c-7412-aafe-63c5947adbbd",
+      "turn_id": "01a0dfac-e394-7e70-8bc8-1f062e924487"
+    },
+    "owner_amendment": {
+      "at": "2026-09-26T20:32:23.434Z",
+      "message_id": "msg_01a0df6b-418a-71d3-8094-bec17b38c29b",
+      "turn_id": "01a0df6b-3ee2-7440-8f84-0084ef0b1760"
+    },
+    "source_task_id": "01a0676f-6eaa-7d70-b034-cb9be5832167",
+    "status": "approved_for_custody_freeze; original owner messages and decision context verified; unchanged v3 plus supplemental approval"
+  },
+  "evaluation_conditions": [
+    {
+      "name": "fixed PostgreSQL FTS/pg_trgm",
+      "profile_id": "fts-trgm-v1",
+      "profile_manifest_revision": "ep-1",
+      "profile_manifest_sha256": "1b7086621dcb6a508114cb5bf4bcbbe6380d0e594b9da4827ca51be7e47125c6",
+      "role": "evaluation-only lexical peer"
+    },
+    {
+      "name": "optional in-Postgres vector condition",
+      "profile_id": "fts-trgm-vector-v1",
+      "profile_manifest_revision": "ep-1",
+      "profile_manifest_sha256": "1b7086621dcb6a508114cb5bf4bcbbe6380d0e594b9da4827ca51be7e47125c6",
+      "role": "evaluation-only lexical-plus-exact-vector peer"
+    }
+  ],
+  "execution": {
+    "database_or_checkpoint_execution": false,
+    "evaluation_runs": 0,
+    "implementation": false,
+    "model_calls": 0,
+    "spending": false
+  },
+  "exposure_incidents": [],
+  "format": "pr04-independent-custody-attestation-v1",
+  "frozen_at": "2026-09-26T22:01:04Z",
+  "issued_at": "2026-09-26T22:03:23Z",
+  "matched_opportunities_and_budgets": true,
+  "model_reproducibility": {
+    "discovery_sha256": "cd544df7b4003b692513f5dfde6439e4570bb63be284ea6f5a32c360e5d47471",
+    "reasoning_effort": "high",
+    "remote_immutable_backend_revision": "unavailable",
+    "scope": "Owner-approved observable-configuration reproducibility; hidden backend updates cannot be ruled out; detectable drift and fallback rejected.",
+    "selector": "gpt-5.6-terra"
+  },
+  "preregistration_complete": true,
+  "prior_exposed_pack_reused": false,
+  "reissue_scope": "Explicit condition/profile linkage and retained loadable-corpus readiness evidence only; original frozen_at and all frozen revisions/digests unchanged. Original attestation retained.",
+  "revisions": {
+    "approved_policy": {
+      "revision": "pr05-evaluation-preregistration-v3",
+      "sha256": "6bdf6b0e790cb7b0ef71337de5b494f03913ec5c47cb3c1d746686594bc545db"
+    },
+    "pack": {
+      "digest_scope": "frozen inventory of exact constituent bytes",
+      "revision": "ef-1",
+      "sha256": "e6e7844592ae4694266b9890f328e90f19f2795eeb1c38f7b28d786ba46fabdd"
+    },
+    "preregistration": {
+      "revision": "er-1",
+      "sha256": "21d6ce7a08eaa084a779db175f0e68fabffa9e42c0f1961c2b25495bb70ce9a9"
+    },
+    "profiles": {
+      "revision": "ep-1",
+      "sha256": "1b7086621dcb6a508114cb5bf4bcbbe6380d0e594b9da4827ca51be7e47125c6"
+    },
+    "supplemental_approval": {
+      "revision": "pr04-custody-policy-approval-v1",
+      "sha256": "3b0170773413c9e772abb93c3f93de92cdeb9d7fe6cd59894eab8891eac47a00"
+    },
+    "thresholds": {
+      "revision": "et-1",
+      "sha256": "cb8d09abf5cd4eaf632eb142c88a7a0cdc12dbfd88c67b63d32d788dc227a236"
+    }
+  },
+  "scope": "Input and preregistration freeze only. No semantic-quality certification, architecture winner, runtime implementation, qualification, evaluation, spending, publication or deployment authorization.",
+  "seen_and_unseen_results_separate": true,
+  "serialization": {
+    "encoding": "UTF-8 without BOM",
+    "final_newline": true,
+    "hash_scope": "Exact complete JSON document bytes; detached SHA-256 is not embedded in this document.",
+    "json": "Python json.dumps ensure_ascii=False, sort_keys=True, indent=2",
+    "line_endings": "LF"
+  },
+  "source_attributed_loadable_corpus": {
+    "evidence_commit": "84f93ec272cc1e868efffb0765b8366bdc5bf987",
+    "evidence_repository": "JohnnyFiv3r/memoriesql-desktop",
+    "foundation_proof_revision": "pr04-replay-proof-v1",
+    "foundation_proof_sha256": "0581e6e0d0a7372517e7a07cdf96689ff5a602abec9083090dd0483b1ac468db",
+    "installed_dependency_in_retained_proof": "memoriesql==0.0.12",
+    "profiles": [
+      "foundation-v1",
+      "relations-v1"
+    ],
+    "qualification_of_new_interface_or_unseen_evaluation_executed": false,
+    "ready": true,
+    "relation_proof_revision": "pr04-relation-replay-proof-v1",
+    "relation_proof_sha256": "55a6dd09889a2c044e7516523c9432a5bf38b89dd61a2ed3dbe9b9dfb1900f74",
+    "retained_source_fidelity_repeat_resume_clean_replay": "passed",
+    "scope": "Delivered PR-04 capture-native foundation and supported relation replay corpus; retained evidence, not a new database run or qualification of unreleased PR-05 runtime.",
+    "source_inventory_sha256": "e3d98a0995bc9d9b060247eaaa7b5e56af2bc2f59a126368c7fe2a39f922d10a"
+  },
+  "status": "frozen",
+  "supersedes_attestation_sha256": "12ecbf3781220990fb235aea4955e9ec88f2b015618dd19c0903e6f5377cefeb",
+  "threshold_and_profile_preservation": {
+    "applicability_and_additions": "Applicable historical rules retained; denominator mappings, comparison safeguards, condition parameters and execution controls use the owner-approved v3 reconciliation plus recorded supplemental approval. Historical experiment configurations are not transplanted as qualification evidence.",
+    "generated_answers_select_architecture": false,
+    "historical_accepted_numeric_floors_preserved": true,
+    "historical_numeric_policy_sha256": "c743c867ab7d35a845fa9ce0d1d1a0af08a219534dc2e632fa467043bff45105",
+    "inconclusive_outcome_permitted": true,
+    "owner_approved_amendments_preserved": true,
+    "post_result_threshold_or_profile_changes": false,
+    "unchanged_since_original_freeze": true
+  },
+  "vector_preparation": "Input, model provenance and recipe frozen; vector outputs not computed. Separately authorized preparation must retain output digests and receipts."
+}

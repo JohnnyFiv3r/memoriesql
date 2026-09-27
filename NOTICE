@@ -1,2 +1,6 @@
 memoriesQL
 Copyright 2026 John Inniger
+
+The unreleased agent SQL admission kernel uses SQLGlot 30.19.0 as a separately
+installed dependency (MIT license). No SQLGlot source is copied or adapted here.
+Its distribution carries its upstream license and copyright notices.

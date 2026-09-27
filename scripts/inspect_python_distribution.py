@@ -31,7 +31,14 @@ DEPENDENCIES = [
     "Requires-Dist: psycopg[binary]==3.3.3",
     "Requires-Dist: pydantic==2.13.3",
     "Requires-Dist: pydantic-ai-slim==2.27.0",
+    "Requires-Dist: sqlglot==30.19.0",
 ]
+EXPECTED_NOTICE = (
+    "memoriesQL\nCopyright 2026 John Inniger\n"
+    "\nThe unreleased agent SQL admission kernel uses SQLGlot 30.19.0 as a separately\n"
+    "installed dependency (MIT license). No SQLGlot source is copied or adapted here.\n"
+    "Its distribution carries its upstream license and copyright notices.\n"
+)
 RESOURCE_FILES = {
     "memoriesql/infrastructure/postgres/_migration_inventory.json",
     *(
@@ -174,9 +181,7 @@ def _wheel_inventory(path: Path) -> list[str]:
             if expected not in metadata:
                 raise ValueError(f"wheel metadata missing: {expected}")
         notice_name = f"memoriesql-{VERSION}.dist-info/licenses/NOTICE"
-        if archive.read(notice_name).decode("utf-8") != (
-            "memoriesQL\nCopyright 2026 John Inniger\n"
-        ):
+        if archive.read(notice_name).decode("utf-8") != EXPECTED_NOTICE:
             raise ValueError("wheel NOTICE attribution drift")
     return members
 
@@ -302,9 +307,7 @@ def _sdist_inventory(path: Path) -> list[str]:
             if expected not in metadata_text:
                 raise ValueError(f"sdist metadata missing: {expected}")
         notice = archive.extractfile(f"{root}NOTICE")
-        if notice is None or notice.read().decode("utf-8") != (
-            "memoriesQL\nCopyright 2026 John Inniger\n"
-        ):
+        if notice is None or notice.read().decode("utf-8") != EXPECTED_NOTICE:
             raise ValueError("sdist NOTICE attribution drift")
     return members
 
