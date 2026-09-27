@@ -6,7 +6,7 @@ import logging
 import unittest
 from uuid import UUID
 
-from memoriesql.application.agent_sql_admission import RecursionBound, admit_select
+from memoriesql.application.agent_sql_admission import RecursionBound, admit_query
 from memoriesql.application.agent_sql_catalog import (
     SqlAdmissionError,
     SqlCatalog,
@@ -50,7 +50,7 @@ class AgentSqlAdmissionTests(unittest.TestCase):
 
     def test_bound_values_are_not_in_emitted_sql_or_derivation_program(self) -> None:
         private_value = "fixture marker; DROP TABLE forbidden"
-        result = admit_select(
+        result = admit_query(
             "SELECT o.bead_id AS id FROM memory_v1.observations o WHERE o.summary ILIKE $1",
             (SqlParameter(1, "text", private_value),),
         )
@@ -78,15 +78,15 @@ class AgentSqlAdmissionTests(unittest.TestCase):
             (("source_unit_id", "content_sha256"),),
         )
         with self.assertRaises(SqlAdmissionError):
-            admit_select(
+            admit_query(
                 "SELECT row_number() OVER (ORDER BY u.source_unit_id) AS n FROM memory_v1.source_units u"
             )
-        admit_select(
+        admit_query(
             "SELECT row_number() OVER (ORDER BY u.source_unit_id,u.content_sha256) AS n FROM memory_v1.source_units u"
         )
 
     def test_parameter_only_text_uses_catalog_collation(self) -> None:
-        result = admit_select(
+        result = admit_query(
             "SELECT $1 ILIKE $2 AS matched",
             (SqlParameter(1, "text", "İ"), SqlParameter(2, "text", "i")),
         )
@@ -105,23 +105,23 @@ class AgentSqlAdmissionTests(unittest.TestCase):
             "SELECT lag(lag(o.summary,1) OVER (ORDER BY o.bead_id,o.bead_version_id),1) OVER (ORDER BY o.bead_id,o.bead_version_id) AS n FROM memory_v1.observations o",
         ):
             with self.subTest(query=query), self.assertRaises(SqlAdmissionError):
-                admit_select(
+                admit_query(
                     query, (SqlParameter(1, "int8", "1"),) if "$1" in query else ()
                 )
 
     def test_qualified_columns_group_alias_and_percent_tokens(self) -> None:
-        result = admit_select(
+        result = admit_query(
             'SELECT memory_v1.observations.bead_id AS "%(p1)s%%" FROM memory_v1.observations WHERE observations.summary=$1',
             (SqlParameter(1, "text", "fictional"),),
         )
         self.assertEqual(result.columns[0].name, "%(p1)s%%")
         self.assertIn('"%%(p1)s%%%%"', result.sql)
-        result = admit_select(
+        result = admit_query(
             "SELECT lower(o.title) AS label, count(*) AS n FROM memory_v1.observations o GROUP BY label"
         )
         self.assertIn("GROUP BY LOWER(o.title)", result.sql)
         with self.assertRaises(SqlAdmissionError):
-            admit_select(
+            admit_query(
                 "SELECT memory_v1.observations.bead_id FROM memory_v1.observations o"
             )
 
@@ -130,11 +130,11 @@ class AgentSqlAdmissionTests(unittest.TestCase):
             "SELECT o.bead_id AS id FROM memory_v1.observations o WHERE o.bead_id=$1"
         )
         with self.assertRaises(SqlAdmissionError) as missing:
-            admit_select(query, (SqlParameter(1, "bead_ref", ANCHOR),))
+            admit_query(query, (SqlParameter(1, "bead_ref", ANCHOR),))
         self.assertEqual(missing.exception.code, "unavailable")
         with self.assertRaises(SqlAdmissionError):
-            admit_select(query, (SqlParameter(1, "uuid", ANCHOR),))
-        result = admit_select(
+            admit_query(query, (SqlParameter(1, "uuid", ANCHOR),))
+        result = admit_query(
             query, (SqlParameter(1, "bead_ref", ANCHOR),), admitted_anchors=ANCHORS
         )
         self.assertEqual(result.columns[0].type.reference_kind, "bead_ref")
@@ -151,11 +151,11 @@ class AgentSqlAdmissionTests(unittest.TestCase):
             "EXCEPT ALL",
         ):
             with self.subTest(operation=operation):
-                result = admit_select(left + " " + operation + " " + right)
+                result = admit_query(left + " " + operation + " " + right)
                 self.assertEqual(result.columns[0].type.reference_kind, "bead_ref")
                 self.assertIn(operation, result.sql)
         with self.assertRaises(SqlAdmissionError):
-            admit_select(
+            admit_query(
                 left + " UNION SELECT s.statement_id AS id FROM memory_v1.statements s"
             )
 
@@ -167,14 +167,14 @@ class AgentSqlAdmissionTests(unittest.TestCase):
             ),
             (("id",),),
         )
-        result = admit_select(
+        result = admit_query(
             "SELECT q.id AS id, sum(q.n) AS total FROM input.prior q GROUP BY q.id",
             inputs={"prior": saved},
         )
         self.assertEqual(result.relations, ("input.prior",))
         self.assertEqual(result.columns[1].type.pg_type, "numeric")
         with self.assertRaises(SqlAdmissionError):
-            admit_select("SELECT q.id FROM input.guessed q", inputs={"prior": saved})
+            admit_query("SELECT q.id FROM input.guessed q", inputs={"prior": saved})
 
     def test_ctes_subqueries_filters_and_case_compose(self) -> None:
         query = """WITH counts AS (
@@ -185,7 +185,7 @@ class AgentSqlAdmissionTests(unittest.TestCase):
           WHERE EXISTS (SELECT s.statement_id AS sid FROM memory_v1.statements s
                         WHERE s.bead_id=o.bead_id AND s.text ILIKE $1)
           ORDER BY o.bead_id"""
-        result = admit_select(
+        result = admit_query(
             query,
             (
                 SqlParameter(1, "text", "%fictional%"),
@@ -211,7 +211,7 @@ class AgentSqlAdmissionTests(unittest.TestCase):
                     if "$1" in expression
                     else ()
                 )
-                admit_select(
+                admit_query(
                     "SELECT " + expression + " AS value FROM memory_v1.observations o",
                     parameters,
                 )
@@ -226,14 +226,14 @@ class AgentSqlAdmissionTests(unittest.TestCase):
                 self.subTest(expression=expression),
                 self.assertRaises(SqlAdmissionError),
             ):
-                admit_select(
+                admit_query(
                     "SELECT " + expression + " AS value FROM memory_v1.observations o"
                 )
 
     def test_array_membership_is_typed_bounded_and_not_in_expansion(self) -> None:
         query = "SELECT o.bead_id AS id FROM memory_v1.observations o WHERE o.bead_id=ANY($1::uuid[])"
         for values in ([], [ANCHOR]):
-            result = admit_select(
+            result = admit_query(
                 query,
                 (SqlParameter(1, "bead_ref[]", values),),
                 admitted_anchors=ANCHORS,
@@ -243,13 +243,13 @@ class AgentSqlAdmissionTests(unittest.TestCase):
             )
         for invalid_values in ([None], [ANCHOR] * 65):
             with self.assertRaises(SqlAdmissionError):
-                admit_select(
+                admit_query(
                     query,
                     (SqlParameter(1, "bead_ref[]", invalid_values),),
                     admitted_anchors=ANCHORS,
                 )
         with self.assertRaises(SqlAdmissionError):
-            admit_select(
+            admit_query(
                 query.replace("=ANY($1::uuid[])", "IN ($1)"),
                 (SqlParameter(1, "bead_ref[]", [ANCHOR]),),
                 admitted_anchors=ANCHORS,
@@ -258,7 +258,7 @@ class AgentSqlAdmissionTests(unittest.TestCase):
     def test_recursion_requires_real_anchor_depth_cycle_and_edge_progress(self) -> None:
         parameter = (SqlParameter(1, "bead_ref", ANCHOR),)
         for depth in range(1, 9):
-            result = admit_select(
+            result = admit_query(
                 recursive_sql(depth),
                 parameter,
                 admitted_anchors=ANCHORS,
@@ -280,7 +280,7 @@ class AgentSqlAdmissionTests(unittest.TestCase):
             query.replace("SELECT node, depth, is_cycle", "SELECT node, depth, path"),
         ):
             with self.subTest(invalid=invalid), self.assertRaises(SqlAdmissionError):
-                admit_select(
+                admit_query(
                     invalid,
                     parameter,
                     admitted_anchors=ANCHORS,
@@ -292,9 +292,9 @@ class AgentSqlAdmissionTests(unittest.TestCase):
     ) -> None:
         query = "SELECT c.bead_id AS id, c.score AS score FROM evaluation_v1.candidates c ORDER BY c.score DESC"
         with self.assertRaises(SqlAdmissionError) as refused:
-            admit_select(query)
+            admit_query(query)
         self.assertEqual(refused.exception.code, "unavailable")
-        result = admit_select(query, evaluation_admitted=True)
+        result = admit_query(query, evaluation_admitted=True)
         self.assertEqual(result.columns[1].type.pg_type, "float8")
 
     def test_sql_bypasses_and_scope_manufacturing_are_refused_without_logging_text(
@@ -323,7 +323,7 @@ class AgentSqlAdmissionTests(unittest.TestCase):
                 self.assertRaises(SqlAdmissionError),
             ):
                 with self.assertNoLogs(logging.getLogger("sqlglot")):
-                    admit_select(statement)
+                    admit_query(statement)
 
     def test_parameters_width_offsets_and_nonfinite_values_fail_closed(self) -> None:
         for parameter in (
@@ -337,10 +337,10 @@ class AgentSqlAdmissionTests(unittest.TestCase):
                 self.subTest(parameter_type=parameter.type),
                 self.assertRaises(SqlAdmissionError),
             ):
-                admit_select("SELECT $1 AS value", (parameter,))
+                admit_query("SELECT $1 AS value", (parameter,))
         for suffix in ("OFFSET 10001", "LIMIT -1"):
             with self.assertRaises(SqlAdmissionError):
-                admit_select(
+                admit_query(
                     "SELECT o.bead_id AS id FROM memory_v1.observations o " + suffix
                 )
 

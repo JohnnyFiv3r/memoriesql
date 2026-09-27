@@ -1,0 +1,35 @@
+{
+  "version": 2,
+  "interface": {
+    "packet_commit": "b3865f307b50bd94681b387ad0f3b16fbb20213a",
+    "packet_path": "docs/agent-sql-results-v1.md",
+    "algorithm": "sha256",
+    "packet_sha256": "78bbc04eaeffd0fd47b0576e270f25eaa30e07a90b42e53d27e64308dfd8269e",
+    "dependencies": [
+      {
+        "path": "docs/relation-assessment.md",
+        "commit": "b3865f307b50bd94681b387ad0f3b16fbb20213a",
+        "sha256": "69a0d985466c6610a3a2abc73bcef9242749ff9535cb709e32867c7e06414d2a"
+      }
+    ]
+  },
+  "approval_ref": "https://github.com/JohnnyFiv3r/memoriesql/pull/49#issuecomment-5851352880",
+  "amendments": [
+    {
+      "amendment_ref": "https://github.com/JohnnyFiv3r/memoriesql/pull/48#issuecomment-5851120561",
+      "supersedes": {
+        "packet_commit": "2baffc688291dbfdeccaa46f7ca05f6e9ef0e12c",
+        "packet_path": "docs/agent-sql-results-v1.md",
+        "algorithm": "sha256",
+        "packet_sha256": "ba9e94b75b581949ff55e9b06b7271e2d4d0c79d6423e1dc6184d72245c585bb",
+        "dependencies": [
+          {
+            "path": "docs/relation-assessment.md",
+            "commit": "2baffc688291dbfdeccaa46f7ca05f6e9ef0e12c",
+            "sha256": "69a0d985466c6610a3a2abc73bcef9242749ff9535cb709e32867c7e06414d2a"
+          }
+        ]
+      }
+    }
+  ]
+}
