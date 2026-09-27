@@ -64,6 +64,13 @@ credential values.
 
 ## Development qualification and historical verification
 
+**Current CI policy:** routine pushes now run only inexpensive package checks.
+Full Python 3.13/3.14 installed database qualification remains mandatory locally;
+hosted full qualification requires explicit owner approval. See
+[CI cost policy](ci-policy.md). Skipped compatibility jobs are not qualification.
+This changes future release verification, not the historical 0.0.12 publication
+record above or its approved artifacts.
+
 Development receipts bind full checkout SHA, filenames, sizes/hashes and
 `unreleased-development`; they never authorize publication. Compatibility jobs
 verify that receipt, rebuild a wheel from sdist, prove it byte-identical to the
@@ -86,9 +93,12 @@ changed downloaded receipt cannot override the committed release hashes.
 
 Only creation of exactly `v0.0.12` in this repository can trigger publication.
 PRs, branch pushes, manual dispatch, wildcard and historical tags cannot upload.
-The tag must target current main with genuine 0.0.12 metadata; the latest package
-main-push run at that exact SHA must be successful. PR qualification alone is
-insufficient.
+The tag must target current main with genuine 0.0.12 metadata. Under the current
+cost policy, the latest explicitly requested full package qualification on main
+at that exact SHA must be successful, including actual successful `package`,
+`compatibility (3.13)` and `compatibility (3.14)` jobs. A cheap main-push run,
+skipped jobs or PR qualification alone is insufficient. The pre-policy main-push
+publication evidence above remains a historical record, not a new dispatch.
 
 The verify job downloads only `memoriesql-python-<exact SHA>` from that selected
 run and checks the two filenames, sizes and SHA-256 values against the committed
@@ -99,7 +109,9 @@ There is no publication-time build, rename, dependency resolution, token fallbac
 or `skip-existing`. Automation must not approve upload or change external settings.
 
 1. Merge only the reviewed release head after exact-head CI and independent archive
-   comparison. Verify actual merged-current-main latest push CI and archives again.
+   comparison. Obtain explicit approval for the full hosted qualification at
+   actual merged-current-main, then verify its jobs and archives again. A green
+   inexpensive main-push check cannot substitute for that qualification.
 2. Recheck tag availability and GitHub environment protections. Stop on a
    mismatch or missing approval gate.
 3. Create/push `v0.0.12` once at verified release main under the owner's

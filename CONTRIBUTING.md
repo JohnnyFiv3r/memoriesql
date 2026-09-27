@@ -27,4 +27,10 @@ ruff check src scripts tests
 mypy src scripts tests
 ```
 
+These are the inexpensive automatic checks, not complete installed qualification.
+Follow the [CI cost and qualification policy](docs/ci-policy.md): both supported
+interpreters still require full local database and restart proof with retained
+exact-head evidence. Hosted database qualification is explicitly owner-requested,
+not an automatic consequence of pushing a PR. Never report skipped jobs as passed.
+
 Do not include user content, provider-specific fixtures, product code, credentials, generated build outputs, or files outside the explicit export registry.
