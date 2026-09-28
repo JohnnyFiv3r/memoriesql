@@ -337,6 +337,69 @@ class QueryWindowWitness(unittest.TestCase):
             [0, 0, 1, 1],
         )
 
+    def test_fanout_and_equal_time_frames_fit_without_losing_members(self) -> None:
+        self.fixture.assertion()
+        aliases = [f"s{i}" for i in range(8)]
+        joined = " ".join(
+            f"JOIN memory_v1.relation_statements {alias} "
+            f"ON {alias}.relation_id=s0.relation_id"
+            for alias in aliases[1:]
+        )
+        selected = ",".join(
+            f"{alias}.statement_id AS id{i}" for i, alias in enumerate(aliases)
+        )
+        keyed_order = ",".join(
+            f"{alias}.relation_id,{alias}.role,{alias}.statement_id"
+            for alias in aliases
+        )
+        output_order = ",".join(f"id{i}" for i in range(len(aliases)))
+        graph = self.compare(
+            f"SELECT {selected},count(*) OVER(ORDER BY {keyed_order} "
+            "ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS running "
+            f"FROM memory_v1.relation_statements s0 {joined} "
+            f"ORDER BY {output_order}"
+        )
+        windows = [n for n in graph["nodes"] if n["operation"] == "window"]
+        self.assertEqual(len(graph["row_provenance"]), 256)
+        self.assertEqual(len(windows), 256)
+        self.assertTrue(all("frame_span" in n for n in windows))
+        self.assertTrue(all("frame_input_refs" not in n for n in windows))
+        self.assertTrue(
+            any(
+                stage["operation"] == "window"
+                and stage["frame_mode"] == "total_span"
+                for stage in graph["stages"]
+            )
+        )
+
+        tied = aliases[:5]
+        tied_joins = " ".join(
+            f"JOIN memory_v1.relation_statements {alias} "
+            f"ON {alias}.relation_id=r.relation_id"
+            for alias in tied
+        )
+        tied_selected = ",".join(
+            f"{alias}.statement_id AS id{i}" for i, alias in enumerate(tied)
+        )
+        tied_order = ",".join(f"id{i}" for i in range(len(tied)))
+        graph = self.compare(
+            f"SELECT {tied_selected},count(*) OVER(ORDER BY r.recorded_at "
+            "ROWS BETWEEN CURRENT ROW AND CURRENT ROW) AS one "
+            f"FROM memory_v1.assessed_relations r {tied_joins} "
+            f"ORDER BY {tied_order}"
+        )
+        windows = [n for n in graph["nodes"] if n["operation"] == "window"]
+        self.assertEqual(len(graph["row_provenance"]), 32)
+        self.assertEqual(len(windows), 32)
+        self.assertTrue(all(len(n["frame_input_refs"]) == 1 for n in windows))
+        self.assertTrue(
+            any(
+                stage["operation"] == "window"
+                and stage["frame_mode"] == "native_members"
+                for stage in graph["stages"]
+            )
+        )
+
     def test_empty_window_keeps_protected_source_and_predicate(self) -> None:
         self.fixture.assertion()
         graph = self.compare(

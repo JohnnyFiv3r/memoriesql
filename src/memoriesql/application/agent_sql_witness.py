@@ -451,6 +451,52 @@ class _Compiler:
                 if data_column(value):
                     columns.setdefault(key(value), (self.fresh("value"), value.copy()))
 
+        source_keys: list[list[set[str]]] = []
+        for source in sources:
+            if not isinstance(source, exp.Subquery):
+                source_keys = []
+                break
+            scan = source.this.unnest()
+            scan_from = scan.args.get("from_") if isinstance(scan, exp.Select) else None
+            table = scan_from.this if scan_from else None
+            if not isinstance(table, exp.Table) or not table.db:
+                source_keys = []
+                break
+            schema = self.relations.get(table.db + "." + table.name)
+            if schema is None:
+                source_keys = []
+                break
+            keys_for_source: list[set[str]] = []
+            for unique_key in schema.unique_keys:
+                flattened = {
+                    flattened_name
+                    for column_name in unique_key
+                    for flattened_name, original in columns.values()
+                    if isinstance(original, exp.Column)
+                    and original.table == source.alias_or_name
+                    and original.name == column_name
+                }
+                if len(flattened) == len(unique_key):
+                    keys_for_source.append(flattened)
+            if not keys_for_source:
+                source_keys = []
+                break
+            source_keys.append(keys_for_source)
+
+        def total_window_order(window: exp.Window) -> bool:
+            if not source_keys or len(source_keys) != len(sources):
+                return False
+            ordered = window.args.get("order")
+            expressions = list(window.args.get("partition_by") or [])
+            if ordered:
+                expressions.extend(item.this for item in ordered.expressions)
+            present = {
+                value.name
+                for value in expressions
+                if isinstance(value, exp.Column) and not value.table
+            }
+            return all(any(key_columns <= present for key_columns in keys) for keys in source_keys)
+
         input_query = exp.select(
             *(exp.alias_(value, name, quoted=True) for name, value in columns.values()),
             exp.alias_(trace, self.hidden, quoted=True),
@@ -654,6 +700,9 @@ class _Compiler:
             ):
                 raise SqlAdmissionError("unsupported", "witness_qualification_pending")
             neighbor: str | None = None
+            frame_mode: str | None = None
+            frame_start: str | None = None
+            frame_end: str | None = None
             frame_members: str | None = None
             if isinstance(function, exp.Lag | exp.Lead):
                 neighbor = self.fresh("neighbor")
@@ -674,22 +723,43 @@ class _Compiler:
             if isinstance(function, exp.Count | exp.Sum | exp.Avg | exp.Min | exp.Max):
                 if not isinstance(window.args.get("spec"), exp.WindowSpec):
                     raise SqlAdmissionError("unsupported", "witness_qualification_pending")
-                frame_members = self.fresh("frame_members")
-                evaluated.append(
-                    "expressions",
-                    exp.alias_(
-                        companion(
-                            window,
-                            exp.Anonymous(
-                                this="pg_catalog.jsonb_agg",
-                                expressions=[exp.column(self.hidden, quoted=True)],
+                if total_window_order(window):
+                    frame_mode = "total_span"
+                    frame_start = self.fresh("frame_start")
+                    frame_end = self.fresh("frame_end")
+                    for name, kind in ((frame_start, exp.Min), (frame_end, exp.Max)):
+                        evaluated.append(
+                            "expressions",
+                            exp.alias_(
+                                companion(
+                                    window,
+                                    kind(
+                                        this=exp.column(part["ordinal"], quoted=True)
+                                    ),
+                                    frame=True,
+                                ),
+                                name,
+                                quoted=True,
                             ),
-                            frame=True,
+                        )
+                else:
+                    frame_mode = "native_members"
+                    frame_members = self.fresh("frame_members")
+                    evaluated.append(
+                        "expressions",
+                        exp.alias_(
+                            companion(
+                                window,
+                                exp.Anonymous(
+                                    this="pg_catalog.jsonb_agg",
+                                    expressions=[exp.column(self.hidden, quoted=True)],
+                                ),
+                                frame=True,
+                            ),
+                            frame_members,
+                            quoted=True,
                         ),
-                        frame_members,
-                        quoted=True,
-                    ),
-                )
+                    )
             stage = self.stage(
                 "window",
                 partition_stage=part["stage"],
@@ -701,12 +771,15 @@ class _Compiler:
                 frame=window.args["spec"].dump()
                 if isinstance(window.args.get("spec"), exp.WindowSpec)
                 else None,
+                frame_mode=frame_mode,
             )
             descriptors.append(
                 {
                     "stage": stage,
                     "part": part,
                     "neighbor": neighbor,
+                    "frame_start": frame_start,
+                    "frame_end": frame_end,
                     "frame_members": frame_members,
                 }
             )
@@ -728,6 +801,12 @@ class _Compiler:
                     else exp.Null(),
                     exp.column(descriptor["frame_members"], quoted=True)
                     if descriptor["frame_members"]
+                    else exp.Null(),
+                    exp.column(descriptor["frame_start"], quoted=True)
+                    if descriptor["frame_start"]
+                    else exp.Null(),
+                    exp.column(descriptor["frame_end"], quoted=True)
+                    if descriptor["frame_end"]
                     else exp.Null(),
                 )
             )

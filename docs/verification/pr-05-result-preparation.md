@@ -114,12 +114,15 @@ partition and native peer rank. The ledger uses the hidden source trace only to
 stabilize ordering within peers; it does not change rank/dense-rank peer groups
 or the admitted visible-key requirement for row_number/lag/lead.
 
-For COUNT/SUM/AVG/MIN/MAX with an explicit ROWS frame, PostgreSQL emits the
-actual ordered frame-member traces in the same restricted SELECT as the value.
-The binder verifies every member against the exact partition occurrence bag and
-records those contributor refs, multiplicities and empty frames. A contiguous
-ordinal span is recorded only when it can be verified against the ledger;
-tied-peer ROWS frames do not acquire a guessed span. FILTER and native null
+For COUNT/SUM/AVG/MIN/MAX with an explicit ROWS frame, a visible source-key
+order proves a total partition order and PostgreSQL emits native first/last
+ordinals in the same restricted SELECT as the value. The frame is then a span
+of the shared partition ledger rather than a repeated array of every member.
+When that proof is unavailable, PostgreSQL emits actual frame-member traces;
+the binder verifies each against the partition occurrence bag and records
+contributor refs, multiplicities and empty frames. A contiguous span is
+recorded only when it can be verified; tied-peer ROWS frames never receive a
+guessed span. FILTER and native null
 semantics remain evaluated by PostgreSQL; all frame members remain protected
 dependencies. Ordinary GROUP BY/HAVING and their rejected-group ledger run before
 the window phase, including nested ordinary aggregates such as
@@ -141,6 +144,18 @@ refuse before reader dispatch. The corrected refusal case uses an admitted
 correlated scalar subquery, which remains witness-publication pending. The
 failed head and logs are retained; only a fresh exact-head convergence can
 qualify the correction.
+The first hub-heavy development probe exposed PostgreSQL's fixed 64 MiB
+temporary-file limit at a 256-row running frame whose order omitted part of
+the logical source key. The source-key span optimization allows a qualified
+eight-alias, 256-row running window to finish with the unchanged bounds and
+the same visible values as the native statement (241 ms, 560,261 encoded bytes,
+including 420,383 witness bytes, in the local fictional probe); an equal-time
+32-row CURRENT ROW frame still uses exact member traces (128 ms, 96,486 encoded
+bytes). SQLSTATE `53400` from the
+owned temporary-file fence is reported as whole-query `budget_exhausted`,
+never successful emptiness. These are fictional shape measurements, not W1–W7
+capacity or physical-storage certification; the original non-total-key probe
+and failure log remain retained.
 
 Seen acceptance compares native values/schema/order to the witnessed statement,
 then independently checks contributions and multiplicities, empty/all-null facts,
