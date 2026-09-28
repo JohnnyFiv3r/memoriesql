@@ -52,6 +52,7 @@ BEGIN
        OR object_kind !~ '^[a-z][a-z0-9._-]{0,127}$'
        OR installation_id IS NOT NULL AND (
            length(installation_id) NOT BETWEEN 1 AND 1024
+           OR installation_id !~ '[^[:space:]]'
        )
        OR external_object_id IS NULL
        OR length(external_object_id) NOT BETWEEN 1 AND 4096

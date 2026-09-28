@@ -14,7 +14,9 @@ class EnrollExactSource(FrozenContractModel):
     contract_version: Literal[1] = 1
     request_id: UUID
     source_system: str = Field(pattern=r"^[a-z][a-z0-9._-]{0,127}$")
-    installation_id: str | None = Field(default=None, min_length=1, max_length=1024)
+    installation_id: str | None = Field(
+        default=None, min_length=1, max_length=1024, pattern=r"\S"
+    )
     object_kind: str = Field(pattern=r"^[a-z][a-z0-9._-]{0,127}$")
     external_object_id: str = Field(min_length=1, max_length=4096)
     source_schema_version: int = Field(ge=1, le=65535)

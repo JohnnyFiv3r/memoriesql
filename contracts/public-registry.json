@@ -1942,13 +1942,13 @@
       "version": "4"
     },
     {
-      "canonical_payload_sha256": "5883faf88784e93beeb4da5dcee11a4cbe59911c88fd3687c4d33a04047bab66",
+      "canonical_payload_sha256": "09ba907ff08603ffa09b9a69f93101d4781bdc077506d234e1ada84bd9bc7604",
       "catalog": "json_schema",
       "classification": "proposed_open_core",
       "id": "memoriesql.source-enrollment.v1",
       "package_disposition": "include",
       "path": "contracts/records/memoriesql-source-enrollment-v1.json",
-      "public_sha256": "5d0ad9a0dd61bdc6cafa02349f3edb27e7336f0c8e01b5d218c2e348895b60ef",
+      "public_sha256": "1aa1171989c257b5d9a5bcd1f47f85bbe5005166334c7ffdd2a4429d3f440422",
       "reason": "Public-authored exact provider-neutral source authority under the current authenticated human context.",
       "version": "1"
     },

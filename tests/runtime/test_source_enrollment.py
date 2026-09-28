@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 import psycopg
 from psycopg import sql
 from psycopg.conninfo import make_conninfo
+from pydantic import ValidationError
 
 from memoriesql.application.source_enrollment import (
     EnrollExactSource,
@@ -218,6 +219,25 @@ class ExactSourceEnrollment(unittest.TestCase):
         )
         with self.assertRaises(psycopg.Error):
             self.api(secret="0" * 64).enroll(selection)
+        with self.assertRaises(ValidationError):
+            EnrollExactSource.model_validate(
+                selection.model_dump(mode="json") | {"installation_id": " \t "}
+            )
+        with self.assertRaises(psycopg.errors.InvalidParameterValue):
+            with self.db.transaction():
+                self.begin(self.owner_secret)
+                self.db.execute(
+                    "SELECT * FROM memoriesql.enroll_exact_source_v1(%s,%s,%s,%s,%s,%s,%s)",
+                    (
+                        selection.request_id,
+                        selection.source_system,
+                        " \t ",
+                        selection.object_kind,
+                        selection.external_object_id,
+                        selection.source_schema_version,
+                        True,
+                    ),
+                )
         with self.assertRaises(psycopg.errors.InsufficientPrivilege):
             with self.db.transaction():
                 self.begin(self.owner_secret)
