@@ -118,8 +118,9 @@ file only if that replay reports nothing was initialized. The receipt carries
 identifiers and expiry, including the workspace to export as
 `MEMORIESQL_WORKSPACE_ID`.
 
-The owner credential is for the owner only. Give agents their own credential
-with `clients pair` and a separate source grant; never hand them the owner's.
+The owner credential is for the owner only. Give each agent its own credential
+with `clients pair`, adding a `sources grant` for any explicit scope it needs;
+never hand an agent the owner's.
 The owner credential expires at `expires_at`, after which owner commands report
 unavailable; renewal is a separate operation not provided by this command.
 
