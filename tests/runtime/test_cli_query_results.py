@@ -21,20 +21,25 @@ from psycopg.conninfo import make_conninfo
 from memoriesql.application.agent_sql_catalog import SqlCatalog
 from memoriesql.application.authorization import LocalCredential
 from memoriesql.cli import main as cli_main
+from memoriesql.infrastructure.postgres.agent_sql_authority import (
+    qualify_query_authority,
+)
 from memoriesql.infrastructure.postgres.agent_sql_results import (
     PostgresAgentSqlResults,
 )
+from memoriesql.infrastructure.postgres.query_reader_provisioning import (
+    provision_query_reader,
+)
 
 if TYPE_CHECKING:
-    from tests.runtime import query_authority_fixture as authority_fixture
     from tests.runtime import test_query_result_commit as commit_tests
     from tests.runtime.test_postgres_runtime import migrate
 else:
-    import query_authority_fixture as authority_fixture
     import test_query_result_commit as commit_tests
     from test_postgres_runtime import migrate
 
 FIXTURE_SECRET = "fictional orchard session for public acceptance"
+READER_PASSWORD = "fictional-cli-reader-password"
 
 
 class RecordingTransport:
@@ -69,9 +74,7 @@ class CliQueryResults(unittest.TestCase):
         self.db = self.h.db
         migrate(self.db, expected_current_version=34, target_version=38)
         self.reader = "pr06_cli_" + uuid4().hex
-        self.profile = authority_fixture.provision_fictional_reader(
-            self.db, self.reader
-        )
+        self.profile = provision_query_reader(self.db, self.reader, READER_PASSWORD)
         self.addCleanup(self.drop_reader)
         self.assertEqual(
             LocalCredential(FIXTURE_SECRET).sha256(), self.fixture.secret_hash
@@ -99,28 +102,41 @@ class CliQueryResults(unittest.TestCase):
                 os.environ["N1_TEST_DATABASE_URL"],
                 dbname=self.db.info.dbname,
                 user=self.reader,
-                password="fictional-only",
+                password=READER_PASSWORD,
             ),
             autocommit=True,
         )
 
-    def cli(self, arguments: list[str]) -> tuple[int, str]:
-        environment = {
-            "MEMORIESQL_DATABASE_URL": "postgresql://unused.example/unused",
-            "MEMORIESQL_LOCAL_CREDENTIAL": FIXTURE_SECRET,
-            "MEMORIESQL_WORKSPACE_ID": str(self.fixture.workspace),
-            "MEMORIESQL_STATE_DIR": str(self.root / "state"),
-        }
+    def cli(
+        self, arguments: list[str], environment: dict[str, str] | None = None
+    ) -> tuple[int, str]:
         output = io.StringIO()
-        with (
-            patch.dict(os.environ, environment),
-            patch("memoriesql.cli._results_transport", return_value=self.transport),
-            redirect_stdout(output),
-        ):
+        if environment is None:
+            environment = {
+                "MEMORIESQL_DATABASE_URL": "postgresql://unused.example/unused",
+                "MEMORIESQL_LOCAL_CREDENTIAL": FIXTURE_SECRET,
+                "MEMORIESQL_WORKSPACE_ID": str(self.fixture.workspace),
+                "MEMORIESQL_STATE_DIR": str(self.root / "state"),
+            }
+            with (
+                patch.dict(os.environ, environment),
+                patch(
+                    "memoriesql.cli._results_transport", return_value=self.transport
+                ),
+                redirect_stdout(output),
+            ):
+                status = cli_main(arguments)
+            return status, output.getvalue()
+        with patch.dict(os.environ, environment, clear=True), redirect_stdout(output):
             status = cli_main(arguments)
         return status, output.getvalue()
 
-    def query(self, text: str, *extra: str) -> tuple[int, dict[str, Any], str]:
+    def query(
+        self,
+        text: str,
+        *extra: str,
+        environment: dict[str, str] | None = None,
+    ) -> tuple[int, dict[str, Any], str]:
         path = self.root / f"{uuid4()}.sql"
         path.write_text(text, encoding="utf-8")
         status, output = self.cli(
@@ -136,7 +152,8 @@ class CliQueryResults(unittest.TestCase):
                 "2",
                 *extra,
                 "--json",
-            ]
+            ],
+            environment,
         )
         return status, json.loads(output), output
 
@@ -229,6 +246,53 @@ class CliQueryResults(unittest.TestCase):
         self.assertEqual(self.transport.runs_started, 2)
         self.assertTrue(
             all(request["run_ref"] != first_run for request in self.transport.requests[1:])
+        )
+
+    def test_trusted_host_environment_composes_the_reviewed_executor(self) -> None:
+        self.fixture.assertion()
+        base = os.environ["N1_TEST_DATABASE_URL"]
+        control_url = make_conninfo(base, dbname=self.db.info.dbname)
+        environment = {
+            "MEMORIESQL_DATABASE_URL": control_url,
+            "MEMORIESQL_QUERY_READER_URL": make_conninfo(
+                base,
+                dbname=self.db.info.dbname,
+                user=self.reader,
+                password=READER_PASSWORD,
+            ),
+            "MEMORIESQL_QUERY_READER_ROLE": self.reader,
+            "MEMORIESQL_LOCAL_CREDENTIAL": FIXTURE_SECRET,
+            "MEMORIESQL_WORKSPACE_ID": str(self.fixture.workspace),
+            "MEMORIESQL_STATE_DIR": str(self.root / "trusted-state"),
+        }
+        with psycopg.connect(control_url, autocommit=True) as control:
+            pin = qualify_query_authority(control, self.profile).profile_sha256
+        text = "SELECT o.bead_id FROM memory_v1.observations o ORDER BY o.bead_id"
+        status, reply, _ = self.query(
+            text,
+            environment=environment | {"MEMORIESQL_QUERY_AUTHORITY_SHA256": pin},
+        )
+        self.assertEqual(status, 0, reply)
+        self.assertEqual(reply["outcome"], "available")
+        status, drifted, _ = self.query(
+            text,
+            environment=environment
+            | {
+                "MEMORIESQL_QUERY_AUTHORITY_SHA256": "0" * 64,
+                "MEMORIESQL_STATE_DIR": str(self.root / "drift-state"),
+            },
+        )
+        self.assertEqual((status, drifted["outcome"]), (2, "unavailable"))
+        self.assertNotIn(READER_PASSWORD, json.dumps(drifted))
+        without_reader = dict(environment)
+        del without_reader["MEMORIESQL_QUERY_READER_URL"]
+        status, missing, _ = self.query(text, environment=without_reader)
+        self.assertEqual(
+            (status, missing),
+            (
+                2,
+                {"outcome": "unavailable", "reason": "trusted_query_host_not_configured"},
+            ),
         )
 
 

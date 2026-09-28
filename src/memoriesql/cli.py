@@ -57,6 +57,7 @@ from memoriesql.query_client import (
     MAX_SQL_BYTES,
     ResultsTransport,
     RunStore,
+    TrustedHostTransport,
     default_state_root,
     query_request,
     read_bounded,
@@ -275,9 +276,23 @@ def _source_authority(
 
 
 def _results_transport(environment: Mapping[str, str]) -> ResultsTransport | None:
-    """The credential-isolated trusted executor host; none is composed here yet."""
+    """Compose the direct trusted-host executor only when every input is present."""
 
-    return None
+    configured = _local_read_configuration(environment)
+    reader_url = environment.get("MEMORIESQL_QUERY_READER_URL")
+    reader_role = environment.get("MEMORIESQL_QUERY_READER_ROLE")
+    if configured is None or not reader_url or not reader_role:
+        return None
+    control_url, credential_sha256, workspace_id = configured
+    return TrustedHostTransport(
+        control_url=control_url,
+        reader_url=reader_url,
+        reader_role=reader_role,
+        pinned_profile_sha256=environment.get("MEMORIESQL_QUERY_AUTHORITY_SHA256")
+        or None,
+        credential_sha256=credential_sha256,
+        workspace_id=workspace_id,
+    )
 
 
 def _emit_reply(reply: bytes, *, machine: bool) -> int:

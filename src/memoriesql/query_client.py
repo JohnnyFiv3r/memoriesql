@@ -27,6 +27,14 @@ from memoriesql.application.agent_sql_results import (
 )
 from memoriesql.contracts import load_catalog
 
+UNAVAILABLE_REPLY = json.dumps(
+    {
+        "contract_version": CONTRACT_VERSION,
+        "outcome": "unavailable",
+        "error": {"code": "unavailable"},
+    }
+).encode()
+
 # Rotate before the database refuses an expired run; never retry a refusal.
 RUN_ROTATION_MARGIN = timedelta(seconds=60)
 MAX_SQL_BYTES = 32768
@@ -49,6 +57,91 @@ class ResultsTransport(Protocol):
     def start_run(self) -> bytes: ...
 
     def handle(self, request: bytes) -> bytes: ...
+
+
+class TrustedHostTransport:
+    """Direct executor for a credential-isolated trusted host process only.
+
+    It holds the trusted control login and the restricted reader login, builds
+    the reviewed reader profile at process start, refuses a pinned-profile
+    mismatch and settles abandoned deliveries once. Never compose it inside an
+    agent's shell: the agent must receive neither connection credential.
+    """
+
+    def __init__(
+        self,
+        *,
+        control_url: str,
+        reader_url: str,
+        reader_role: str,
+        pinned_profile_sha256: str | None,
+        credential_sha256: str,
+        workspace_id: UUID,
+    ) -> None:
+        self._control_url = control_url
+        self._reader_url = reader_url
+        self._reader_role = reader_role
+        self._pin = pinned_profile_sha256
+        self._credential = credential_sha256
+        self._workspace = workspace_id
+        self._executor: Any = None
+
+    def _connect_control(self) -> Any:
+        import psycopg
+
+        return psycopg.connect(self._control_url, autocommit=True)
+
+    def _connect_reader(self) -> Any:
+        import psycopg
+
+        return psycopg.connect(self._reader_url, autocommit=True)
+
+    def _service(self) -> Any:
+        if self._executor is not None:
+            return self._executor
+        from memoriesql.infrastructure.postgres.agent_sql_authority import (
+            qualify_query_authority,
+        )
+        from memoriesql.infrastructure.postgres.agent_sql_results import (
+            PostgresAgentSqlResults,
+        )
+        from memoriesql.infrastructure.postgres.query_reader_provisioning import (
+            reviewed_query_reader_profile,
+        )
+
+        with self._connect_control() as control:
+            profile = reviewed_query_reader_profile(control, self._reader_role)
+            if (
+                self._pin is not None
+                and qualify_query_authority(control, profile).profile_sha256
+                != self._pin
+            ):
+                raise PermissionError("reviewed reader profile drifted")
+        executor = PostgresAgentSqlResults(
+            control_factory=self._connect_control,
+            reader_factory=self._connect_reader,
+            authority_profile=profile,
+            credential_sha256=self._credential,
+            workspace_id=self._workspace,
+        )
+        executor.recover_abandoned()
+        self._executor = executor
+        return executor
+
+    def start_run(self) -> bytes:
+        try:
+            service = self._service()
+        except Exception:
+            # Configuration and drift failures disclose no connection detail.
+            return UNAVAILABLE_REPLY
+        return bytes(service.start_run())
+
+    def handle(self, request: bytes) -> bytes:
+        try:
+            service = self._service()
+        except Exception:
+            return UNAVAILABLE_REPLY
+        return bytes(service.handle(request))
 
 
 class RunStore:
