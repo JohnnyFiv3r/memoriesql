@@ -32,6 +32,10 @@ class AlreadyInitialized(RuntimeError):
     """Another initialization owns this database; nothing was created."""
 
 
+class InitializationReplayUnverifiable(RuntimeError):
+    """This login cannot read the records a replay must match; nothing was created."""
+
+
 def initialization_identities(request_id: UUID) -> dict[str, UUID]:
     return {role: uuid5(_INITIALIZATION_NAMESPACE, f"{request_id}:{role}") for role in _ROLES}
 
@@ -80,7 +84,12 @@ class PostgresPersonalLocalInitialization:
                 )
             replayed = False
         except ObjectNotInPrerequisiteState as error:
-            if not self._owns_existing(ids, command):
+            owned = self._owns_existing(ids, command)
+            if owned is None:
+                raise InitializationReplayUnverifiable(
+                    "personal-local replay cannot be verified by this login"
+                ) from error
+            if not owned:
                 raise AlreadyInitialized("personal-local authority exists") from error
             replayed = True
         except InsufficientPrivilege as error:
@@ -98,12 +107,12 @@ class PostgresPersonalLocalInitialization:
 
     def _owns_existing(
         self, ids: dict[str, UUID], command: InitializePersonalLocal
-    ) -> bool:
+    ) -> bool | None:
         """True only for an identical replay of this exact request.
 
         The active workspace, owner name and credential expiry must all match
-        the request's derived records. Operator logins that cannot read them
-        cannot confirm a replay and are told the database is initialized.
+        the request's derived records. None means this login cannot read those
+        records, so the replay can be neither confirmed nor ruled out.
         """
 
         try:
@@ -119,7 +128,7 @@ class PostgresPersonalLocalInitialization:
         except Exception:
             if self._connection.info.transaction_status != TransactionStatus.IDLE:
                 self._connection.rollback()
-            return False
+            return None
         return (
             row is not None
             and row[0] == command.owner_display_name

@@ -59,7 +59,9 @@ from memoriesql.infrastructure.postgres.local_client_pairing import (
 )
 from memoriesql.infrastructure.postgres.personal_local_initialization import (
     AlreadyInitialized,
+    InitializationReplayUnverifiable,
     PostgresPersonalLocalInitialization,
+    initialization_identities,
 )
 from memoriesql.infrastructure.postgres.relation_assessment import (
     PostgresRelationAssessments,
@@ -419,6 +421,11 @@ def _initialize(
             )
     except AlreadyInitialized:
         refusal = {"outcome": "unavailable", "reason": "already_initialized"}
+    except InitializationReplayUnverifiable:
+        refusal = {
+            "outcome": "unavailable",
+            "reason": "initialization_replay_unverifiable",
+        }
     except PermissionError:
         refusal = {"outcome": "unavailable", "reason": "resource_unavailable"}
     except Exception as error:
@@ -426,10 +433,13 @@ def _initialize(
         if receipt is None and _commit_outcome_unknown(error):
             # The owner may exist now: keep its only secret. An identical replay
             # with a new file reports whether this file is the credential.
+            ids = initialization_identities(request.request_id)
             return {
                 "outcome": "failed",
                 "reason": "initialization_outcome_unknown",
                 "secret_file_retained": True,
+                "workspace_id": str(ids["workspace"]),
+                "principal_id": str(ids["principal"]),
             }
     if receipt is None or receipt.replayed:
         # No credential was issued for this secret: remove it. On a replay the

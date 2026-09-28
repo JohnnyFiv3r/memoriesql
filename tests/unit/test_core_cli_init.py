@@ -24,6 +24,7 @@ from memoriesql.application.personal_local_initialization import (
 from memoriesql.cli import main
 from memoriesql.infrastructure.postgres.personal_local_initialization import (
     AlreadyInitialized,
+    InitializationReplayUnverifiable,
     initialization_identities,
 )
 
@@ -137,6 +138,7 @@ class CoreCLIInitTests(unittest.TestCase):
         for outcome, expected in (
             (receipt(replayed=True), (0, "available")),
             (AlreadyInitialized("hidden"), (2, "unavailable")),
+            (InitializationReplayUnverifiable("hidden"), (2, "unavailable")),
             (PermissionError("hidden"), (2, "unavailable")),
             (RuntimeError("postgresql://secret@fictional"), (3, "failed")),
         ):
@@ -172,6 +174,8 @@ class CoreCLIInitTests(unittest.TestCase):
                 "outcome": "failed",
                 "reason": "initialization_outcome_unknown",
                 "secret_file_retained": True,
+                "workspace_id": str(initialization_identities(UUID(int=51))["workspace"]),
+                "principal_id": str(initialization_identities(UUID(int=51))["principal"]),
             },
         )
         secret = self.secret.read_text(encoding="ascii")

@@ -78,13 +78,14 @@ class PersonalLocalInitialization(unittest.TestCase):
             )
 
     def init(
-        self, request: dict[str, object], secret: Path
+        self, request: dict[str, object], secret: Path, url: str | None = None
     ) -> tuple[int, dict[str, Any]]:
         path = self.root / f"init-{uuid.uuid4()}.json"
         path.write_text(json.dumps(request), encoding="utf-8")
         output = io.StringIO()
+        environment = {"MEMORIESQL_DATABASE_URL": url or self.url}
         with (
-            patch.dict(os.environ, {"MEMORIESQL_DATABASE_URL": self.url}, clear=True),
+            patch.dict(os.environ, environment, clear=True),
             redirect_stdout(output),
         ):
             status = cli_main(
@@ -191,6 +192,67 @@ class PersonalLocalInitialization(unittest.TestCase):
                     credential_sha256=secret.sha256(), requested_workspace_id=workspace
                 )
         self.assertEqual(context.workspace_id, workspace)
+
+    def operator_login(self) -> str:
+        """A non-superuser login that can only assume the application role."""
+        role = "pr06_init_operator_" + uuid.uuid4().hex[:12]
+        password = "fictional-init-operator-password"
+        self.db.execute(
+            sql.SQL("CREATE ROLE {} LOGIN INHERIT PASSWORD {}").format(
+                sql.Identifier(role), sql.Literal(password)
+            )
+        )
+        self.db.execute(
+            sql.SQL("GRANT memoriesql_application TO {} WITH INHERIT TRUE, SET TRUE").format(
+                sql.Identifier(role)
+            )
+        )
+
+        def drop() -> None:
+            with psycopg.connect(self.admin, autocommit=True) as admin:
+                admin.execute(
+                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+                    "WHERE usename=%s",
+                    (role,),
+                )
+            self.db.execute(sql.SQL("DROP OWNED BY {}").format(sql.Identifier(role)))
+            self.db.execute(sql.SQL("DROP ROLE {}").format(sql.Identifier(role)))
+
+        self.addCleanup(drop)
+        return make_conninfo(self.url, user=role, password=password)
+
+    def test_least_privileged_operator_replay_is_unverifiable_not_refused(self) -> None:
+        operator = self.operator_login()
+        first = self.root / "operator-owner.secret"
+        status, created = self.init(self.request, first, operator)
+        self.assertEqual(status, 0, created)
+        self.assertFalse(created["receipt"]["replayed"])
+        secret = first.read_text(encoding="ascii")
+        workspace = uuid.UUID(created["receipt"]["workspace_id"])
+
+        # This login cannot read the bootstrap records a replay must match, so
+        # it must not claim that a different owner initialized the database.
+        replay_file = self.root / "operator-replay.secret"
+        status, unverifiable = self.init(self.request, replay_file, operator)
+        self.assertEqual(
+            (status, unverifiable),
+            (
+                2,
+                {
+                    "outcome": "unavailable",
+                    "reason": "initialization_replay_unverifiable",
+                },
+            ),
+        )
+        self.assertFalse(replay_file.exists())
+        self.assertEqual(first.read_text(encoding="ascii"), secret)
+        self.assertTrue(self.authenticates(secret, workspace))
+
+        # A login that can read them confirms the same replay.
+        status, confirmed = self.init(self.request, self.root / "admin-replay.secret")
+        self.assertEqual(status, 0, confirmed)
+        self.assertTrue(confirmed["receipt"]["replayed"])
+        self.assertEqual(self.principals(), 1)
 
 
 if __name__ == "__main__":
