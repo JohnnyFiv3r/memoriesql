@@ -145,6 +145,14 @@
     {
       "filename": "0036_exact_source_enrollment.sql",
       "sha256": "73d86b8b9b1a7f280bf40f267a384eb280d797adf95c01e7f1839540d5688505"
+    },
+    {
+      "filename": "0037_observation_sql_population.sql",
+      "sha256": "2e53d8be906971108212f1fb89448b85a5d61ac44feec6cebe410c5318fdf32f"
+    },
+    {
+      "filename": "0038_query_result_access.sql",
+      "sha256": "71f59ec1b1f87d1897ee6b1ceb53ff4499bc610b5c3e7be6f6d506feb0919edc"
     }
   ]
 }

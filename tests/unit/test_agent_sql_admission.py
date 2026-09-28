@@ -314,6 +314,46 @@ class AgentSqlAdmissionTests(unittest.TestCase):
             compile_bag_witness(admitted, SqlCatalog.installed().relations)
         self.assertEqual(refused.exception.construct, "witness_qualification_pending")
 
+    def test_reverse_recursive_endpoint_and_multi_anchor_bounds(self) -> None:
+        reverse = (
+            recursive_sql(3)
+            .replace(
+                "SELECT o.bead_id, 0 FROM memory_v1.observations o WHERE o.bead_id = $1",
+                "SELECT r.target_bead_id, 0 FROM memory_v1.assessed_relations r "
+                "WHERE r.target_bead_id = ANY($1::uuid[])",
+            )
+            .replace(
+                "SELECT r.target_bead_id, w.depth + 1",
+                "SELECT r.source_bead_id, w.depth + 1",
+            )
+            .replace("r.source_bead_id = w.node", "r.target_bead_id = w.node")
+        )
+        anchors = [str(UUID(int=i)) for i in range(1, 17)]
+        admitted = frozenset(("bead_ref", value) for value in anchors)
+        result = admit_query(
+            reverse,
+            (SqlParameter(1, "bead_ref[]", anchors),),
+            admitted_anchors=admitted,
+            recursion=RecursionBound("walk", "depth", "node", 3),
+        )
+        self.assertIn("r.target_bead_id = w.node", result.sql)
+        with self.assertRaises(SqlAdmissionError):
+            admit_query(
+                reverse,
+                (SqlParameter(1, "bead_ref[]", [*anchors, str(UUID(int=17))]),),
+                admitted_anchors=admitted | {("bead_ref", str(UUID(int=17)))},
+                recursion=RecursionBound("walk", "depth", "node", 3),
+            )
+        with self.assertRaises(SqlAdmissionError):
+            admit_query(
+                reverse.replace(
+                    "r.target_bead_id = w.node", "r.source_bead_id = w.node"
+                ),
+                (SqlParameter(1, "bead_ref[]", anchors),),
+                admitted_anchors=admitted,
+                recursion=RecursionBound("walk", "depth", "node", 3),
+            )
+
     def test_evaluation_relation_is_unavailable_without_explicit_trusted_selection(
         self,
     ) -> None:

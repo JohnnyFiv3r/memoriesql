@@ -21,9 +21,16 @@ EXISTS/NOT EXISTS, IN/NOT IN, direct-projection scalar witnesses and bounded
 native CYCLE paths over prepared assessed-relation rows. The forward schema-35
 continuation adds only private original-identity and whole-closure authorization
 checks for standalone saved results; it returns no rows, bytes or public result
-response. Other recursive seed/edge populations, richer subquery contexts and
-governed disclosure/erasure/accounting remain pending. Preserve SQL 0001–0034
-and earlier records;
+response. The forward schema-37/38 preview cut prepares the accepted-observation
+family beside the assessed relations and delivers standalone `query` and
+`reuse_result` through the trusted `PostgresAgentSqlResults` executor. That covers
+runs, admitted and accounted accesses, receipted whole-closure disclosure,
+cursors, owner close and crash recovery; see
+`docs/verification/pr-05-public-results.md`. Checkpoints/saves, saved-input
+refinement, inspection/hydration through this contract, erasure/cleanup, other
+recursive populations and measured W1–W7 fit remain pending, and credential
+isolation gates any agent-facing deployment. Preserve SQL 0001–0036 and earlier
+records;
 canonical lifecycle/projection stays PR-03-owned. Remaining integrated PR-05
 delivery and useful workload qualification are required before availability.
 No release, publication or Desktop consumption is authorized by this slice.

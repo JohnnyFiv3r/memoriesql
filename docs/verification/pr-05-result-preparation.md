@@ -457,3 +457,26 @@ failure: the installed-runtime ownership fixture still expected 71 modules
 after this private gate added the 72nd. All three shard logs and that failed
 exact head remain historical evidence; changing the fixture requires a fresh
 complete convergence at the new head. No partial shard pass qualifies it.
+
+## Multi-anchor reverse assessed paths
+
+This no-migration qualification starts from owner-merged #65 at public main
+`f5f5cb7958bf5c49032f68d1e7bfb363bf2f0d71`. Its one claim is that the
+existing bounded native CYCLE bridge also preserves complete private witnesses
+when the seed selects multiple currently admitted assessed-relation endpoints
+through a typed array and expansion follows the reverse assessed endpoint key.
+It changes no approved SQL grammar, result wire contract or database grant.
+
+Fictional PostgreSQL cases compare admitted native rows against all traced rows,
+including duplicate seed occurrences, cycles and the explicit depth bound. A
+second case uses two canonically assessed relations from the PR-03 projector,
+the independently restricted reader and an atomic private result commit. The
+saved witness includes every path occurrence and the original protected
+population; no path is inferred from a previously committed result. These cases
+qualify only assessed-relation rows in the existing nine-relation population.
+Observation/source seeds, correction edges, other recursive arm forms, public
+disclosure, storage/work fit and useful W1–W7 completion remain pending. An
+empty or denied population must never be presented as a complete answer.
+The first local package check stopped at mypy because a fictional native-test
+population used an untyped stand-in; the case now uses the actual immutable
+population type. That failed log remains historical, not a passing receipt.
