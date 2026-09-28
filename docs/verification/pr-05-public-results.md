@@ -197,23 +197,43 @@ Development failures retained:
 
 Exact-head installed 3.13/3.14 qualification and CI belong on the PR.
 
-## Before any release: owner approvals required
+## Before any release
 
-Releasing this cut as a labelled preview needs John's explicit approval of:
+The owner's Decision 1 is recorded in `../approvals/pr-05-preview-amendments.md`.
+It allows only a labelled preview with these terms:
 
-1. **Availability gating.** Delivery before the packet's availability gates:
-   - W1–W7 measured fit;
-   - a physical storage profile;
-   - integrated adversarial acceptance, including credential isolation;
-   - checkpoints;
-   - cleanup and erasure.
+- **Measured range.** The preview range is whatever the small-workspace
+  qualification measures, never an extrapolation.
+- **Logical accounting.** Allocation accounting is temporarily logical, with a
+  before/after database-growth measurement. The 512 MiB quota is a logical
+  allocation, never a statement about disk usage.
+- **Erasure wording.** Every preview description states, verbatim:
 
-   Interface shapes and numeric policy are unchanged.
-2. **No physical purge yet.** Result bytes are not purged. Access ends at 30
-   days or on authority loss, but the 24-hour purge commitment is not met.
-   Allocations accumulate toward the 512 MiB workspace quota.
-3. **Credential posture.** The credential and transport posture of any
-   agent-facing deployment.
+  > Governed erasure is unavailable in this preview. Revocation prevents
+  > subsequent authorized disclosure; it does not delete retained data or recall
+  > previously delivered copies. Regrant may restore access while the result
+  > remains valid. Expired derived-result content is removed through qualified
+  > expiry cleanup. Canonical source deletion and immediate erasure are not
+  > provided by this release.
 
-No release, version, tag, publication, provider call, owner data, evaluation run
-or Desktop consumption is authorized by this slice.
+Expired-result deletion is required work, not an exception, and is not yet part
+of this cut. Until it lands and is qualified, the expiry-cleanup sentence above is
+not yet true of this branch.
+
+Still gating any preview release:
+
+- the measured small-workspace qualification, with database growth;
+- finished expired-result deletion and its qualification;
+- integrated adversarial acceptance, including credential isolation against the
+  agent's actual shell, filesystem and process access;
+- **agent-identity access.** It is not available until the combined end-to-end
+  proof passes: capture, then authoring, then the agent's own query through the
+  trusted host, then the agent's source inspection. The paired-agent regression
+  tests above prove only the population fix.
+- the Desktop lane's trust boundary;
+- the credential and transport posture of any agent-facing deployment.
+
+Decision 1 implies no security waiver, no full-acceptance claim, no release
+authorization and no owner-credential fallback for agents. No release, version,
+tag, publication, provider call, owner data, evaluation run or Desktop
+consumption is authorized by this slice.
