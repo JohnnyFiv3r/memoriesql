@@ -21,7 +21,7 @@ Desktop and never loads private Python modules or arbitrary plugins. `contracts`
 | `init --request-file request.json --secret-file PATH` | Operator-only, once per database: creates the single personal-local owner, workspace and an expiring owner credential through the existing bootstrap. Its secret is written once to a newly created owner-only file and never printed. |
 | `clients pair --request-file request.json --secret-file PATH` | Pairs one local agent client with explicit capabilities, owned scopes and expiry. Its new secret is written once to a newly created owner-only file and never printed. |
 | `clients revoke --request-file request.json` | Terminally revokes one pairing grant at its exact current revision. |
-| `schema` | Describes the installed logical query catalog, which relations are prepared, reserved or not prepared, the admission rules and delivery limits. It contacts no database and starts no run. |
+| `schema` | Describes the installed logical query catalog, which relations are prepared, reserved or not prepared, the grants each prepared table family needs, the admission rules and delivery limits. It contacts no database and starts no run. |
 | `query --file query.sql --intent discover\|enumerate --view resolved\|historical` | Submits one caller-authored admitted SELECT with typed `$n` parameters through the trusted results executor and prints its closed reply. |
 | `result <result-id> --digest <content-digest> [--cursor C]` | Pages one retained immutable result by its exact pin under current authority, without rerunning its query. |
 
@@ -185,7 +185,14 @@ not-yet-qualified refinement, expansion, refresh or source scopes. Replies are
 printed unchanged; `--json` prints the executor's exact reply bytes. Exit status
 is 0 only for `available`, 2 for `unavailable` and 3 for every other outcome,
 including `unsupported_query`, `invalid_request`, `budget_exhausted` and
-`settlement_pending`. A zero-row result is still `available`.
+`settlement_pending`. A zero-row result is still `available`: it never proves
+absence. The caller's own grants decide what is returned, and a missing
+capability is named in `result.coverage.gaps`, which the human view also prints
+on stderr. Observation tables need `memory.query` and `source.read` over the
+scope; the assessed relation tables also need `source.raw.read`, which only the
+personal-local owner holds. `--known-at` takes an ISO 8601 timestamp with a UTC
+offset and is sent as UTC with a literal `Z`; without it the run's default
+cutoff applies.
 
 The CLI keeps one run per authenticated principal and workspace in an owner-only
 state file under `MEMORIESQL_STATE_DIR` (default `$XDG_STATE_HOME/memoriesql`),
