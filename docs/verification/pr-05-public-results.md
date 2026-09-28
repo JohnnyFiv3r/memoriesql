@@ -21,12 +21,31 @@ accessed or received.
 `prepare_query_sql_population_v2` consumes PR-03's unchanged relation projection
 (M0032) and adds observations, statements, statement_sources, source_units and
 corrections at the same explicit cutoff, under the same authority fence and
-repeatable-read frame. It adds no second authorization evaluator: each family is
-admitted only if `relation_bead_records_v1` authorizes the bead, its accepted
-version, statements, statement evidence and source units, **and every correction
-neighbour visible at the frame**. Otherwise the whole family is withheld, so no
-successor count, branch or older-as-current presentation escapes. Their
-protected records join one dependency manifest.
+repeatable-read frame. It adds no second authorization evaluator. Each family is
+admitted only if the canonical predicates used by bounded stored-bead inspection
+authorize all of the following:
+
+- the bead's event, for `memory.query`;
+- its accepted version and statements;
+- every unit whose text the catalog exposes, for both `memory.query` and
+  `source.read`;
+- **every correction neighbour visible at the frame**.
+
+Otherwise the whole family is withheld, so no successor count, branch or
+older-as-current presentation escapes. Raw source-range authority is not
+required, because no raw captured bytes are exposed. The protected records
+(`query_bead_records_v1`) have PR-03's record shapes and join one deduplicated
+dependency manifest.
+
+PR-03's nine assessed relations keep their unchanged projection and its
+raw-source-gated provenance records. Only `personal_owner` holds
+`source.raw.read`, so a paired agent's relation tables are empty. Coverage
+discloses that as a gap, `relation_tables`/`source_raw_read_required`, never as
+absence. A caller without `source.read` likewise gets
+`observation_tables`/`source_read_required`. Both gaps describe only the caller's
+own capabilities, never whether protected data exists. Whether paired agents may
+read assessed relations is a PR-03/owner policy question; this cut changes no
+PR-03 authority.
 
 Column mapping decisions (implementation readings of the approved enums; review
 welcome):
@@ -124,6 +143,7 @@ Reply metadata sealed into the digest:
   hash. Per-source watermarks are not computed.
 - **Coverage.** The query result is complete. Source capture, authorship,
   search readiness and discovery are all `unknown`, never claimed complete.
+  Missing caller capabilities are listed as gaps.
 - **`order_basis`.** Projected outer sort keys, including qualified keys that
   are exactly a projected column, then the sealed witness order.
 - **`total_rows`.**
@@ -135,10 +155,14 @@ lists source refs as hydration-required.
 
 ## Acceptance and preserved development failures
 
-Fictional installed tests (`test_agent_sql_results`, 10 cases) use the
+Fictional installed tests (`test_agent_sql_results`, 14 cases) use the
 production reader provisioning path. They cover:
 
 - query, page, cursor and reuse
+- a paired agent (pairing plus access grant, never the owner) reading its own
+  granted observation families, with relation tables disclosed as a
+  raw-authority gap, revocation ending reuse, and a `memory.query`-only agent
+  seeing a `source_read_required` gap instead of silent absence
 - exact redelivery with no rerun
 - a zero-row available result versus unavailable, and the distinct
   unsupported, invalid and idempotency outcomes
@@ -147,6 +171,10 @@ production reader provisioning path. They cover:
 - resolved versus historical views over a real correction, with correction lineage
 - run admission, expiry and no budget reset
 - crash after commit, host recovery and owner close
+- host death mid-query: capacity, close and admission stay blocked until the
+  reader backend is confirmed gone; recovery then settles the orphaned
+  invocation at the full reservation, and a new step is admitted without
+  replaying the lost one
 - group, window, set, EXISTS and relation-join shapes, with frame lifecycle
   fields and coverage gaps
 
@@ -162,6 +190,10 @@ Development failures retained:
     parameters.
   - A lost single-use preparation correctly fails instead of rerunning.
 - Inventory hashes drifted during SQL edits.
+- **Paired agents saw zero observation rows** (PR-06 repro). The first
+  observation families reused PR-03's provenance records, which require
+  `source.raw.read`, a capability the `paired_agent` role can never hold. The
+  regression test fails on that code and passes on the query-level records.
 
 Exact-head installed 3.13/3.14 qualification and CI belong on the PR.
 

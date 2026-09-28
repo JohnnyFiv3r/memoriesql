@@ -3,10 +3,68 @@
 -- nine assessed relations are consumed unchanged. No agent grant, result API or
 -- entity/alias/mention/topic population is added; those remain unsupported.
 
+-- Query-level protected records for one accepted observation family, using the
+-- same canonical predicates as bounded stored-bead inspection: memory.query on
+-- the bead's event, accepted-version and statement authorization, and both
+-- memory.query and source.read for every unit whose text the catalog exposes.
+-- Raw source-range authority is not required because no raw captured bytes are
+-- exposed. Record shapes equal PR-03's so shared records deduplicate exactly.
+CREATE FUNCTION memoriesql.query_unit_records_v1(t uuid,id uuid,known timestamptz) RETURNS jsonb
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,memoriesql SET row_security=off AS $$
+DECLARE u record;
+BEGIN
+ SELECT su.*,ev.source_object_id,ev.recorded_at,ev.content_hash event_content_hash INTO u
+  FROM memoriesql.source_units su JOIN memoriesql.source_events ev ON ev.tenant_id=su.tenant_id AND ev.event_id=su.event_id
+  WHERE su.tenant_id=t AND su.source_unit_id=id AND su.created_at<=known AND ev.recorded_at<=known;
+ IF NOT FOUND OR NOT memoriesql.current_context_event_authorized(u.access_scope_id,u.event_id,'memory.query','read')
+  OR NOT memoriesql.current_context_event_authorized(u.access_scope_id,u.event_id,'source.read','read') THEN
+  RAISE EXCEPTION 'dependency_unavailable' USING ERRCODE='42501';
+ END IF;
+ RETURN jsonb_build_array(
+  jsonb_build_object('kind','source_unit','id',id::text,'row',jsonb_build_object('source_unit_id',id,'event_id',u.event_id,'content_sha256',u.content_hash,'created_at',memoriesql.relation_packet_time(u.created_at))),
+  jsonb_build_object('kind','source_event','id',u.event_id::text,'row',jsonb_build_object('event_id',u.event_id,'source_object_id',u.source_object_id,'content_sha256',u.event_content_hash,'recorded_at',memoriesql.relation_packet_time(u.recorded_at))),
+  jsonb_build_object('kind','source_object','id',u.source_object_id::text,'row',jsonb_build_object('source_object_id',u.source_object_id)));
+END $$;
+REVOKE ALL ON FUNCTION memoriesql.query_unit_records_v1(uuid,uuid,timestamptz) FROM PUBLIC;
+
+CREATE FUNCTION memoriesql.query_bead_records_v1(t uuid,id uuid,known timestamptz) RETURNS jsonb
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,memoriesql SET row_security=off AS $$
+DECLARE b memoriesql.beads%ROWTYPE; v record; st record; e record; result jsonb; receipt uuid;
+BEGIN
+ SELECT * INTO b FROM memoriesql.beads WHERE tenant_id=t AND bead_id=id AND created_at<=known;
+ IF NOT FOUND OR NOT memoriesql.current_context_event_authorized(b.access_scope_id,b.event_id,'memory.query','read') THEN
+  RAISE EXCEPTION 'dependency_unavailable' USING ERRCODE='42501';
+ END IF;
+ result:=jsonb_build_array(jsonb_build_object('kind','bead','id',id::text,'row',jsonb_build_object('bead_id',id,'created_at',memoriesql.relation_packet_time(b.created_at),'event_id',b.event_id,'source_unit_id',b.source_unit_id)));
+ result:=result||memoriesql.query_unit_records_v1(t,b.source_unit_id,known);
+ FOR v IN SELECT bv.* FROM memoriesql.accepted_bead_semantics a JOIN memoriesql.bead_versions bv
+          ON bv.tenant_id=a.tenant_id AND bv.bead_version_id=a.bead_version_id
+          WHERE a.tenant_id=t AND a.bead_id=id AND bv.authored_at<=known LOOP
+  IF NOT memoriesql.current_context_bead_version_authorized(t,v.workspace_id,v.access_scope_id,v.bead_version_id) THEN
+   RAISE EXCEPTION 'dependency_unavailable' USING ERRCODE='42501';
+  END IF;
+  SELECT idempotency_receipt_id INTO receipt FROM memoriesql.semantic_task_receipts WHERE tenant_id=t AND semantic_task_receipt_id=v.semantic_task_receipt_id;
+  result:=result||jsonb_build_array(jsonb_build_object('kind','accepted_bead','id',v.bead_version_id::text,'row',jsonb_build_object('bead_id',id,'bead_version_id',v.bead_version_id,'authored_at',memoriesql.relation_packet_time(v.authored_at),'semantic_task_receipt_id',v.semantic_task_receipt_id,'idempotency_receipt_id',receipt,'authored_by_principal_id',v.authored_by_principal_id)));
+  FOR st IN SELECT * FROM memoriesql.bead_semantic_statements WHERE tenant_id=t AND bead_version_id=v.bead_version_id ORDER BY statement_id LOOP
+   IF NOT memoriesql.current_context_semantic_statement_authorized(t,st.workspace_id,st.access_scope_id,st.statement_id) THEN
+    RAISE EXCEPTION 'dependency_unavailable' USING ERRCODE='42501';
+   END IF;
+   result:=result||jsonb_build_array(jsonb_build_object('kind','statement','id',st.statement_id::text,'row',jsonb_build_object('statement_id',st.statement_id,'bead_id',st.bead_id,'bead_version_id',st.bead_version_id,'text',st.statement_text)));
+   FOR e IN SELECT * FROM memoriesql.bead_semantic_statement_evidence WHERE tenant_id=t AND statement_id=st.statement_id ORDER BY evidence_source_unit_id LOOP
+    result:=result||memoriesql.query_unit_records_v1(t,e.evidence_source_unit_id,known)||jsonb_build_array(jsonb_build_object('kind','statement_evidence','id',memoriesql.lifecycle_canonical_json_v1(jsonb_build_array(st.statement_id,e.evidence_source_unit_id)),'row',jsonb_build_object('statement_id',st.statement_id,'source_unit_id',e.evidence_source_unit_id,'content_hash',e.evidence_content_hash)));
+   END LOOP;
+  END LOOP;
+ END LOOP;
+ RETURN result;
+END $$;
+REVOKE ALL ON FUNCTION memoriesql.query_bead_records_v1(uuid,uuid,timestamptz) FROM PUBLIC;
+
 -- One authorized historical frame for all fourteen prepared relations. A whole
 -- observation family (accepted bead version, statements, statement evidence,
 -- source units and every correction neighbour visible at the frame) is either
 -- admitted or withheld; no protected counts, identifiers or neighbours escape.
+-- Families use the query-level records above; the assessed relations keep
+-- PR-03's unchanged projection and its raw-source-gated provenance records.
 CREATE FUNCTION memoriesql.prepare_query_sql_population_v2(
     requested_known_at timestamptz, requested_view text, byte_budget integer
 ) RETURNS jsonb
@@ -57,7 +115,7 @@ BEGIN
              ORDER BY a.bead_id LOOP
         family_corrections := '[]'; successors := 0;
         BEGIN
-            family_deps := memoriesql.relation_bead_records_v1(c.tenant_id,b.bead_id,known);
+            family_deps := memoriesql.query_bead_records_v1(c.tenant_id,b.bead_id,known);
             -- Correction neighbours at this frame are required dependencies. A
             -- protected successor or predecessor withholds this whole family:
             -- no successor count, branch or older-as-current presentation leaks.
@@ -73,7 +131,7 @@ BEGIN
                      ORDER BY s.bead_id, s.superseded_bead_id LOOP
                 IF n.successor_bead_id=b.bead_id THEN
                     family_deps := family_deps
-                        || memoriesql.relation_bead_records_v1(c.tenant_id,n.superseded_bead_id,known);
+                        || memoriesql.query_bead_records_v1(c.tenant_id,n.superseded_bead_id,known);
                     family_corrections := family_corrections || jsonb_build_array(jsonb_build_object(
                         'predecessor_version_id',n.superseded_bead_version_id,
                         'successor_version_id',n.successor_version_id,
@@ -84,7 +142,7 @@ BEGIN
                 ELSE
                     successors := successors + 1;
                     family_deps := family_deps
-                        || memoriesql.relation_bead_records_v1(c.tenant_id,n.successor_bead_id,known);
+                        || memoriesql.query_bead_records_v1(c.tenant_id,n.successor_bead_id,known);
                 END IF;
                 family_deps := family_deps || jsonb_build_array(jsonb_build_object(
                     'kind','bead_supersession',
@@ -211,7 +269,12 @@ BEGIN
             'dependency_manifest_sha256',memoriesql.lifecycle_hash_v1(manifest),
             -- The shared PR-03 projector's own visible-dependency hash, reported
             -- only when a result actually uses a relation projection.
-            'relation_manifest_sha256',relation_part#>>'{frame,dependency_manifest_sha256}'),
+            'relation_manifest_sha256',relation_part#>>'{frame,dependency_manifest_sha256}',
+            -- The caller's OWN capabilities (never data existence): PR-03's
+            -- relation records require raw source authority, and observation
+            -- families require source.read. Missing ones are disclosed as gaps.
+            'relation_raw_authority',memoriesql.current_context_has_capability('source.raw.read'),
+            'source_read_authority',memoriesql.current_context_has_capability('source.read')),
         'dependency_records_json',memoriesql.lifecycle_canonical_json_v1(deps),
         'dependency_manifest_json',memoriesql.lifecycle_canonical_json_v1(manifest));
     IF octet_length(result::text) + 8192 > byte_budget THEN
