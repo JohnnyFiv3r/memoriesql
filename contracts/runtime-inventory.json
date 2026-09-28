@@ -246,6 +246,30 @@
     },
     {
       "path": "src/memoriesql/query_client.py"
+    },
+    {
+      "path": "src/memoriesql/infrastructure/results_broker/__init__.py"
+    },
+    {
+      "path": "src/memoriesql/infrastructure/results_broker/wire.py"
+    },
+    {
+      "path": "src/memoriesql/infrastructure/results_broker/config.py"
+    },
+    {
+      "path": "src/memoriesql/infrastructure/results_broker/registry.py"
+    },
+    {
+      "path": "src/memoriesql/infrastructure/results_broker/readers.py"
+    },
+    {
+      "path": "src/memoriesql/infrastructure/results_broker/client.py"
+    },
+    {
+      "path": "src/memoriesql/infrastructure/results_broker/server.py"
+    },
+    {
+      "path": "src/memoriesql/infrastructure/results_broker/admin.py"
     }
   ]
 }
