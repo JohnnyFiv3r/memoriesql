@@ -1,6 +1,6 @@
 """Core-owned, provider-neutral memoriesQL command line.
 
-Read commands use installed typed core contracts and their authorization-aware
+Commands use installed typed core contracts and their authorization-aware
 Postgres adapters. They never infer identity from a terminal or import Desktop.
 """
 
@@ -26,6 +26,11 @@ from pydantic import BaseModel
 from memoriesql import __version__
 from memoriesql.application.authorization import LocalCredential
 from memoriesql.application.relation_inspection import InspectBeadRelationsV2
+from memoriesql.application.source_enrollment import (
+    EnrollExactSource,
+    GrantExactSource,
+    RevokeExactSource,
+)
 from memoriesql.application.stored_bead_inspection import (
     InspectStoredBead,
     ReadStoredBeadEvidence,
@@ -39,6 +44,9 @@ from memoriesql.contracts import (
 )
 from memoriesql.infrastructure.postgres.relation_assessment import (
     PostgresRelationAssessments,
+)
+from memoriesql.infrastructure.postgres.source_enrollment import (
+    PostgresSourceEnrollment,
 )
 from memoriesql.infrastructure.postgres.stored_bead_inspection import (
     PostgresStoredBeadInspection,
@@ -121,6 +129,18 @@ def _parser() -> argparse.ArgumentParser:
     relations.add_argument("bead_id", type=UUID)
     relations.add_argument("--known-at", type=_aware_time)
     relations.add_argument("--json", action="store_true")
+
+    sources = commands.add_parser(
+        "sources", help="Manage one explicitly selected source with current authority."
+    )
+    sources.add_argument("--json", action="store_true")
+    source_commands = sources.add_subparsers(dest="source_command")
+    for action in ("enroll", "grant", "revoke"):
+        operation = source_commands.add_parser(
+            action, help=f"Submit one typed exact-source {action} request."
+        )
+        operation.add_argument("--request-file", required=True, type=Path)
+        operation.add_argument("--json", action="store_true")
     return parser
 
 
@@ -175,11 +195,48 @@ def _read_core(
 
 
 def _selection(path: Path) -> StoredEvidenceSelection:
+    return _request_file(path, StoredEvidenceSelection)
+
+
+def _request_file[RequestModel: BaseModel](
+    path: Path, model: type[RequestModel]
+) -> RequestModel:
     with path.open("rb") as file:
         data = file.read(8193)
     if len(data) > 8192:
-        raise ValueError("source selection exceeds 8192 bytes")
-    return StoredEvidenceSelection.model_validate_json(data)
+        raise ValueError("request file exceeds 8192 bytes")
+    return model.model_validate_json(data)
+
+
+def _source_authority(
+    action: str, request: BaseModel, environment: Mapping[str, str]
+) -> BaseModel | dict[str, str]:
+    configured = _local_read_configuration(environment)
+    if configured is None:
+        return {"outcome": "unavailable", "reason": "local_source_authority_required"}
+    database, credential_sha256, workspace_id = configured
+    try:
+        with psycopg.connect(database, autocommit=True) as connection:
+            authority = PostgresSourceEnrollment(
+                connection,
+                credential_sha256=credential_sha256,
+                workspace_id=workspace_id,
+            )
+            if action == "enroll":
+                return authority.enroll(EnrollExactSource.model_validate(request))
+            if action == "grant":
+                return authority.grant(GrantExactSource.model_validate(request))
+            return authority.revoke(RevokeExactSource.model_validate(request))
+    except (
+        PermissionError,
+        InsufficientPrivilege,
+        InvalidAuthorizationSpecification,
+        NoDataFound,
+    ):
+        return {"outcome": "unavailable", "reason": "resource_unavailable"}
+    except Exception:
+        # Never echo source identity, credentials, connection or SQL diagnostics.
+        return {"outcome": "failed", "reason": "source_authority_failed"}
 
 
 def _emit_result(result: BaseModel | dict[str, Any], *, machine: bool) -> int:
@@ -260,6 +317,33 @@ def main(arguments: Sequence[str] | None = None) -> int:
             },
             machine=args.json,
         )
+
+    if args.command == "sources":
+        if args.source_command is None:
+            return _emit_result(
+                {"outcome": "unavailable", "reason": "source_inventory_not_released"},
+                machine=args.json,
+            )
+        source_request: BaseModel
+        try:
+            if args.source_command == "enroll":
+                source_request = _request_file(args.request_file, EnrollExactSource)
+            elif args.source_command == "grant":
+                source_request = _request_file(args.request_file, GrantExactSource)
+            else:
+                source_request = _request_file(args.request_file, RevokeExactSource)
+        except (OSError, ValueError):
+            return _emit_result(
+                {"outcome": "failed", "reason": "invalid_source_request"},
+                machine=args.json,
+            )
+        receipt = _source_authority(args.source_command, source_request, os.environ)
+        if isinstance(receipt, BaseModel):
+            return _emit_result(
+                {"outcome": "available", "receipt": receipt.model_dump(mode="json")},
+                machine=args.json,
+            )
+        return _emit_result(receipt, machine=args.json)
 
     request: BaseModel
     if args.command == "source":

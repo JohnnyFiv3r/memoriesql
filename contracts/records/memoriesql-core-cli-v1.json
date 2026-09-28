@@ -1,6 +1,6 @@
 {
   "contract": {
-    "authentication": "existing_local_credential_and_workspace_context_for_reads",
+    "authentication": "existing_local_credential_and_workspace_context_for_reads_and_exact_source_authority",
     "core_commands": [
       "contracts",
       "contract",
@@ -8,7 +8,10 @@
       "capabilities",
       "inspect",
       "source",
-      "relations"
+      "relations",
+      "sources enroll",
+      "sources grant",
+      "sources revoke"
     ],
     "entrypoint": "memoriesql.cli:main",
     "executable": "memoriesql",
@@ -22,17 +25,24 @@
       "source": "ReadStoredBeadEvidence / StoredBeadEvidence v1",
       "relations": "InspectBeadRelationsV2 / BeadRelationsInspectionV2"
     },
+    "source_authority": {
+      "enroll": "EnrollExactSource / ExactSourceEnrollment v1",
+      "grant": "GrantExactSource / ExactSourceGrant v1",
+      "revoke": "RevokeExactSource / ExactSourceRevocation v1",
+      "result_envelope": "available receipt, unavailable reason or failed reason"
+    },
     "unavailable": {
       "ask": "qualified_recall_not_released",
       "investigations": "pr05_checkpoint_not_released",
       "query": "pr05_query_result_not_released",
       "result": "pr05_query_result_not_released",
-      "sources connect": "source_enrollment_not_released",
+      "sources": "source_inventory_not_released",
+      "sources connect": "provider_adapter_not_routed",
       "ui": "private_textual_surface_not_routed"
     }
   },
   "id": "memoriesql.core-cli.v1",
   "status": "available",
-  "summary": "One public executable with contract catalog, configuration health and current-authority stored reads; no private routing, enrollment or PR-05 retrieval claim.",
+  "summary": "One public executable with contract catalog, configuration health, authorized stored reads and exact provider-neutral source authority; no private routing or PR-05 retrieval claim.",
   "version": "1"
 }

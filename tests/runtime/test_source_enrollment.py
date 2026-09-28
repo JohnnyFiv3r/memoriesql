@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 import hashlib
+import io
+import json
 import os
+import tempfile
 import threading
 import time
 import unittest
 import uuid
+from contextlib import redirect_stdout
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from unittest.mock import patch
 
 import psycopg
 from psycopg import sql
@@ -21,6 +27,7 @@ from memoriesql.application.source_enrollment import (
     GrantExactSource,
     RevokeExactSource,
 )
+from memoriesql.cli import main as cli_main
 from memoriesql.infrastructure.postgres.authorization import PostgresAuthorizationPort
 from memoriesql.infrastructure.postgres.source_enrollment import (
     PostgresSourceEnrollment,
@@ -30,6 +37,8 @@ if TYPE_CHECKING:
     from tests.runtime.test_postgres_runtime import migrate
 else:
     from test_postgres_runtime import migrate
+
+OWNER_CREDENTIAL = "fictional orchard owner session credential"
 
 
 class ExactSourceEnrollment(unittest.TestCase):
@@ -55,9 +64,7 @@ class ExactSourceEnrollment(unittest.TestCase):
             self.credential,
             session,
         ) = (uuid.uuid4() for _ in range(9))
-        self.owner_secret = hashlib.sha256(
-            b"fictional orchard owner session"
-        ).hexdigest()
+        self.owner_secret = hashlib.sha256(OWNER_CREDENTIAL.encode("utf-8")).hexdigest()
         self.now = datetime.now(UTC)
         with self.db.transaction():
             self.db.execute("SET LOCAL ROLE memoriesql_application")
@@ -106,6 +113,74 @@ class ExactSourceEnrollment(unittest.TestCase):
         PostgresAuthorizationPort(self.db).begin_context(
             credential_sha256=secret, requested_workspace_id=self.workspace
         )
+
+    def test_cli_exact_source_lifecycle_uses_current_authority(self) -> None:
+        def run(action: str, payload: dict[str, object]) -> tuple[int, dict[str, Any]]:
+            with tempfile.TemporaryDirectory() as directory:
+                request = Path(directory) / "request.json"
+                request.write_text(json.dumps(payload), encoding="utf-8")
+                output = io.StringIO()
+                with redirect_stdout(output):
+                    status = cli_main(
+                        ["sources", action, "--request-file", str(request), "--json"]
+                    )
+                return status, json.loads(output.getvalue())
+
+        environment = {
+            "MEMORIESQL_DATABASE_URL": self.url,
+            "MEMORIESQL_LOCAL_CREDENTIAL": OWNER_CREDENTIAL,
+            "MEMORIESQL_WORKSPACE_ID": str(self.workspace),
+        }
+        enrollment_request = {
+            "request_id": str(uuid.uuid4()),
+            "source_system": "fictional-orchard",
+            "object_kind": "transcript",
+            "external_object_id": "selected/cli-session.jsonl",
+            "source_schema_version": 1,
+            "exact_source_confirmed": True,
+        }
+        with patch.dict(os.environ, environment):
+            status, enrolled = run("enroll", enrollment_request)
+            self.assertEqual(status, 0)
+            self.assertFalse(enrolled["receipt"]["replayed"])
+            source_id = enrolled["receipt"]["source_object_id"]
+            self.assertTrue(run("enroll", enrollment_request)[1]["receipt"]["replayed"])
+
+            grant_request = {
+                "request_id": str(uuid.uuid4()),
+                "source_object_id": source_id,
+                "target_principal_id": str(self.principal),
+                "permission_keys": ["read"],
+                "valid_from": self.now.isoformat(),
+                "expires_at": (self.now + timedelta(hours=1)).isoformat(),
+            }
+            unavailable_target = grant_request | {
+                "request_id": str(uuid.uuid4()),
+                "target_principal_id": str(uuid.uuid4()),
+            }
+            status, denied = run("grant", unavailable_target)
+            self.assertEqual(status, 2)
+            self.assertEqual(
+                denied, {"outcome": "unavailable", "reason": "resource_unavailable"}
+            )
+            status, granted = run("grant", grant_request)
+            self.assertEqual(status, 0)
+            self.assertFalse(granted["receipt"]["replayed"])
+
+            revoke_request = {
+                "request_id": str(uuid.uuid4()),
+                "source_object_id": source_id,
+                "reason": "fictional CLI revocation",
+            }
+            status, revoked = run("revoke", revoke_request)
+            self.assertEqual(status, 0)
+            self.assertFalse(revoked["receipt"]["replayed"])
+            self.assertTrue(run("revoke", revoke_request)[1]["receipt"]["replayed"])
+            status, denied = run("grant", grant_request)
+            self.assertEqual(status, 2)
+            self.assertEqual(
+                denied, {"outcome": "unavailable", "reason": "resource_unavailable"}
+            )
 
     def test_exact_source_grant_restart_and_revocation(self) -> None:
         selection = EnrollExactSource(
