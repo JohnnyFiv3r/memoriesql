@@ -517,7 +517,7 @@ class PostgresRestrictedQuery:
             safe_error = error.construct
         except Error as error:
             code = error.sqlstate
-            if code in {"57014", "55P03", "54000"}:
+            if code in {"57014", "55P03", "54000", "53400"}:
                 outcome = (
                     "cancelled"
                     if cancellation is not None and cancellation.is_set()

@@ -29,9 +29,15 @@ class QueryWindowWitness(unittest.TestCase):
         self.addCleanup(self.harness.doCleanups)
         self.fixture = self.harness.fixture
 
-    def compare(self, statement: str, *, commit: bool = False) -> dict[str, Any]:
+    def compare(
+        self,
+        statement: str,
+        *,
+        commit: bool = False,
+        parameters: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
         h = self.harness
-        request = h.request(statement)
+        request = h.request(statement, parameters=parameters)
         plain_request = fixtures.replace_request_step(request)
         owner, plain_owner = (
             h.reserve_request(request),
@@ -210,6 +216,210 @@ class QueryWindowWitness(unittest.TestCase):
             len([n for n in graph["nodes"] if n["operation"] == "set"]), 2
         )
 
+    def test_aggregate_rows_frames_share_partition_membership(self) -> None:
+        self.fixture.assertion()
+        graph = self.compare(
+            "SELECT s.statement_id,"
+            "count(*) OVER(ORDER BY s.statement_id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS n,"
+            "sum(r.author_confidence) FILTER(WHERE r.support_eligible) "
+            "OVER(ORDER BY s.statement_id ROWS BETWEEN 1 PRECEDING AND CURRENT ROW) AS total,"
+            "avg(r.author_confidence) OVER(ORDER BY s.statement_id ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS mean "
+            "FROM memory_v1.assessed_relations r JOIN memory_v1.relation_statements s "
+            "ON r.relation_id=s.relation_id ORDER BY s.statement_id",
+            commit=True,
+        )
+        partitions = [
+            n for n in graph["nodes"] if n["operation"] == "window_partition"
+        ]
+        windows = [n for n in graph["nodes"] if n["operation"] == "window"]
+        self.assertEqual(len(partitions), 1)
+        self.assertEqual(len(partitions[0]["ordered_input_refs"]), 2)
+        self.assertEqual(len(windows), 6)
+        self.assertEqual(
+            sorted(len(n["frame_input_refs"]) for n in windows),
+            [1, 1, 2, 2, 2, 2],
+        )
+        self.assertEqual(
+            sorted(tuple(n["frame_span"]) for n in windows),
+            [(1, 1), (1, 1), (1, 2), (1, 2), (1, 2), (1, 2)],
+        )
+
+    def test_multiple_window_orders_and_unprojected_outer_sort(self) -> None:
+        self.fixture.assertion()
+        graph = self.compare(
+            "SELECT s.statement_id,s.role,"
+            "rank() OVER(PARTITION BY s.role ORDER BY s.statement_id) AS place,"
+            "dense_rank() OVER(ORDER BY s.role) AS role_place "
+            "FROM memory_v1.relation_statements s ORDER BY lower(s.role),s.statement_id",
+            commit=True,
+        )
+        self.assertEqual(
+            len([n for n in graph["nodes"] if n["operation"] == "window_partition"]),
+            3,
+        )
+        self.assertEqual(
+            len([n for n in graph["nodes"] if n["operation"] == "window"]), 4,
+        )
+
+    def test_outer_sort_window_without_projection_keeps_its_witness(self) -> None:
+        self.fixture.assertion()
+        graph = self.compare(
+            "SELECT r.relation_id FROM memory_v1.assessed_relations r "
+            "ORDER BY row_number() OVER(ORDER BY r.relation_id) DESC",
+            commit=True,
+        )
+        self.assertEqual(len(graph["row_provenance"]), 1)
+        self.assertEqual(
+            len([n for n in graph["nodes"] if n["operation"] == "window"]), 1
+        )
+
+    def test_same_select_group_aggregates_feed_native_windows(self) -> None:
+        self.fixture.assertion()
+        graph = self.compare(
+            "SELECT s.role,count(*) AS n,"
+            "sum(count(*)) OVER(ORDER BY s.role ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS running,"
+            "rank() OVER(ORDER BY count(*) DESC) AS place "
+            "FROM memory_v1.relation_statements s GROUP BY s.role ORDER BY lower(s.role)",
+            commit=True,
+        )
+        self.assertEqual(len(graph["row_provenance"]), 2)
+        self.assertEqual(
+            len([n for n in graph["nodes"] if n["operation"] == "group"]), 2
+        )
+        self.assertEqual(
+            len([n for n in graph["nodes"] if n["operation"] == "window"]), 4
+        )
+
+    def test_having_rejects_groups_before_window_membership(self) -> None:
+        self.fixture.assertion()
+        graph = self.compare(
+            "SELECT s.role,count(*) AS n,rank() OVER(ORDER BY s.role) AS place "
+            "FROM memory_v1.relation_statements s GROUP BY s.role "
+            "HAVING s.role=$1 ORDER BY s.role",
+            parameters=[{"position": 1, "type": "text", "value": "source"}],
+        )
+        self.assertEqual(len(graph["row_provenance"]), 1)
+        self.assertEqual(
+            len([n for n in graph["nodes"] if n["operation"] == "group"]), 2
+        )
+        self.assertEqual(
+            len([n for n in graph["nodes"] if n["operation"] == "window"]), 1
+        )
+
+    def test_implicit_group_feeds_full_frame(self) -> None:
+        self.fixture.assertion()
+        graph = self.compare(
+            "SELECT count(*) AS n,"
+            "sum(count(*)) OVER(ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS total "
+            "FROM memory_v1.relation_statements s"
+        )
+        self.assertEqual(len(graph["row_provenance"]), 1)
+        self.assertEqual(
+            len([n for n in graph["nodes"] if n["operation"] == "group"]), 1
+        )
+        self.assertEqual(
+            len([n for n in graph["nodes"] if n["operation"] == "window"]), 1
+        )
+
+    def test_empty_rows_frame_and_tied_peer_membership_are_native(self) -> None:
+        self.fixture.assertion()
+        graph = self.compare(
+            "SELECT s.statement_id,"
+            "count(*) OVER(ORDER BY s.statement_id ROWS BETWEEN 2 FOLLOWING AND 3 FOLLOWING) AS empty_count,"
+            "count(*) OVER(ORDER BY s.relation_id ROWS BETWEEN CURRENT ROW AND CURRENT ROW) AS self_count "
+            "FROM memory_v1.relation_statements s ORDER BY s.statement_id"
+        )
+        windows = [n for n in graph["nodes"] if n["operation"] == "window"]
+        self.assertEqual(len(windows), 4)
+        self.assertEqual(sum(n.get("frame_empty", False) for n in windows), 2)
+        self.assertEqual(
+            sorted(len(n.get("frame_input_refs", [])) for n in windows),
+            [0, 0, 1, 1],
+        )
+
+    def test_fanout_and_equal_time_frames_fit_without_losing_members(self) -> None:
+        self.fixture.assertion()
+        aliases = [f"s{i}" for i in range(8)]
+        joined = " ".join(
+            f"JOIN memory_v1.relation_statements {alias} "
+            f"ON {alias}.relation_id=s0.relation_id"
+            for alias in aliases[1:]
+        )
+        selected = ",".join(
+            f"{alias}.statement_id AS id{i}" for i, alias in enumerate(aliases)
+        )
+        keyed_order = ",".join(
+            f"{alias}.relation_id,{alias}.role,{alias}.statement_id"
+            for alias in aliases
+        )
+        output_order = ",".join(f"id{i}" for i in range(len(aliases)))
+        graph = self.compare(
+            f"SELECT {selected},count(*) OVER(ORDER BY {keyed_order} "
+            "ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS running "
+            f"FROM memory_v1.relation_statements s0 {joined} "
+            f"ORDER BY {output_order}"
+        )
+        windows = [n for n in graph["nodes"] if n["operation"] == "window"]
+        self.assertEqual(len(graph["row_provenance"]), 256)
+        self.assertEqual(len(windows), 256)
+        self.assertTrue(all("frame_span" in n for n in windows))
+        self.assertTrue(all("frame_input_refs" not in n for n in windows))
+        self.assertTrue(
+            any(
+                stage["operation"] == "window"
+                and stage["frame_mode"] == "total_span"
+                for stage in graph["stages"]
+            )
+        )
+
+        tied = aliases[:5]
+        tied_joins = " ".join(
+            f"JOIN memory_v1.relation_statements {alias} "
+            f"ON {alias}.relation_id=r.relation_id"
+            for alias in tied
+        )
+        tied_selected = ",".join(
+            f"{alias}.statement_id AS id{i}" for i, alias in enumerate(tied)
+        )
+        tied_order = ",".join(f"id{i}" for i in range(len(tied)))
+        graph = self.compare(
+            f"SELECT {tied_selected},count(*) OVER(ORDER BY r.recorded_at "
+            "ROWS BETWEEN CURRENT ROW AND CURRENT ROW) AS one "
+            f"FROM memory_v1.assessed_relations r {tied_joins} "
+            f"ORDER BY {tied_order}"
+        )
+        windows = [n for n in graph["nodes"] if n["operation"] == "window"]
+        self.assertEqual(len(graph["row_provenance"]), 32)
+        self.assertEqual(len(windows), 32)
+        self.assertTrue(all(len(n["frame_input_refs"]) == 1 for n in windows))
+        self.assertTrue(
+            any(
+                stage["operation"] == "window"
+                and stage["frame_mode"] == "native_members"
+                for stage in graph["stages"]
+            )
+        )
+
+    def test_positional_aliases_preserve_catalog_key_identity(self) -> None:
+        self.fixture.assertion()
+        aliased = "memory_v1.assessed_relations AS r(actual_id, relation_id)"
+        for order, mode in (
+            ("r.relation_id", "native_members"),
+            ("r.actual_id", "total_span"),
+        ):
+            with self.subTest(order=order):
+                graph = self.compare(
+                    "SELECT r.actual_id,count(*) OVER(ORDER BY "
+                    f"{order} ROWS BETWEEN CURRENT ROW AND CURRENT ROW) AS one "
+                    f"FROM {aliased} ORDER BY actual_id"
+                )
+                stages = [
+                    stage for stage in graph["stages"]
+                    if stage["operation"] == "window"
+                ]
+                self.assertEqual([stage["frame_mode"] for stage in stages], [mode])
+                self.assertEqual(len(graph["row_provenance"]), 1)
+
     def test_empty_window_keeps_protected_source_and_predicate(self) -> None:
         self.fixture.assertion()
         graph = self.compare(
@@ -223,7 +433,7 @@ class QueryWindowWitness(unittest.TestCase):
             any(n["operation"] == "window_partition" for n in graph["nodes"])
         )
 
-    def test_unqualified_windows_remain_unpublished(self) -> None:
+    def test_previously_pending_window_compositions_publish_exact_witnesses(self) -> None:
         self.fixture.assertion()
         for statement in (
             "SELECT r.relation_id,count(*) OVER(ORDER BY r.relation_id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS n FROM memory_v1.assessed_relations r",
@@ -231,18 +441,9 @@ class QueryWindowWitness(unittest.TestCase):
             "SELECT r.relation_id,rank() OVER(ORDER BY r.state) AS place FROM memory_v1.assessed_relations r ORDER BY r.state",
         ):
             with self.subTest(statement=statement):
-                h = self.harness
-                request = h.request(statement)
-                owner = h.reserve_request(request)
-                with h.population(request) as population:
-                    result = h.execute_request(request, owner, population)
-                    self.assertEqual(result.outcome, "unsupported_query")
-                    self.assertEqual(result.error, "witness_qualification_pending")
-                    self.assertEqual(result.rows, ())
-                    self.assertIsNone(result.witnesses)
-                h.store.discard(
-                    operation_ref=owner.operation_ref,
-                    ownership_ref=owner.ownership_ref,
+                graph = self.compare(statement)
+                self.assertTrue(
+                    any(node["operation"] == "window" for node in graph["nodes"])
                 )
 
     def test_missing_lag_privilege_refuses_without_result(self) -> None:

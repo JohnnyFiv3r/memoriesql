@@ -102,6 +102,63 @@ storage accounting, and representative W1–W7 workload fit also remain pending.
 Passing small fictional windows and safe exhaustion is not semantic-quality or
 capacity certification.
 
+The next no-migration continuation starts from owner-merged #60 at public main
+`8463f3b2beb572c327c73a35f3e1af318c0161d5`. Its single claim is **native
+multi-window and aggregate ROWS-frame membership composed with ordinary
+same-SELECT grouping, under the existing private atomic result commit**.
+Previously qualified single ranking/neighbor windows remain covered. Multiple
+different partition/order specifications may share a SELECT, including windows
+used only in an outer ordering expression. A partition ledger is shared by exact
+partition/order specification; each window node independently names its source,
+partition and native peer rank. The ledger uses the hidden source trace only to
+stabilize ordering within peers; it does not change rank/dense-rank peer groups
+or the admitted visible-key requirement for row_number/lag/lead.
+
+For COUNT/SUM/AVG/MIN/MAX with an explicit ROWS frame, a visible source-key
+order proves a total partition order and PostgreSQL emits native first/last
+ordinals in the same restricted SELECT as the value. The frame is then a span
+of the shared partition ledger rather than a repeated array of every member.
+The proof resolves positional table-column aliases against catalog key positions;
+an alias for a non-key column cannot stand in for the key.
+When that proof is unavailable, PostgreSQL emits actual frame-member traces;
+the binder verifies each against the partition occurrence bag and records
+contributor refs, multiplicities and empty frames. A contiguous span is
+recorded only when it can be verified; tied-peer ROWS frames never receive a
+guessed span. FILTER and native null
+semantics remain evaluated by PostgreSQL; all frame members remain protected
+dependencies. Ordinary GROUP BY/HAVING and their rejected-group ledger run before
+the window phase, including nested ordinary aggregates such as
+`SUM(COUNT(*)) OVER (...)` and the implicit single group. Outer sort expressions
+are computed without changing the visible projection. No SQL privilege, public
+result contract, migration, policy ceiling or approved blob changes.
+
+This is private witness-publication qualification, not an available query or
+disclosure API. Scalar/correlated/EXISTS/IN subquery lineage and bounded recursive
+CTE witnesses remain pending, as do saved-input reuse, paging/hydration,
+checkpoints, saves, whole-closure reauthorization, governed erasure, cumulative
+work/physical-storage accounting and measured useful W1–W7 fit. Correct timeout
+settlement and the fictional window cases below cannot certify capacity or
+semantic answer quality. Full installed receipts and exact-head CI belong to the
+PR; no hosted paid qualification is authorized by this continuation.
+The first full installed 3.13 convergence at `275e3b7` exposed a stale
+pending-shape regression that still expected a now-qualified ROWS window to
+refuse before reader dispatch. The corrected refusal case uses an admitted
+correlated scalar subquery, which remains witness-publication pending. The
+failed head and logs are retained; only a fresh exact-head convergence can
+qualify the correction.
+The first hub-heavy development probe exposed PostgreSQL's fixed 64 MiB
+temporary-file limit at a 256-row running frame whose order omitted part of
+the logical source key. The source-key span optimization allows a qualified
+eight-alias, 256-row running window to finish with the unchanged bounds and
+the same visible values as the native statement (241 ms, 560,261 encoded bytes,
+including 420,383 witness bytes, in the local fictional probe); an equal-time
+32-row CURRENT ROW frame still uses exact member traces (128 ms, 96,486 encoded
+bytes). SQLSTATE `53400` from the
+owned temporary-file fence is reported as whole-query `budget_exhausted`,
+never successful emptiness. These are fictional shape measurements, not W1–W7
+capacity or physical-storage certification; the original non-total-key probe
+and failure log remain retained.
+
 Seen acceptance compares native values/schema/order to the witnessed statement,
 then independently checks contributions and multiplicities, empty/all-null facts,
 rejected groups, filtered unknown truth, compositional groups/sets, pinned C
