@@ -52,12 +52,13 @@
       "direct": "without the socket, query and result compose the trusted executor in-process and need the host's own database logins, which are never given to an agent",
       "operator": "broker serve|provision|check|runs|close-run run only as the host's service user with its private configuration; each prints one JSON line and exits 0, 2 or 3",
       "paired_agent_reads": {
-        "inspect": "resource_unavailable: the stored-bead readers require raw-source authority that the paired-agent role cannot hold",
+        "inspect": "owner_only: the exact stored-bead readers answer resource_unavailable to paired agents",
         "query": "available",
-        "relations": "resource_unavailable: the stored-bead readers require raw-source authority that the paired-agent role cannot hold",
+        "relations": "owner_only: the exact stored-bead readers answer resource_unavailable to paired agents",
         "result": "available",
         "schema": "available",
-        "source": "resource_unavailable: the stored-bead readers require raw-source authority that the paired-agent role cannot hold"
+        "source": "owner_only: the exact stored-bead readers answer resource_unavailable to paired agents",
+        "source_citation": "through query results: retained source-unit text in memory_v1.source_units under memory.query and source.read"
       },
       "protocol_version": 1
     },

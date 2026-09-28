@@ -154,8 +154,9 @@ class SocketClientTests(unittest.TestCase):
         self.assertIn("broker serve", capabilities["core_commands"])
         reads = capabilities["paired_agent_reads"]
         self.assertEqual(reads["query"], "available")
+        self.assertTrue(reads["source_citation"].startswith("through query results"))
         for command in ("inspect", "source", "relations"):
-            self.assertTrue(reads[command].startswith("resource_unavailable"))
+            self.assertTrue(reads[command].startswith("owner_only"))
         status, output = invoke(["doctor", "--json"], self.environment)
         self.assertEqual(status, 0)
         doctor = json.loads(output)
