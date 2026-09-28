@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 import unittest
 from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
@@ -63,10 +64,12 @@ class AgentSqlResults(unittest.TestCase):
             autocommit=True,
         )
 
-    def service(self, secret: str | None = None) -> PostgresAgentSqlResults:
+    def service(
+        self, secret: str | None = None, reader: Any = None
+    ) -> PostgresAgentSqlResults:
         return PostgresAgentSqlResults(
             control_factory=self.fixture.connection,
-            reader_factory=self.reader_connection,
+            reader_factory=reader or self.reader_connection,
             authority_profile=self.profile,
             credential_sha256=secret or self.fixture.secret_hash,
             workspace_id=self.fixture.workspace,
@@ -398,6 +401,112 @@ class AgentSqlResults(unittest.TestCase):
             (first["run_ref"],),
         )
         self.assertGreater(window, 0)
+
+    def test_host_death_mid_query_keeps_capacity_until_reader_ends(self) -> None:
+        self.fixture.assertion()
+        run = self.start()
+        request, _ = self.request_only(run, "SELECT bead_id FROM memory_v1.observations")
+        leaked: list[Any] = []
+
+        class HostDied(BaseException):
+            pass
+
+        class Leaky(psycopg.Connection[Any]):
+            # The host dies as the admitted SELECT is dispatched; its reader
+            # backend keeps an open transaction, as a still-running query would.
+            def cursor(self, *args: Any, **kwargs: Any) -> Any:
+                if kwargs.get("name"):
+                    raise HostDied()
+                return super().cursor(*args, **kwargs)
+
+            def rollback(self) -> None:
+                pass
+
+            def close(self) -> None:
+                pass
+
+        def leaky() -> Any:
+            connection = Leaky.connect(
+                make_conninfo(
+                    os.environ["N1_TEST_DATABASE_URL"],
+                    dbname=self.db.info.dbname,
+                    user=self.reader,
+                    password=READER_PASSWORD,
+                ),
+                autocommit=True,
+            )
+            leaked.append(connection)
+            return connection
+
+        with self.assertRaises(HostDied):
+            self.service(reader=leaky).handle(json.dumps(request).encode())
+        self.assertEqual(
+            self.h.scalar(
+                "SELECT state FROM memoriesql_query.invocations WHERE run_ref=%s",
+                (run["run_ref"],),
+            ),
+            "executing",
+        )
+        # The owner session ended, but the reader may still be executing.
+        self.assertEqual(self.service().recover_abandoned(), 0)
+        refused = json.loads(self.service().close_run(run["run_ref"]))
+        self.assertEqual(refused["error"], {"code": "settlement"}, refused)
+        pending = self.send(request)
+        self.assertEqual(pending["outcome"], "settlement_pending", pending)
+        _, blocked = self.query(run, "SELECT bead_version_id FROM memory_v1.observations")
+        self.assertEqual(blocked["error"], {"code": "settlement"}, blocked)
+        self.assertEqual(
+            self.h.scalar("SELECT count(*) FROM memoriesql.query_run_closures"), 0
+        )
+        # Only confirmed reader termination lets owned settlement proceed.
+        pid = leaked[0].info.backend_pid
+        psycopg.Connection.close(leaked[0])
+        for _ in range(100):
+            if not self.h.scalar(
+                "SELECT count(*) FROM pg_stat_activity WHERE pid=%s", (pid,)
+            ):
+                break
+            time.sleep(0.05)
+        self.assertEqual(self.service().recover_abandoned(), 1)
+        self.assertEqual(
+            self.h.scalar(
+                "SELECT state FROM memoriesql_query.invocations WHERE run_ref=%s",
+                (run["run_ref"],),
+            ),
+            "settled",
+        )
+        self.assertGreaterEqual(
+            self.h.scalar(
+                "SELECT charged_db_ms FROM memoriesql.query_deliveries "
+                "WHERE outcome='abandoned'"
+            ),
+            30000,
+        )
+        closed = json.loads(self.service().close_run(run["run_ref"]))
+        self.assertEqual(closed["outcome"], "available", closed)
+
+    def test_close_refuses_while_run_work_is_unsettled(self) -> None:
+        self.fixture.assertion()
+        run = self.start()
+        request, _ = self.request_only(run, "SELECT bead_id FROM memory_v1.observations")
+
+        class Crash(BaseException):
+            pass
+
+        def crash(*args: Any, **kwargs: Any) -> bytes:
+            raise Crash()
+
+        with patch.object(PostgresAgentSqlResults, "_execute", crash):
+            with self.assertRaises(Crash):
+                self.send(request)
+        refused = json.loads(self.service().close_run(run["run_ref"]))
+        self.assertEqual(refused["outcome"], "budget_exhausted", refused)
+        self.assertEqual(refused["error"], {"code": "settlement"})
+        self.assertEqual(self.service().recover_abandoned(), 1)
+        closed = json.loads(self.service().close_run(run["run_ref"]))
+        self.assertEqual(closed["outcome"], "available", closed)
+        foreign = json.loads(self.service().close_run(str(uuid4())))
+        self.assertEqual(foreign["outcome"], "unavailable", foreign)
 
     def test_composition_shapes_over_prepared_observation_relations(self) -> None:
         self.fixture.assertion()

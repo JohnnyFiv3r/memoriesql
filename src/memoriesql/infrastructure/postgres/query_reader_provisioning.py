@@ -111,7 +111,8 @@ def provision_query_reader(
 
     Run once by an operator on a migrated database (schema 38). The role gets no
     memberships, ownership, CREATE/TEMP or table access beyond the fourteen
-    prepared security-barrier views and the reviewed function closure.
+    prepared security-barrier views and the reviewed function closure. The
+    password travels in `CREATE ROLE`; disable statement logging for this call.
     """
     if not reader.isidentifier() or not reader.islower() or len(password) < 16:
         raise ValueError("invalid reader provisioning request")

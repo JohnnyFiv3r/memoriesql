@@ -265,6 +265,8 @@ BEGIN
  SELECT * INTO k FROM memoriesql.query_run_closures WHERE tenant_id=c.tenant_id AND run_ref=run;
  IF NOT FOUND THEN
   IF EXISTS(SELECT 1 FROM memoriesql.query_deliveries WHERE tenant_id=c.tenant_id
+   AND run_ref=run AND state<>'settled')
+   OR EXISTS(SELECT 1 FROM memoriesql_query.invocations WHERE tenant_id=c.tenant_id
    AND run_ref=run AND state<>'settled') THEN
    RETURN jsonb_build_object('refused','settlement');
   END IF;
@@ -411,12 +413,16 @@ GRANT EXECUTE ON FUNCTION memoriesql.settle_query_delivery_v1(uuid,text,text,big
 
 
 -- Recovery only: settle a reserved delivery whose owning executor session has
--- ended. Unknown timing and transport keep the FULL reservation as the charge;
--- the step is left for the caller to resolve from M0031/M0033/M0034 state.
+-- ended. An ended owner proves nothing about its reader: every invocation of the
+-- step first passes M0033's owned cancel/settle, which confirms the identified
+-- reader backend and transaction are gone. While any reader may still execute,
+-- the delivery stays reserved and keeps blocking. Unknown timing and transport
+-- keep the FULL reservation; recorded late reader usage beyond it is charged too.
+-- The step is left for the caller to resolve from M0031/M0033/M0034 state.
 CREATE FUNCTION memoriesql.abandon_query_delivery_v1(delivery uuid) RETURNS boolean
-LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,memoriesql
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,memoriesql,memoriesql_query
  SET row_security=off SET lock_timeout='500ms' AS $$
-DECLARE d memoriesql.query_deliveries%ROWTYPE; key bigint;
+DECLARE d memoriesql.query_deliveries%ROWTYPE; key bigint; i record; outcome jsonb; late bigint;
 BEGIN
  SELECT * INTO d FROM memoriesql.query_deliveries WHERE delivery_ref=delivery FOR UPDATE;
  IF NOT FOUND THEN RAISE EXCEPTION 'query_delivery_unavailable' USING ERRCODE='42501'; END IF;
@@ -424,9 +430,18 @@ BEGIN
  key:=hashtextextended(d.tenant_id::text||':query-delivery:'||d.delivery_ref::text,0);
  IF NOT pg_try_advisory_lock(key) THEN RETURN false; END IF;
  PERFORM pg_advisory_unlock(key);
+ FOR i IN SELECT invocation_ref,ownership_ref FROM memoriesql_query.invocations
+          WHERE tenant_id=d.tenant_id AND run_ref=d.run_ref AND step_key=d.step_key
+            AND state<>'settled' LOOP
+  PERFORM memoriesql.cancel_relation_query_v1(i.invocation_ref,i.ownership_ref);
+  outcome:=memoriesql.settle_relation_query_v1(i.invocation_ref,i.ownership_ref,'cancelled',NULL);
+  IF outcome->>'state' IS DISTINCT FROM 'settled' THEN RETURN false; END IF;
+ END LOOP;
+ SELECT COALESCE(max(COALESCE(observed_ms,reserved_ms)),0) INTO late FROM memoriesql_query.invocations
+  WHERE tenant_id=d.tenant_id AND run_ref=d.run_ref AND step_key=d.step_key;
  UPDATE memoriesql.query_deliveries SET state='settled',outcome='abandoned',
-  charged_db_ms=reserved_db_ms,charged_transport=reserved_transport,settled_at=clock_timestamp()
-  WHERE delivery_ref=delivery;
+  charged_db_ms=GREATEST(reserved_db_ms,late),charged_transport=reserved_transport,
+  settled_at=clock_timestamp() WHERE delivery_ref=delivery;
  RETURN true;
 END $$;
 REVOKE ALL ON FUNCTION memoriesql.abandon_query_delivery_v1(uuid) FROM PUBLIC;

@@ -466,6 +466,14 @@ class PostgresAgentSqlResults:
                         max_output_bytes=max(8192, request.max_result_bytes),
                         collect_bag_witnesses=True,
                     )
+                    if (
+                        execution.outcome == "settlement_pending"
+                        and execution.invocation_ref is None
+                        and execution.error == "settlement"
+                    ):
+                        # Staging refused because other work is unsettled; this
+                        # step dispatched nothing and its own reservation ends.
+                        raise _Failure("budget_exhausted", "settlement")
                     if execution.outcome != "complete":
                         code, feature = _admission_error(
                             execution.outcome, execution.error
