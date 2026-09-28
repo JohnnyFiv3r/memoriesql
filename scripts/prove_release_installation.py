@@ -70,7 +70,7 @@ def main() -> None:
                     .rstrip("=")
                     == record.hash.value
                 )
-        assert len(tuple(iter_contracts())) == 65
+        assert len(tuple(iter_contracts())) == 66
         assert (
             get_contract("memoriesql.source-stable-identity.v1")["id"]
             == "memoriesql.source-stable-identity.v1"
@@ -88,6 +88,7 @@ def main() -> None:
             "memoriesql.bead-classification.v1",
             "memoriesql.stored-bead-inspection.v1",
             "memoriesql.relation-assessment.v1",
+            "memoriesql.core-cli.v1",
         ):
             assert get_contract(identifier)["id"] == identifier
         assert (
