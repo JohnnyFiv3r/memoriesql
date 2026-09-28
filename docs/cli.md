@@ -18,6 +18,9 @@ Desktop and never loads private Python modules or arbitrary plugins. `contracts`
 | `sources enroll --request-file request.json` | Enrolls one exact, explicitly confirmed provider-neutral source through the installed authority adapter. |
 | `sources grant --request-file request.json` | Grants bounded read/write permission for one enrolled source to a specified principal, subject to current authority and the existing membership/pairing checks. |
 | `sources revoke --request-file request.json` | Terminally revokes one exact source with an actor-attributed reason and receipt. |
+| `schema` | Describes the installed logical query catalog, which relations are prepared, reserved or not prepared, the admission rules and delivery limits. It contacts no database and starts no run. |
+| `query --file query.sql --intent discover\|enumerate --view resolved\|historical` | Submits one caller-authored admitted SELECT with typed `$n` parameters through the trusted results executor and prints its closed reply. |
+| `result <result-id> --digest <content-digest> [--cursor C]` | Pages one retained immutable result by its exact pin under current authority, without rerunning its query. |
 
 Bare `sources` reports `source_inventory_not_released`; there is no public
 source-inventory reader yet. Provider-specific `sources connect` remains a
@@ -89,6 +92,36 @@ syntax/presence only; it is not proof that the database, grant or source is read
 The source authority commands require that credential to represent a human with
 the appropriate current management/share capabilities; they never take a
 caller-supplied actor or workspace override. The CLI makes no model call.
+
+`query` and `result` speak `memoriesql.agent-sql-results.v1` through a trusted
+executor that alone holds the control login and the restricted reader login.
+`query --file` reads at most 32 KiB of SQL; `--parameters-file` holds the typed
+parameter list (`[{"position": 1, "type": "uuid", "value": "..."}]`). All values
+are parameters; the executor refuses SQL literals except structural ones,
+unprepared relations (`unsupported_query`, feature `unprepared_relation`) and
+not-yet-qualified refinement, expansion, refresh or source scopes. Replies are
+printed unchanged; `--json` prints the executor's exact reply bytes. Exit status
+is 0 only for `available`, 2 for `unavailable` and 3 for every other outcome,
+including `unsupported_query`, `invalid_request`, `budget_exhausted` and
+`settlement_pending`. A zero-row result is still `available`.
+
+The CLI keeps one run per authenticated principal and workspace in an owner-only
+state file under `MEMORIESQL_STATE_DIR` (default `$XDG_STATE_HOME/memoriesql`),
+reuses it across invocations and starts a new run shortly before the stored run
+expires; it never retries a refused or budgeted request. Runs are bounded
+(30 minutes, two active per workspace). A follow-up `result` needs both the
+`result_id` and `content_digest` from the query reply, plus its `next_cursor` for
+the following page. Access is rechecked on every page; a revoked dependency
+refuses the whole result.
+
+The trusted host is configured only in the process that may hold database
+credentials: `MEMORIESQL_DATABASE_URL` (a login that can assume the application
+role), `MEMORIESQL_QUERY_READER_URL` and `MEMORIESQL_QUERY_READER_ROLE` for the
+reviewed restricted reader, the local credential and workspace, and optionally
+`MEMORIESQL_QUERY_AUTHORITY_SHA256` to refuse a drifted reader profile. Never
+give those values to an agent's shell, files or processes: an agent that can
+read them could bypass admitted SQL. Without them `query` and `result` report
+`trusted_query_host_not_configured`.
 
 This slice does not route Desktop's Textual interface or provider adapters. A
 future, reviewed static service/client seam must preserve public core commands,
