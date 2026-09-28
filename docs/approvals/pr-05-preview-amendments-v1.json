@@ -29,9 +29,8 @@
     "approver": "owner",
     "source": "owner confirmation relayed by the PR-05 coordinator",
     "relay_session": "local_4021a4b7-3793-4a06-804c-58c97ce8b304",
-    "relay_stated_time": "2026-09-28, ~16:45 CDT",
-    "received_by_implementer_at": "2026-09-28T21:26:24.818Z",
-    "time_note": "The relay reached the implementer at 16:26 CDT, before the stated ~16:45 CDT; receipt is the verified upper bound."
+    "confirmed_at": "on or before 2026-09-28T21:26:24.818Z (16:26 CDT), the coordinator relay receipt time",
+    "coordinator_correction": "An earlier unchecked time estimate in the relay was withdrawn by the coordinator; only the receipt bound is recorded."
   },
   "amendments": [
     {

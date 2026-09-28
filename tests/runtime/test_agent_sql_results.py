@@ -7,6 +7,8 @@ import json
 import os
 import time
 import unittest
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
@@ -18,9 +20,11 @@ from psycopg.conninfo import make_conninfo
 
 from memoriesql.application.agent_sql_catalog import SqlCatalog
 from memoriesql.application.agent_sql_results import POLICY_HASH
+from memoriesql.application.evidence_packages import NativeFacts
 from memoriesql.infrastructure.postgres.agent_sql_results import (
     PostgresAgentSqlResults,
 )
+from memoriesql.infrastructure.postgres.authorization import PostgresAuthorizationPort
 from memoriesql.infrastructure.postgres.query_reader_provisioning import (
     provision_query_reader,
 )
@@ -187,8 +191,252 @@ class AgentSqlResults(unittest.TestCase):
             )
         return grant, secret
 
+    @contextmanager
+    def in_scope(self, scope: UUID | None) -> Iterator[None]:
+        """Author into another fixture scope, as the assertion fixture does."""
+        original = self.fixture.scope
+        if scope is not None:
+            self.fixture.scope = scope
+        try:
+            yield
+        finally:
+            self.fixture.scope = original
+
+    def normalized_bead(
+        self,
+        text: str,
+        key: str,
+        *,
+        raw: str,
+        source: UUID | None = None,
+        scope: UUID | None = None,
+    ) -> UUID:
+        """A bead authored from a producer-normalized package over raw bytes.
+
+        The fixture captures `raw` as the retained source range; the sealed part
+        holds only `text`, derived from it and lineage-linked to it.
+        """
+        original = self.fixture.part
+
+        def normalized(content: str, *args: Any, **kwargs: Any) -> Any:
+            captured = original(raw, *args, **kwargs)
+            return captured.model_copy(
+                update={
+                    "derivation": "producer_normalized",
+                    "content": content,
+                    "content_sha256": hashlib.sha256(content.encode()).hexdigest(),
+                }
+            )
+
+        normalized.__module__ = original.__module__
+        with self.in_scope(scope), patch.object(self.fixture, "part", normalized):
+            bead: UUID = self.fixture.bead(text, key=key, source=source)
+        return bead
+
+    def newer_representation(
+        self, text: str, key: str, source: UUID, scope: UUID
+    ) -> Any:
+        """A sealed, never-materialized newer package for the same occurrence."""
+        fixture = self.fixture
+        module = __import__("sys").modules[fixture.part.__module__]
+        builder = module.build_capture_source_range_command
+        checkpoint = fixture.checkpoints[source]
+        original = fixture.source
+        fixture.source = source
+        fixture.offset, fixture.sequence = fixture.positions[source]
+        try:
+            with (
+                self.in_scope(scope),
+                patch.object(
+                    module,
+                    "build_capture_source_range_command",
+                    side_effect=lambda **kw: builder(
+                        **(kw | {"checkpoint_key": checkpoint})
+                    ),
+                ),
+            ):
+                part = fixture.part(text).model_copy(
+                    update={
+                        "component_key": "orchard.whole",
+                        "component_offset": 0,
+                        "derivation": "producer_normalized",
+                    }
+                )
+                package = fixture.create(
+                    (part,),
+                    occurrence_key="orchard." + key,
+                    native=NativeFacts(native_id="native." + key),
+                    normalization_policy_version="orchard.normalization.v2",
+                )
+                fixture.append(package, part)
+                fixture.seal(package)
+            fixture.positions[source] = (fixture.offset, fixture.sequence)
+            return package
+        finally:
+            fixture.source = original
+
     def invocations(self) -> int:
         return int(self.h.scalar("SELECT count(*) FROM memoriesql_query.invocations"))
+
+    def dispatch_then_die(self, request: dict[str, Any]) -> Any:
+        """The host dies as the admitted SELECT is dispatched; returns its reader."""
+        leaked: list[Any] = []
+
+        class HostDied(BaseException):
+            pass
+
+        class Leaky(psycopg.Connection[Any]):
+            # The reader backend keeps an open transaction, as a still-running
+            # query would, after its host is gone.
+            def cursor(self, *args: Any, **kwargs: Any) -> Any:
+                if kwargs.get("name"):
+                    raise HostDied()
+                return super().cursor(*args, **kwargs)
+
+            def rollback(self) -> None:
+                pass
+
+            def close(self) -> None:
+                pass
+
+        def leaky() -> Any:
+            connection = Leaky.connect(
+                make_conninfo(
+                    os.environ["N1_TEST_DATABASE_URL"],
+                    dbname=self.db.info.dbname,
+                    user=self.reader,
+                    password=READER_PASSWORD,
+                ),
+                autocommit=True,
+            )
+            leaked.append(connection)
+            return connection
+
+        with self.assertRaises(HostDied):
+            self.service(reader=leaky).handle(json.dumps(request).encode())
+        return leaked[0]
+
+    def end_backend(self, pid: int) -> None:
+        for _ in range(100):
+            if not self.h.scalar(
+                "SELECT count(*) FROM pg_stat_activity WHERE pid=%s", (pid,)
+            ):
+                return
+            time.sleep(0.05)
+        self.fail("backend did not end")
+
+    def end_reader(self, reader: Any) -> None:
+        pid = reader.info.backend_pid
+        psycopg.Connection.close(reader)
+        self.end_backend(pid)
+
+    def age(self, run_ref: str, by: timedelta, *, results: bool = True) -> None:
+        """Move one fictional run, its invocations and its results into the past."""
+        shift = f"{int(by.total_seconds())} seconds"
+        triggers = (
+            ("query_runs", "query_runs_no_update"),
+            ("query_result_creations", "query_result_creations_no_update"),
+        )
+        for table, trigger in triggers:
+            self.db.execute(f"ALTER TABLE memoriesql.{table} DISABLE TRIGGER {trigger}")
+        try:
+            self.db.execute(
+                "UPDATE memoriesql.query_runs SET started_at=started_at-%s::interval,"
+                "expires_at=expires_at-%s::interval,"
+                "default_known_at=default_known_at-%s::interval WHERE run_ref=%s",
+                (shift, shift, shift, run_ref),
+            )
+            self.db.execute(
+                "UPDATE memoriesql_query.invocations SET deadline=deadline-%s::interval "
+                "WHERE run_ref=%s",
+                (shift, run_ref),
+            )
+            if results:
+                self.db.execute(
+                    "UPDATE memoriesql.query_result_creations c "
+                    "SET created_at=c.created_at-%s::interval,"
+                    "expires_at=c.expires_at-%s::interval "
+                    "FROM memoriesql.result_preparation_operations o "
+                    "WHERE o.tenant_id=c.tenant_id AND o.operation_ref=c.operation_ref "
+                    "AND o.run_ref=%s",
+                    (shift, shift, run_ref),
+                )
+        finally:
+            for table, trigger in triggers:
+                self.db.execute(
+                    f"ALTER TABLE memoriesql.{table} ENABLE TRIGGER {trigger}"
+                )
+
+    def age_tombstone(self, run_ref: str, by: timedelta) -> None:
+        shift = f"{int(by.total_seconds())} seconds"
+        triggers = (
+            ("query_run_purges", "query_run_purges_no_update"),
+            ("query_result_purges", "query_result_purges_no_update"),
+        )
+        for table, trigger in triggers:
+            self.db.execute(f"ALTER TABLE memoriesql.{table} DISABLE TRIGGER {trigger}")
+        try:
+            for table, _ in triggers:
+                self.db.execute(
+                    f"UPDATE memoriesql.{table} SET purged_at=purged_at-%s::interval "
+                    "WHERE run_ref=%s",
+                    (shift, run_ref),
+                )
+        finally:
+            for table, trigger in triggers:
+                self.db.execute(
+                    f"ALTER TABLE memoriesql.{table} ENABLE TRIGGER {trigger}"
+                )
+
+    def retained(self) -> int:
+        return int(
+            self.h.scalar(
+                "SELECT COALESCE(sum(CASE WHEN state='reserved' THEN reservation_bytes "
+                "ELSE allocation_bytes END),0) FROM memoriesql.result_preparation_operations"
+            )
+        )
+
+    def copies(self, needle: str) -> dict[str, int]:
+        """Rows of every PR-05 result/access table whose text contains `needle`."""
+        found: dict[str, int] = {}
+        for table in (
+            "memoriesql.query_runs",
+            "memoriesql.query_run_closures",
+            "memoriesql.query_steps",
+            "memoriesql.query_deliveries",
+            "memoriesql.query_disclosures",
+            "memoriesql.query_visible_refs",
+            "memoriesql.query_cursors",
+            "memoriesql.query_run_purges",
+            "memoriesql.query_result_purges",
+            "memoriesql.query_purge_failures",
+            "memoriesql.query_result_creations",
+            "memoriesql.query_result_identities",
+            "memoriesql.result_preparation_operations",
+            "memoriesql.result_preparation_parent_holds",
+            "memoriesql_query.invocations",
+            "memoriesql_query.population_rows",
+        ):
+            count = int(
+                self.h.scalar(
+                    f"SELECT count(*) FROM {table} x WHERE strpos(x::text,%s)>0",
+                    (needle,),
+                )
+            )
+            if count:
+                found[table] = count
+        artifacts = int(
+            self.h.scalar(
+                "SELECT count(*) FROM memoriesql.result_preparation_artifacts WHERE "
+                "position(convert_to(%s,'UTF8') IN content_bytes)>0 "
+                "OR position(convert_to(%s,'UTF8') IN witness_bytes)>0 "
+                "OR position(convert_to(%s,'UTF8') IN dependency_bytes)>0",
+                (needle, needle, needle),
+            )
+        )
+        if artifacts:
+            found["memoriesql.result_preparation_artifacts"] = artifacts
+        return found
 
     def test_query_page_cursor_reuse_and_redelivery_without_rerun(self) -> None:
         source, target, _ = self.fixture.assertion()
@@ -373,8 +621,7 @@ class AgentSqlResults(unittest.TestCase):
         with self.db.transaction():
             self.fixture.begin()
             self.db.execute(
-                "SELECT memoriesql.revise_pairing_grant("
-                "%s,1,%s,%s,'revoked',%s,%s,%s)",
+                "SELECT memoriesql.revise_pairing_grant(%s,1,%s,%s,'revoked',%s,%s,%s)",
                 (
                     grant,
                     ["memory.inspect", "memory.query", "source.read"],
@@ -384,6 +631,149 @@ class AgentSqlResults(unittest.TestCase):
                     self.fixture.now,
                 ),
             )
+        revoked = self.reuse(run, reply["result"], page_size=50, secret=agent)
+        self.assertEqual(revoked["outcome"], "unavailable", revoked)
+        self.assertNotIn("result", revoked)
+
+    def test_paired_agent_cites_a_finding_to_its_retained_source_units(self) -> None:
+        # Owner decision (2026-09-28): source.read admits retained unit text
+        # through receipted query results; raw bytes, evidence packages and
+        # revisiting stay owner-only. Retained text is not exact hydration.
+        scope, source_object, _ = self.fixture.remote_scope()
+        self.fixture.assertion(scope=scope, source_object=source_object)
+        _, agent = self.pair_agent(scope, ["memory.query", "source.read"])
+        run = self.start(agent)
+        _, reply = self.query(
+            run,
+            "SELECT o.bead_id,s.statement_id,s.text,ss.evidence_ref,u.source_unit_id,"
+            "u.content_sha256,u.text_state,u.search_text,u.package_revision_id "
+            "FROM memory_v1.observations o "
+            "JOIN memory_v1.statements s ON s.bead_version_id=o.bead_version_id "
+            "JOIN memory_v1.statement_sources ss ON ss.statement_id=s.statement_id "
+            "JOIN memory_v1.source_units u ON u.source_unit_id=ss.source_unit_id "
+            "ORDER BY o.bead_id,s.statement_id,u.source_unit_id",
+            page_size=50,
+            secret=agent,
+        )
+        self.assertEqual(reply["outcome"], "available", reply)
+        rows = reply["page"]["rows"]
+        self.assertTrue(rows)
+        for row in rows:
+            _, _, _, evidence, unit, digest, state, retained, package = row["values"]
+            canonical = self.db.execute(
+                "SELECT u.content_hash,u.content_text,m.package_id "
+                "FROM memoriesql.source_units u "
+                "LEFT JOIN memoriesql.logical_unit_materializations m "
+                "ON m.tenant_id=u.tenant_id AND m.source_unit_id=u.source_unit_id "
+                "WHERE u.source_unit_id=%s",
+                (unit,),
+            ).fetchone()
+            assert canonical is not None
+            # These fixture units are materialized from identity (raw) package
+            # parts: the citation binds the pinned package but carries no text.
+            self.assertEqual((digest, package), (canonical[0], str(canonical[2])))
+            self.assertEqual((state, retained), ("unsupported", None))
+            self.assertEqual(
+                [ref for ref in row["evidence_refs"] if ref["kind"] == "source"],
+                [
+                    {
+                        "kind": "source",
+                        "ref": evidence,
+                        "unit_ref": unit,
+                        "content_sha256": digest,
+                    }
+                ],
+            )
+        # Cited units are hydration-required, and unit text is never exact.
+        self.assertTrue(reply["visibility"]["hydration_required"])
+        self.assertIn(
+            {
+                "facet": "source_units.search_text",
+                "reason": "normalized_text_not_exact_source",
+            },
+            reply["result"]["coverage"]["gaps"],
+        )
+        with self.db.transaction():
+            self.db.execute("SET LOCAL ROLE memoriesql_application")
+            PostgresAuthorizationPort(self.db).begin_context(
+                credential_sha256=agent, requested_workspace_id=self.fixture.workspace
+            )
+            authority = self.db.execute(
+                "SELECT memoriesql.current_context_source_authorized("
+                "%s,%s,'source.read','read'),"
+                "memoriesql.current_context_source_authorized("
+                "%s,%s,'source.raw.read','read')",
+                (scope, source_object, scope, source_object),
+            ).fetchone()
+        self.assertEqual(authority, (True, False))
+
+    def test_agent_reads_only_its_pinned_normalized_package_text(self) -> None:
+        # Owner decision (2026-09-28, extend to package text): an authorized
+        # agent receives the normalized projection of its authorized units from
+        # the pinned package only; raw, neighbouring, foreign and newer package
+        # content stays out, and reuse ends with the agent's authority.
+        scope, source_object, _ = self.fixture.remote_scope()
+        marker = "fictional-raw-session-metadata-5150"
+        raw = json.dumps({"sessionId": marker, "type": "user", "note": "raw line"})
+        served_text = "Fictional normalized turn: the orchard gate opens at dawn."
+        foreign_text = "Fictional foreign turn that the agent must never read."
+        newer_text = "Fictional newer projection that must never replace the pin."
+        served = self.normalized_bead(
+            served_text, "normalized-served", raw=raw, source=source_object, scope=scope
+        )
+        with self.in_scope(scope):
+            identity = self.fixture.bead(
+                "Fictional identity turn about the barn.",
+                key="identity-neighbour",
+                source=source_object,
+            )
+        self.normalized_bead(foreign_text, "normalized-foreign", raw=raw)
+        self.newer_representation(newer_text, "normalized-served", source_object, scope)
+        pins = {
+            bead: (str(unit), str(package), version)
+            for bead, unit, package, version in self.db.execute(
+                "SELECT m.bead_id,m.source_unit_id,m.package_id,"
+                "p.declaration->>'normalization_policy_version' "
+                "FROM memoriesql.logical_unit_materializations m "
+                "JOIN memoriesql.evidence_packages p ON p.tenant_id=m.tenant_id "
+                "AND p.package_id=m.package_id WHERE m.bead_id IN (%s,%s)",
+                (served, identity),
+            ).fetchall()
+        }
+        _, agent = self.pair_agent(scope, ["memory.query", "source.read"])
+        run = self.start(agent)
+        text = (
+            "SELECT u.source_unit_id,u.package_revision_id,u.text_state,u.search_text "
+            "FROM memory_v1.source_units u ORDER BY u.source_unit_id"
+        )
+        _, reply = self.query(run, text, page_size=50, secret=agent)
+        self.assertEqual(reply["outcome"], "available", reply)
+        units = {row["values"][0]: row["values"][1:] for row in reply["page"]["rows"]}
+        unit, package, version = pins[served]
+        self.assertEqual(units[unit], [package, "available", served_text])
+        gaps = reply["result"]["coverage"]["gaps"]
+        for reason in (
+            "normalized_text_not_exact_source",
+            "normalized_projection:" + version,
+        ):
+            self.assertIn({"facet": "source_units.search_text", "reason": reason}, gaps)
+        # The raw (identity) neighbour keeps only its citation; raw bytes, the
+        # foreign unit and the newer representation are never delivered.
+        neighbour, neighbour_package, _ = pins[identity]
+        self.assertEqual(units[neighbour], [neighbour_package, "unsupported", None])
+        delivered = json.dumps(reply)
+        for text_out in (marker, foreign_text, newer_text):
+            self.assertNotIn(text_out, delivered)
+        again = self.reuse(run, reply["result"], page_size=50, secret=agent)
+        self.assertEqual(again["outcome"], "available", again)
+        self.assertEqual(again["page"]["rows"], reply["page"]["rows"])
+        # Saved-result reuse ends with the agent's authority.
+        self.db.execute(
+            "UPDATE memoriesql.protected_resources "
+            "SET status='revoked',revoked_at=clock_timestamp() "
+            "WHERE resource_kind='source' AND resource_id=%s",
+            (source_object,),
+        )
         revoked = self.reuse(run, reply["result"], page_size=50, secret=agent)
         self.assertEqual(revoked["outcome"], "unavailable", revoked)
         self.assertNotIn("result", revoked)
@@ -402,6 +792,87 @@ class AgentSqlResults(unittest.TestCase):
             {"facet": "observation_tables", "reason": "source_read_required"},
             reply["result"]["coverage"]["gaps"],
         )
+
+    def test_hostile_requests_get_closed_refusals_without_side_effects(self) -> None:
+        self.fixture.assertion()
+        run = self.start()
+        request, reply = self.query(run, "SELECT bead_id FROM memory_v1.observations")
+        self.assertEqual(reply["outcome"], "available", reply)
+        result = reply["result"]
+        operations = "SELECT count(*) FROM memoriesql.result_preparation_operations"
+        before = (self.h.scalar(operations), self.invocations())
+
+        def query(**changes: Any) -> dict[str, Any]:
+            return {**request, "step_key": str(uuid4()), **changes}
+
+        cases: list[tuple[str, bytes, set[str]]] = [
+            ("not json", b"{", {"invalid_request"}),
+            ("array", b"[]", {"invalid_request"}),
+            ("unknown field", json.dumps(query(extra=1)).encode(), {"invalid_request"}),
+            (
+                "contract",
+                json.dumps(query(contract_version=2)).encode(),
+                {"invalid_request"},
+            ),
+            (
+                "page size",
+                json.dumps(query(page_size=51)).encode(),
+                {"invalid_request"},
+            ),
+            (
+                "offset time",
+                json.dumps(
+                    query(
+                        scope={
+                            **request["scope"],
+                            "known_at": "2026-09-28T00:00:00+00:00",
+                        }
+                    )
+                ).encode(),
+                {"invalid_request"},
+            ),
+        ]
+        for label, text in (
+            ("catalog", "SELECT rolname FROM pg_catalog.pg_authid"),
+            ("physical", "SELECT payload FROM memoriesql_query.population_rows"),
+            ("canonical table", "SELECT bead_id FROM memoriesql.beads"),
+            ("dml", "DELETE FROM memory_v1.observations"),
+            (
+                "cte dml",
+                "WITH x AS (DELETE FROM memory_v1.observations RETURNING bead_id) "
+                "SELECT bead_id FROM x",
+            ),
+            (
+                "two statements",
+                "SELECT bead_id FROM memory_v1.observations; "
+                "SELECT bead_id FROM memory_v1.observations",
+            ),
+            ("function", "SELECT pg_sleep(1)"),
+            ("settings", "SELECT current_setting('is_superuser')"),
+            ("literal", "SELECT bead_id FROM memory_v1.observations WHERE title='x'"),
+        ):
+            cases.append(
+                (
+                    label,
+                    json.dumps(query(sql=text)).encode(),
+                    {"invalid_request", "unsupported_query"},
+                )
+            )
+        for label, data, allowed in cases:
+            with self.subTest(label=label):
+                answer = json.loads(self.service().handle(data))
+                self.assertIn(answer["outcome"], allowed, answer)
+                self.assertTrue(answer["error"]["code"], answer)
+                self.assertNotIn("result", answer)
+                self.assertNotIn("page", answer)
+        self.assertEqual((self.h.scalar(operations), self.invocations()), before)
+        # Forged pins and cursors never switch or reveal a result.
+        forged = self.reuse(run, {**result, "content_digest": "0" * 64})
+        self.assertEqual(forged["outcome"], "unavailable", forged)
+        self.assertNotIn("result", forged)
+        guessed = self.reuse(run, result, cursor=str(uuid4()))
+        self.assertEqual(guessed["outcome"], "invalid_request", guessed)
+        self.assertEqual(guessed["error"], {"code": "cursor"})
 
     def test_resolved_view_withholds_corrected_predecessor(self) -> None:
         _, target, _ = self.fixture.assertion()
@@ -435,7 +906,6 @@ class AgentSqlResults(unittest.TestCase):
             lineage["page"]["rows"][0]["values"], [str(target), str(corrected)]
         )
 
-
     def test_run_admission_expiry_and_no_budget_reset(self) -> None:
         first = self.start()
         self.start()
@@ -466,7 +936,9 @@ class AgentSqlResults(unittest.TestCase):
     def test_crash_after_commit_redelivers_same_result_without_rerun(self) -> None:
         self.fixture.assertion()
         run = self.start()
-        request, _ = self.request_only(run, "SELECT bead_id FROM memory_v1.observations")
+        request, _ = self.request_only(
+            run, "SELECT bead_id FROM memory_v1.observations"
+        )
 
         class Crash(BaseException):
             pass
@@ -478,7 +950,9 @@ class AgentSqlResults(unittest.TestCase):
             with self.assertRaises(Crash):
                 self.send(request)
         # The owner session is gone, so other work is refused as unsettled.
-        _, blocked = self.query(run, "SELECT bead_version_id FROM memory_v1.observations")
+        _, blocked = self.query(
+            run, "SELECT bead_version_id FROM memory_v1.observations"
+        )
         self.assertEqual(blocked["outcome"], "budget_exhausted", blocked)
         self.assertEqual(blocked["error"], {"code": "settlement"})
         before = self.invocations()
@@ -495,7 +969,9 @@ class AgentSqlResults(unittest.TestCase):
     def test_host_recovery_abandons_dead_owner_without_disclosure(self) -> None:
         self.fixture.assertion()
         run = self.start()
-        request, _ = self.request_only(run, "SELECT bead_id FROM memory_v1.observations")
+        request, _ = self.request_only(
+            run, "SELECT bead_id FROM memory_v1.observations"
+        )
 
         class Crash(BaseException):
             pass
@@ -537,41 +1013,10 @@ class AgentSqlResults(unittest.TestCase):
     def test_host_death_mid_query_keeps_capacity_until_reader_ends(self) -> None:
         self.fixture.assertion()
         run = self.start()
-        request, _ = self.request_only(run, "SELECT bead_id FROM memory_v1.observations")
-        leaked: list[Any] = []
-
-        class HostDied(BaseException):
-            pass
-
-        class Leaky(psycopg.Connection[Any]):
-            # The host dies as the admitted SELECT is dispatched; its reader
-            # backend keeps an open transaction, as a still-running query would.
-            def cursor(self, *args: Any, **kwargs: Any) -> Any:
-                if kwargs.get("name"):
-                    raise HostDied()
-                return super().cursor(*args, **kwargs)
-
-            def rollback(self) -> None:
-                pass
-
-            def close(self) -> None:
-                pass
-
-        def leaky() -> Any:
-            connection = Leaky.connect(
-                make_conninfo(
-                    os.environ["N1_TEST_DATABASE_URL"],
-                    dbname=self.db.info.dbname,
-                    user=self.reader,
-                    password=READER_PASSWORD,
-                ),
-                autocommit=True,
-            )
-            leaked.append(connection)
-            return connection
-
-        with self.assertRaises(HostDied):
-            self.service(reader=leaky).handle(json.dumps(request).encode())
+        request, _ = self.request_only(
+            run, "SELECT bead_id FROM memory_v1.observations"
+        )
+        reader = self.dispatch_then_die(request)
         self.assertEqual(
             self.h.scalar(
                 "SELECT state FROM memoriesql_query.invocations WHERE run_ref=%s",
@@ -585,20 +1030,15 @@ class AgentSqlResults(unittest.TestCase):
         self.assertEqual(refused["error"], {"code": "settlement"}, refused)
         pending = self.send(request)
         self.assertEqual(pending["outcome"], "settlement_pending", pending)
-        _, blocked = self.query(run, "SELECT bead_version_id FROM memory_v1.observations")
+        _, blocked = self.query(
+            run, "SELECT bead_version_id FROM memory_v1.observations"
+        )
         self.assertEqual(blocked["error"], {"code": "settlement"}, blocked)
         self.assertEqual(
             self.h.scalar("SELECT count(*) FROM memoriesql.query_run_closures"), 0
         )
         # Only confirmed reader termination lets owned settlement proceed.
-        pid = leaked[0].info.backend_pid
-        psycopg.Connection.close(leaked[0])
-        for _ in range(100):
-            if not self.h.scalar(
-                "SELECT count(*) FROM pg_stat_activity WHERE pid=%s", (pid,)
-            ):
-                break
-            time.sleep(0.05)
+        self.end_reader(reader)
         self.assertEqual(self.service().recover_abandoned(), 1)
         self.assertEqual(
             self.h.scalar(
@@ -626,7 +1066,9 @@ class AgentSqlResults(unittest.TestCase):
     def test_close_refuses_while_run_work_is_unsettled(self) -> None:
         self.fixture.assertion()
         run = self.start()
-        request, _ = self.request_only(run, "SELECT bead_id FROM memory_v1.observations")
+        request, _ = self.request_only(
+            run, "SELECT bead_id FROM memory_v1.observations"
+        )
 
         class Crash(BaseException):
             pass
@@ -684,10 +1126,264 @@ class AgentSqlResults(unittest.TestCase):
             [gap["facet"] for gap in sources["result"]["coverage"]["gaps"]],
             [
                 "source_units.occurrence_ref",
-                "source_units.package_revision_id",
                 "source_units.trust_label",
+                "source_units.search_text",
             ],
         )
+
+    def test_expiry_cleanup_purges_content_copies_and_then_the_tombstone(self) -> None:
+        self.fixture.assertion()
+        marker = "fictional-cleanup-marker-7731"
+        run = self.start()
+        request, reply = self.query(
+            run,
+            "SELECT o.bead_id AS cleanup_probe_column,s.text FROM memory_v1.observations o "
+            "JOIN memory_v1.statements s ON s.bead_version_id=o.bead_version_id "
+            "WHERE s.text=$1 OR s.bead_id=o.bead_id ORDER BY o.bead_id,s.statement_id",
+            parameters=[{"position": 1, "type": "text", "value": marker}],
+            page_size=1,
+        )
+        self.assertEqual(reply["outcome"], "available", reply)
+        result = reply["result"]
+        following = self.reuse(run, result, cursor=reply["page"]["next_cursor"])
+        self.assertEqual(following["outcome"], "available", following)
+        bead = reply["page"]["rows"][0]["values"][0]
+        fingerprint = self.h.scalar(
+            "SELECT request_fingerprint FROM memoriesql.query_steps "
+            "WHERE run_ref=%s AND step_key=%s",
+            (run["run_ref"], request["step_key"]),
+        )
+        needles = (
+            marker,
+            "cleanup_probe_column",
+            result["content_digest"],
+            fingerprint,
+            bead,
+        )
+        for needle in needles:
+            self.assertTrue(self.copies(needle), needle)
+        charged = self.retained()
+        self.assertGreater(charged, 8192)
+        idle = json.loads(self.service().cleanup_expired())
+        self.assertEqual(
+            idle["cleanup"]["purged"], {"runs": 0, "results": 0, "tombstones": 0}
+        )
+
+        # Run expiry purges the run's own copies; the live result stays reusable.
+        self.age(run["run_ref"], timedelta(minutes=31), results=False)
+        ran = json.loads(self.service().cleanup_expired())
+        self.assertEqual(
+            ran["cleanup"]["purged"], {"runs": 1, "results": 0, "tombstones": 0}
+        )
+        for table, column in (
+            ("query_steps", "request_fingerprint"),
+            ("query_steps", "content_digest"),
+            ("query_deliveries", "response_sha256"),
+        ):
+            self.assertEqual(
+                self.h.scalar(
+                    f"SELECT count({column}) FROM memoriesql.{table} WHERE run_ref=%s",
+                    (run["run_ref"],),
+                ),
+                0,
+            )
+        self.assertEqual(
+            self.h.scalar(
+                "SELECT count(*) FROM memoriesql.query_visible_refs WHERE run_ref=%s",
+                (run["run_ref"],),
+            ),
+            0,
+        )
+        later = self.start()
+        reused = self.reuse(later, result)
+        self.assertEqual(reused["outcome"], "available", reused)
+
+        # Result expiry purges the body and every sensitive copy, leaving only
+        # the noncontent tombstone; retained allocation drops to the journal.
+        self.age(run["run_ref"], timedelta(days=30))
+        self.age(later["run_ref"], timedelta(days=30))
+        purged = json.loads(self.service().cleanup_expired())
+        self.assertEqual(
+            purged["cleanup"]["purged"], {"runs": 1, "results": 1, "tombstones": 0}
+        )
+        for needle in needles:
+            self.assertEqual(self.copies(needle), {}, needle)
+        self.assertEqual(
+            self.h.scalar(
+                "SELECT count(*) FROM memoriesql.result_preparation_artifacts"
+            ),
+            0,
+        )
+        self.assertEqual(self.retained(), 8192)
+        step = self.h.scalar(
+            "SELECT jsonb_build_object('state',state,'result_id',result_id,"
+            "'purged',purged_at IS NOT NULL) FROM memoriesql.query_steps "
+            "WHERE run_ref=%s AND step_key=%s",
+            (run["run_ref"], request["step_key"]),
+        )
+        self.assertEqual(
+            step,
+            {"state": "complete", "result_id": result["result_id"], "purged": True},
+        )
+        self.assertEqual(
+            self.h.scalar(
+                "SELECT count(*) FROM memoriesql.query_deliveries "
+                "WHERE charged_db_ms IS NOT NULL AND response_sha256 IS NULL"
+            ),
+            self.h.scalar("SELECT count(*) FROM memoriesql.query_deliveries"),
+        )
+        gone = self.reuse(self.start(), result)
+        self.assertEqual(gone["outcome"], "unavailable", gone)
+        status = json.loads(self.service().cleanup_status())["cleanup"]
+        self.assertEqual(status["overdue"], {"runs": 0, "results": 0, "tombstones": 0})
+        self.assertEqual(status["admission"], "open")
+        self.assertIsNotNone(status["last_purged_at"])
+
+        # Thirty days after its last purge the tombstone and its charge go too.
+        self.age_tombstone(run["run_ref"], timedelta(days=31))
+        expired = json.loads(self.service().cleanup_expired())
+        self.assertEqual(expired["cleanup"]["purged"]["tombstones"], 1)
+        self.assertEqual(
+            self.h.scalar(
+                "SELECT count(*) FROM memoriesql.query_runs WHERE run_ref=%s",
+                (run["run_ref"],),
+            ),
+            0,
+        )
+        self.assertEqual(
+            self.h.scalar(
+                "SELECT count(*) FROM memoriesql.result_preparation_operations "
+                "WHERE run_ref=%s",
+                (run["run_ref"],),
+            ),
+            0,
+        )
+        self.assertEqual(self.retained(), 0)
+
+    def test_cleanup_reclaims_a_stranded_reservation_after_run_expiry(self) -> None:
+        self.fixture.assertion()
+        run = self.start()
+        request, _ = self.request_only(
+            run, "SELECT bead_id FROM memory_v1.observations"
+        )
+        self.end_reader(self.dispatch_then_die(request))
+        self.assertEqual(self.service().recover_abandoned(), 1)
+        # Nobody redelivers the lost step, so its reservation stays charged.
+        self.assertGreater(self.retained(), 8192)
+        self.age(run["run_ref"], timedelta(minutes=31))
+        cleaned = json.loads(self.service().cleanup_expired())
+        self.assertEqual(
+            cleaned["cleanup"]["purged"], {"runs": 1, "results": 0, "tombstones": 0}
+        )
+        self.assertEqual(self.retained(), 8192)
+        self.assertEqual(
+            self.h.scalar(
+                "SELECT state FROM memoriesql.result_preparation_operations "
+                "WHERE run_ref=%s",
+                (run["run_ref"],),
+            ),
+            "discarded",
+        )
+        self.assertEqual(self.invocations(), 0)
+        self.assertEqual(
+            self.h.scalar(
+                "SELECT outcome FROM memoriesql.query_steps WHERE run_ref=%s",
+                (run["run_ref"],),
+            ),
+            "execution_error",
+        )
+
+    def test_interrupted_cleanup_leaves_nothing_partial_and_restart_completes(
+        self,
+    ) -> None:
+        self.fixture.assertion()
+        run = self.start()
+        for text in (
+            "SELECT bead_id FROM memory_v1.observations",
+            "SELECT bead_version_id FROM memory_v1.observations",
+        ):
+            _, reply = self.query(run, text)
+            self.assertEqual(reply["outcome"], "available", reply)
+        self.age(run["run_ref"], timedelta(days=31))
+        # One committed batch; runs come first.
+        first = json.loads(self.service().cleanup_expired(batch_size=1, max_batches=1))
+        self.assertEqual(
+            first["cleanup"]["purged"], {"runs": 1, "results": 0, "tombstones": 0}
+        )
+        artifacts = "SELECT count(*) FROM memoriesql.result_preparation_artifacts"
+        # The next pass dies before commit: nothing it did persists.
+        victim = psycopg.connect(
+            make_conninfo(
+                os.environ["N1_TEST_DATABASE_URL"], dbname=self.db.info.dbname
+            )
+        )
+        pid = victim.info.backend_pid
+        try:
+            outcome = victim.execute(
+                "SELECT memoriesql.purge_expired_query_state_v1(8)"
+            ).fetchone()
+            self.assertEqual(outcome[0]["purged"]["results"], 2)  # type: ignore[index]
+            self.db.execute("SELECT pg_terminate_backend(%s)", (pid,))
+        finally:
+            try:
+                victim.close()
+            except psycopg.Error:
+                pass
+        self.end_backend(pid)
+        self.assertEqual(self.h.scalar(artifacts), 2)
+        self.assertEqual(
+            self.h.scalar("SELECT count(*) FROM memoriesql.query_result_purges"), 0
+        )
+        self.assertEqual(
+            self.h.scalar("SELECT count(*) FROM memoriesql.query_run_purges"), 1
+        )
+        restarted = json.loads(self.service().cleanup_expired())
+        self.assertEqual(
+            restarted["cleanup"]["purged"], {"runs": 0, "results": 2, "tombstones": 0}
+        )
+        self.assertEqual(self.h.scalar(artifacts), 0)
+
+    def test_failed_cleanup_is_visible_refuses_runs_and_recovers(self) -> None:
+        self.fixture.assertion()
+        run = self.start()
+        _, reply = self.query(run, "SELECT bead_id FROM memory_v1.observations")
+        self.assertEqual(reply["outcome"], "available", reply)
+        self.age(run["run_ref"], timedelta(days=32))
+        self.db.execute(
+            "CREATE FUNCTION memoriesql.fictional_cleanup_fault() RETURNS trigger "
+            "LANGUAGE plpgsql AS $$BEGIN RAISE EXCEPTION 'fictional fault'; END$$"
+        )
+        self.db.execute(
+            "REVOKE ALL ON FUNCTION memoriesql.fictional_cleanup_fault() FROM PUBLIC"
+        )
+        self.db.execute(
+            "CREATE TRIGGER fictional_cleanup_fault BEFORE DELETE ON "
+            "memoriesql.result_preparation_artifacts FOR EACH ROW "
+            "EXECUTE FUNCTION memoriesql.fictional_cleanup_fault()"
+        )
+        failed = json.loads(self.service().cleanup_expired())
+        self.assertEqual(failed["cleanup"]["purged"]["results"], 0)
+        self.assertEqual(failed["cleanup"]["failed"], 1)
+        status = json.loads(self.service().cleanup_status())["cleanup"]
+        self.assertEqual(status["failures"]["count"], 1)
+        self.assertEqual(status["failures"]["last_error_code"], "P0001")
+        self.assertEqual(status["overdue"]["results"], 1)
+        self.assertEqual(status["admission"], "blocked")
+        refused = json.loads(self.service().start_run())
+        self.assertEqual(
+            (refused["outcome"], refused["error"]),
+            ("budget_exhausted", {"code": "settlement"}),
+        )
+        self.db.execute(
+            "DROP TRIGGER fictional_cleanup_fault ON memoriesql.result_preparation_artifacts"
+        )
+        self.db.execute("DROP FUNCTION memoriesql.fictional_cleanup_fault()")
+        # The run start's own pass completes the overdue cleanup first.
+        self.start()
+        status = json.loads(self.service().cleanup_status())["cleanup"]
+        self.assertEqual(status["failures"]["count"], 0)
+        self.assertEqual(status["overdue"], {"runs": 0, "results": 0, "tombstones": 0})
+        self.assertEqual(status["admission"], "open")
 
     def request_only(
         self, run: dict[str, Any], text: str
@@ -711,6 +1407,7 @@ class AgentSqlResults(unittest.TestCase):
             "max_result_bytes": 64 * 1024 * 1024,
             "page_size": 2,
         }, None
+
 
 if __name__ == "__main__":
     unittest.main()
