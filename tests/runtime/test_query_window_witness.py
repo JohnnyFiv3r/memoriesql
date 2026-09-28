@@ -400,6 +400,26 @@ class QueryWindowWitness(unittest.TestCase):
             )
         )
 
+    def test_positional_aliases_preserve_catalog_key_identity(self) -> None:
+        self.fixture.assertion()
+        aliased = "memory_v1.assessed_relations AS r(actual_id, relation_id)"
+        for order, mode in (
+            ("r.relation_id", "native_members"),
+            ("r.actual_id", "total_span"),
+        ):
+            with self.subTest(order=order):
+                graph = self.compare(
+                    "SELECT r.actual_id,count(*) OVER(ORDER BY "
+                    f"{order} ROWS BETWEEN CURRENT ROW AND CURRENT ROW) AS one "
+                    f"FROM {aliased} ORDER BY actual_id"
+                )
+                stages = [
+                    stage for stage in graph["stages"]
+                    if stage["operation"] == "window"
+                ]
+                self.assertEqual([stage["frame_mode"] for stage in stages], [mode])
+                self.assertEqual(len(graph["row_provenance"]), 1)
+
     def test_empty_window_keeps_protected_source_and_predicate(self) -> None:
         self.fixture.assertion()
         graph = self.compare(

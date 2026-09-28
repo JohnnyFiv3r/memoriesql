@@ -466,11 +466,19 @@ class _Compiler:
             if schema is None:
                 source_keys = []
                 break
+            catalog_positions = {
+                column.name: index for index, column in enumerate(schema.columns)
+            }
+            exposed_names = source_columns[source.alias_or_name]
             keys_for_source: list[set[str]] = []
             for unique_key in schema.unique_keys:
+                exposed_key = {
+                    exposed_names[catalog_positions[column_name]]
+                    for column_name in unique_key
+                }
                 flattened = {
                     flattened_name
-                    for column_name in unique_key
+                    for column_name in exposed_key
                     for flattened_name, original in columns.values()
                     if isinstance(original, exp.Column)
                     and original.table == source.alias_or_name

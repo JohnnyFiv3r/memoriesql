@@ -118,6 +118,8 @@ For COUNT/SUM/AVG/MIN/MAX with an explicit ROWS frame, a visible source-key
 order proves a total partition order and PostgreSQL emits native first/last
 ordinals in the same restricted SELECT as the value. The frame is then a span
 of the shared partition ledger rather than a repeated array of every member.
+The proof resolves positional table-column aliases against catalog key positions;
+an alias for a non-key column cannot stand in for the key.
 When that proof is unavailable, PostgreSQL emits actual frame-member traces;
 the binder verifies each against the partition occurrence bag and records
 contributor refs, multiplicities and empty frames. A contiguous span is
