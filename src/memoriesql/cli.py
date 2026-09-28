@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import secrets
 from collections.abc import Mapping, Sequence
 from datetime import datetime
 from pathlib import Path
@@ -25,6 +26,11 @@ from pydantic import BaseModel
 
 from memoriesql import __version__
 from memoriesql.application.authorization import LocalCredential
+from memoriesql.application.local_client_pairing import (
+    LocalClientPairing,
+    PairLocalClient,
+    RevokeLocalClient,
+)
 from memoriesql.application.relation_inspection import InspectBeadRelationsV2
 from memoriesql.application.source_enrollment import (
     EnrollExactSource,
@@ -41,6 +47,10 @@ from memoriesql.contracts import (
     ContractNotFoundError,
     contract_inventory,
     get_contract,
+)
+from memoriesql.infrastructure.postgres.local_client_pairing import (
+    PairingRevisionConflict,
+    PostgresLocalClientPairing,
 )
 from memoriesql.infrastructure.postgres.relation_assessment import (
     PostgresRelationAssessments,
@@ -141,6 +151,27 @@ def _parser() -> argparse.ArgumentParser:
         )
         operation.add_argument("--request-file", required=True, type=Path)
         operation.add_argument("--json", action="store_true")
+
+    clients = commands.add_parser(
+        "clients", help="Pair or revoke one local agent client with current authority."
+    )
+    client_commands = clients.add_subparsers(dest="client_command", required=True)
+    pair = client_commands.add_parser(
+        "pair", help="Pair one agent client and write its new secret once to a file."
+    )
+    pair.add_argument("--request-file", required=True, type=Path)
+    pair.add_argument(
+        "--secret-file",
+        required=True,
+        type=Path,
+        help="New owner-only file to create; never overwritten or printed.",
+    )
+    pair.add_argument("--json", action="store_true")
+    revoke = client_commands.add_parser(
+        "revoke", help="Terminally revoke one pairing grant at its current revision."
+    )
+    revoke.add_argument("--request-file", required=True, type=Path)
+    revoke.add_argument("--json", action="store_true")
     return parser
 
 
@@ -239,6 +270,93 @@ def _source_authority(
         return {"outcome": "failed", "reason": "source_authority_failed"}
 
 
+def _write_new_secret(path: Path) -> str:
+    """Create one owner-only secret file; refuse existing paths and symlinks."""
+
+    secret = secrets.token_urlsafe(32)
+    flags = (
+        os.O_WRONLY
+        | os.O_CREAT
+        | os.O_EXCL
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_CLOEXEC", 0)
+    )
+    descriptor = os.open(path, flags, 0o600)
+    try:
+        os.fchmod(descriptor, 0o600)
+        payload = secret.encode("ascii")
+        written = 0
+        while written < len(payload):
+            written += os.write(descriptor, payload[written:])
+        os.fsync(descriptor)
+    except BaseException:
+        os.close(descriptor)
+        path.unlink(missing_ok=True)
+        raise
+    os.close(descriptor)
+    return secret
+
+
+def _pair_client(
+    request: PairLocalClient, secret_file: Path, environment: Mapping[str, str]
+) -> dict[str, object]:
+    configured = _local_read_configuration(environment)
+    if configured is None:
+        return {"outcome": "unavailable", "reason": "local_client_authority_required"}
+    database, credential_sha256, workspace_id = configured
+    try:
+        secret = _write_new_secret(secret_file)
+    except OSError:
+        return {"outcome": "failed", "reason": "secret_file_unavailable"}
+    receipt: LocalClientPairing | None = None
+    refusal: dict[str, object] = {"outcome": "failed", "reason": "client_pairing_failed"}
+    try:
+        with psycopg.connect(database, autocommit=True) as connection:
+            receipt = PostgresLocalClientPairing(
+                connection,
+                credential_sha256=credential_sha256,
+                workspace_id=workspace_id,
+            ).pair(request, client_secret_sha256=LocalCredential(secret).sha256())
+    except PermissionError:
+        refusal = {"outcome": "unavailable", "reason": "resource_unavailable"}
+    except Exception:
+        # A failure after the committed pairing still reports that receipt.
+        # Never echo the secret, credentials, connection or SQL diagnostics.
+        pass
+    if receipt is None:
+        # An unpaired secret authorizes nothing; do not leave it behind.
+        secret_file.unlink(missing_ok=True)
+        return refusal
+    return {
+        "outcome": "available",
+        "receipt": receipt.model_dump(mode="json"),
+        "secret_file_written": True,
+    }
+
+
+def _revoke_client(
+    request: RevokeLocalClient, environment: Mapping[str, str]
+) -> dict[str, object]:
+    configured = _local_read_configuration(environment)
+    if configured is None:
+        return {"outcome": "unavailable", "reason": "local_client_authority_required"}
+    database, credential_sha256, workspace_id = configured
+    try:
+        with psycopg.connect(database, autocommit=True) as connection:
+            receipt = PostgresLocalClientPairing(
+                connection,
+                credential_sha256=credential_sha256,
+                workspace_id=workspace_id,
+            ).revoke(request)
+        return {"outcome": "available", "receipt": receipt.model_dump(mode="json")}
+    except PairingRevisionConflict:
+        return {"outcome": "failed", "reason": "pairing_revision_conflict"}
+    except PermissionError:
+        return {"outcome": "unavailable", "reason": "resource_unavailable"}
+    except Exception:
+        return {"outcome": "failed", "reason": "client_revocation_failed"}
+
+
 def _emit_result(result: BaseModel | dict[str, Any], *, machine: bool) -> int:
     payload = (
         result.model_dump(mode="json") if isinstance(result, BaseModel) else result
@@ -299,7 +417,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
         )
 
     if args.command == "capabilities":
-        reference = get_contract("memoriesql.core-cli.v1")
+        reference = get_contract("memoriesql.core-cli.v2")
         command_contract = reference["contract"]
         if not isinstance(command_contract, dict):
             raise RuntimeError("bundled CLI reference is malformed")
@@ -344,6 +462,24 @@ def main(arguments: Sequence[str] | None = None) -> int:
                 machine=args.json,
             )
         return _emit_result(receipt, machine=args.json)
+
+    if args.command == "clients":
+        client_request: PairLocalClient | RevokeLocalClient
+        try:
+            if args.client_command == "pair":
+                client_request = _request_file(args.request_file, PairLocalClient)
+            else:
+                client_request = _request_file(args.request_file, RevokeLocalClient)
+        except (OSError, ValueError):
+            return _emit_result(
+                {"outcome": "failed", "reason": "invalid_client_request"},
+                machine=args.json,
+            )
+        if isinstance(client_request, PairLocalClient):
+            outcome = _pair_client(client_request, args.secret_file, os.environ)
+        else:
+            outcome = _revoke_client(client_request, os.environ)
+        return _emit_result(outcome, machine=args.json)
 
     request: BaseModel
     if args.command == "source":
