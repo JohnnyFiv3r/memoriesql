@@ -219,6 +219,35 @@ class CoreCLIPairingTests(unittest.TestCase):
         )
         self.assertFalse(self.secret.exists())
 
+    def test_unreachable_database_is_a_definite_revocation_failure(self) -> None:
+        request = self.root / "revoke.json"
+        request.write_text(
+            json.dumps(
+                {
+                    "pairing_grant_id": str(UUID(int=41)),
+                    "expected_revision": 1,
+                    "capabilities": PAIR_REQUEST["capabilities"],
+                    "access_scope_ids": [str(SCOPE)],
+                    "exact_revocation_confirmed": True,
+                }
+            ),
+            encoding="utf-8",
+        )
+        with (
+            patch.dict(os.environ, LOCAL_ENV),
+            patch(
+                "memoriesql.cli.psycopg.connect",
+                side_effect=psycopg.OperationalError("connection refused"),
+            ),
+        ):
+            status, output = invoke(
+                ["clients", "revoke", "--request-file", str(request), "--json"]
+            )
+        self.assertEqual(
+            (status, json.loads(output)),
+            (3, {"outcome": "failed", "reason": "client_revocation_failed"}),
+        )
+
     def test_lost_commit_keeps_the_secret_and_names_the_grant(self) -> None:
         connection = MagicMock()
         connection.__enter__.return_value = connection
