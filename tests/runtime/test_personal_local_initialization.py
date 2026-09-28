@@ -7,6 +7,7 @@ import json
 import os
 import stat
 import tempfile
+import time
 import unittest
 import uuid
 from contextlib import redirect_stdout
@@ -248,11 +249,95 @@ class PersonalLocalInitialization(unittest.TestCase):
         self.assertEqual(first.read_text(encoding="ascii"), secret)
         self.assertTrue(self.authenticates(secret, workspace))
 
-        # A login that can read them confirms the same replay.
+        # Granting it SELECT only shows rows through forced row security, which
+        # hides them: an empty read is still no evidence of another owner.
+        for table in ("workspaces", "users", "authentication_credentials"):
+            self.db.execute(
+                sql.SQL("GRANT SELECT ON memoriesql.{} TO {}").format(
+                    sql.Identifier(table),
+                    sql.Identifier(str(psycopg.conninfo.conninfo_to_dict(operator)["user"])),
+                )
+            )
+        filtered_file = self.root / "operator-filtered.secret"
+        status, filtered = self.init(self.request, filtered_file, operator)
+        self.assertEqual(
+            (status, filtered),
+            (
+                2,
+                {
+                    "outcome": "unavailable",
+                    "reason": "initialization_replay_unverifiable",
+                },
+            ),
+        )
+        self.assertFalse(filtered_file.exists())
+
+        # A login that bypasses row security confirms the same replay.
         status, confirmed = self.init(self.request, self.root / "admin-replay.secret")
         self.assertEqual(status, 0, confirmed)
         self.assertTrue(confirmed["receipt"]["replayed"])
         self.assertEqual(self.principals(), 1)
+
+    def test_lost_connection_during_replay_verification_is_unverifiable(self) -> None:
+        first = self.root / "owner.secret"
+        status, created = self.init(self.request, first)
+        self.assertEqual(status, 0, created)
+        secret = first.read_text(encoding="ascii")
+        workspace = uuid.UUID(created["receipt"]["workspace_id"])
+        admin_url = self.url
+        connect = psycopg.connect
+
+        class CutBeforeVerification:
+            """A real connection whose server session ends before the replay read."""
+
+            def __init__(self, connection: Any) -> None:
+                self.connection = connection
+
+            def __getattr__(self, name: str) -> Any:
+                return getattr(self.connection, name)
+
+            def __enter__(self) -> Any:
+                self.connection.__enter__()
+                return self
+
+            def __exit__(self, *exc: Any) -> Any:
+                return self.connection.__exit__(*exc)
+
+            def execute(self, query: Any, params: Any = None) -> Any:
+                if isinstance(query, str) and query.startswith("SELECT u.display_name"):
+                    pid = self.connection.info.backend_pid
+                    with connect(admin_url, autocommit=True) as admin:
+                        admin.execute("SELECT pg_terminate_backend(%s)", (pid,))
+                        for _ in range(500):
+                            if not admin.execute(
+                                "SELECT 1 FROM pg_stat_activity WHERE pid=%s", (pid,)
+                            ).fetchone():
+                                break
+                            time.sleep(0.01)
+                return self.connection.execute(query, params)
+
+        def cut(url: str, **kwargs: Any) -> Any:
+            return CutBeforeVerification(connect(url, **kwargs))
+
+        replay_file = self.root / "cut-replay.secret"
+        with patch("memoriesql.cli.psycopg.connect", side_effect=cut):
+            status, cut_off = self.init(self.request, replay_file)
+        # The bootstrap had already refused this run, so nothing it sent can
+        # have committed: the lost read leaves the replay unverifiable, and the
+        # new file, which cannot be the credential, is removed.
+        self.assertEqual(
+            (status, cut_off),
+            (
+                2,
+                {
+                    "outcome": "unavailable",
+                    "reason": "initialization_replay_unverifiable",
+                },
+            ),
+        )
+        self.assertFalse(replay_file.exists())
+        self.assertEqual(self.principals(), 1)
+        self.assertTrue(self.authenticates(secret, workspace))
 
 
 if __name__ == "__main__":

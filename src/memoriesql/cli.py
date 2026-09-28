@@ -509,7 +509,12 @@ def _revoke_client(
         return {"outcome": "unavailable", "reason": "local_client_authority_required"}
     database, credential_sha256, workspace_id = configured
     try:
-        with psycopg.connect(database, autocommit=True) as connection:
+        connection = psycopg.connect(database, autocommit=True)
+    except Exception:
+        # Nothing can have been revoked without a connection.
+        return {"outcome": "failed", "reason": "client_revocation_failed"}
+    try:
+        with connection:
             receipt = PostgresLocalClientPairing(
                 connection,
                 credential_sha256=credential_sha256,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 from typing import Any
 from uuid import UUID, uuid5
 
@@ -112,10 +113,21 @@ class PostgresPersonalLocalInitialization:
 
         The active workspace, owner name and credential expiry must all match
         the request's derived records. None means this login cannot read those
-        records, so the replay can be neither confirmed nor ruled out.
+        records unfiltered, or the read failed, so the replay can be neither
+        confirmed nor ruled out.
         """
 
         try:
+            # An empty read proves nothing under row security: only a login
+            # that bypasses it (a superuser or BYPASSRLS role) can rule out.
+            unrestricted = self._connection.execute(
+                "SELECT NOT (pg_catalog.row_security_active('memoriesql.workspaces') "
+                "OR pg_catalog.row_security_active('memoriesql.users') "
+                "OR pg_catalog.row_security_active("
+                "'memoriesql.authentication_credentials'))"
+            ).fetchone()
+            if not (unrestricted and unrestricted[0]):
+                return None
             row = self._connection.execute(
                 "SELECT u.display_name, c.expires_at "
                 "FROM memoriesql.workspaces w "
@@ -126,8 +138,15 @@ class PostgresPersonalLocalInitialization:
                 (ids["user"], ids["credential"], ids["tenant"], ids["workspace"]),
             ).fetchone()
         except Exception:
-            if self._connection.info.transaction_status != TransactionStatus.IDLE:
-                self._connection.rollback()
+            # The bootstrap was already refused, so nothing this run sent can
+            # commit: any failure here, a lost connection included, only leaves
+            # the replay unverifiable.
+            with contextlib.suppress(Exception):
+                if self._connection.info.transaction_status in (
+                    TransactionStatus.INTRANS,
+                    TransactionStatus.INERROR,
+                ):
+                    self._connection.rollback()
             return None
         return (
             row is not None

@@ -121,10 +121,12 @@ file only if that replay reports nothing was initialized. If the connection
 fails while the commit's outcome is unknown, `init` keeps the file and reports
 `initialization_outcome_unknown`; recover the same way. A replay reporting
 `replayed: true` means the kept file is the owner credential, and a fresh
-initialization means it is not. Confirming a replay reads the bootstrap
-records, so an operator login that cannot read them reports
-`initialization_replay_unverifiable` instead; keep any earlier file and rerun
-the replay with a login that can, such as the migration administrator. The receipt carries
+initialization means it is not. If more than one run left a kept file, keep all
+of them: a replay cannot tell which one is the credential. Confirming a replay
+reads the bootstrap records without row security, so any other operator login
+reports `initialization_replay_unverifiable` instead; keep every earlier file
+and rerun the replay as a superuser or BYPASSRLS login, such as the migration
+administrator. The receipt carries
 identifiers and expiry, including the workspace to export as
 `MEMORIESQL_WORKSPACE_ID`.
 
