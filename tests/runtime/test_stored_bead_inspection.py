@@ -3,15 +3,25 @@
 from __future__ import annotations
 
 import asyncio
+import io
+import json
+import os
+import tempfile
 import unittest
 import uuid
+from contextlib import redirect_stdout
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
+from unittest.mock import patch
+
+from psycopg.conninfo import make_conninfo
 
 from memoriesql.application.stored_bead_inspection import (
     InspectStoredBead,
     ReadStoredBeadEvidence,
     StoredEvidenceSelection,
 )
+from memoriesql.cli import main as cli_main
 from memoriesql.infrastructure.postgres.stored_bead_inspection import (
     PostgresStoredBeadInspection,
 )
@@ -93,6 +103,78 @@ class StoredInspection(BeadClassification):
         return cast(
             uuid.UUID, self.row("SELECT bead_id FROM memoriesql.bead_versions")[0]
         )
+
+    def test_installed_public_cli_reads_and_revocation(self) -> None:
+        bead = self.accepted_fixture()
+        self.reader()
+        environment = {
+            "MEMORIESQL_DATABASE_URL": make_conninfo(self.admin, dbname=self.database),
+            "MEMORIESQL_LOCAL_CREDENTIAL": "fictional orchard session for public acceptance",
+            "MEMORIESQL_WORKSPACE_ID": str(self.workspace),
+        }
+
+        def command(
+            *arguments: str, credential: str | None = None
+        ) -> tuple[int, dict[str, Any]]:
+            output = io.StringIO()
+            configured = dict(environment)
+            if credential is not None:
+                configured["MEMORIESQL_LOCAL_CREDENTIAL"] = credential
+            with redirect_stdout(output), patch.dict(os.environ, configured):
+                status = cli_main(list(arguments))
+            return status, json.loads(output.getvalue())
+
+        status, inspected = command("inspect", str(bead), "--json")
+        self.assertEqual(status, 0)
+        self.assertEqual(inspected["outcome"], "available")
+        self.assertEqual(inspected["bead"]["lifecycle"], "accepted")
+        self.assertEqual(
+            inspected["bead"]["meaning"]["statements"][0]["text"],
+            "Alex proposed a count; no count has occurred.",
+        )
+        human_status, human = command("inspect", str(bead))
+        self.assertEqual(human_status, 0)
+        self.assertEqual(human, inspected)
+
+        with tempfile.TemporaryDirectory() as directory:
+            selection = Path(directory) / "selection.json"
+            selection.write_text(json.dumps(self.selection(limit=8)), encoding="utf-8")
+            source_status, source = command(
+                "source", str(bead), "--selection-file", str(selection), "--json"
+            )
+        self.assertEqual(source_status, 0)
+        self.assertEqual(source["outcome"], "available")
+        self.assertEqual(source["evidence"]["content"], "Alex pro")
+
+        migrate(self.db, expected_current_version=24, target_version=29)
+        relation_status, relations = command("relations", str(bead), "--json")
+        self.assertEqual(relation_status, 0)
+        self.assertEqual(relations["outcome"], "available")
+        self.assertEqual(relations["bead_id"], str(bead))
+        wrong_status, wrong = command(
+            "inspect",
+            str(bead),
+            "--json",
+            credential="fictional unauthorized local credential",
+        )
+        self.assertEqual(wrong_status, 2)
+        self.assertEqual(wrong["outcome"], "unavailable")
+        self.assertNotIn("bead", wrong)
+
+        self.db.execute(
+            "UPDATE memoriesql.protected_resources SET status='revoked',revoked_at=clock_timestamp() WHERE resource_id=%s",
+            (self.source,),
+        )
+        denied_status, denied = command("inspect", str(bead), "--json")
+        missing_status, missing = command("inspect", str(uuid.uuid4()), "--json")
+        self.assertEqual(denied_status, 2)
+        self.assertEqual(missing_status, 2)
+        self.assertEqual(denied, missing)
+        relation_status, hidden_relations = command("relations", str(bead), "--json")
+        self.assertEqual(relation_status, 2)
+        self.assertEqual(hidden_relations["outcome"], "unavailable")
+        self.assertIsNone(hidden_relations["bead_id"])
+        self.assertEqual(hidden_relations["relations"], [])
 
     def test_inspection_preserves_authored_meaning_and_diagnostic_confidence(
         self,
