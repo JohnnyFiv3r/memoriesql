@@ -64,7 +64,7 @@
             "result": "available",
             "schema": "available",
             "source": "owner_only: the exact stored-bead readers answer resource_unavailable to paired agents",
-            "source_citation": "through query results: retained source-unit text in memory_v1.source_units under memory.query and source.read"
+            "source_citation": "through query results: the normalized text of authorized source units in memory_v1.source_units under memory.query and source.read; never raw bytes or clause-level citations"
           },
           "protocol_version": 1
         },
