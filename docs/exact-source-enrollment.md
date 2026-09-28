@@ -36,7 +36,9 @@ The typed application requests and PostgreSQL adapter live in
 `memoriesql.infrastructure.postgres.source_enrollment`. Product connections
 must use the installed adapter with an authenticated credential and an idle
 connection that the adapter can own for its short transaction. The installed
-contract catalog describes the request and receipt shapes. A future CLI or
-Desktop binding must preserve the exact native selection and recheck current
-authority before every capture/read; this migration does not authorize access
-to historical sessions or outbound model disclosure.
+contract catalog describes the request and receipt shapes. The development CLI
+binds these operations as `sources enroll|grant|revoke --request-file` and
+returns typed receipts; it does not discover or validate provider objects. A
+future Desktop binding must preserve the exact native selection and recheck
+current authority before every capture/read; this migration does not authorize
+access to historical sessions or outbound model disclosure.
