@@ -1,6 +1,6 @@
 {
   "contract": {
-    "authentication": "existing_local_credential_and_workspace_context_for_reads_exact_source_authority_and_client_pairing; operator_database_login_for_init",
+    "authentication": "existing_local_credential_and_workspace_context_for_reads_exact_source_authority_and_client_pairing; operator_database_login_for_init; the query host's service-user configuration for broker commands",
     "client_pairing": {
       "pair": "PairLocalClient / LocalClientPairing v1",
       "result_envelope": "available receipt, unavailable reason or failed reason",
@@ -23,7 +23,12 @@
       "init",
       "schema",
       "query",
-      "result"
+      "result",
+      "broker serve",
+      "broker provision",
+      "broker check",
+      "broker runs",
+      "broker close-run"
     ],
     "doctor": {
       "--check-database": "read-only reachability, schema compatibility and login role readiness; never migrates, grants or repairs",
@@ -41,6 +46,20 @@
       "init": "InitializePersonalLocal / PersonalLocalInitialization v1",
       "result_envelope": "available receipt, unavailable reason or failed reason",
       "secret_delivery": "a new caller-named owner-only file created exclusively before the database call; never printed, logged or accepted as input; removed when nothing commits or on replay"
+    },
+    "query_host": {
+      "client": "MEMORIESQL_RESULTS_SOCKET selects the local trusted query host for query, result, inspect, source and relations; the client presents only its own paired credential and workspace over a Unix socket whose serving uid it verifies, and never uses a database URL",
+      "direct": "without the socket, query and result compose the trusted executor in-process and need the host's own database logins, which are never given to an agent",
+      "operator": "broker serve|provision|check|runs|close-run run only as the host's service user with its private configuration; each prints one JSON line and exits 0, 2 or 3",
+      "paired_agent_reads": {
+        "inspect": "resource_unavailable: the stored-bead readers require raw-source authority that the paired-agent role cannot hold",
+        "query": "available",
+        "relations": "resource_unavailable: the stored-bead readers require raw-source authority that the paired-agent role cannot hold",
+        "result": "available",
+        "schema": "available",
+        "source": "resource_unavailable: the stored-bead readers require raw-source authority that the paired-agent role cannot hold"
+      },
+      "protocol_version": 1
     },
     "read_contracts": {
       "inspect": "InspectStoredBead / StoredBeadInspection v1",

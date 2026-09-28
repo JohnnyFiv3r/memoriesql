@@ -95,12 +95,14 @@ class CoreCLIReadTests(unittest.TestCase):
         connection = MagicMock()
         connection.__enter__.return_value = connection
         reader = MagicMock()
-        reader.inspect.return_value = {"outcome": "unavailable"}
+        reader.inspect.return_value.model_dump.return_value = {"outcome": "unavailable"}
         with (
             patch.dict(os.environ, LOCAL_ENV),
             patch("memoriesql.cli.psycopg.connect", return_value=connection) as connect,
             patch(
-                "memoriesql.cli.PostgresStoredBeadInspection", return_value=reader
+                "memoriesql.infrastructure.results_broker.readers."
+                "PostgresStoredBeadInspection",
+                return_value=reader,
             ) as reader_type,
         ):
             status, result = invoke(["inspect", str(BEAD), "--json"])

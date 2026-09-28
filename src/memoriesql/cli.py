@@ -61,15 +61,12 @@ from memoriesql.infrastructure.postgres.personal_local_initialization import (
     AlreadyInitialized,
     PostgresPersonalLocalInitialization,
 )
-from memoriesql.infrastructure.postgres.relation_assessment import (
-    PostgresRelationAssessments,
-)
 from memoriesql.infrastructure.postgres.source_enrollment import (
     PostgresSourceEnrollment,
 )
-from memoriesql.infrastructure.postgres.stored_bead_inspection import (
-    PostgresStoredBeadInspection,
-)
+from memoriesql.infrastructure.results_broker import PROTOCOL_VERSION
+from memoriesql.infrastructure.results_broker.client import BrokerTransport
+from memoriesql.infrastructure.results_broker.readers import DirectReadTransport
 from memoriesql.query_client import (
     MAX_PARAMETER_FILE_BYTES,
     MAX_SQL_BYTES,
@@ -239,6 +236,37 @@ def _parser() -> argparse.ArgumentParser:
         "--new-run", action="store_true", help="Start a new run for this page."
     )
     result.add_argument("--json", action="store_true")
+
+    broker = commands.add_parser(
+        "broker",
+        help="Operate the local trusted query host, as its service user only.",
+    )
+    broker_commands = broker.add_subparsers(dest="broker_command", required=True)
+    serve = broker_commands.add_parser(
+        "serve", help="Serve the host socket until SIGTERM or SIGINT, then drain."
+    )
+    provision = broker_commands.add_parser(
+        "provision",
+        help="Create or rotate the host's database logins and private configuration.",
+    )
+    check = broker_commands.add_parser(
+        "check", help="Check the host's configuration, logins and file integrity."
+    )
+    runs = broker_commands.add_parser("runs", help="List runs the host has recorded.")
+    close_run = broker_commands.add_parser(
+        "close-run", help="Close one run the host recorded, as its operator."
+    )
+    for operation in (serve, provision, check, runs, close_run):
+        operation.add_argument("--config", required=True, type=Path)
+    provision.add_argument("--workspace-id", type=UUID)
+    provision.add_argument("--client-uid", type=int)
+    provision.add_argument("--database-host")
+    provision.add_argument("--database-port", type=int)
+    provision.add_argument("--database-name")
+    provision.add_argument("--rotate", action="store_true")
+    provision.add_argument("--control-role")
+    provision.add_argument("--reader-role")
+    close_run.add_argument("run_ref", type=UUID)
     return parser
 
 
@@ -256,40 +284,57 @@ def _local_read_configuration(
         return None
 
 
+def _client_identity(environment: Mapping[str, str]) -> tuple[str, str, UUID] | None:
+    """The caller's own credential and workspace; no database URL is involved."""
+
+    secret = environment.get("MEMORIESQL_LOCAL_CREDENTIAL")
+    workspace = environment.get("MEMORIESQL_WORKSPACE_ID")
+    if not secret or not workspace:
+        return None
+    try:
+        return secret, LocalCredential(secret).sha256(), UUID(workspace)
+    except ValueError:
+        return None
+
+
+def _query_host(environment: Mapping[str, str]) -> BrokerTransport | None:
+    """The trusted query host client, when its socket is configured.
+
+    With the socket set, reads and results go only through the host: a database
+    URL in the same environment is never used as a fallback.
+    """
+
+    socket_path = environment.get("MEMORIESQL_RESULTS_SOCKET")
+    identity = _client_identity(environment)
+    if not socket_path or identity is None:
+        return None
+    secret, _credential_sha256, workspace_id = identity
+    return BrokerTransport(Path(socket_path), secret, workspace_id)
+
+
 def _read_core(
     command: str, request: BaseModel, environment: Mapping[str, str]
-) -> BaseModel | dict[str, str]:
-    configured = _local_read_configuration(environment)
-    if configured is None:
-        return {"outcome": "unavailable", "reason": "local_read_identity_required"}
-    database, credential_sha256, workspace_id = configured
-    try:
-        with psycopg.connect(database, autocommit=True) as connection:
-            if command == "relations":
-                return PostgresRelationAssessments(
-                    connection,
-                    credential_sha256=credential_sha256,
-                    workspace_id=workspace_id,
-                ).inspect_relations(InspectBeadRelationsV2.model_validate(request))
-            reader = PostgresStoredBeadInspection(
-                connection,
-                credential_sha256=credential_sha256,
-                workspace_id=workspace_id,
-            )
-            if command == "inspect":
-                return reader.inspect(InspectStoredBead.model_validate(request))
-            return reader.read(ReadStoredBeadEvidence.model_validate(request))
-    except (
-        PermissionError,
-        InsufficientPrivilege,
-        InvalidAuthorizationSpecification,
-        NoDataFound,
-    ):
-        return {"outcome": "unavailable", "reason": "resource_unavailable"}
-    except Exception:
-        # A failure is never a successful empty result. Hide connection strings,
-        # secrets, protected IDs, SQL diagnostics and partial content.
+) -> dict[str, Any]:
+    """One existing reader, through the host or in-process; identical bytes."""
+
+    body = request.model_dump_json().encode("utf-8")
+    if environment.get("MEMORIESQL_RESULTS_SOCKET"):
+        host = _query_host(environment)
+        if host is None:
+            return {"outcome": "unavailable", "reason": "local_read_identity_required"}
+        reply = host.read(command, body)
+    else:
+        configured = _local_read_configuration(environment)
+        if configured is None:
+            return {"outcome": "unavailable", "reason": "local_read_identity_required"}
+        database, credential_sha256, workspace_id = configured
+        reply = DirectReadTransport(database, credential_sha256, workspace_id).read(
+            command, body
+        )
+    payload = json.loads(reply)
+    if not isinstance(payload, dict):
         return {"outcome": "failed", "reason": "core_read_failed"}
+    return payload
 
 
 def _selection(path: Path) -> StoredEvidenceSelection:
@@ -468,8 +513,14 @@ def _revoke_client(
     except Exception:
         return {"outcome": "failed", "reason": "client_revocation_failed"}
 def _results_transport(environment: Mapping[str, str]) -> ResultsTransport | None:
-    """Compose the direct trusted-host executor only when every input is present."""
+    """The query host client, else the in-process executor of a trusted host.
 
+    The in-process executor needs the host's own database logins; it is composed
+    only when every one of them is present and the socket is not configured.
+    """
+
+    if environment.get("MEMORIESQL_RESULTS_SOCKET"):
+        return _query_host(environment)
     configured = _local_read_configuration(environment)
     reader_url = environment.get("MEMORIESQL_QUERY_READER_URL")
     reader_role = environment.get("MEMORIESQL_QUERY_READER_ROLE")
@@ -504,7 +555,7 @@ def _emit_reply(reply: bytes, *, machine: bool) -> int:
 
 
 def _investigate(args: argparse.Namespace, environment: Mapping[str, str]) -> int:
-    configured = _local_read_configuration(environment)
+    configured = _client_identity(environment)
     if configured is None:
         return _emit_result(
             {"outcome": "unavailable", "reason": "local_read_identity_required"},
@@ -516,7 +567,7 @@ def _investigate(args: argparse.Namespace, environment: Mapping[str, str]) -> in
             {"outcome": "unavailable", "reason": "trusted_query_host_not_configured"},
             machine=args.json,
         )
-    _database, credential_sha256, workspace_id = configured
+    _secret, credential_sha256, workspace_id = configured
     try:
         if args.command == "query":
             sql = read_bounded(args.file, MAX_SQL_BYTES).decode("utf-8")
@@ -668,6 +719,32 @@ def _emit_result(result: BaseModel | dict[str, Any], *, machine: bool) -> int:
     return 2 if outcome == "unavailable" else 3
 
 
+def _broker(args: argparse.Namespace) -> int:
+    """Operator commands of the trusted query host; each prints its own JSON line."""
+
+    from memoriesql.infrastructure.results_broker import admin, server
+
+    if args.broker_command == "serve":
+        return server.serve(args.config)
+    if args.broker_command == "provision":
+        return admin.provision(
+            args.config,
+            workspace_id=args.workspace_id,
+            client_uid=args.client_uid,
+            database_host=args.database_host,
+            database_port=args.database_port,
+            database_name=args.database_name,
+            rotate=args.rotate,
+            control_role=args.control_role or admin.DEFAULT_CONTROL_ROLE,
+            reader_role=args.reader_role or admin.DEFAULT_READER_ROLE,
+        )
+    if args.broker_command == "check":
+        return admin.check(args.config)
+    if args.broker_command == "runs":
+        return admin.list_runs(args.config)
+    return admin.close_run(args.config, args.run_ref)
+
+
 def main(arguments: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(arguments)
     if args.command == "contracts":
@@ -709,6 +786,10 @@ def main(arguments: Sequence[str] | None = None) -> int:
             "configuration_only": not args.check_database,
             "local_read_identity_configured": _local_read_configuration(os.environ)
             is not None,
+            "query_host_socket_configured": bool(
+                os.environ.get("MEMORIESQL_RESULTS_SOCKET")
+            ),
+            "query_host_protocol_version": PROTOCOL_VERSION,
             "database_contacted": False,
             "model_contacted": False,
         }
@@ -723,7 +804,12 @@ def main(arguments: Sequence[str] | None = None) -> int:
             raise RuntimeError("bundled CLI reference is malformed")
         commands = command_contract.get("core_commands")
         unavailable = command_contract.get("unavailable")
-        if not isinstance(commands, list) or not isinstance(unavailable, dict):
+        query_host = command_contract.get("query_host")
+        if (
+            not isinstance(commands, list)
+            or not isinstance(unavailable, dict)
+            or not isinstance(query_host, dict)
+        ):
             raise RuntimeError("bundled CLI capabilities are malformed")
         return _emit_result(
             {
@@ -732,6 +818,8 @@ def main(arguments: Sequence[str] | None = None) -> int:
                 "reference_version": reference["version"],
                 "core_commands": commands,
                 "unavailable": unavailable,
+                "query_host_protocol_version": PROTOCOL_VERSION,
+                "paired_agent_reads": query_host.get("paired_agent_reads"),
             },
             machine=args.json,
         )
@@ -741,6 +829,9 @@ def main(arguments: Sequence[str] | None = None) -> int:
 
     if args.command in ("query", "result"):
         return _investigate(args, os.environ)
+
+    if args.command == "broker":
+        return _broker(args)
 
     if args.command == "sources":
         if args.source_command is None:
