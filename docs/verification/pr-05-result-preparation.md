@@ -193,6 +193,39 @@ projection EXISTS with no outer WHERE slipping past an absent-clause identity
 check; the corrected guard explicitly requires the owning WHERE. The failed
 installed logs remain historical evidence, not qualification of the repair.
 
+The next no-migration internal continuation starts from owner-merged #62 at
+public main `a8709f8334ed7757f6695effe451fde858e54c0e`. Its single claim is
+**native scalar and three-valued IN/NOT IN subquery witnesses under the existing
+private atomic result commit**. A qualified inner SELECT projects one source
+column from one versioned logical relation and uses row-level equality/null
+predicates; the outer SELECT remains row-level. IN evaluates every selected
+inner occurrence's native equality truth, retaining the positive match bag,
+false/null exclusions and whole protected searched population. Match and
+unknown counts are checked against the emitted comparison bag; NULL with an
+empty set is false, while a positive match wins over unknown comparisons.
+For IN in WHERE, a tested-row ledger records each candidate's native
+true/false/unknown predicate truth even when no row is returned. Unused CTE
+ledgers are pruned; an empty-left INTERSECT/EXCEPT does not force its right
+ledger. Correlated and uncorrelated IN forms can compose with CTE and set
+branches. Surrounding row predicates that cannot be safely evaluated for
+every candidate remain pending.
+
+Direct-projection scalar subqueries retain the searched inner bag and allow
+PostgreSQL's original scalar expression to enforce zero-row NULL and native
+multirow cardinality errors. The witness scan and value expression may both
+evaluate the inner relation within the one restricted statement; actual work
+is charged to the unchanged deadline rather than claimed as one inner scan.
+No result is published after cardinality error or interrupted binding. Other
+scalar contexts, richer inner queries, grouped/windowed outer SELECTs and
+bounded recursive CTEs remain witness-publication pending. There is no public
+result/disclosure API, migration, privilege expansion, policy increase or
+approved-contract change. Complete installed receipts belong to this PR;
+fictional mechanical cases do not qualify W1–W7 capacity or semantic answers.
+The first tested-row development probe exposed a ledger that was built but
+pruned from an empty output. The repair retains an unowned top-level ledger,
+retains a CTE ledger only when its owner is reachable, and preserves the
+existing empty-left set-arm evaluation fence. Its failed log is retained.
+
 Seen acceptance compares native values/schema/order to the witnessed statement,
 then independently checks contributions and multiplicities, empty/all-null facts,
 rejected groups, filtered unknown truth, compositional groups/sets, pinned C
