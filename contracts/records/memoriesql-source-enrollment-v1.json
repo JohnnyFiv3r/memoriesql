@@ -1,0 +1,273 @@
+{
+  "contract": {
+    "schemas": {
+      "EnrollExactSource": {
+        "additionalProperties": false,
+        "properties": {
+          "contract_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Contract Version",
+            "type": "integer"
+          },
+          "exact_source_confirmed": {
+            "const": true,
+            "title": "Exact Source Confirmed",
+            "type": "boolean"
+          },
+          "external_object_id": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "External Object Id",
+            "type": "string"
+          },
+          "installation_id": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Installation Id"
+          },
+          "object_kind": {
+            "pattern": "^[a-z][a-z0-9._-]{0,127}$",
+            "title": "Object Kind",
+            "type": "string"
+          },
+          "request_id": {
+            "format": "uuid",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "source_schema_version": {
+            "maximum": 65535,
+            "minimum": 1,
+            "title": "Source Schema Version",
+            "type": "integer"
+          },
+          "source_system": {
+            "pattern": "^[a-z][a-z0-9._-]{0,127}$",
+            "title": "Source System",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "source_system",
+          "object_kind",
+          "external_object_id",
+          "source_schema_version",
+          "exact_source_confirmed"
+        ],
+        "title": "EnrollExactSource",
+        "type": "object"
+      },
+      "ExactSourceEnrollment": {
+        "additionalProperties": false,
+        "properties": {
+          "access_scope_id": {
+            "format": "uuid",
+            "title": "Access Scope Id",
+            "type": "string"
+          },
+          "contract_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Contract Version",
+            "type": "integer"
+          },
+          "policy_revision_id": {
+            "format": "uuid",
+            "title": "Policy Revision Id",
+            "type": "string"
+          },
+          "replayed": {
+            "title": "Replayed",
+            "type": "boolean"
+          },
+          "source_object_id": {
+            "format": "uuid",
+            "title": "Source Object Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_object_id",
+          "access_scope_id",
+          "policy_revision_id",
+          "replayed"
+        ],
+        "title": "ExactSourceEnrollment",
+        "type": "object"
+      },
+      "ExactSourceGrant": {
+        "additionalProperties": false,
+        "properties": {
+          "contract_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Contract Version",
+            "type": "integer"
+          },
+          "grant_id": {
+            "format": "uuid",
+            "title": "Grant Id",
+            "type": "string"
+          },
+          "replayed": {
+            "title": "Replayed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "grant_id",
+          "replayed"
+        ],
+        "title": "ExactSourceGrant",
+        "type": "object"
+      },
+      "ExactSourceRevocation": {
+        "additionalProperties": false,
+        "properties": {
+          "contract_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Contract Version",
+            "type": "integer"
+          },
+          "recorded_at": {
+            "format": "date-time",
+            "title": "Recorded At",
+            "type": "string"
+          },
+          "replayed": {
+            "title": "Replayed",
+            "type": "boolean"
+          },
+          "request_id": {
+            "format": "uuid",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "source_object_id": {
+            "format": "uuid",
+            "title": "Source Object Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "source_object_id",
+          "replayed",
+          "recorded_at"
+        ],
+        "title": "ExactSourceRevocation",
+        "type": "object"
+      },
+      "GrantExactSource": {
+        "additionalProperties": false,
+        "properties": {
+          "contract_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Contract Version",
+            "type": "integer"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "permission_keys": {
+            "items": {
+              "enum": [
+                "read",
+                "write"
+              ],
+              "type": "string"
+            },
+            "maxItems": 2,
+            "minItems": 1,
+            "title": "Permission Keys",
+            "type": "array"
+          },
+          "request_id": {
+            "format": "uuid",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "source_object_id": {
+            "format": "uuid",
+            "title": "Source Object Id",
+            "type": "string"
+          },
+          "target_principal_id": {
+            "format": "uuid",
+            "title": "Target Principal Id",
+            "type": "string"
+          },
+          "valid_from": {
+            "format": "date-time",
+            "title": "Valid From",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "source_object_id",
+          "target_principal_id",
+          "permission_keys",
+          "valid_from",
+          "expires_at"
+        ],
+        "title": "GrantExactSource",
+        "type": "object"
+      },
+      "RevokeExactSource": {
+        "additionalProperties": false,
+        "properties": {
+          "contract_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Contract Version",
+            "type": "integer"
+          },
+          "reason": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "request_id": {
+            "format": "uuid",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "source_object_id": {
+            "format": "uuid",
+            "title": "Source Object Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "source_object_id",
+          "reason"
+        ],
+        "title": "RevokeExactSource",
+        "type": "object"
+      }
+    }
+  },
+  "id": "memoriesql.source-enrollment.v1",
+  "kind": "json_schema",
+  "status": "available",
+  "summary": "Authenticated, exact provider-neutral source enrollment, scoped grant and revocation receipts; no source bytes or provider adapter.",
+  "version": "1"
+}

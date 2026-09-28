@@ -62,5 +62,7 @@ include src/memoriesql/infrastructure/postgres/fold_recovery.py
 
 include src/memoriesql/application/source_revisiting.py
 include src/memoriesql/infrastructure/jobs/source_revisiting_access.py
+include src/memoriesql/application/source_enrollment.py
+include src/memoriesql/infrastructure/postgres/source_enrollment.py
 
 include src/memoriesql/application/source_stable_identity.py

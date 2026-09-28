@@ -1446,7 +1446,7 @@
     },
     {
       "disposition": "include",
-      "expected_record_count": 59,
+      "expected_record_count": 60,
       "filename": "json-schema.json",
       "kind": "json_schema",
       "note": "Provider-neutral capture, host, source-range, transcript-fold, and harness-lifecycle schemas."
@@ -1940,6 +1940,17 @@
       "reviewed_spike_record_sha256": "a6bd1f0c7ff590c271baac31afac526e788c387b4b126843d1e60f7415bfe792",
       "reviewed_spike_source_sha256": "98e67ebaeae7d255b3fd9b65d972b265f1751fa67389f8d59e3b616e087f5861",
       "version": "4"
+    },
+    {
+      "canonical_payload_sha256": "5883faf88784e93beeb4da5dcee11a4cbe59911c88fd3687c4d33a04047bab66",
+      "catalog": "json_schema",
+      "classification": "proposed_open_core",
+      "id": "memoriesql.source-enrollment.v1",
+      "package_disposition": "include",
+      "path": "contracts/records/memoriesql-source-enrollment-v1.json",
+      "public_sha256": "5d0ad9a0dd61bdc6cafa02349f3edb27e7336f0c8e01b5d218c2e348895b60ef",
+      "reason": "Public-authored exact provider-neutral source authority under the current authenticated human context.",
+      "version": "1"
     },
     {
       "catalog": "python",

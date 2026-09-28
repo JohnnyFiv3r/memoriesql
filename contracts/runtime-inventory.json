@@ -131,6 +131,12 @@
       "path": "src/memoriesql/infrastructure/jobs/source_revisiting_access.py"
     },
     {
+      "path": "src/memoriesql/application/source_enrollment.py"
+    },
+    {
+      "path": "src/memoriesql/infrastructure/postgres/source_enrollment.py"
+    },
+    {
       "path": "src/memoriesql/application/source_stable_identity.py"
     },
     {
