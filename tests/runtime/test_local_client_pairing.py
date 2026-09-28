@@ -191,7 +191,9 @@ class LocalClientPairing(unittest.TestCase):
         self.assertEqual(receipt["principal_id"], str(principal))
         self.assertEqual(receipt["pairing_grant_id"], str(grant))
         agent = LocalCredential(secret).sha256()
-        self.assertFalse(self.source_readable(agent), "pairing alone grants no read")
+        self.assertFalse(
+            self.source_readable(agent), "an explicit scope needs a source grant"
+        )
 
         grant_request: dict[str, object] = {
             "request_id": str(uuid.uuid4()),

@@ -108,7 +108,7 @@
       },
       "PairLocalClient": {
         "additionalProperties": false,
-        "description": "Pair one agent client with explicit capabilities, owned scopes and expiry.\n\nThe database derives tenant, workspace and the pairing human from the\nauthenticated credential. The paired client's authority is the intersection\nof this pairing grant, its role and current resource grants; pairing alone\ngrants no source access.",
+        "description": "Pair one agent client with explicit capabilities, owned scopes and expiry.\n\nThe database derives tenant, workspace and the pairing human from the\nauthenticated credential. The paired client's authority is the intersection\nof this pairing grant, its role and each paired scope's policy. An\nowner-private scope admits the client on the pairing human's behalf; an\nexplicit scope, such as an enrolled exact source's, also requires a current\naccess grant to the client's principal.",
         "properties": {
           "access_scope_ids": {
             "items": {
