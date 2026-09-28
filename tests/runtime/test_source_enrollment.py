@@ -154,6 +154,15 @@ class ExactSourceEnrollment(unittest.TestCase):
                 "valid_from": self.now.isoformat(),
                 "expires_at": (self.now + timedelta(hours=1)).isoformat(),
             }
+            unavailable_target = grant_request | {
+                "request_id": str(uuid.uuid4()),
+                "target_principal_id": str(uuid.uuid4()),
+            }
+            status, denied = run("grant", unavailable_target)
+            self.assertEqual(status, 2)
+            self.assertEqual(
+                denied, {"outcome": "unavailable", "reason": "resource_unavailable"}
+            )
             status, granted = run("grant", grant_request)
             self.assertEqual(status, 0)
             self.assertFalse(granted["receipt"]["replayed"])

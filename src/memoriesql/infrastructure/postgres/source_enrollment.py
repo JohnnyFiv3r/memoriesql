@@ -6,7 +6,7 @@ from typing import Any
 from uuid import UUID
 
 from psycopg import Connection
-from psycopg.errors import InsufficientPrivilege
+from psycopg.errors import ForeignKeyViolation, InsufficientPrivilege
 from psycopg.pq import TransactionStatus
 
 from memoriesql.application.source_enrollment import (
@@ -94,7 +94,7 @@ class PostgresSourceEnrollment:
                 if row is None:
                     raise RuntimeError("source grant returned no receipt")
                 return ExactSourceGrant(grant_id=row[0], replayed=row[1])
-        except InsufficientPrivilege as error:
+        except (InsufficientPrivilege, ForeignKeyViolation) as error:
             raise PermissionError("source grant is unavailable") from error
 
     def revoke(self, request: RevokeExactSource) -> ExactSourceRevocation:
