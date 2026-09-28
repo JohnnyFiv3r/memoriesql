@@ -105,9 +105,13 @@ class BrokerConfig(BaseModel):
             password=login.password.get_secret_value(),
             sslmode=self.database.sslmode,
             application_name="memoriesql-query-host",
-            # Never consult a password file or service file of the host user.
-            passfile=os.devnull,
+            # Never consult a password file of the host user: point libpq at a
+            # name in the private state directory that is never created.
+            passfile=str(self.no_password_file()),
         )
+
+    def no_password_file(self) -> Path:
+        return self.state_dir / ".no-password-file"
 
     def serialized(self) -> bytes:
         document = {
