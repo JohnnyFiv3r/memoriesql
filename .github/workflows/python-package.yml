@@ -65,6 +65,7 @@ jobs:
           python scripts/generate_relation_assessment_contract.py --check
           python scripts/generate_assessed_relation_lifecycle_contract.py --check
           python scripts/generate_stored_bead_inspection_contract.py --check
+          python scripts/generate_source_enrollment_contract.py --check
           python scripts/generate_catalogs.py --check
           python scripts/verify_public_boundary.py
           python scripts/verify_migration_export.py
