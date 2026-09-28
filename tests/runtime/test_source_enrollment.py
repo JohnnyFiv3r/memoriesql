@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import os
+import threading
+import time
 import unittest
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -50,7 +52,7 @@ class ExactSourceEnrollment(unittest.TestCase):
             self.workspace,
             _default_scope,
             membership,
-            credential,
+            self.credential,
             session,
         ) = (uuid.uuid4() for _ in range(9))
         self.owner_secret = hashlib.sha256(
@@ -69,7 +71,7 @@ class ExactSourceEnrollment(unittest.TestCase):
                     self.workspace,
                     _default_scope,
                     membership,
-                    credential,
+                    self.credential,
                     session,
                     str(identity),
                     self.owner_secret,
@@ -255,3 +257,186 @@ class ExactSourceEnrollment(unittest.TestCase):
                         self.now,
                     ),
                 )
+
+    def test_fenced_source_writes_reject_expired_authority(self) -> None:
+        selected = EnrollExactSource(
+            request_id=uuid.uuid4(),
+            source_system="fictional-orchard",
+            object_kind="transcript",
+            external_object_id="orchard/expiring-session.jsonl",
+            source_schema_version=1,
+            exact_source_confirmed=True,
+        )
+        enrollment = self.api().enroll(selected)
+        new_source = selected.model_copy(
+            update={
+                "request_id": uuid.uuid4(),
+                "external_object_id": "orchard/after-expiry.jsonl",
+            }
+        )
+        grant_id = uuid.uuid4()
+        revoke_id = uuid.uuid4()
+        cases = (
+            (
+                "SELECT * FROM memoriesql.enroll_exact_source_v1(%s,%s,%s,%s,%s,%s,%s)",
+                (
+                    new_source.request_id,
+                    new_source.source_system,
+                    new_source.installation_id,
+                    new_source.object_kind,
+                    new_source.external_object_id,
+                    new_source.source_schema_version,
+                    True,
+                ),
+            ),
+            (
+                "SELECT * FROM memoriesql.grant_exact_source_v1(%s,%s,%s,%s,%s,%s)",
+                (
+                    grant_id,
+                    enrollment.source_object_id,
+                    self.principal,
+                    ["read"],
+                    self.now,
+                    self.now + timedelta(hours=1),
+                ),
+            ),
+            (
+                "SELECT * FROM memoriesql.revoke_exact_source_v1(%s,%s,%s)",
+                (revoke_id, enrollment.source_object_id, "expired authority"),
+            ),
+        )
+        for statement, parameters in cases:
+            with self.subTest(statement=statement):
+                ready = threading.Event()
+                holder_errors: list[Exception] = []
+                updated = self.db.execute(
+                    "UPDATE memoriesql.authentication_credentials "
+                    "SET expires_at = clock_timestamp() + interval '4 seconds' "
+                    "WHERE tenant_id=%s AND credential_id=%s",
+                    (self.tenant, self.credential),
+                )
+                self.assertEqual(updated.rowcount, 1)
+
+                def hold_fence() -> None:
+                    try:
+                        with psycopg.connect(self.url) as locker:
+                            locker.execute(
+                                "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
+                                (str(self.tenant) + ":semantic_outcome_authority:",),
+                            )
+                            ready.set()
+                            time.sleep(5)
+                    except Exception as error:
+                        holder_errors.append(error)
+                        ready.set()
+
+                holder = threading.Thread(target=hold_fence)
+                holder.start()
+                try:
+                    self.assertTrue(ready.wait(5), "tenant fence was not acquired")
+                    self.assertFalse(holder_errors)
+                    with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+                        with self.db.transaction():
+                            self.begin(self.owner_secret)
+                            self.db.execute(statement, parameters)
+                finally:
+                    holder.join(timeout=5)
+                self.assertFalse(holder.is_alive())
+                self.assertFalse(holder_errors)
+
+        self.assertEqual(
+            self.db.execute(
+                "SELECT count(*) FROM memoriesql.source_objects "
+                "WHERE source_object_id=%s",
+                (new_source.request_id,),
+            ).fetchone(),
+            (0,),
+        )
+        self.assertEqual(
+            self.db.execute(
+                "SELECT count(*) FROM memoriesql.access_grants WHERE grant_id=%s",
+                (grant_id,),
+            ).fetchone(),
+            (0,),
+        )
+        self.assertEqual(
+            self.db.execute(
+                "SELECT status FROM memoriesql.protected_resources "
+                "WHERE resource_kind='source' AND resource_id=%s",
+                (enrollment.source_object_id,),
+            ).fetchone(),
+            ("active",),
+        )
+
+    def test_fenced_source_grant_rejects_expired_scope(self) -> None:
+        selection = EnrollExactSource(
+            request_id=uuid.uuid4(),
+            source_system="fictional-orchard",
+            object_kind="transcript",
+            external_object_id="orchard/expiring-grant.jsonl",
+            source_schema_version=1,
+            exact_source_confirmed=True,
+        )
+        enrollment = self.api().enroll(selection)
+        owner_grant = self.db.execute(
+            "SELECT grant_id FROM memoriesql.access_grants "
+            "WHERE tenant_id=%s AND access_scope_id=%s "
+            "AND target_principal_id=%s",
+            (self.tenant, enrollment.access_scope_id, self.principal),
+        ).fetchone()
+        assert owner_grant is not None
+        with self.db.transaction():
+            self.begin(self.owner_secret)
+            self.db.execute(
+                "SELECT memoriesql.revise_access_grant(%s,1,%s,'active',%s,"
+                "clock_timestamp() + interval '4 seconds',clock_timestamp())",
+                (owner_grant[0], ["read", "write", "share"], self.now),
+            )
+
+        ready = threading.Event()
+        holder_errors: list[Exception] = []
+
+        def hold_fence() -> None:
+            try:
+                with psycopg.connect(self.url) as locker:
+                    locker.execute(
+                        "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
+                        (str(self.tenant) + ":semantic_outcome_authority:",),
+                    )
+                    ready.set()
+                    time.sleep(5)
+            except Exception as error:
+                holder_errors.append(error)
+                ready.set()
+
+        holder = threading.Thread(target=hold_fence)
+        holder.start()
+        request_id = uuid.uuid4()
+        try:
+            self.assertTrue(ready.wait(5), "tenant fence was not acquired")
+            self.assertFalse(holder_errors)
+            with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+                with self.db.transaction():
+                    self.begin(self.owner_secret)
+                    self.db.execute(
+                        "SELECT * FROM memoriesql.grant_exact_source_v1(%s,%s,%s,%s,%s,%s)",
+                        (
+                            request_id,
+                            enrollment.source_object_id,
+                            self.principal,
+                            ["read"],
+                            self.now,
+                            self.now + timedelta(hours=1),
+                        ),
+                    )
+        finally:
+            holder.join(timeout=5)
+        self.assertFalse(holder.is_alive())
+        self.assertFalse(holder_errors)
+        self.assertEqual(
+            self.db.execute(
+                "SELECT count(*) FROM memoriesql.access_grants WHERE grant_id=%s",
+                (request_id,),
+            ).fetchone(),
+            (0,),
+        )

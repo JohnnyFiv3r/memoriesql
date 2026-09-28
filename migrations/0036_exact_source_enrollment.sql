@@ -26,7 +26,7 @@ DECLARE
     resource memoriesql.protected_resources%ROWTYPE;
     scope_id uuid;
     policy_id uuid;
-    recorded_at timestamptz := pg_catalog.statement_timestamp();
+    recorded_at timestamptz;
 BEGIN
     SELECT context.* INTO authority
       FROM memoriesql.current_authorization_context() AS context;
@@ -38,7 +38,17 @@ BEGIN
     PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
         authority.tenant_id::text || ':semantic_outcome_authority:', 0
     ));
-    IF authority.principal_kind <> 'human'
+    recorded_at := pg_catalog.clock_timestamp();
+    IF authority.expires_at <= recorded_at
+       OR NOT EXISTS (
+           SELECT 1 FROM memoriesql.authentication_credentials AS credential
+            WHERE credential.tenant_id = authority.tenant_id
+              AND credential.credential_id = authority.credential_id
+              AND credential.principal_id = authority.principal_id
+              AND credential.status = 'active'
+              AND credential.expires_at > recorded_at
+       )
+       OR authority.principal_kind <> 'human'
        OR authority.user_id IS NULL
        OR NOT memoriesql.current_context_has_capability('workspace.manage')
        OR NOT memoriesql.current_context_has_capability('source.manage')
@@ -84,6 +94,9 @@ BEGIN
            OR previous.schema_version <> source_schema_version
            OR NOT memoriesql.current_context_scope_authorized(
                previous.access_scope_id, 'source.manage', 'write'
+           )
+           OR NOT memoriesql.current_context_scope_time_authorized(
+               previous.access_scope_id, 'write', pg_catalog.clock_timestamp()
            ) THEN
             RAISE EXCEPTION 'source enrollment is unavailable'
                 USING ERRCODE = '42501';
@@ -178,7 +191,16 @@ BEGIN
     PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
         authority.tenant_id::text || ':semantic_outcome_authority:', 0
     ));
-    IF authority.principal_kind <> 'human'
+    IF authority.expires_at <= pg_catalog.clock_timestamp()
+       OR NOT EXISTS (
+           SELECT 1 FROM memoriesql.authentication_credentials AS credential
+            WHERE credential.tenant_id = authority.tenant_id
+              AND credential.credential_id = authority.credential_id
+              AND credential.principal_id = authority.principal_id
+              AND credential.status = 'active'
+              AND credential.expires_at > pg_catalog.clock_timestamp()
+       )
+       OR authority.principal_kind <> 'human'
        OR NOT memoriesql.current_context_has_capability('source.share') THEN
         RAISE EXCEPTION 'source grant is unavailable' USING ERRCODE = '42501';
     END IF;
@@ -211,6 +233,9 @@ BEGIN
        OR NOT memoriesql.current_context_source_authorized(
            selected.access_scope_id, requested_source_object_id,
            'source.share', 'share'
+       )
+       OR NOT memoriesql.current_context_scope_time_authorized(
+           selected.access_scope_id, 'share', pg_catalog.clock_timestamp()
        ) OR (
            SELECT count(*) FROM memoriesql.source_objects AS source
             WHERE source.tenant_id = selected.tenant_id
@@ -290,7 +315,7 @@ DECLARE
     selected memoriesql.source_objects%ROWTYPE;
     resource memoriesql.protected_resources%ROWTYPE;
     prior memoriesql.source_revocation_receipts%ROWTYPE;
-    revocation_time timestamptz := pg_catalog.statement_timestamp();
+    revocation_time timestamptz;
 BEGIN
     SELECT context.* INTO authority
       FROM memoriesql.current_authorization_context() AS context;
@@ -300,7 +325,17 @@ BEGIN
     PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
         authority.tenant_id::text || ':semantic_outcome_authority:', 0
     ));
-    IF authority.principal_kind <> 'human'
+    revocation_time := pg_catalog.clock_timestamp();
+    IF authority.expires_at <= revocation_time
+       OR NOT EXISTS (
+           SELECT 1 FROM memoriesql.authentication_credentials AS credential
+            WHERE credential.tenant_id = authority.tenant_id
+              AND credential.credential_id = authority.credential_id
+              AND credential.principal_id = authority.principal_id
+              AND credential.status = 'active'
+              AND credential.expires_at > revocation_time
+       )
+       OR authority.principal_kind <> 'human'
        OR authority.user_id IS NULL
        OR NOT memoriesql.current_context_has_capability('source.manage') THEN
         RAISE EXCEPTION 'source revocation is unavailable' USING ERRCODE = '42501';
@@ -318,6 +353,9 @@ BEGIN
        OR selected.owner_user_id <> authority.user_id
        OR NOT memoriesql.current_context_scope_authorized(
            selected.access_scope_id, 'source.manage', 'write'
+       )
+       OR NOT memoriesql.current_context_scope_time_authorized(
+           selected.access_scope_id, 'write', pg_catalog.clock_timestamp()
        ) THEN
         RAISE EXCEPTION 'source revocation is unavailable' USING ERRCODE = '42501';
     END IF;
