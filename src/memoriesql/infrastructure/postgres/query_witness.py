@@ -101,6 +101,10 @@ class NativeWitnessBuilder:
         self.row_refs: list[UUID] = []
         self.tested_refs: list[UUID] = []
         self.cache: dict[bytes, UUID] = {}
+        self.partitions: dict[
+            tuple[int, int],
+            tuple[UUID, list[str], list[int], dict[int, tuple[int, int]]],
+        ] = {}
         self.encoded_bytes = len(result_json_bytes(self.base))
 
     def add(self, trace: Any, *, published: bool = True) -> UUID:
@@ -135,6 +139,91 @@ class NativeWitnessBuilder:
                 if member is None:
                     raise ValueError("unknown frozen logical key")
                 member_refs.append(str(member))
+            elif stage["operation"] == "window_partition":
+                if (
+                    len(value) != 3
+                    or not isinstance(value[1], list)
+                    or type(value[2]) is not int
+                    or value[2] < 1
+                ):
+                    raise ValueError("invalid native window partition")
+                ordered_refs: list[str] = []
+                peer_ranks: list[int] = []
+                peer_spans: dict[int, tuple[int, int]] = {}
+                for position, entry in enumerate(value[1], start=1):
+                    if (
+                        not isinstance(entry, list)
+                        or len(entry) != 3
+                        or type(entry[0]) is not int
+                        or entry[0] != position
+                        or type(entry[1]) is not int
+                        or entry[1] < 1
+                        or entry[1] > (peer_ranks[-1] + 1 if peer_ranks else 1)
+                        or (peer_ranks and entry[1] < peer_ranks[-1])
+                    ):
+                        raise ValueError("invalid native window order")
+                    child = str(bind(entry[2], depth + 1))
+                    ordered_refs.append(child)
+                    peer_ranks.append(entry[1])
+                    old = peer_spans.get(entry[1])
+                    peer_spans[entry[1]] = (old[0] if old else position, position)
+                if not ordered_refs:
+                    raise ValueError("empty native window partition")
+                multiplicities = Counter(ordered_refs)
+                inputs = list(multiplicities)
+                details.update(
+                    partition_id=value[2],
+                    ordered_input_refs=ordered_refs,
+                    input_multiplicities=list(multiplicities.values()),
+                    peer_spans=[
+                        {
+                            "rank": rank,
+                            "start_ordinal": bounds[0],
+                            "end_ordinal": bounds[1],
+                        }
+                        for rank, bounds in peer_spans.items()
+                    ],
+                )
+            elif stage["operation"] == "window":
+                if len(value) != 6 or any(
+                    type(v) is not int or v < 1 for v in value[2:5]
+                ):
+                    raise ValueError("invalid native window row")
+                partition = self.partitions.get((stage["partition_stage"], value[2]))
+                if partition is None:
+                    raise ValueError("missing native window partition")
+                partition_ref, ordered_refs, peers, spans = partition
+                ordinal = value[3]
+                if ordinal > len(ordered_refs) or peers[ordinal - 1] != value[4]:
+                    raise ValueError("native window peer mismatch")
+                source_ref = str(bind(value[1], depth + 1))
+                if source_ref != ordered_refs[ordinal - 1]:
+                    raise ValueError("native window ordinal mismatch")
+                inputs.extend((source_ref, str(partition_ref)))
+                offset = stage.get("offset")
+                if offset is None:
+                    if value[5] is not None:
+                        raise ValueError("unexpected native window neighbor")
+                else:
+                    target = ordinal + (offset if stage["kind"] == "Lead" else -offset)
+                    if 1 <= target <= len(ordered_refs):
+                        if value[5] is None:
+                            raise ValueError("missing native window neighbor")
+                        neighbor_ref = str(bind(value[5], depth + 1))
+                        if neighbor_ref != ordered_refs[target - 1]:
+                            raise ValueError("native window neighbor mismatch")
+                        inputs.append(neighbor_ref)
+                        details["neighbor_ref"] = neighbor_ref
+                    elif value[5] is not None:
+                        raise ValueError("invented native window neighbor")
+                    details["neighbor_exists"] = 1 <= target <= len(ordered_refs)
+                details.update(
+                    partition_ref=str(partition_ref),
+                    partition_id=value[2],
+                    ordinal=ordinal,
+                    peer_dense_rank=value[4],
+                    peer_span=list(spans[value[4]]),
+                )
             elif stage["operation"] in {
                 "group",
                 "collapse",
@@ -285,6 +374,12 @@ class NativeWitnessBuilder:
             if ref not in self.nodes:
                 self.nodes[ref] = node
                 self.encoded_bytes += len(result_json_bytes(node)) + 1
+            if stage["operation"] == "window_partition":
+                pin = (value[0], value[2])
+                recorded = self.partitions.get(pin)
+                if recorded is not None and recorded[0] != ref:
+                    raise ValueError("conflicting native window partition")
+                self.partitions[pin] = (ref, ordered_refs, peer_ranks, peer_spans)
             self.cache[cache_key] = ref
             return ref
 

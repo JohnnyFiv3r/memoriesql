@@ -72,6 +72,36 @@ work/physical-storage accounting and useful W1–W7 fit still gate public availa
 Correct exhaustion and small fictional native-composition cases do not establish
 those workload or capacity claims. No policy ceiling or approved blob changes.
 
+The next no-migration continuation starts from owner-merged #59 at public main
+`d8d7ad4cee00490582520ce805704cfccb0d7d61`. Its single claim is **private
+native ranking and neighbor window witnesses composed with the existing atomic
+result commit**. One projected `row_number`, `rank`, `dense_rank`, `lag` or `lead`
+window per SELECT is qualified, including partitions, peers and chosen or absent
+neighbors, when the outer sort resolves to a projected alias or direct projected
+source column. Other admitted outer sort expressions remain witness-publication
+pending. Grouping in a prior CTE may feed that SELECT, and `UNION ALL` may
+combine separately windowed branches with distinct partition ledgers. PostgreSQL
+computes all visible values; a shared ordered partition ledger records full
+input occurrences once. Each row points to its ordinal, peer span and exact
+neighbor. The ledger, rows and witness DAG share one restricted statement,
+reservation and deadline. The independently restricted reader profile adds only the exact
+two- and three-argument lag/lead signatures used by this cut. Missing privilege,
+cancelled binding, unqualified shapes and budget exhaustion leave no partial
+result. The native `composition_revision: 2` graph and M0034 publication store
+remain private and unchanged in wire shape; no migration or policy change occurs.
+Full qualifications, measurements and exact-head receipts belong to the PR.
+
+This cut does not qualify same-SELECT grouping or multiple windows, aggregate
+ROWS frames,
+scalar/correlated/EXISTS/IN subquery lineage or bounded recursive CTEs. They
+remain admitted only where their mandatory native derivation is available;
+otherwise witness publication refuses with `witness_qualification_pending`.
+The public query/result and disclosure APIs, checkpoints, saves, cross-run
+reuse, whole-closure reauthorization, erasure, cumulative work and physical
+storage accounting, and representative W1–W7 workload fit also remain pending.
+Passing small fictional windows and safe exhaustion is not semantic-quality or
+capacity certification.
+
 Seen acceptance compares native values/schema/order to the witnessed statement,
 then independently checks contributions and multiplicities, empty/all-null facts,
 rejected groups, filtered unknown truth, compositional groups/sets, pinned C

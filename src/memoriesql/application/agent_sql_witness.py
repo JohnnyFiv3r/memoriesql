@@ -293,6 +293,11 @@ class _Compiler:
         where = node.args.get("where")
         if where:
             trace = self.tag(self.stage("filter", predicate=where.this.dump()), trace)
+        window_roots = [*node.expressions]
+        if node.args.get("order"):
+            window_roots.extend(o.this for o in node.args["order"].expressions)
+        if any(isinstance(n, exp.Window) for e in window_roots for n in e.walk()):
+            return self.window_query(node, trace)
         # The already admitted AST's ordinary aggregates are evaluated natively.
         # Inputs and all tested groups are materialized within this same SELECT.
         roots = [*node.expressions]
@@ -323,6 +328,267 @@ class _Compiler:
             )
         self.order(node)
         return node
+
+    def window_query(self, node: exp.Select, trace: exp.Expr) -> exp.Select:
+        """Bind one native ranking/neighbor window to a shared ordered partition."""
+        projections = [e.copy() for e in node.expressions]
+        windows = [
+            n for e in projections for n in e.walk() if isinstance(n, exp.Window)
+        ]
+        if (
+            len(windows) != 1
+            or node.args.get("group")
+            or node.args.get("having")
+            or any(
+                isinstance(n, exp.AggFunc)
+                and not isinstance(n, exp.Rank | exp.DenseRank | exp.Lag | exp.Lead)
+                for e in projections
+                for n in e.walk()
+            )
+        ):
+            raise SqlAdmissionError("unsupported", "witness_qualification_pending")
+        window = windows[0]
+        function = window.this
+        if not isinstance(
+            function, exp.RowNumber | exp.Rank | exp.DenseRank | exp.Lag | exp.Lead
+        ):
+            raise SqlAdmissionError("unsupported", "witness_qualification_pending")
+        original_order = node.args.get("order")
+        output_names = [e.alias_or_name for e in projections]
+        projected = {
+            e.alias_or_name: e.this if isinstance(e, exp.Alias) else e
+            for e in projections
+        }
+        ordered: list[exp.Ordered] = []
+        if original_order:
+            for item in original_order.expressions:
+                value = item.this
+                name = None
+                if isinstance(value, exp.Column):
+                    if not value.table and value.name in projected:
+                        name = value.name
+                    else:
+                        name = next(
+                            (
+                                k
+                                for k, e in projected.items()
+                                if isinstance(e, exp.Column)
+                                and e.name == value.name
+                                and (not value.table or value.table == e.table)
+                            ),
+                            None,
+                        )
+                if name is None:
+                    raise SqlAdmissionError(
+                        "unsupported", "witness_qualification_pending"
+                    )
+                ordered.append(
+                    exp.Ordered(
+                        this=exp.column(name, quoted=True),
+                        desc=item.args.get("desc"),
+                        nulls_first=item.args.get("nulls_first"),
+                    )
+                )
+
+        sources = [node.args["from_"].this] if node.args.get("from_") else []
+        sources.extend(j.this for j in node.args.get("joins") or [])
+        source_columns: dict[str, list[str]] = {}
+        for source in sources:
+            names = (
+                self.columns(source.this)
+                if isinstance(source, exp.Subquery)
+                else self.outputs[source.name]
+            )
+            alias = source.args.get("alias")
+            supplied = (
+                [i.name for i in alias.args.get("columns") or []] if alias else []
+            )
+            source_columns[source.alias_or_name] = supplied + names[len(supplied) :]
+
+        def data_column(value: exp.Expr) -> TypeGuard[exp.Column]:
+            return isinstance(value, exp.Column) and not (
+                isinstance(value.parent, exp.Collate) and value.arg_key == "expression"
+            )
+
+        def canonical(expression: exp.Expr) -> exp.Expr:
+            def qualify(value: exp.Expr) -> exp.Expr:
+                if data_column(value) and not value.table:
+                    aliases = [
+                        a for a, names in source_columns.items() if value.name in names
+                    ]
+                    if len(aliases) == 1:
+                        value.set("table", exp.to_identifier(aliases[0], quoted=True))
+                return value
+
+            return expression.transform(qualify)
+
+        roots = [canonical(e) for e in projections]
+        columns: dict[str, tuple[str, exp.Expr]] = {}
+
+        def key(value: exp.Expr) -> str:
+            return value.sql(dialect=_ClosedPostgres(), comments=False)
+
+        for root in roots:
+            for value in root.walk():
+                if data_column(value):
+                    columns.setdefault(key(value), (self.fresh("value"), value.copy()))
+
+        input_query = exp.select(
+            *(exp.alias_(value, name, quoted=True) for name, value in columns.values()),
+            exp.alias_(trace, self.hidden, quoted=True),
+        )
+        for clause in ("from_", "joins", "where"):
+            value = node.args.get(clause)
+            if value:
+                input_query.set(
+                    clause,
+                    [x.copy() for x in value]
+                    if isinstance(value, list)
+                    else value.copy(),
+                )
+        input_name = self.store(input_query, "window_inputs")
+
+        def rewrite(expression: exp.Expr) -> exp.Expr:
+            return expression.transform(
+                lambda value: exp.column(columns[key(value)][0], quoted=True)
+                if data_column(value)
+                else value
+            )
+
+        visible = [
+            exp.alias_(
+                rewrite(e.this if isinstance(e, exp.Alias) else e),
+                original.alias_or_name,
+                quoted=True,
+            )
+            for original, e in zip(projections, roots, strict=True)
+        ]
+        selected = next(
+            n for e in visible for n in e.walk() if isinstance(n, exp.Window)
+        )
+        partition = [e.copy() for e in selected.args.get("partition_by") or []]
+        source_trace = self.fresh("source_trace")
+        partition_id = self.fresh("partition_id")
+        ordinal = self.fresh("window_ordinal")
+        peer_rank = self.fresh("peer_rank")
+        neighbor = self.fresh("neighbor")
+
+        def companion(kind: exp.Expr) -> exp.Window:
+            result = selected.copy()
+            result.set("this", kind)
+            return result
+
+        if partition:
+            partition_class: exp.Expr = exp.Window(
+                this=exp.DenseRank(),
+                order=exp.Order(
+                    expressions=[exp.Ordered(this=e.copy()) for e in partition]
+                ),
+            )
+        else:
+            partition_class = exp.Cast(
+                this=exp.Literal.number(1), to=exp.DataType.build("BIGINT")
+            )
+        native_neighbor: exp.Expr = exp.Null()
+        if isinstance(function, exp.Lag | exp.Lead):
+            native_neighbor = companion(
+                type(function)(
+                    this=exp.column(self.hidden, quoted=True),
+                    offset=function.args["offset"].copy(),
+                )
+            )
+        numbered = exp.select(
+            *visible,
+            exp.alias_(exp.column(self.hidden, quoted=True), source_trace, quoted=True),
+            exp.alias_(partition_class, partition_id, quoted=True),
+            exp.alias_(companion(exp.RowNumber()), ordinal, quoted=True),
+            exp.alias_(companion(exp.DenseRank()), peer_rank, quoted=True),
+            exp.alias_(native_neighbor, neighbor, quoted=True),
+        ).from_(input_name)
+        numbered_name = self.store(numbered, "window_numbered")
+        partition_stage = self.stage(
+            "window_partition",
+            window=window.dump(),
+            partition=[e.dump() for e in partition],
+            ordering=selected.args["order"].dump()
+            if selected.args.get("order")
+            else None,
+        )
+        members = exp.Anonymous(
+            this="pg_catalog.jsonb_agg",
+            expressions=[
+                exp.Order(
+                    this=_array(
+                        exp.column(ordinal, quoted=True),
+                        exp.column(peer_rank, quoted=True),
+                        exp.column(source_trace, quoted=True),
+                    ),
+                    expressions=[exp.Ordered(this=exp.column(ordinal, quoted=True))],
+                )
+            ],
+        )
+        ledger = (
+            exp.select(
+                exp.alias_(
+                    self.tag(
+                        partition_stage, members, exp.column(partition_id, quoted=True)
+                    ),
+                    self.hidden,
+                    quoted=True,
+                )
+            )
+            .from_(numbered_name)
+            .group_by(exp.column(partition_id, quoted=True))
+        )
+        ledger_name = self.store(ledger, "window_partitions", ledger=True)
+        self.ledger_owners[ledger_name] = numbered_name
+        stage = self.stage(
+            "window",
+            partition_stage=partition_stage,
+            kind=type(function).__name__,
+            offset=int(function.args["offset"].this)
+            if isinstance(function, exp.Lag | exp.Lead)
+            else None,
+            window=window.dump(),
+        )
+        result = exp.select(
+            *(exp.column(name, quoted=True) for name in output_names),
+            exp.alias_(
+                self.tag(
+                    stage,
+                    exp.column(source_trace, quoted=True),
+                    exp.column(partition_id, quoted=True),
+                    exp.column(ordinal, quoted=True),
+                    exp.column(peer_rank, quoted=True),
+                    exp.column(neighbor, quoted=True),
+                ),
+                self.hidden,
+                quoted=True,
+            ),
+        ).from_(numbered_name)
+        result.expressions[-1].set(
+            "this",
+            self.tag(
+                self.stage("project", expressions=[e.dump() for e in projections]),
+                result.expressions[-1].this,
+            ),
+        )
+        if ordered:
+            result.set("order", exp.Order(expressions=ordered))
+        if node.args.get("distinct"):
+            result = self.distinct_query(result, projections, result.args.get("order"))
+        for clause in ("limit", "offset"):
+            if node.args.get(clause):
+                result.set(clause, node.args[clause].copy())
+        if node.args.get("limit") or node.args.get("offset"):
+            result.meta["original_order"] = (
+                original_order.dump() if original_order else None
+            )
+            result.expressions[-1].set(
+                "this", self.tag(self.subset(result), result.expressions[-1].this)
+            )
+        self.order(result)
+        return result
 
     def aggregate(self, value: exp.Expr) -> exp.Expr:
         return exp.Coalesce(
@@ -1045,7 +1311,7 @@ class _Compiler:
         transport: exp.Expr = exp.select(
             *(exp.column(n, quoted=True) for n in [*output_names, self.hidden, ordinal])
         ).from_(result_name)
-        for ledger in self.ledgers:
+        for index, ledger in enumerate(self.ledgers):
             envelope = exp.select(
                 *(exp.alias_(exp.Null(), n, quoted=True) for n in output_names),
                 exp.alias_(
@@ -1053,7 +1319,11 @@ class _Compiler:
                     self.hidden,
                     quoted=True,
                 ),
-                exp.alias_(exp.Neg(this=exp.Literal.number(1)), ordinal, quoted=True),
+                exp.alias_(
+                    exp.Neg(this=exp.Literal.number(len(self.ledgers) - index)),
+                    ordinal,
+                    quoted=True,
+                ),
             ).from_(ledger)
             if ledger in self.ledger_conditions:
                 envelope = envelope.where(self.ledger_conditions[ledger].copy())
@@ -1143,7 +1413,7 @@ def compile_bag_witness(
     """Compile only an already admitted, lowered tree; refuse pending shapes."""
     tree = exp.Expr.load(query.execution_tree)
     if query.recursion or any(
-        isinstance(n, exp.Window | exp.Exists)
+        isinstance(n, exp.Exists)
         or (
             isinstance(n, exp.Subquery)
             and not isinstance(
