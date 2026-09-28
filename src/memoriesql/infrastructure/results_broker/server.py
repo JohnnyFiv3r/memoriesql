@@ -28,6 +28,7 @@ from typing import Any
 
 import psycopg
 from psycopg import Connection
+from psycopg.errors import InsufficientPrivilege
 
 from memoriesql.application.agent_sql_catalog import SqlAdmissionError
 from memoriesql.application.authorization import LocalCredential
@@ -97,27 +98,40 @@ def check_control_login(connection: Connection[Any]) -> None:
     read silently) and must not be a superuser or hold elevation it never uses,
     so that a stolen host configuration is no more than the host's authority.
     """
-    row = connection.execute(
-        """SELECT r.rolsuper, r.rolbypassrls, r.rolcreaterole, r.rolcreatedb,
-                  r.rolreplication,
-                  pg_has_role(current_user, %s, 'USAGE'),
-                  pg_has_role(current_user, %s, 'MEMBER')
-           FROM pg_roles r WHERE r.rolname = current_user""",
-        (_TRUSTED_ROLE, _TRUSTED_ROLE),
-    ).fetchone()
+    inherit_refusal = (
+        "control login must be an INHERIT member of memoriesql_application"
+    )
+    try:
+        row = connection.execute(
+            """SELECT rolsuper, rolbypassrls, rolcreaterole, rolcreatedb,
+                      rolreplication
+               FROM pg_roles WHERE rolname = current_user"""
+        ).fetchone()
+    except InsufficientPrivilege:
+        # Schema 33 revokes PUBLIC EXECUTE on builtins (even operators); only
+        # logins inheriting memoriesql_application can evaluate this at all.
+        raise HostRefused(inherit_refusal) from None
     if row is None:
         raise HostRefused("control login is not a database role")
-    superuser, bypass, create_role, create_db, replication, usage, member = row
+    superuser, bypass, create_role, create_db, replication = row
     if superuser:
         raise HostRefused("control login must not be a superuser")
     if bypass or create_role or create_db or replication:
         raise HostRefused(
             "control login must be NOBYPASSRLS NOCREATEROLE NOCREATEDB NOREPLICATION"
         )
-    if not (usage and member):
-        raise HostRefused(
-            "control login must be an INHERIT member of memoriesql_application"
-        )
+    try:
+        inherited = connection.execute(
+            "SELECT pg_has_role(current_user, %s, 'USAGE') "
+            "AND pg_has_role(current_user, %s, 'MEMBER')",
+            (_TRUSTED_ROLE, _TRUSTED_ROLE),
+        ).fetchone()
+    except InsufficientPrivilege:
+        # Builtins are executable only through memoriesql_application: being
+        # refused here is itself the symptom of a login that does not inherit it.
+        inherited = None
+    if not inherited or not inherited[0]:
+        raise HostRefused(inherit_refusal)
 
 
 @dataclass(frozen=True)
@@ -248,8 +262,6 @@ class Server:
         self._slots = threading.BoundedSemaphore(MAX_CONNECTIONS)
         self._workers: set[threading.Thread] = set()
         self._workers_lock = threading.Lock()
-        self._recovered: set[str] = set()
-        self._recovery_lock = threading.Lock()
 
     def stop(self) -> None:
         self._stop.set()
@@ -371,7 +383,8 @@ class Server:
         if not self._host.paired_agent(credential_sha256):
             return refusal
         executor = self._host.executor(credential_sha256)
-        self._recover_once(executor, credential_sha256)
+        if header.operation in ("start_run", "handle"):
+            self._recover(executor)
         if header.operation == "start_run":
             if body:
                 return refusal
@@ -388,19 +401,17 @@ class Server:
             workspace_id=config.workspace_id,
         )
 
-    def _recover_once(
-        self, executor: PostgresAgentSqlResults, credential_sha256: str
-    ) -> None:
-        """Settle this workspace's dead-owner deliveries once per principal.
+    @staticmethod
+    def _recover(executor: PostgresAgentSqlResults) -> None:
+        """Settle this workspace's work whose owner died, before new admission.
 
-        PR-05 abandons only deliveries whose owning session ended and whose
-        restricted reader is confirmed gone; live work of this very process
-        keeps its owner lock and is untouched.
+        PR-05 settles a delivery only when its owning session has ended and its
+        restricted reader is confirmed gone, so live work (including this very
+        process's own, which holds its owner lock) is untouched. Running it on
+        every run or query request means that work stranded by an earlier host
+        death stops blocking the workspace as soon as its reader has ended,
+        without replaying the lost step and without restarting the host.
         """
-        with self._recovery_lock:
-            if credential_sha256 in self._recovered:
-                return
-            self._recovered.add(credential_sha256)
         try:
             settled = executor.recover_abandoned()
         except Exception:

@@ -28,7 +28,6 @@ from uuid import UUID
 import psycopg
 from psycopg import Connection, sql
 
-from memoriesql.application.investigation_contracts import result_json_bytes
 from memoriesql.infrastructure.postgres.agent_sql_authority import (
     qualify_query_authority,
 )
@@ -117,6 +116,8 @@ def provision(
     database_port: int | None = None,
     database_name: str | None = None,
     rotate: bool = False,
+    control_role: str = DEFAULT_CONTROL_ROLE,
+    reader_role: str = DEFAULT_READER_ROLE,
     admin_url: Callable[[], str] = _prompt_admin_url,
 ) -> int:
     """Create (or rotate) both host logins with generated secrets and pin them.
@@ -175,12 +176,8 @@ def provision(
                 database=DatabaseEndpoint(
                     host=database_host, port=database_port, name=database_name
                 ),
-                control=DatabaseLogin(
-                    role=DEFAULT_CONTROL_ROLE, password=control_password
-                ),
-                reader=DatabaseLogin(
-                    role=DEFAULT_READER_ROLE, password=reader_password
-                ),
+                control=DatabaseLogin(role=control_role, password=control_password),
+                reader=DatabaseLogin(role=reader_role, password=reader_password),
             )
         except ValueError:
             return _refused("invalid provisioning arguments")
@@ -252,8 +249,31 @@ def _apply_roles(admin: Connection[Any], config: BrokerConfig, *, rotate: bool) 
             "GRANT memoriesql_application TO {} WITH INHERIT TRUE, SET TRUE"
         ).format(control)
     )
+    # The host re-derives the reviewed reader profile by name at every start;
+    # name lookup needs schema USAGE, which grants no access to the objects.
+    admin.execute(
+        sql.SQL("GRANT USAGE ON SCHEMA memoriesql_query, memory_v1 TO {}").format(
+            control
+        )
+    )
+    # Qualification refuses a profile whose creators would grant PUBLIC EXECUTE
+    # on future functions, PostgreSQL's implicit default.
+    admin.execute(
+        sql.SQL(
+            "ALTER DEFAULT PRIVILEGES FOR ROLE {} REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC"
+        ).format(control)
+    )
     # PR-05's reviewed closure; it is handed the verifier, never the plaintext.
     provision_query_reader(admin, config.reader.role, reader_verifier)
+    # The host must observe, cancel and confirm the end of its own reader
+    # backends; PostgreSQL shows another role's session identity only to a role
+    # that inherits it. This is narrower than cluster-wide pg_read_all_stats and
+    # gives the reader nothing: it gains no membership of its own.
+    admin.execute(
+        sql.SQL("GRANT {} TO {} WITH INHERIT TRUE, SET FALSE").format(
+            sql.Identifier(config.reader.role), control
+        )
+    )
 
 
 def _client_groups(uid: int) -> set[int]:
@@ -327,7 +347,7 @@ def _passwordless_login_refused(config: BrokerConfig, role: str) -> bool:
             dbname=config.database.name,
             user=role,
             password="",
-            passfile=os.devnull,
+            passfile=str(config.no_password_file()),
             sslmode=config.database.sslmode,
             connect_timeout=5,
         ):
@@ -451,11 +471,13 @@ def close_run(config_path: Path, run_ref: UUID) -> int:
 
 
 __all__ = [
+    "EXIT_FAILED",
+    "EXIT_OK",
+    "EXIT_REFUSED",
     "check",
     "close_run",
     "integrity_findings",
     "list_runs",
     "provision",
-    "result_json_bytes",
     "scram_sha256_verifier",
 ]

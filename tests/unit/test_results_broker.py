@@ -309,9 +309,10 @@ class ServerBoundary(unittest.TestCase):
             [call for call in host.calls if call[0] != "recover"],
             [("start_run", b""), ("handle", request.encode())],
         )
-        # One recovery per principal and process, before its first request.
+        # Dead-owner recovery precedes every run or query admission.
         self.assertEqual(
-            [c for c in host.calls if c[0] == "recover"], [("recover", b"")]
+            [c[0] for c in host.calls],
+            ["recover", "start_run", "recover", "handle"],
         )
         self.assertEqual(len(set(host.authenticated)), 1)
         self.assertNotIn(SECRET, "".join(host.authenticated))
