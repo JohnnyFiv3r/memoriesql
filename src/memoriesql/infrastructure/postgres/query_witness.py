@@ -139,6 +139,44 @@ class NativeWitnessBuilder:
                 if member is None:
                     raise ValueError("unknown frozen logical key")
                 member_refs.append(str(member))
+            elif stage["operation"] == "exists" and stage.get("kind") == "in":
+                if (
+                    len(value) != 5
+                    or not isinstance(value[2], list)
+                    or any(type(count) is not int or count < 0 for count in value[3:])
+                ):
+                    raise ValueError("invalid native IN population")
+                outer_ref = str(bind(value[1], depth + 1))
+                searched_refs: list[str] = []
+                truths: list[bool | None] = []
+                for entry in value[2]:
+                    if (
+                        not isinstance(entry, list)
+                        or len(entry) != 2
+                        or type(entry[1]) not in {bool, type(None)}
+                    ):
+                        raise ValueError("invalid native IN comparison")
+                    searched_refs.append(str(bind(entry[0], depth + 1)))
+                    truths.append(entry[1])
+                if value[3] != truths.count(True) or value[4] != truths.count(None):
+                    raise ValueError("incomplete native IN comparison bag")
+                searched_counts = Counter(searched_refs)
+                match_refs = [
+                    ref for ref, truth in zip(searched_refs, truths, strict=True)
+                    if truth is True
+                ]
+                match_counts = Counter(match_refs)
+                inputs = [outer_ref, *searched_counts]
+                details.update(
+                    searched_input_refs=searched_refs,
+                    searched_multiplicities=list(searched_counts.values()),
+                    comparison_truths=truths,
+                    match_refs=match_refs,
+                    match_multiplicities=list(match_counts.values()),
+                    match_count=value[3],
+                    unknown_count=value[4],
+                    in_truth=True if value[3] else None if value[4] else False,
+                )
             elif stage["operation"] == "exists":
                 if (
                     len(value) != 4
@@ -157,6 +195,34 @@ class NativeWitnessBuilder:
                     match_count=value[3],
                     exists_truth=value[3] > 0,
                 )
+            elif (
+                stage["operation"] == "project"
+                and stage.get("phase") == "scalar_subquery"
+            ):
+                if (
+                    len(value) != 4
+                    or not isinstance(value[2], list)
+                    or type(value[3]) is not int
+                    or value[3] != len(value[2])
+                    or value[3] > 1
+                ):
+                    raise ValueError("invalid native scalar subquery cardinality")
+                outer_ref = str(bind(value[1], depth + 1))
+                scalar_refs = [str(bind(row, depth + 1)) for row in value[2]]
+                inputs = [outer_ref, *scalar_refs]
+                details.update(
+                    scalar_input_refs=scalar_refs,
+                    scalar_count=value[3],
+                    scalar_present=value[3] == 1,
+                )
+            elif (
+                stage["operation"] == "filter"
+                and stage.get("phase") == "tested_truth"
+            ):
+                if len(value) != 3 or type(value[2]) not in {bool, type(None)}:
+                    raise ValueError("invalid native tested predicate")
+                inputs = [str(bind(value[1], depth + 1))]
+                details["predicate_truth"] = value[2]
             elif stage["operation"] == "window_partition":
                 if (
                     len(value) != 3

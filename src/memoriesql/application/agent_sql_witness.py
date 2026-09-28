@@ -1,7 +1,7 @@
 """Trusted native bag-witness compiler; no agent capability or SQL fallback.
 
 This qualification cut handles native bags, groups, collapsed values, sets,
-qualified windows and row-level EXISTS predicates. Other subquery forms and
+qualified windows and row-level subquery membership. General subquery forms and
 recursion remain private native SELECTs but cannot be committed through this
 witness compiler.
 No Python SQL evaluator is used: PostgreSQL evaluates values and membership in
@@ -32,6 +32,54 @@ def _array(*items: exp.Expr) -> exp.Expr:
     return exp.Anonymous(this="pg_catalog.jsonb_build_array", expressions=list(items))
 
 
+def _row_value_ok(value: exp.Expr) -> bool:
+    if isinstance(value, exp.Column | exp.Literal | exp.Null | exp.Boolean):
+        return True
+    if isinstance(value, exp.Cast) and isinstance(value.this, exp.Placeholder):
+        return True
+    return isinstance(value, exp.Collate) and _row_value_ok(value.this)
+
+
+def _row_predicate_ok(value: exp.Expr) -> bool:
+    if isinstance(value, exp.Paren):
+        return _row_predicate_ok(value.this)
+    if isinstance(value, exp.And | exp.Or):
+        return _row_predicate_ok(value.this) and _row_predicate_ok(value.expression)
+    if isinstance(value, exp.Not):
+        return _row_predicate_ok(value.this)
+    if isinstance(value, exp.EQ):
+        return _row_value_ok(value.this) and _row_value_ok(value.expression)
+    if isinstance(value, exp.Is):
+        return _row_value_ok(value.this) and isinstance(value.expression, exp.Null)
+    return False
+
+
+def _tested_predicate_ok(value: exp.Expr) -> bool:
+    """A row predicate safe to evaluate for every candidate in a witness ledger."""
+    if isinstance(value, exp.Paren):
+        return _tested_predicate_ok(value.this)
+    if isinstance(value, exp.And | exp.Or):
+        return _tested_predicate_ok(value.this) and _tested_predicate_ok(
+            value.expression
+        )
+    if isinstance(value, exp.Not):
+        return _tested_predicate_ok(value.this)
+    if isinstance(value, exp.In):
+        return _row_value_ok(value.this) and (
+            bool(value.args.get("query"))
+            or all(_row_value_ok(item) for item in value.expressions)
+        )
+    if isinstance(value, exp.Exists):
+        return True
+    if isinstance(value, exp.EQ | exp.NEQ | exp.LT | exp.LTE | exp.GT | exp.GTE):
+        return _row_value_ok(value.this) and _row_value_ok(value.expression)
+    if isinstance(value, exp.Is):
+        return _row_value_ok(value.this) and isinstance(value.expression, exp.Null)
+    if isinstance(value, exp.Like | exp.ILike):
+        return _row_value_ok(value.this) and _row_value_ok(value.expression)
+    return False
+
+
 class _Compiler:
     def __init__(self, tree: exp.Expr, relations: dict[str, SqlRelation]) -> None:
         names = {i.name for i in tree.find_all(exp.Identifier)}
@@ -47,6 +95,7 @@ class _Compiler:
         self.ctes: list[exp.CTE] = []
         self.outputs: dict[str, list[str]] = {}
         self.ledgers: list[str] = []
+        self.row_tested_ledgers: set[str] = set()
         self.sequence = 0
         self.ledger_owners: dict[str, str] = {}
         self.ledger_conditions: dict[str, exp.Expr] = {}
@@ -192,11 +241,10 @@ class _Compiler:
             tie_basis="native_trace_v1",
         )
 
-    def exists_predicate(
-        self, exists: exp.Exists, ctes: dict[str, str]
-    ) -> tuple[exp.Join, str, str, str, int]:
-        """Evaluate one pure row-level EXISTS and its native matches together."""
-        inner = exists.this
+    def row_subquery(
+        self, inner: exp.Expr, *, value: bool
+    ) -> tuple[exp.Select, exp.Expr | None]:
+        """Admit a pure one-relation subquery before trusted instrumentation."""
         if not isinstance(inner, exp.Select) or any(
             inner.args.get(name)
             for name in (
@@ -225,30 +273,30 @@ class _Compiler:
             for part in inner.walk()
         ):
             raise SqlAdmissionError("unsupported", "witness_qualification_pending")
-
-        def value_ok(value: exp.Expr) -> bool:
-            if isinstance(value, exp.Column | exp.Literal | exp.Null | exp.Boolean):
-                return True
-            if isinstance(value, exp.Cast) and isinstance(value.this, exp.Placeholder):
-                return True
-            return isinstance(value, exp.Collate) and value_ok(value.this)
-
-        def predicate_ok(value: exp.Expr) -> bool:
-            if isinstance(value, exp.Paren):
-                return predicate_ok(value.this)
-            if isinstance(value, exp.And | exp.Or):
-                return predicate_ok(value.this) and predicate_ok(value.expression)
-            if isinstance(value, exp.Not):
-                return predicate_ok(value.this)
-            if isinstance(value, exp.EQ):
-                return value_ok(value.this) and value_ok(value.expression)
-            if isinstance(value, exp.Is):
-                return value_ok(value.this) and isinstance(value.expression, exp.Null)
-            return False
-
         where = inner.args.get("where")
-        if where and not predicate_ok(where.this):
+        if where and not _row_predicate_ok(where.this):
             raise SqlAdmissionError("unsupported", "witness_qualification_pending")
+        selected: exp.Expr | None = None
+        if value:
+            if len(inner.expressions) != 1:
+                raise SqlAdmissionError("unsupported", "witness_qualification_pending")
+            expression = inner.expressions[0]
+            selected = expression.this if isinstance(expression, exp.Alias) else expression
+            alias = source.this.alias_or_name
+            schema = self.relations[source.this.db + "." + source.this.name]
+            if (
+                not isinstance(selected, exp.Column)
+                or selected.table not in ("", alias)
+                or selected.name not in {column.name for column in schema.columns}
+            ):
+                raise SqlAdmissionError("unsupported", "witness_qualification_pending")
+        return inner, selected
+
+    def exists_predicate(
+        self, exists: exp.Exists, ctes: dict[str, str]
+    ) -> tuple[exp.Join, str, str, str, int]:
+        """Evaluate one pure row-level EXISTS and its native matches together."""
+        inner, _ = self.row_subquery(exists.this, value=False)
         original = inner.dump()
         probe = inner.copy()
         probe.set(
@@ -296,6 +344,139 @@ class _Compiler:
         )
         return join, lateral_alias, members, count, stage
 
+    def scalar_projection(
+        self, scalar: exp.Subquery, ctes: dict[str, str]
+    ) -> tuple[exp.Join, str, str, str, int]:
+        """Retain exact rows while PostgreSQL enforces scalar cardinality."""
+        inner, selected = self.row_subquery(scalar.this, value=True)
+        if selected is None:
+            raise SqlAdmissionError("unsupported", "witness_qualification_pending")
+        original = scalar.dump()
+        probe = inner.copy()
+        value_name = self.fresh("scalar_value")
+        probe.set("expressions", [exp.alias_(selected.copy(), value_name, quoted=True)])
+        qualified = self.query(probe, ctes)
+        row_alias = self.fresh("scalar_rows")
+        members = self.fresh("scalar_members")
+        count = self.fresh("scalar_count")
+        lateral_alias = self.fresh("scalar_probe")
+        aggregated = exp.select(
+            exp.alias_(
+                self.aggregate(exp.column(self.hidden, table=row_alias, quoted=True)),
+                members,
+                quoted=True,
+            ),
+            exp.alias_(exp.Count(this=exp.Star()), count, quoted=True),
+        ).from_(
+            exp.Subquery(
+                this=qualified,
+                alias=exp.TableAlias(this=exp.to_identifier(row_alias)),
+            )
+        )
+        join = exp.Join(
+            this=exp.Lateral(
+                this=exp.Subquery(this=aggregated),
+                alias=exp.TableAlias(this=exp.to_identifier(lateral_alias)),
+            ),
+            kind="CROSS",
+        )
+        stage = self.stage(
+            "project", phase="scalar_subquery", query=original,
+            cardinality="native_scalar_error",
+        )
+        return join, lateral_alias, members, count, stage
+
+    def in_membership(
+        self, membership: exp.In, ctes: dict[str, str]
+    ) -> tuple[exp.Join, str, str, str, str, int]:
+        """Evaluate one IN bag and each comparison's three-valued truth."""
+        subquery = membership.args.get("query")
+        if not isinstance(subquery, exp.Subquery) or not _row_value_ok(
+            membership.this
+        ):
+            raise SqlAdmissionError("unsupported", "witness_qualification_pending")
+        inner, selected = self.row_subquery(subquery.this, value=True)
+        if selected is None:
+            raise SqlAdmissionError("unsupported", "witness_qualification_pending")
+        original = membership.dump()
+        probe = inner.copy()
+        value_name = self.fresh("in_value")
+        probe.set("expressions", [exp.alias_(selected.copy(), value_name, quoted=True)])
+        qualified = self.query(probe, ctes)
+        row_alias = self.fresh("in_rows")
+        members = self.fresh("in_members")
+        matches = self.fresh("in_matches")
+        unknowns = self.fresh("in_unknowns")
+        lateral_alias = self.fresh("in_probe")
+        comparison = exp.EQ(
+            this=membership.this.copy(),
+            expression=exp.column(value_name, table=row_alias, quoted=True),
+        )
+        unknown = exp.Is(this=comparison.copy(), expression=exp.Null())
+        aggregated = exp.select(
+            exp.alias_(
+                self.aggregate(
+                    _array(
+                        exp.column(self.hidden, table=row_alias, quoted=True),
+                        comparison.copy(),
+                    )
+                ),
+                members,
+                quoted=True,
+            ),
+            exp.alias_(
+                exp.Filter(
+                    this=exp.Count(this=exp.Star()),
+                    expression=exp.Where(this=comparison.copy()),
+                ),
+                matches,
+                quoted=True,
+            ),
+            exp.alias_(
+                exp.Filter(
+                    this=exp.Count(this=exp.Star()),
+                    expression=exp.Where(this=unknown),
+                ),
+                unknowns,
+                quoted=True,
+            ),
+        ).from_(
+            exp.Subquery(
+                this=qualified,
+                alias=exp.TableAlias(this=exp.to_identifier(row_alias)),
+            )
+        )
+        join = exp.Join(
+            this=exp.Lateral(
+                this=exp.Subquery(this=aggregated),
+                alias=exp.TableAlias(this=exp.to_identifier(lateral_alias)),
+            ),
+            kind="CROSS",
+        )
+        stage = self.stage(
+            "exists", kind="in", query=original,
+            evaluation="native_three_valued_bag",
+        )
+
+        def positive(column: str) -> exp.Expr:
+            return exp.GT(
+                this=exp.column(column, table=lateral_alias, quoted=True),
+                expression=exp.Cast(
+                    this=exp.Literal.number(0), to=exp.DataType.build("BIGINT")
+                ),
+            )
+
+        membership.replace(
+            exp.Case(
+                ifs=[
+                    exp.If(this=positive(matches), true=exp.Boolean(this=True)),
+                    exp.If(this=positive(unknowns), true=exp.Null()),
+                ],
+                default=exp.Boolean(this=False),
+            )
+        )
+        return join, lateral_alias, members, matches, unknowns, stage
+
     def query(self, node: exp.Expr, inherited: dict[str, str]) -> exp.Expr:
         if isinstance(node, exp.Subquery):
             node.set("this", self.query(node.this, inherited))
@@ -305,10 +486,13 @@ class _Compiler:
         if with_node:
             for cte in with_node.expressions:
                 self.name_outputs(cte.this)
+                first_ledger = len(self.ledgers)
                 cte.set("this", self.query(cte.this, ctes))
                 self.alias_columns(cte)
                 original = cte.alias
                 name = self.fresh("cte")
+                for ledger in self.ledgers[first_ledger:]:
+                    self.ledger_owners.setdefault(ledger, name)
                 cte.args["alias"].set("this", exp.to_identifier(name))
                 cte.set("materialized", True)
                 self.ctes.append(cte)
@@ -397,11 +581,40 @@ class _Compiler:
             )
         where = node.args.get("where")
         original_where = where.this.dump() if where else None
+        expression_roots = list(node.expressions)
+        if where:
+            expression_roots.append(where.this)
+        memberships = [
+            part
+            for root in expression_roots
+            for part in root.find_all(exp.In)
+            if part.args.get("query")
+        ]
+        scalars: list[exp.Subquery] = []
+        for projection in node.expressions:
+            value = projection.this if isinstance(projection, exp.Alias) else projection
+            if isinstance(value, exp.Subquery):
+                scalars.append(value)
+        phase_roots = expression_roots.copy()
+        if node.args.get("order"):
+            phase_roots.extend(item.this for item in node.args["order"].expressions)
+        if (memberships or scalars) and (
+            node.args.get("group")
+            or node.args.get("having")
+            or any(
+                isinstance(part, exp.AggFunc | exp.Window)
+                for root in phase_roots
+                for part in root.walk()
+            )
+        ):
+            raise SqlAdmissionError("unsupported", "witness_qualification_pending")
+        if where and memberships and not _tested_predicate_ok(where.this):
+            raise SqlAdmissionError("unsupported", "witness_qualification_pending")
         if where:
             exists_predicates = list(where.find_all(exp.Exists))
-            expression_roots = list(node.expressions)
+            aggregate_roots = list(node.expressions)
             if node.args.get("order"):
-                expression_roots.extend(
+                aggregate_roots.extend(
                     item.this for item in node.args["order"].expressions
                 )
             if exists_predicates and (
@@ -410,7 +623,7 @@ class _Compiler:
                 or node.args.get("having")
                 or any(
                     isinstance(part, exp.AggFunc | exp.Window)
-                    for root in expression_roots
+                    for root in aggregate_roots
                     for part in root.walk()
                 )
             ):
@@ -424,6 +637,54 @@ class _Compiler:
                     exp.column(members, table=alias, quoted=True),
                     exp.column(count, table=alias, quoted=True),
                 )
+        for membership in memberships:
+            join, alias, members, matches, unknowns, stage = self.in_membership(
+                membership, ctes
+            )
+            node.append("joins", join)
+            trace = self.tag(
+                stage,
+                trace,
+                exp.column(members, table=alias, quoted=True),
+                exp.column(matches, table=alias, quoted=True),
+                exp.column(unknowns, table=alias, quoted=True),
+            )
+        for scalar in scalars:
+            join, alias, members, count, stage = self.scalar_projection(scalar, ctes)
+            node.append("joins", join)
+            trace = self.tag(
+                stage,
+                trace,
+                exp.column(members, table=alias, quoted=True),
+                exp.column(count, table=alias, quoted=True),
+            )
+        if where and memberships:
+            tested = node.copy()
+            tested.set("where", None)
+            for clause in ("order", "limit", "offset", "distinct"):
+                tested.set(clause, None)
+            tested_stage = self.stage(
+                "filter",
+                phase="tested_truth",
+                predicate=original_where,
+                lowered_predicate=where.this.dump(),
+            )
+            tested.set(
+                "expressions",
+                [
+                    exp.alias_(
+                        self.tag(
+                            tested_stage,
+                            trace.copy(),
+                            where.this.copy(),
+                        ),
+                        self.hidden,
+                        quoted=True,
+                    )
+                ],
+            )
+            tested_name = self.store(tested, "in_tested", ledger=True)
+            self.row_tested_ledgers.add(tested_name)
         if where:
             trace = self.tag(
                 self.stage(
@@ -1773,7 +2034,9 @@ class _Compiler:
         self.ledgers = [
             n
             for n in self.ledgers
-            if n in reachable or self.ledger_owners.get(n) in reachable
+            if n in reachable
+            or self.ledger_owners.get(n) in reachable
+            or (n in self.row_tested_ledgers and n not in self.ledger_owners)
         ]
         retained = reachable | set(self.ledgers)
         self.ctes = [c for c in self.ctes if c.alias in retained]
@@ -1925,14 +2188,30 @@ def compile_bag_witness(
 ) -> WitnessPlan:
     """Compile only an already admitted, lowered tree; refuse pending shapes."""
     tree = exp.Expr.load(query.execution_tree)
-    if query.recursion or any(
-        isinstance(n, exp.Subquery)
-        and not isinstance(
-            n.parent,
-            exp.From | exp.Join | exp.CTE | exp.Subquery | exp.SetOperation,
-        )
-        for n in tree.walk()
-    ):
+    if query.recursion:
+        raise SqlAdmissionError("unsupported", "witness_qualification_pending")
+    for subquery in tree.find_all(exp.Subquery):
+        parent = subquery.parent
+        if isinstance(
+            parent, exp.From | exp.Join | exp.CTE | exp.Subquery | exp.SetOperation
+        ):
+            continue
+        owner = subquery.find_ancestor(exp.Select)
+        if owner is None:
+            raise SqlAdmissionError("unsupported", "witness_qualification_pending")
+        if isinstance(parent, exp.In) and parent.args.get("query") is subquery:
+            roots = list(owner.expressions)
+            if owner.args.get("where"):
+                roots.append(owner.args["where"].this)
+            if any(any(part is parent for part in root.walk()) for root in roots):
+                continue
+        projection = parent if isinstance(parent, exp.Alias) else subquery
+        if (
+            isinstance(parent, exp.Alias | exp.Select)
+            and any(projection is item for item in owner.expressions)
+            and subquery.find_ancestor(exp.CTE) is None
+        ):
+            continue
         raise SqlAdmissionError("unsupported", "witness_qualification_pending")
     # Inspect only agent-authored EXISTS nodes. Set witnesses later introduce
     # trusted EXISTS guards to avoid evaluating a natively skipped right arm.
