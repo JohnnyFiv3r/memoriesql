@@ -52,6 +52,17 @@ ADMISSION_RULES = (
     "One bounded recursive CTE requires the declared recursion object.",
     "Refused constructs reply invalid_request or unsupported_query with a code "
     "and position; project a column instead of `EXISTS (SELECT 1 ...)`.",
+    "Text inequality (`<>`, or `NOT (a = $n)`, which the planner rewrites to "
+    "it) is outside the reviewed operator closure and replies unavailable; "
+    "filter with equality instead.",
+)
+# The unit text agents receive, as the executor labels it in coverage gaps.
+SOURCE_TEXT = (
+    "memory_v1.source_units.search_text is the normalized text of an authorized "
+    "source unit: for a materialized unit, the pinned package's normalized "
+    "projection when every part is producer-normalized; otherwise text_state is "
+    "unsupported and only the citation is returned. It is never raw bytes, "
+    "exact source or a clause-level citation."
 )
 
 
@@ -298,6 +309,7 @@ def schema_description() -> dict[str, Any]:
                 "gap_reason": "source_raw_read_required",
             },
         },
+        "source_text": SOURCE_TEXT,
         "delivery": dict(BASELINE_POLICY["delivery"]),
         "run": dict(BASELINE_POLICY["run"]),
         "logical_catalog": logical,
