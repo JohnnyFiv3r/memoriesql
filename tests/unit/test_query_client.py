@@ -6,12 +6,19 @@ import json
 import stat
 import tempfile
 import unittest
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
 
-from memoriesql.query_client import RUN_ROTATION_MARGIN, RunStore
+from memoriesql.query_client import (
+    RUN_ROTATION_MARGIN,
+    RunStore,
+    coverage_gaps,
+    query_request,
+    schema_description,
+    wire_time,
+)
 
 NOW = datetime(2026, 9, 28, 20, 0, tzinfo=UTC)
 
@@ -101,6 +108,73 @@ class RunStoreTests(unittest.TestCase):
         self.store.forget_ended(json.dumps(ended).encode(), now=NOW)
         self.assertEqual(list((self.root / "runs").glob("*.json")), [])
         self.store.forget_ended(b"not json", now=NOW)
+
+
+class WireFormatTests(unittest.TestCase):
+    def test_known_at_is_sent_as_utc_with_a_literal_z(self) -> None:
+        central = timezone(timedelta(hours=-5))
+        pinned = datetime(2026, 9, 28, 16, 26, 24, 818000, tzinfo=central)
+        self.assertEqual(wire_time(pinned), "2026-09-28T21:26:24.818000Z")
+        stored = run(NOW + timedelta(minutes=30))["run"]
+        request = json.loads(
+            query_request(
+                stored,
+                sql="SELECT o.bead_id FROM memory_v1.observations o",
+                parameters=[],
+                intent="enumerate",
+                view="resolved",
+                known_at=pinned,
+                page_size=10,
+            )
+        )
+        self.assertEqual(request["scope"]["known_at"], "2026-09-28T21:26:24.818000Z")
+        default = json.loads(
+            query_request(
+                stored,
+                sql="SELECT o.bead_id FROM memory_v1.observations o",
+                parameters=[],
+                intent="enumerate",
+                view="resolved",
+                known_at=None,
+                page_size=10,
+            )
+        )
+        self.assertEqual(default["scope"]["known_at"], stored["default_known_at"])
+
+    def test_coverage_gaps_are_named_and_malformed_replies_name_none(self) -> None:
+        reply = {
+            "outcome": "available",
+            "result": {
+                "coverage": {
+                    "gaps": [
+                        {"facet": "relation_tables", "reason": "source_raw_read_required"}
+                    ]
+                }
+            },
+        }
+        self.assertEqual(
+            coverage_gaps(reply), ["relation_tables (source_raw_read_required)"]
+        )
+        malformed: tuple[dict[str, Any], ...] = (
+            {},
+            {"result": []},
+            {"result": {"coverage": {"gaps": {}}}},
+        )
+        for payload in malformed:
+            self.assertEqual(coverage_gaps(payload), [])
+
+    def test_schema_names_the_grants_each_table_family_needs(self) -> None:
+        authority = schema_description()["authority"]
+        self.assertEqual(
+            authority["observation_tables"]["requires"], ["memory.query", "source.read"]
+        )
+        self.assertIn("memory_v1.observations", authority["observation_tables"]["relations"])
+        self.assertEqual(
+            authority["relation_tables"]["gap_reason"], "source_raw_read_required"
+        )
+        self.assertIn(
+            "memory_v1.assessed_relations", authority["relation_tables"]["relations"]
+        )
 
 
 if __name__ == "__main__":

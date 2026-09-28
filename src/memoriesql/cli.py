@@ -79,6 +79,7 @@ from memoriesql.query_client import (
     ResultsTransport,
     RunStore,
     TrustedHostTransport,
+    coverage_gaps,
     default_state_root,
     query_request,
     read_bounded,
@@ -551,6 +552,8 @@ def _emit_reply(reply: bytes, *, machine: bool) -> int:
         sys.stdout.write(reply.decode("utf-8") + "\n")
     else:
         _write_json(payload)
+        for gap in coverage_gaps(payload):
+            print(f"coverage gap: {gap}", file=sys.stderr)
     outcome = payload.get("outcome")
     if outcome == "available":
         return 0
