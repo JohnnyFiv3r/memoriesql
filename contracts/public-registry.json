@@ -1885,13 +1885,13 @@
       "version": "1"
     },
     {
-      "canonical_payload_sha256": "2183e435b8b972d2922a150bfe1f9ff1190eb567cf610f89dafcb6391f4e25b9",
+      "canonical_payload_sha256": "247910c2a0cbeba7ecaddf39e07a255fb495c80ae5710086d11a95ab11c0676d",
       "catalog": "json_schema",
       "classification": "proposed_open_core",
       "id": "memoriesql.local-client-pairing.v1",
       "package_disposition": "include",
       "path": "contracts/records/memoriesql-local-client-pairing-v1.json",
-      "public_sha256": "5f2bd40c27aa5bf14c9c2adad872b7c1a6188fcbf0865a4cb7ab9d93d6b9dc78",
+      "public_sha256": "44bc1e8733be52feacfc80adb04fa16582a0f1824ea0a12ef4c22aa22aa61cbe",
       "reason": "Public-authored pairing and revocation of one local agent client under the current authenticated human context.",
       "version": "1"
     },

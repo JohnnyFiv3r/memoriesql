@@ -139,9 +139,12 @@ unavailable; renewal is a separate operation not provided by this command.
 Only an authenticated human with the current `client.pair` capability can pair
 or revoke a client. Capabilities must belong to the paired-agent role and scopes
 must be active and owned by that human; refusal does not reveal which input
-failed. Pairing grants no resource access by itself: the client still needs a
-separate grant such as `sources grant` for one exact source, and its authority is
-the intersection of pairing, role and current grants. Principal, pairing, grant
+failed. A paired client reaches only its paired scopes, within its capabilities,
+and each scope's policy decides the rest: an owner-private scope, such as the
+personal-local default, admits it on the pairing human's behalf, while an explicit
+scope, such as an enrolled exact source's, also needs a `sources grant` naming the
+client's principal. Its authority is the intersection of pairing, role and current
+grants. Principal, pairing, grant
 and credential identifiers derive from the request UUID, so replaying a request
 cannot create a second client.
 
