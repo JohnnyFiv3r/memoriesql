@@ -54,7 +54,7 @@ def main() -> None:
             Path(str(installed.locate_file(p))).resolve() for p in installed.files or ()
         }
         migrations = discover_migrations()
-        assert len(migrations) == 34
+        assert len(migrations) == 35
         for migration in migrations:
             assert Path(str(migration.path)).resolve() in owned
             assert (
@@ -70,7 +70,7 @@ def main() -> None:
                     .rstrip("=")
                     == record.hash.value
                 )
-        assert len(tuple(iter_contracts())) == 65
+        assert len(tuple(iter_contracts())) == 66
         assert (
             get_contract("memoriesql.source-stable-identity.v1")["id"]
             == "memoriesql.source-stable-identity.v1"
@@ -88,6 +88,7 @@ def main() -> None:
             "memoriesql.bead-classification.v1",
             "memoriesql.stored-bead-inspection.v1",
             "memoriesql.relation-assessment.v1",
+            "memoriesql.core-cli.v1",
         ):
             assert get_contract(identifier)["id"] == identifier
         assert (

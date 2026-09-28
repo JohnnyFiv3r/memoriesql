@@ -137,6 +137,10 @@
     {
       "filename": "0034_query_result_commit.sql",
       "sha256": "4b8aee371b730e6dabe8c997dc1d72bfbb43cc009c7b9b7088989939392fa213"
+    },
+    {
+      "filename": "0035_query_result_closure.sql",
+      "sha256": "05b7712cf912c6771e476ed3da3949354a301697d32192ffe60d1f47c1cd7b5f"
     }
   ]
 }

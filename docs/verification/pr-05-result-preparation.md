@@ -408,3 +408,52 @@ useful W1–W7 fit. No observation-only substitute or lifecycle duplication, mod
 provider call, holdout access, default candidate/fallback, owner data, CLI expansion,
 production checkpoint, deployment, merge, version selection, release or Desktop
 consumption. Mechanical preparation proof is not semantic-quality certification.
+
+## Private saved-result closure gate (schema 35)
+
+This forward-only continuation starts from owner-merged #64, public main
+`63a0f963f7377d38ae03c685b64d9759a86eaf8f`. Its one acceptance claim is
+**a saved standalone result can be privately recognized only for its original
+owner identity and entire currently authorized protected dependency closure**.
+M0035 captures principal kind, user/on-behalf-of and pairing-grant identity in
+the same transaction as the M0034 result, witness and receipt. Results created
+before that binding exists remain unavailable to this gate; a later caller
+cannot supply an identity retroactively.
+
+The private check runs inside PR-03's session-owned authority fence and a fresh
+repeatable-read frame. It validates the original result and partition hashes,
+exact canonical protected-record/manifest binding, original owner and standalone
+expiry, then asks the unchanged PR-03 population projector for the *current*
+authorized historical dependencies at the result's original `known_at`. Every
+saved dependency pin must still be present. A later authorized record does not
+change old rows, hashes or historical counts; loss of one source or event pin
+refuses the entire result, including an aggregate. Regrant can restore this
+private verdict only while the original standalone route is still valid.
+
+The check returns only a Boolean verdict to trusted application code. Neither
+the restricted SQL login nor the agent receives result bytes, metadata, pages,
+facts, citations or an access receipt. This gate deliberately has no checkpoint
+context, descendant retention or public reuse. Reprojecting the entire current
+population is conservative and may cost more than a targeted checker; it is not
+W1–W7 work fit. Physical allocation, durable cumulative work/transport, governed
+erasure and cleanup, atomic disclosure receipts and context-bound paging remain
+prerequisites before any result becomes available. Unsupported observation or
+correction recursive populations and richer SQL witness shapes stay explicit.
+No candidate default, contract change, semantic-quality claim or release follows.
+
+Focused fictional installed checks cover exact-owner restart without redispatch,
+same-workspace alternate-principal refusal, source revocation and regrant of a
+stored aggregate, retained bytes after standalone expiry, missing identity,
+late-assessed historical addition and crash injection into identity capture with
+no partial result. The first development run was blocked by sandboxed localhost
+network access; the escalated draft run exposed a reused fictional evidence key
+and an unavailable delegated-grant fixture. Subsequent drafts exposed a bad
+fixture expiry timestamp and a fixture DDL change inside a held projection
+frame. Those are preserved as failed development logs; exact-head installed
+qualification and CI are required separately.
+
+The first complete installed Python 3.13 draft at `cd6c6d5` retained one
+failure: the installed-runtime ownership fixture still expected 71 modules
+after this private gate added the 72nd. All three shard logs and that failed
+exact head remain historical evidence; changing the fixture requires a fresh
+complete convergence at the new head. No partial shard pass qualifies it.
