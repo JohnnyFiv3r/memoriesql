@@ -29,8 +29,10 @@ class PairLocalClient(FrozenContractModel):
 
     The database derives tenant, workspace and the pairing human from the
     authenticated credential. The paired client's authority is the intersection
-    of this pairing grant, its role and current resource grants; pairing alone
-    grants no source access.
+    of this pairing grant, its role and each paired scope's policy. An
+    owner-private scope admits the client on the pairing human's behalf; an
+    explicit scope, such as an enrolled exact source's, also requires a current
+    access grant to the client's principal.
     """
 
     contract_version: Literal[1] = 1
