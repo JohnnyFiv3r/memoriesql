@@ -118,14 +118,21 @@ and credential identifiers derive from the request UUID, so replaying a request
 cannot create a second client.
 
 The CLI creates `--secret-file` exclusively (never overwriting, never following a
-symlink) with owner-only permissions before contacting the database, stores only
-the secret's SHA-256, and removes the file when pairing does not commit. The
-secret is never printed, logged or accepted as input. Whoever can read the file,
+symlink) with owner-only permissions before contacting the database, and stores
+only the secret's SHA-256. It removes the file when pairing is refused or fails
+before committing. If the connection fails while the commit's outcome is
+unknown, it keeps the file and reports `pairing_outcome_unknown` with the derived
+`principal_id` and `pairing_grant_id`. To recover, revoke that grant with
+`clients revoke` (expected revision 1 and the requested capabilities and scopes),
+delete the file, and pair again with a new request UUID. The secret is never
+printed, logged or accepted as input. Whoever can read the file,
 or the environment of a process given the secret, holds that client's authority
 until expiry or revocation; supply it only through a channel the client cannot
 use to read broader credentials. `clients revoke` takes the pairing grant,
 expected revision, capabilities and scopes from the pairing receipt and records a
-terminal revision; a changed revision is a conflict, not a success.
+terminal revision; a changed revision is a conflict, not a success. A
+revocation that reports `revocation_outcome_unknown` may have applied; retrying
+it reports `pairing_revision_conflict` once it has.
 
 This slice does not route Desktop's Textual interface or provider adapters. A
 future, reviewed static service/client seam must preserve public core commands,

@@ -15,6 +15,9 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 from uuid import UUID
 
+import psycopg
+from psycopg.errors import QueryCanceled
+
 from memoriesql.application.authorization import LocalCredential
 from memoriesql.application.local_client_pairing import (
     LocalClientPairing,
@@ -179,6 +182,11 @@ class CoreCLIPairingTests(unittest.TestCase):
                 RuntimeError("postgresql://secret@fictional"),
                 (3, {"outcome": "failed", "reason": "client_pairing_failed"}),
             ),
+            (
+                # A server-reported error means the transaction rolled back.
+                QueryCanceled("postgresql://secret@fictional"),
+                (3, {"outcome": "failed", "reason": "client_pairing_failed"}),
+            ),
         ):
             with self.subTest(error=type(error).__name__):
                 adapter = MagicMock()
@@ -195,6 +203,54 @@ class CoreCLIPairingTests(unittest.TestCase):
                 self.assertEqual((status, json.loads(output)), expected)
                 self.assertNotIn("secret@", output)
                 self.assertFalse(self.secret.exists())
+
+    def test_unreachable_database_removes_the_unpaired_secret(self) -> None:
+        with (
+            patch.dict(os.environ, LOCAL_ENV),
+            patch(
+                "memoriesql.cli.psycopg.connect",
+                side_effect=psycopg.OperationalError("postgresql://secret@fictional"),
+            ),
+        ):
+            status, output = self.pair()
+        self.assertEqual(
+            (status, json.loads(output)),
+            (3, {"outcome": "failed", "reason": "client_pairing_failed"}),
+        )
+        self.assertFalse(self.secret.exists())
+
+    def test_lost_commit_keeps_the_secret_and_names_the_grant(self) -> None:
+        connection = MagicMock()
+        connection.__enter__.return_value = connection
+        adapter = MagicMock()
+        adapter.pair.side_effect = psycopg.OperationalError(
+            "server closed the connection unexpectedly"
+        )
+        with (
+            patch.dict(os.environ, LOCAL_ENV),
+            patch("memoriesql.cli.psycopg.connect", return_value=connection),
+            patch("memoriesql.cli.PostgresLocalClientPairing", return_value=adapter),
+        ):
+            status, output = self.pair()
+        principal, _pairing, grant, _credential = pairing_identities(
+            UUID(PAIR_REQUEST["request_id"])
+        )
+        self.assertEqual(status, 3)
+        self.assertEqual(
+            json.loads(output),
+            {
+                "outcome": "failed",
+                "reason": "pairing_outcome_unknown",
+                "secret_file_retained": True,
+                "principal_id": str(principal),
+                "pairing_grant_id": str(grant),
+            },
+        )
+        secret = self.secret.read_text(encoding="ascii")
+        self.assertNotIn(secret, output)
+        self.assertEqual(stat.S_IMODE(self.secret.stat().st_mode), 0o600)
+        (hashed,) = adapter.pair.call_args.kwargs.values()
+        self.assertEqual(hashed, LocalCredential(secret).sha256())
 
     def test_revocation_maps_conflict_and_hides_refusal(self) -> None:
         request = self.root / "revoke.json"
@@ -223,6 +279,7 @@ class CoreCLIPairingTests(unittest.TestCase):
             ),
             (PairingRevisionConflict("changed"), (3, "failed")),
             (PermissionError("hidden"), (2, "unavailable")),
+            (psycopg.OperationalError("connection lost"), (3, "failed")),
         )
         for outcome, (expected_status, expected_outcome) in outcomes:
             with self.subTest(outcome=type(outcome).__name__):
@@ -244,6 +301,10 @@ class CoreCLIPairingTests(unittest.TestCase):
                     )
                 self.assertEqual(status, expected_status)
                 self.assertEqual(json.loads(output)["outcome"], expected_outcome)
+                if isinstance(outcome, psycopg.OperationalError):
+                    self.assertEqual(
+                        json.loads(output)["reason"], "revocation_outcome_unknown"
+                    )
 
 
 if __name__ == "__main__":

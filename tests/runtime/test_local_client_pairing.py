@@ -272,6 +272,28 @@ class LocalClientPairing(unittest.TestCase):
         )
         self.assertFalse(nested_file.exists())
 
+    def test_unknown_owner_credential_is_refused_without_disclosure(self) -> None:
+        unknown = "fictional unknown orchard credential for refusal"
+        secret_file = self.root / "unknown.secret"
+        status, refused = self.pair(self.pairing_request(), secret_file, unknown)
+        self.assertEqual(
+            (status, refused),
+            (2, {"outcome": "unavailable", "reason": "resource_unavailable"}),
+        )
+        self.assertFalse(secret_file.exists())
+        revoke: dict[str, object] = {
+            "pairing_grant_id": str(uuid.uuid4()),
+            "expected_revision": 1,
+            "capabilities": AGENT_CAPABILITIES,
+            "access_scope_ids": [str(self.source.access_scope_id)],
+            "exact_revocation_confirmed": True,
+        }
+        status, refused = self.run_cli(["clients", "revoke"], revoke, unknown)
+        self.assertEqual(
+            (status, refused),
+            (2, {"outcome": "unavailable", "reason": "resource_unavailable"}),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

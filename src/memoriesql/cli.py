@@ -51,6 +51,7 @@ from memoriesql.contracts import (
 from memoriesql.infrastructure.postgres.local_client_pairing import (
     PairingRevisionConflict,
     PostgresLocalClientPairing,
+    pairing_identities,
 )
 from memoriesql.infrastructure.postgres.relation_assessment import (
     PostgresRelationAssessments,
@@ -297,6 +298,19 @@ def _write_new_secret(path: Path) -> str:
     return secret
 
 
+def _commit_outcome_unknown(error: BaseException) -> bool:
+    """A lost connection leaves an in-flight commit unknown.
+
+    Every error the server reports carries a SQLSTATE and means nothing
+    committed; only a client-side connection failure has none.
+    """
+
+    return (
+        isinstance(error, psycopg.OperationalError | psycopg.InterfaceError)
+        and error.sqlstate is None
+    )
+
+
 def _pair_client(
     request: PairLocalClient, secret_file: Path, environment: Mapping[str, str]
 ) -> dict[str, object]:
@@ -311,7 +325,13 @@ def _pair_client(
     receipt: LocalClientPairing | None = None
     refusal: dict[str, object] = {"outcome": "failed", "reason": "client_pairing_failed"}
     try:
-        with psycopg.connect(database, autocommit=True) as connection:
+        connection = psycopg.connect(database, autocommit=True)
+    except Exception:
+        # Nothing can have committed without a connection.
+        secret_file.unlink(missing_ok=True)
+        return refusal
+    try:
+        with connection:
             receipt = PostgresLocalClientPairing(
                 connection,
                 credential_sha256=credential_sha256,
@@ -319,10 +339,22 @@ def _pair_client(
             ).pair(request, client_secret_sha256=LocalCredential(secret).sha256())
     except PermissionError:
         refusal = {"outcome": "unavailable", "reason": "resource_unavailable"}
-    except Exception:
+    except Exception as error:
         # A failure after the committed pairing still reports that receipt.
         # Never echo the secret, credentials, connection or SQL diagnostics.
-        pass
+        if receipt is None and _commit_outcome_unknown(error):
+            # The pairing may have committed: its only secret stays in the new
+            # owner-only file, and the derived identifiers let the owner revoke.
+            principal_id, _pairing, grant_id, _credential = pairing_identities(
+                request.request_id
+            )
+            return {
+                "outcome": "failed",
+                "reason": "pairing_outcome_unknown",
+                "secret_file_retained": True,
+                "principal_id": str(principal_id),
+                "pairing_grant_id": str(grant_id),
+            }
     if receipt is None:
         # An unpaired secret authorizes nothing; do not leave it behind.
         secret_file.unlink(missing_ok=True)
@@ -353,7 +385,9 @@ def _revoke_client(
         return {"outcome": "failed", "reason": "pairing_revision_conflict"}
     except PermissionError:
         return {"outcome": "unavailable", "reason": "resource_unavailable"}
-    except Exception:
+    except Exception as error:
+        if _commit_outcome_unknown(error):
+            return {"outcome": "failed", "reason": "revocation_outcome_unknown"}
         return {"outcome": "failed", "reason": "client_revocation_failed"}
 
 

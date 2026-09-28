@@ -11,7 +11,7 @@
           "pair": "PairLocalClient / LocalClientPairing v1",
           "result_envelope": "available receipt, unavailable reason or failed reason",
           "revoke": "RevokeLocalClient / LocalClientRevocation v1",
-          "secret_delivery": "a new caller-named owner-only file created exclusively before the database call; the secret is never printed, logged or accepted as input, and the file is removed when pairing does not commit"
+          "secret_delivery": "a new caller-named owner-only file created exclusively before the database call; the secret is never printed, logged or accepted as input; the file is removed when pairing is refused or fails before committing, and kept with the derived principal and pairing grant identifiers reported as pairing_outcome_unknown when a lost connection leaves the commit unknown"
         },
         "core_commands": [
           "contracts",

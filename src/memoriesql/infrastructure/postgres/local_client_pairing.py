@@ -10,6 +10,7 @@ from psycopg.errors import (
     CheckViolation,
     ForeignKeyViolation,
     InsufficientPrivilege,
+    InvalidAuthorizationSpecification,
     NoDataFound,
     SerializationFailure,
     UniqueViolation,
@@ -97,11 +98,13 @@ class PostgresLocalClientPairing:
                 )
         except (
             InsufficientPrivilege,
+            InvalidAuthorizationSpecification,
             CheckViolation,
             ForeignKeyViolation,
             UniqueViolation,
         ) as error:
-            # Refusal never reveals which scope, capability or identity failed.
+            # Refusal never reveals which scope, capability, identity or
+            # credential failed.
             raise PermissionError("client pairing is unavailable") from error
         return LocalClientPairing(
             principal_id=principal_id,
@@ -138,6 +141,7 @@ class PostgresLocalClientPairing:
             raise PairingRevisionConflict("pairing grant revision changed") from error
         except (
             InsufficientPrivilege,
+            InvalidAuthorizationSpecification,
             CheckViolation,
             ForeignKeyViolation,
             NoDataFound,
