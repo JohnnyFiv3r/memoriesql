@@ -118,6 +118,11 @@ def _parser() -> argparse.ArgumentParser:
     doctor = commands.add_parser(
         "doctor", help="Show core and local read configuration without connecting."
     )
+    doctor.add_argument(
+        "--check-database",
+        action="store_true",
+        help="Also run read-only schema and login-role checks against the database.",
+    )
     doctor.add_argument("--json", action="store_true")
 
     capabilities = commands.add_parser(
@@ -168,6 +173,9 @@ def _parser() -> argparse.ArgumentParser:
     query.add_argument("--view", required=True, choices=("resolved", "historical"))
     query.add_argument("--known-at", type=_aware_time)
     query.add_argument("--page-size", type=int, default=20)
+    query.add_argument(
+        "--new-run", action="store_true", help="Start a new run for this query."
+    )
     query.add_argument("--json", action="store_true")
     result = commands.add_parser(
         "result", help="Page one retained immutable result by its exact pin."
@@ -176,6 +184,9 @@ def _parser() -> argparse.ArgumentParser:
     result.add_argument("--digest", required=True)
     result.add_argument("--cursor")
     result.add_argument("--page-size", type=int, default=20)
+    result.add_argument(
+        "--new-run", action="store_true", help="Start a new run for this page."
+    )
     result.add_argument("--json", action="store_true")
     return parser
 
@@ -337,11 +348,12 @@ def _investigate(args: argparse.Namespace, environment: Mapping[str, str]) -> in
         return _emit_result(
             {"outcome": "failed", "reason": "invalid_query_input"}, machine=args.json
         )
-    run = RunStore(
+    store = RunStore(
         default_state_root(environment),
         credential_sha256=credential_sha256,
         workspace_id=workspace_id,
-    ).current(transport, now=datetime.now(UTC))
+    )
+    run = store.current(transport, now=datetime.now(UTC), fresh=args.new_run)
     if isinstance(run, bytes):
         return _emit_reply(run, machine=args.json)
     if args.command == "query":
@@ -362,7 +374,104 @@ def _investigate(args: argparse.Namespace, environment: Mapping[str, str]) -> in
             cursor=args.cursor,
             page_size=args.page_size,
         )
-    return _emit_reply(transport.handle(request), machine=args.json)
+    reply = transport.handle(request)
+    store.forget_ended(reply, now=datetime.now(UTC))
+    return _emit_reply(reply, machine=args.json)
+
+
+_LOGIN_PROBE = """
+SELECT r.rolsuper,
+       pg_catalog.has_function_privilege(
+           'pg_catalog.set_config(text,text,boolean)', 'EXECUTE'),
+       pg_catalog.pg_has_role('memoriesql_application', 'SET'),
+       pg_catalog.pg_has_role('memoriesql_application', 'USAGE'),
+       pg_catalog.pg_has_role('memoriesql_worker', 'SET'),
+       pg_catalog.pg_has_role('memoriesql_worker', 'USAGE'),
+       pg_catalog.current_setting('server_version_num')::int
+FROM pg_catalog.pg_roles AS r
+WHERE r.rolname = current_user
+"""
+
+
+def _installed_schema_version() -> int | None:
+    from memoriesql.infrastructure.postgres.migration_runner import (
+        MigrationError,
+        discover_migrations,
+    )
+
+    try:
+        return discover_migrations()[-1].version
+    except MigrationError:
+        return None
+
+
+def _database_health(environment: Mapping[str, str]) -> dict[str, object]:
+    """Read-only schema and login checks; no migration, grant or repair."""
+
+    database = environment.get("MEMORIESQL_DATABASE_URL")
+    if not database:
+        return {
+            "outcome": "unavailable",
+            "reason": "database_not_configured",
+        }
+    installed = _installed_schema_version()
+    row: tuple[Any, ...] | None = None
+    schema_version: int | None = None
+    try:
+        with psycopg.connect(database, autocommit=True, connect_timeout=5) as db:
+            db.execute("SELECT 1").fetchone()
+            try:
+                row = db.execute(_LOGIN_PROBE).fetchone()
+            except InsufficientPrivilege:
+                # This login cannot even execute ordinary catalog builtins.
+                row = None
+            try:
+                version_row = db.execute(
+                    "SELECT max(version) FROM memoriesql.schema_migrations"
+                ).fetchone()
+                schema_version = version_row[0] if version_row else None
+            except psycopg.Error:
+                schema_version = None
+    except psycopg.Error:
+        # Never echo the connection string, role names or server diagnostics.
+        return {
+            "outcome": "failed",
+            "reason": "database_unreachable",
+            "database_contacted": True,
+        }
+    if row is None:
+        row = (False, False, None, None, None, None, None)
+    superuser, prologue, app_set, app_usage, worker_set, worker_usage, server = row
+    application_ready = bool(superuser or (app_set and app_usage and prologue))
+    login = {
+        "superuser": bool(superuser),
+        "prologue_builtins_executable": bool(prologue),
+        "application_role_settable": app_set,
+        "application_role_inherited": app_usage,
+        "worker_role_settable": worker_set,
+        "worker_role_inherited": worker_usage,
+        "application_ready": application_ready,
+    }
+    compatible = (
+        None
+        if schema_version is None or installed is None
+        else schema_version == installed
+    )
+    result: dict[str, object] = {
+        "database_contacted": True,
+        "database": {
+            "server_version_num": server,
+            "schema_version": schema_version,
+            "installed_schema_version": installed,
+            "schema_compatible": compatible,
+            "login": login,
+        },
+    }
+    if not application_ready:
+        result |= {"outcome": "failed", "reason": "login_role_not_ready"}
+    elif compatible is False:
+        result |= {"outcome": "failed", "reason": "schema_version_mismatch"}
+    return result
 
 
 def _emit_result(result: BaseModel | dict[str, Any], *, machine: bool) -> int:
@@ -411,18 +520,18 @@ def main(arguments: Sequence[str] | None = None) -> int:
         return 0
 
     if args.command == "doctor":
-        return _emit_result(
-            {
-                "outcome": "available",
-                "core_version": __version__,
-                "configuration_only": True,
-                "local_read_identity_configured": _local_read_configuration(os.environ)
-                is not None,
-                "database_contacted": False,
-                "model_contacted": False,
-            },
-            machine=args.json,
-        )
+        report: dict[str, object] = {
+            "outcome": "available",
+            "core_version": __version__,
+            "configuration_only": not args.check_database,
+            "local_read_identity_configured": _local_read_configuration(os.environ)
+            is not None,
+            "database_contacted": False,
+            "model_contacted": False,
+        }
+        if args.check_database:
+            report |= _database_health(os.environ)
+        return _emit_result(report, machine=args.json)
 
     if args.command == "capabilities":
         reference = get_contract("memoriesql.core-cli.v1")

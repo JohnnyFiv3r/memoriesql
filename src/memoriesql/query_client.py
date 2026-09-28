@@ -152,9 +152,13 @@ class RunStore:
         self._path = root / "runs" / f"{key[:32]}.json"
 
     def current(
-        self, transport: ResultsTransport, *, now: datetime
+        self, transport: ResultsTransport, *, now: datetime, fresh: bool = False
     ) -> dict[str, Any] | bytes:
-        """Return the reusable run, or the executor's refusal bytes."""
+        """Return the reusable run, or the executor's refusal bytes.
+
+        `fresh` drops the stored reference and asks for a new run; the old run
+        still counts against the workspace cap until it ends.
+        """
 
         self._path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         lock = os.open(
@@ -164,7 +168,7 @@ class RunStore:
         )
         try:
             fcntl.flock(lock, fcntl.LOCK_EX)
-            run = self._load()
+            run = None if fresh else self._load()
             if run is not None and _expires(run) - RUN_ROTATION_MARGIN > now:
                 return run
             reply = transport.start_run()
@@ -177,6 +181,24 @@ class RunStore:
             return dict(data["run"])
         finally:
             os.close(lock)
+
+    def forget_ended(self, reply: bytes, *, now: datetime) -> None:
+        """Clear a stored run the executor reports as ended; never retry here."""
+
+        try:
+            data = json.loads(reply)
+            ends = data["remaining"]["run_expires_at"]
+        except (ValueError, KeyError, TypeError):
+            return
+        if data.get("outcome") == "available":
+            return
+        stored = self._load()
+        if (
+            stored is not None
+            and stored.get("run_ref") == data.get("run_ref")
+            and _expires({"expires_at": ends}) <= now
+        ):
+            self._path.unlink(missing_ok=True)
 
     def _load(self) -> dict[str, Any] | None:
         try:

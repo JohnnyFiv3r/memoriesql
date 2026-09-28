@@ -10,7 +10,7 @@ Desktop and never loads private Python modules or arbitrary plugins. `contracts`
 
 | Command | Behavior |
 | --- | --- |
-| `doctor` | Reports installed version and whether local read inputs are configured. It contacts no database or model. |
+| `doctor [--check-database]` | Reports installed version and whether local read inputs are configured; it contacts no database or model by default. `--check-database` adds read-only checks of reachability, schema compatibility with the installed migrations and whether the login can run the adapters' prologue and assume the application role. It never migrates, grants or repairs. |
 | `capabilities` | Lists the static core command set and names unavailable product capabilities. |
 | `inspect <bead-id>` | Uses the installed authorized stored-bead inspection; pending/thin/failed authorship remains distinct from accepted meaning. |
 | `source <bead-id> --selection-file selection.json` | Reads one exact selection through the installed source-evidence reader. The file contains a `StoredEvidenceSelection`, including package and inventory pins. No source is inferred from a bead ID alone. |
@@ -108,7 +108,10 @@ including `unsupported_query`, `invalid_request`, `budget_exhausted` and
 The CLI keeps one run per authenticated principal and workspace in an owner-only
 state file under `MEMORIESQL_STATE_DIR` (default `$XDG_STATE_HOME/memoriesql`),
 reuses it across invocations and starts a new run shortly before the stored run
-expires; it never retries a refused or budgeted request. Runs are bounded
+expires; it never retries a refused or budgeted request. `--new-run` asks for a
+new run without ending the old one, which still counts against the workspace's
+active-run limit until it expires; a stored run the executor reports as ended is
+forgotten so the next command starts fresh. Runs are bounded
 (30 minutes, two active per workspace). A follow-up `result` needs both the
 `result_id` and `content_digest` from the query reply, plus its `next_cursor` for
 the following page. Access is rechecked on every page; a revoked dependency
@@ -118,7 +121,11 @@ The trusted host is configured only in the process that may hold database
 credentials: `MEMORIESQL_DATABASE_URL` (a login that can assume the application
 role), `MEMORIESQL_QUERY_READER_URL` and `MEMORIESQL_QUERY_READER_ROLE` for the
 reviewed restricted reader, the local credential and workspace, and optionally
-`MEMORIESQL_QUERY_AUTHORITY_SHA256` to refuse a drifted reader profile. Never
+`MEMORIESQL_QUERY_AUTHORITY_SHA256` to refuse a drifted reader profile. The database login
+must be a superuser or an inheriting member of `memoriesql_application` (and of
+`memoriesql_worker` for workers); since migration 0033 a non-inheriting member
+cannot run the released adapters' prologue, and `doctor --check-database` reports
+it as `login_role_not_ready`. Never
 give those values to an agent's shell, files or processes: an agent that can
 read them could bypass admitted SQL. Without them `query` and `result` report
 `trusted_query_host_not_configured`.
