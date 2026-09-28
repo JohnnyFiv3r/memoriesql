@@ -30117,6 +30117,238 @@
     },
     {
       "contract": {
+        "schemas": {
+          "LocalClientPairing": {
+            "additionalProperties": false,
+            "properties": {
+              "access_scope_ids": {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "maxItems": 32,
+                "minItems": 1,
+                "title": "Access Scope Ids",
+                "type": "array"
+              },
+              "capabilities": {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 32,
+                "minItems": 1,
+                "title": "Capabilities",
+                "type": "array"
+              },
+              "contract_version": {
+                "const": 1,
+                "default": 1,
+                "title": "Contract Version",
+                "type": "integer"
+              },
+              "credential_id": {
+                "format": "uuid",
+                "title": "Credential Id",
+                "type": "string"
+              },
+              "expires_at": {
+                "format": "date-time",
+                "title": "Expires At",
+                "type": "string"
+              },
+              "pairing_grant_id": {
+                "format": "uuid",
+                "title": "Pairing Grant Id",
+                "type": "string"
+              },
+              "pairing_grant_revision": {
+                "const": 1,
+                "default": 1,
+                "title": "Pairing Grant Revision",
+                "type": "integer"
+              },
+              "pairing_id": {
+                "format": "uuid",
+                "title": "Pairing Id",
+                "type": "string"
+              },
+              "principal_id": {
+                "format": "uuid",
+                "title": "Principal Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "principal_id",
+              "pairing_id",
+              "pairing_grant_id",
+              "credential_id",
+              "capabilities",
+              "access_scope_ids",
+              "expires_at"
+            ],
+            "title": "LocalClientPairing",
+            "type": "object"
+          },
+          "LocalClientRevocation": {
+            "additionalProperties": false,
+            "properties": {
+              "contract_version": {
+                "const": 1,
+                "default": 1,
+                "title": "Contract Version",
+                "type": "integer"
+              },
+              "pairing_grant_id": {
+                "format": "uuid",
+                "title": "Pairing Grant Id",
+                "type": "string"
+              },
+              "revision": {
+                "minimum": 2,
+                "title": "Revision",
+                "type": "integer"
+              },
+              "revoked_at": {
+                "format": "date-time",
+                "title": "Revoked At",
+                "type": "string"
+              }
+            },
+            "required": [
+              "pairing_grant_id",
+              "revision",
+              "revoked_at"
+            ],
+            "title": "LocalClientRevocation",
+            "type": "object"
+          },
+          "PairLocalClient": {
+            "additionalProperties": false,
+            "description": "Pair one agent client with explicit capabilities, owned scopes and expiry.\n\nThe database derives tenant, workspace and the pairing human from the\nauthenticated credential. The paired client's authority is the intersection\nof this pairing grant, its role and current resource grants; pairing alone\ngrants no source access.",
+            "properties": {
+              "access_scope_ids": {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "maxItems": 32,
+                "minItems": 1,
+                "title": "Access Scope Ids",
+                "type": "array"
+              },
+              "capabilities": {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 32,
+                "minItems": 1,
+                "title": "Capabilities",
+                "type": "array"
+              },
+              "contract_version": {
+                "const": 1,
+                "default": 1,
+                "title": "Contract Version",
+                "type": "integer"
+              },
+              "exact_pairing_confirmed": {
+                "const": true,
+                "title": "Exact Pairing Confirmed",
+                "type": "boolean"
+              },
+              "expires_at": {
+                "format": "date-time",
+                "title": "Expires At",
+                "type": "string"
+              },
+              "principal_kind": {
+                "const": "agent",
+                "default": "agent",
+                "title": "Principal Kind",
+                "type": "string"
+              },
+              "request_id": {
+                "format": "uuid",
+                "title": "Request Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "request_id",
+              "capabilities",
+              "access_scope_ids",
+              "expires_at",
+              "exact_pairing_confirmed"
+            ],
+            "title": "PairLocalClient",
+            "type": "object"
+          },
+          "RevokeLocalClient": {
+            "additionalProperties": false,
+            "description": "Terminally revoke one pairing grant at its exact current revision.",
+            "properties": {
+              "access_scope_ids": {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "maxItems": 32,
+                "minItems": 1,
+                "title": "Access Scope Ids",
+                "type": "array"
+              },
+              "capabilities": {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 32,
+                "minItems": 1,
+                "title": "Capabilities",
+                "type": "array"
+              },
+              "contract_version": {
+                "const": 1,
+                "default": 1,
+                "title": "Contract Version",
+                "type": "integer"
+              },
+              "exact_revocation_confirmed": {
+                "const": true,
+                "title": "Exact Revocation Confirmed",
+                "type": "boolean"
+              },
+              "expected_revision": {
+                "minimum": 1,
+                "title": "Expected Revision",
+                "type": "integer"
+              },
+              "pairing_grant_id": {
+                "format": "uuid",
+                "title": "Pairing Grant Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "pairing_grant_id",
+              "expected_revision",
+              "capabilities",
+              "access_scope_ids",
+              "exact_revocation_confirmed"
+            ],
+            "title": "RevokeLocalClient",
+            "type": "object"
+          }
+        }
+      },
+      "id": "memoriesql.local-client-pairing.v1",
+      "kind": "json_schema",
+      "status": "available",
+      "summary": "Authenticated pairing and terminal revocation of one local agent client with explicit capabilities, owned scopes and expiry; the secret never enters a receipt.",
+      "version": "1"
+    },
+    {
+      "contract": {
         "empty_set": "Required mentions array may be empty. Accepted bead version's own task receipt (author-complete-unit revision 4) proves capability; legacy or unavailable results do not imply empty.",
         "evidence": "Enclosing immutable bead/source unit and original task/package pin; no fabricated character offsets or statement links.",
         "registry_hash": "semantic-tasks-v1:0876addc48bcf62db405dff9d1a8b75eb497cbec739945d741d4db72aea4b6dd",

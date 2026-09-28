@@ -222,6 +222,12 @@
     },
     {
       "path": "src/memoriesql/infrastructure/postgres/query_result_closure.py"
+    },
+    {
+      "path": "src/memoriesql/application/local_client_pairing.py"
+    },
+    {
+      "path": "src/memoriesql/infrastructure/postgres/local_client_pairing.py"
     }
   ]
 }

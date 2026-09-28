@@ -1,6 +1,12 @@
 {
   "contract": {
-    "authentication": "existing_local_credential_and_workspace_context_for_reads_and_exact_source_authority",
+    "authentication": "existing_local_credential_and_workspace_context_for_reads_exact_source_authority_and_client_pairing",
+    "client_pairing": {
+      "pair": "PairLocalClient / LocalClientPairing v1",
+      "result_envelope": "available receipt, unavailable reason or failed reason",
+      "revoke": "RevokeLocalClient / LocalClientRevocation v1",
+      "secret_delivery": "a new caller-named owner-only file created exclusively before the database call; the secret is never printed, logged or accepted as input, and the file is removed when pairing does not commit"
+    },
     "core_commands": [
       "contracts",
       "contract",
@@ -11,25 +17,27 @@
       "relations",
       "sources enroll",
       "sources grant",
-      "sources revoke"
+      "sources revoke",
+      "clients pair",
+      "clients revoke"
     ],
     "entrypoint": "memoriesql.cli:main",
     "executable": "memoriesql",
     "exit_status": {
       "available": 0,
-      "unavailable": 2,
-      "failed_or_budget_exhausted": 3
+      "failed_or_budget_exhausted": 3,
+      "unavailable": 2
     },
     "read_contracts": {
       "inspect": "InspectStoredBead / StoredBeadInspection v1",
-      "source": "ReadStoredBeadEvidence / StoredBeadEvidence v1",
-      "relations": "InspectBeadRelationsV2 / BeadRelationsInspectionV2"
+      "relations": "InspectBeadRelationsV2 / BeadRelationsInspectionV2",
+      "source": "ReadStoredBeadEvidence / StoredBeadEvidence v1"
     },
     "source_authority": {
       "enroll": "EnrollExactSource / ExactSourceEnrollment v1",
       "grant": "GrantExactSource / ExactSourceGrant v1",
-      "revoke": "RevokeExactSource / ExactSourceRevocation v1",
-      "result_envelope": "available receipt, unavailable reason or failed reason"
+      "result_envelope": "available receipt, unavailable reason or failed reason",
+      "revoke": "RevokeExactSource / ExactSourceRevocation v1"
     },
     "unavailable": {
       "ask": "qualified_recall_not_released",
@@ -43,6 +51,6 @@
   },
   "id": "memoriesql.core-cli.v1",
   "status": "available",
-  "summary": "One public executable with contract catalog, configuration health, authorized stored reads and exact provider-neutral source authority; no private routing or PR-05 retrieval claim.",
+  "summary": "One public executable with contract catalog, configuration health, authorized stored reads, exact provider-neutral source authority and local agent client pairing; no private routing or PR-05 retrieval claim.",
   "version": "1"
 }

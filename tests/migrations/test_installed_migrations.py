@@ -105,8 +105,9 @@ class InstalledMigrations(unittest.TestCase):
         self.assertEqual(output.getvalue().strip(), __version__)
         registry = json.loads(Path("public-registry.json").read_text())
         entries = {entry["id"]: entry for entry in iter_contracts()}
-        self.assertEqual(len(entries), 67)
+        self.assertEqual(len(entries), 68)
         self.assertIn("memoriesql.core-cli.v1", entries)
+        self.assertIn("memoriesql.local-client-pairing.v1", entries)
         self.assertIn("memoriesql.source-enrollment.v1", entries)
         for row in registry["records"]:
             payload = json.dumps(
