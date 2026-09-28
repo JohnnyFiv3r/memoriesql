@@ -318,7 +318,15 @@
     "memoriesql.contracts.contract_inventory",
     "memoriesql --version",
     "memoriesql contracts",
-    "memoriesql contract"
+    "memoriesql contract",
+    "memoriesql doctor",
+    "memoriesql capabilities",
+    "memoriesql inspect",
+    "memoriesql source",
+    "memoriesql relations",
+    "memoriesql sources enroll",
+    "memoriesql sources grant",
+    "memoriesql sources revoke"
   ],
   "records": {
     "count": 67,

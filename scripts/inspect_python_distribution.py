@@ -72,6 +72,10 @@ EXPECTED_WHEEL_MEMBERS = EXPECTED_PACKAGE_FILES | {
     f"memoriesql-{VERSION}.dist-info/licenses/LICENSE",
     f"memoriesql-{VERSION}.dist-info/licenses/NOTICE",
 }
+# The reviewed CLI command contract is the only source of executable entries.
+CLI_COMMANDS = json.loads(
+    (ROOT / "contracts/records/memoriesql-core-cli-v1.json").read_text()
+)["contract"]["core_commands"]
 PACKAGE_APIS = (
     "memoriesql.__version__",
     "memoriesql.contracts.CATALOG_KINDS",
@@ -83,8 +87,7 @@ PACKAGE_APIS = (
     "memoriesql.contracts.get_contract",
     "memoriesql.contracts.contract_inventory",
     "memoriesql --version",
-    "memoriesql contracts",
-    "memoriesql contract",
+    *(f"memoriesql {command}" for command in CLI_COMMANDS),
 )
 FORBIDDEN_PARTS = {
     ".env",

@@ -219,6 +219,14 @@ class ReleaseControlTests(unittest.TestCase):
         )
         project = tomllib.loads((root / "pyproject.toml").read_text())["project"]
         self.assertEqual(project["version"], APPROVED_VERSION)
+        cli = json.loads(
+            (root / "contracts/records/memoriesql-core-cli-v1.json").read_bytes()
+        )["contract"]
+        self.assertEqual(
+            [api for api in candidate["package_apis"] if api.startswith("memoriesql ")],
+            ["memoriesql --version"]
+            + [f"memoriesql {command}" for command in cli["core_commands"]],
+        )
     def test_development_receipt_cannot_authorize_release_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
