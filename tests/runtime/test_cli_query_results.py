@@ -8,7 +8,8 @@ import os
 import stat
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
@@ -294,6 +295,137 @@ class CliQueryResults(unittest.TestCase):
                 {"outcome": "unavailable", "reason": "trusted_query_host_not_configured"},
             ),
         )
+
+    def trusted_environment(self, credential: str, state: str) -> dict[str, str]:
+        base = os.environ["N1_TEST_DATABASE_URL"]
+        return {
+            "MEMORIESQL_DATABASE_URL": make_conninfo(base, dbname=self.db.info.dbname),
+            "MEMORIESQL_QUERY_READER_URL": make_conninfo(
+                base,
+                dbname=self.db.info.dbname,
+                user=self.reader,
+                password=READER_PASSWORD,
+            ),
+            "MEMORIESQL_QUERY_READER_ROLE": self.reader,
+            "MEMORIESQL_LOCAL_CREDENTIAL": credential,
+            "MEMORIESQL_WORKSPACE_ID": str(self.fixture.workspace),
+            "MEMORIESQL_STATE_DIR": str(self.root / state),
+        }
+
+    def test_paired_agent_queries_the_owner_scope_under_its_own_pairing(self) -> None:
+        self.fixture.assertion()
+        mode = self.db.execute(
+            "SELECT mode FROM memoriesql.access_scopes WHERE access_scope_id=%s",
+            (self.fixture.scope,),
+        ).fetchone()
+        self.assertEqual(mode, ("owner_private",))
+        text = "SELECT o.bead_id FROM memory_v1.observations o ORDER BY o.bead_id"
+        owner_environment = self.trusted_environment(FIXTURE_SECRET, "owner-state")
+        status, owner, _ = self.query(text, environment=owner_environment)
+        self.assertEqual(status, 0, owner)
+        owner_rows = int(owner["result"]["total_rows"])
+        self.assertGreater(owner_rows, 0)
+
+        # The owner pairs through the public command; no private grant call.
+        request = self.root / "pair.json"
+        request.write_text(
+            json.dumps(
+                {
+                    "request_id": str(uuid4()),
+                    "capabilities": ["memory.query", "source.read"],
+                    "access_scope_ids": [str(self.fixture.scope)],
+                    "expires_at": (self.fixture.now + timedelta(hours=1)).isoformat(),
+                    "exact_pairing_confirmed": True,
+                }
+            ),
+            encoding="utf-8",
+        )
+        secret_file = self.root / "agent.secret"
+        status, output = self.cli(
+            [
+                "clients",
+                "pair",
+                "--request-file",
+                str(request),
+                "--secret-file",
+                str(secret_file),
+                "--json",
+            ],
+            owner_environment,
+        )
+        paired = json.loads(output)
+        self.assertEqual(status, 0, paired)
+        agent = secret_file.read_text(encoding="ascii")
+        agent_environment = self.trusted_environment(agent, "agent-state")
+
+        status, reply, _ = self.query(text, environment=agent_environment)
+        self.assertEqual(status, 0, reply)
+        self.assertEqual(int(reply["result"]["total_rows"]), owner_rows)
+        self.assertEqual(reply["result"]["coverage"]["gaps"], [])
+        self.assertNotEqual(reply["run_ref"], owner["run_ref"])
+
+        # An explicit cutoff with a numeric offset is sent in the accepted Z form.
+        known_at = datetime.fromisoformat(
+            reply["result"]["frame"]["known_at"].replace("Z", "+00:00")
+        )
+        status, pinned, _ = self.query(
+            text,
+            "--known-at",
+            known_at.isoformat(),
+            environment=agent_environment,
+        )
+        self.assertEqual(status, 0, pinned)
+        self.assertEqual(pinned["result"]["total_rows"], reply["result"]["total_rows"])
+
+        # Relations keep raw-source provenance the paired role cannot hold; the
+        # human view names the gap on stderr instead of implying absence.
+        path = self.root / "relations.sql"
+        path.write_text(
+            "SELECT count(*) AS n FROM memory_v1.assessed_relations", encoding="utf-8"
+        )
+        errors = io.StringIO()
+        with redirect_stderr(errors):
+            status, output = self.cli(
+                [
+                    "query",
+                    "--file",
+                    str(path),
+                    "--intent",
+                    "enumerate",
+                    "--view",
+                    "resolved",
+                ],
+                agent_environment,
+            )
+        relations = json.loads(output)
+        self.assertEqual(status, 0, relations)
+        self.assertEqual(relations["page"]["rows"][0]["values"], ["0"])
+        self.assertIn(
+            "coverage gap: relation_tables (source_raw_read_required)",
+            errors.getvalue(),
+        )
+
+        revoke = self.root / "revoke.json"
+        revoke.write_text(
+            json.dumps(
+                {
+                    "pairing_grant_id": paired["receipt"]["pairing_grant_id"],
+                    "expected_revision": 1,
+                    "capabilities": paired["receipt"]["capabilities"],
+                    "access_scope_ids": paired["receipt"]["access_scope_ids"],
+                    "exact_revocation_confirmed": True,
+                }
+            ),
+            encoding="utf-8",
+        )
+        status, output = self.cli(
+            ["clients", "revoke", "--request-file", str(revoke), "--json"],
+            owner_environment,
+        )
+        self.assertEqual(status, 0, output)
+        status, refused, _ = self.query(text, environment=agent_environment)
+        self.assertEqual((status, refused["outcome"]), (2, "unavailable"), refused)
+        self.assertNotIn("page", refused)
 
 
 if __name__ == "__main__":

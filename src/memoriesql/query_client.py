@@ -23,7 +23,9 @@ from memoriesql.application.agent_sql_results import (
     BASELINE_POLICY,
     CONTRACT_ID,
     CONTRACT_VERSION,
+    OBSERVATION_TABLES,
     PREPARED_RELATIONS,
+    RELATION_TABLES,
 )
 from memoriesql.application.investigation_contracts import result_json_bytes
 from memoriesql.contracts import load_catalog
@@ -227,6 +229,27 @@ def _expires(run: Mapping[str, Any]) -> datetime:
     return datetime.fromisoformat(str(run["expires_at"]).replace("Z", "+00:00"))
 
 
+def wire_time(value: datetime) -> str:
+    """The results contract accepts UTC with a literal `Z`, never an offset."""
+
+    return value.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+
+
+def coverage_gaps(payload: Mapping[str, Any]) -> list[str]:
+    """Name each disclosed coverage gap; a gap is never evidence of absence."""
+
+    result = payload.get("result")
+    coverage = result.get("coverage") if isinstance(result, dict) else None
+    gaps = coverage.get("gaps") if isinstance(coverage, dict) else None
+    if not isinstance(gaps, list):
+        return []
+    return [
+        f"{gap.get('facet')} ({gap.get('reason')})"
+        for gap in gaps
+        if isinstance(gap, dict)
+    ]
+
+
 def default_state_root(environment: Mapping[str, str]) -> Path:
     configured = environment.get("MEMORIESQL_STATE_DIR")
     if configured:
@@ -261,6 +284,20 @@ def schema_description() -> dict[str, Any]:
             "error": {"code": "feature", "feature": "unprepared_relation"},
         },
         "admission_rules": list(ADMISSION_RULES),
+        # The caller's own grants decide what is returned; a missing capability
+        # is disclosed as a coverage gap with this reason, never as absence.
+        "authority": {
+            "observation_tables": {
+                "relations": sorted(OBSERVATION_TABLES),
+                "requires": ["memory.query", "source.read"],
+                "gap_reason": "source_read_required",
+            },
+            "relation_tables": {
+                "relations": sorted(RELATION_TABLES),
+                "requires": ["memory.query", "source.raw.read"],
+                "gap_reason": "source_raw_read_required",
+            },
+        },
         "delivery": dict(BASELINE_POLICY["delivery"]),
         "run": dict(BASELINE_POLICY["run"]),
         "logical_catalog": logical,
@@ -291,9 +328,7 @@ def query_request(
         "scope": {
             "source_refs": [],
             "known_at": (
-                known_at.astimezone(UTC).isoformat()
-                if known_at is not None
-                else run["default_known_at"]
+                wire_time(known_at) if known_at is not None else run["default_known_at"]
             ),
             "view": view,
         },
