@@ -76,7 +76,7 @@ class InstalledMigrations(unittest.TestCase):
                 hashlib.sha256(migration.path.read_bytes()).hexdigest(),
                 migration.sha256,
             )
-        self.assertEqual(distribution.version, "0.0.12")
+        self.assertEqual(distribution.version, "0.0.13")
         for name, module in tuple(sys.modules.items()):
             if name == "memoriesql" or name.startswith("memoriesql."):
                 assert module.__file__ is not None
@@ -95,7 +95,7 @@ class InstalledMigrations(unittest.TestCase):
         from memoriesql import __version__
         from memoriesql.contracts import iter_contracts
 
-        self.assertEqual(__version__, "0.0.12")
+        self.assertEqual(__version__, "0.0.13")
         from memoriesql.cli import main
 
         output = io.StringIO()
@@ -105,8 +105,10 @@ class InstalledMigrations(unittest.TestCase):
         self.assertEqual(output.getvalue().strip(), __version__)
         registry = json.loads(Path("public-registry.json").read_text())
         entries = {entry["id"]: entry for entry in iter_contracts()}
-        self.assertEqual(len(entries), 67)
+        self.assertEqual(len(entries), 69)
         self.assertIn("memoriesql.core-cli.v1", entries)
+        self.assertIn("memoriesql.core-cli.v2", entries)
+        self.assertIn("memoriesql.local-client-pairing.v1", entries)
         self.assertIn("memoriesql.source-enrollment.v1", entries)
         for row in registry["records"]:
             payload = json.dumps(

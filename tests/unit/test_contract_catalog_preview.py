@@ -31,7 +31,7 @@ class ContractCatalogPreviewTests(unittest.TestCase):
         schema_entries = schemas.get("entries")
         self.assertIsInstance(schema_entries, list)
         assert isinstance(schema_entries, list)
-        self.assertEqual(len(schema_entries), 60)
+        self.assertEqual(len(schema_entries), 61)
 
         cursor = get_contract("memoriesql.capture.connector-cursor")
         self.assertEqual(cursor["version"], "1")
@@ -45,23 +45,32 @@ class ContractCatalogPreviewTests(unittest.TestCase):
         self.assertEqual(unavailable["status"], "not_implemented")
         self.assertEqual(unavailable["entries"], [])
 
-        self.assertEqual(len(iter_contracts()), 67)
+        self.assertEqual(len(iter_contracts()), 69)
         cli = load_catalog("cli")
         self.assertEqual(cli["status"], "available")
         entries = cli["entries"]
         self.assertIsInstance(entries, list)
         assert isinstance(entries, list)
-        self.assertEqual(len(entries), 1)
-        reference = get_contract("memoriesql.core-cli.v1")["contract"]
+        self.assertEqual(len(entries), 2)
+        reference = get_contract("memoriesql.core-cli.v2")["contract"]
         self.assertIsInstance(reference, dict)
         assert isinstance(reference, dict)
         self.assertEqual(
             reference["entrypoint"],
             "memoriesql.cli:main",
         )
+        self.assertIn("clients pair", reference["core_commands"])
+        self.assertEqual(reference["supersedes"], "memoriesql.core-cli.v1")
+        previous = get_contract("memoriesql.core-cli.v1")["contract"]
+        assert isinstance(previous, dict)
+        self.assertEqual(previous["entrypoint"], "memoriesql.cli:main")
         self.assertEqual(
             get_contract("memoriesql.source-enrollment.v1")["id"],
             "memoriesql.source-enrollment.v1",
+        )
+        self.assertEqual(
+            get_contract("memoriesql.local-client-pairing.v1")["id"],
+            "memoriesql.local-client-pairing.v1",
         )
         with self.assertRaises(ContractNotFoundError):
             get_contract("memoriesql.unlisted-provider")

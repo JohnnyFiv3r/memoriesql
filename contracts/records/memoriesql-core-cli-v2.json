@@ -1,0 +1,57 @@
+{
+  "contract": {
+    "authentication": "existing_local_credential_and_workspace_context_for_reads_exact_source_authority_and_client_pairing",
+    "client_pairing": {
+      "pair": "PairLocalClient / LocalClientPairing v1",
+      "result_envelope": "available receipt, unavailable reason or failed reason",
+      "revoke": "RevokeLocalClient / LocalClientRevocation v1",
+      "secret_delivery": "a new caller-named owner-only file created exclusively before the database call; the secret is never printed, logged or accepted as input, and the file is removed when pairing does not commit"
+    },
+    "core_commands": [
+      "contracts",
+      "contract",
+      "doctor",
+      "capabilities",
+      "inspect",
+      "source",
+      "relations",
+      "sources enroll",
+      "sources grant",
+      "sources revoke",
+      "clients pair",
+      "clients revoke"
+    ],
+    "entrypoint": "memoriesql.cli:main",
+    "executable": "memoriesql",
+    "exit_status": {
+      "available": 0,
+      "failed_or_budget_exhausted": 3,
+      "unavailable": 2
+    },
+    "read_contracts": {
+      "inspect": "InspectStoredBead / StoredBeadInspection v1",
+      "relations": "InspectBeadRelationsV2 / BeadRelationsInspectionV2",
+      "source": "ReadStoredBeadEvidence / StoredBeadEvidence v1"
+    },
+    "source_authority": {
+      "enroll": "EnrollExactSource / ExactSourceEnrollment v1",
+      "grant": "GrantExactSource / ExactSourceGrant v1",
+      "result_envelope": "available receipt, unavailable reason or failed reason",
+      "revoke": "RevokeExactSource / ExactSourceRevocation v1"
+    },
+    "supersedes": "memoriesql.core-cli.v1",
+    "unavailable": {
+      "ask": "qualified_recall_not_released",
+      "investigations": "pr05_checkpoint_not_released",
+      "query": "pr05_query_result_not_released",
+      "result": "pr05_query_result_not_released",
+      "sources": "source_inventory_not_released",
+      "sources connect": "provider_adapter_not_routed",
+      "ui": "private_textual_surface_not_routed"
+    }
+  },
+  "id": "memoriesql.core-cli.v2",
+  "status": "available",
+  "summary": "One public executable with contract catalog, configuration health, authorized stored reads, exact provider-neutral source authority and local agent client pairing; no private routing or PR-05 retrieval claim.",
+  "version": "2"
+}

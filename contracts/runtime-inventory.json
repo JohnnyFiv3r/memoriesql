@@ -231,6 +231,12 @@
     },
     {
       "path": "src/memoriesql/infrastructure/postgres/query_reader_provisioning.py"
+    },
+    {
+      "path": "src/memoriesql/application/local_client_pairing.py"
+    },
+    {
+      "path": "src/memoriesql/infrastructure/postgres/local_client_pairing.py"
     }
   ]
 }

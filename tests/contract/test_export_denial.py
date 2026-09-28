@@ -26,7 +26,7 @@ class ExportDenialTests(unittest.TestCase):
         self.assertEqual(wrapper["note"], "Synthetic registry-owned note.")
         self.assertEqual(
             [entry["id"] for entry in wrapper["entries"]],
-            ["memoriesql.core-cli.v1"],
+            ["memoriesql.core-cli.v1", "memoriesql.core-cli.v2"],
         )
         self.assertEqual(wrapper["status"], "available")
 

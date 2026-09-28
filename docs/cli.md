@@ -1,8 +1,8 @@
 # Public headless CLI
 
-Status: implementation in this development branch; no release or production
-source enrollment is claimed. Published `memoriesql==0.0.12` still has only the
-contract-catalog commands.
+Status: merged on main and prepared for the proposed 0.0.13 release; not yet
+published. Published `memoriesql==0.0.12` still has only the contract-catalog
+commands. No production source enrollment is claimed.
 
 The public package owns the single `memoriesql` executable. It is useful without
 Desktop and never loads private Python modules or arbitrary plugins. `contracts`,
@@ -21,13 +21,16 @@ Desktop and never loads private Python modules or arbitrary plugins. `contracts`
 | `schema` | Describes the installed logical query catalog, which relations are prepared, reserved or not prepared, the admission rules and delivery limits. It contacts no database and starts no run. |
 | `query --file query.sql --intent discover\|enumerate --view resolved\|historical` | Submits one caller-authored admitted SELECT with typed `$n` parameters through the trusted results executor and prints its closed reply. |
 | `result <result-id> --digest <content-digest> [--cursor C]` | Pages one retained immutable result by its exact pin under current authority, without rerunning its query. |
+| `clients pair --request-file request.json --secret-file PATH` | Pairs one local agent client with explicit capabilities, owned scopes and expiry. Its new secret is written once to a newly created owner-only file and never printed. |
+| `clients revoke --request-file request.json` | Terminally revokes one pairing grant at its exact current revision. |
 
 Bare `sources` reports `source_inventory_not_released`; there is no public
 source-inventory reader yet. Provider-specific `sources connect` remains a
 Desktop composition dependency, not an enrollment synonym.
 
 The installed versioned command reference is
-`memoriesql contract memoriesql.core-cli.v1 --json`; `capabilities --json`
+`memoriesql contract memoriesql.core-cli.v2 --json` (v2 adds client pairing to the
+unchanged v1 commands); `capabilities --json`
 reports its available command names and explicit pending capabilities. The
 generated CLI catalog is derived from the reviewed public registry.
 
@@ -122,6 +125,37 @@ reviewed restricted reader, the local credential and workspace, and optionally
 give those values to an agent's shell, files or processes: an agent that can
 read them could bypass admitted SQL. Without them `query` and `result` report
 `trusted_query_host_not_configured`.
+`clients pair` uses the installed `PairLocalClient` shape in
+`memoriesql.local-client-pairing.v1`:
+
+```json
+{
+  "request_id": "<new request UUID>",
+  "capabilities": ["memory.inspect", "memory.query", "source.read"],
+  "access_scope_ids": ["<owned access scope UUID>"],
+  "expires_at": "<UTC timestamp with offset>",
+  "exact_pairing_confirmed": true
+}
+```
+
+Only an authenticated human with the current `client.pair` capability can pair
+or revoke a client. Capabilities must belong to the paired-agent role and scopes
+must be active and owned by that human; refusal does not reveal which input
+failed. Pairing grants no resource access by itself: the client still needs a
+separate grant such as `sources grant` for one exact source, and its authority is
+the intersection of pairing, role and current grants. Principal, pairing, grant
+and credential identifiers derive from the request UUID, so replaying a request
+cannot create a second client.
+
+The CLI creates `--secret-file` exclusively (never overwriting, never following a
+symlink) with owner-only permissions before contacting the database, stores only
+the secret's SHA-256, and removes the file when pairing does not commit. The
+secret is never printed, logged or accepted as input. Whoever can read the file,
+or the environment of a process given the secret, holds that client's authority
+until expiry or revocation; supply it only through a channel the client cannot
+use to read broader credentials. `clients revoke` takes the pairing grant,
+expected revision, capabilities and scopes from the pairing receipt and records a
+terminal revision; a changed revision is a conflict, not a success.
 
 This slice does not route Desktop's Textual interface or provider adapters. A
 future, reviewed static service/client seam must preserve public core commands,
