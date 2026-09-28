@@ -7,8 +7,9 @@ development candidate after migration 0035, not a published capability in
 provider format, capture bytes, pair a device, start a worker, or activate the
 private product UI. No source is enrolled merely because it is discoverable.
 
-An authenticated human with current `workspace.manage` and `source.manage`
-capabilities submits `EnrollExactSource` with `exact_source_confirmed=true`, a
+An authenticated human with current `workspace.manage`, `source.manage` and
+`source.share` capabilities submits `EnrollExactSource` with
+`exact_source_confirmed=true`, a
 fresh request UUID, a source system, optional installation identity, object
 kind, opaque external object identity, and schema version. The database derives
 tenant, workspace, actor, and owner from the credential context. It creates one

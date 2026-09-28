@@ -30,11 +30,19 @@ DECLARE
 BEGIN
     SELECT context.* INTO authority
       FROM memoriesql.current_authorization_context() AS context;
-    IF authority.principal_id IS NULL
-       OR authority.principal_kind <> 'human'
+    IF authority.tenant_id IS NULL THEN
+        RAISE EXCEPTION 'source enrollment is unavailable' USING ERRCODE = '42501';
+    END IF;
+    -- Authority mutations already use this tenant fence. Acquire it before
+    -- checking current membership/credential so revocation has one order.
+    PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
+        authority.tenant_id::text || ':semantic_outcome_authority:', 0
+    ));
+    IF authority.principal_kind <> 'human'
        OR authority.user_id IS NULL
        OR NOT memoriesql.current_context_has_capability('workspace.manage')
-       OR NOT memoriesql.current_context_has_capability('source.manage') THEN
+       OR NOT memoriesql.current_context_has_capability('source.manage')
+       OR NOT memoriesql.current_context_has_capability('source.share') THEN
         RAISE EXCEPTION 'source enrollment is unavailable' USING ERRCODE = '42501';
     END IF;
     IF request_id IS NULL OR exact_source_confirmed IS DISTINCT FROM TRUE
@@ -163,7 +171,13 @@ DECLARE
 BEGIN
     SELECT context.* INTO authority
       FROM memoriesql.current_authorization_context() AS context;
-    IF authority.principal_id IS NULL OR authority.principal_kind <> 'human'
+    IF authority.tenant_id IS NULL THEN
+        RAISE EXCEPTION 'source grant is unavailable' USING ERRCODE = '42501';
+    END IF;
+    PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
+        authority.tenant_id::text || ':semantic_outcome_authority:', 0
+    ));
+    IF authority.principal_kind <> 'human'
        OR NOT memoriesql.current_context_has_capability('source.share') THEN
         RAISE EXCEPTION 'source grant is unavailable' USING ERRCODE = '42501';
     END IF;
@@ -279,7 +293,13 @@ DECLARE
 BEGIN
     SELECT context.* INTO authority
       FROM memoriesql.current_authorization_context() AS context;
-    IF authority.principal_id IS NULL OR authority.principal_kind <> 'human'
+    IF authority.tenant_id IS NULL THEN
+        RAISE EXCEPTION 'source revocation is unavailable' USING ERRCODE = '42501';
+    END IF;
+    PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
+        authority.tenant_id::text || ':semantic_outcome_authority:', 0
+    ));
+    IF authority.principal_kind <> 'human'
        OR authority.user_id IS NULL
        OR NOT memoriesql.current_context_has_capability('source.manage') THEN
         RAISE EXCEPTION 'source revocation is unavailable' USING ERRCODE = '42501';
