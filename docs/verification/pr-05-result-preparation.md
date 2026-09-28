@@ -102,6 +102,40 @@ storage accounting, and representative W1–W7 workload fit also remain pending.
 Passing small fictional windows and safe exhaustion is not semantic-quality or
 capacity certification.
 
+The next no-migration continuation starts from owner-merged #60 at public main
+`8463f3b2beb572c327c73a35f3e1af318c0161d5`. Its single claim is **native
+multi-window and aggregate ROWS-frame membership composed with ordinary
+same-SELECT grouping, under the existing private atomic result commit**.
+Previously qualified single ranking/neighbor windows remain covered. Multiple
+different partition/order specifications may share a SELECT, including windows
+used only in an outer ordering expression. A partition ledger is shared by exact
+partition/order specification; each window node independently names its source,
+partition and native peer rank. The ledger uses the hidden source trace only to
+stabilize ordering within peers; it does not change rank/dense-rank peer groups
+or the admitted visible-key requirement for row_number/lag/lead.
+
+For COUNT/SUM/AVG/MIN/MAX with an explicit ROWS frame, PostgreSQL emits the
+actual ordered frame-member traces in the same restricted SELECT as the value.
+The binder verifies every member against the exact partition occurrence bag and
+records those contributor refs, multiplicities and empty frames. A contiguous
+ordinal span is recorded only when it can be verified against the ledger;
+tied-peer ROWS frames do not acquire a guessed span. FILTER and native null
+semantics remain evaluated by PostgreSQL; all frame members remain protected
+dependencies. Ordinary GROUP BY/HAVING and their rejected-group ledger run before
+the window phase, including nested ordinary aggregates such as
+`SUM(COUNT(*)) OVER (...)` and the implicit single group. Outer sort expressions
+are computed without changing the visible projection. No SQL privilege, public
+result contract, migration, policy ceiling or approved blob changes.
+
+This is private witness-publication qualification, not an available query or
+disclosure API. Scalar/correlated/EXISTS/IN subquery lineage and bounded recursive
+CTE witnesses remain pending, as do saved-input reuse, paging/hydration,
+checkpoints, saves, whole-closure reauthorization, governed erasure, cumulative
+work/physical-storage accounting and measured useful W1–W7 fit. Correct timeout
+settlement and the fictional window cases below cannot certify capacity or
+semantic answer quality. Full installed receipts and exact-head CI belong to the
+PR; no hosted paid qualification is authorized by this continuation.
+
 Seen acceptance compares native values/schema/order to the witnessed statement,
 then independently checks contributions and multiplicities, empty/all-null facts,
 rejected groups, filtered unknown truth, compositional groups/sets, pinned C

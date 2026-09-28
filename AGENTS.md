@@ -13,9 +13,10 @@ The authorized schema-34 slice builds private native bag, group and set witnesse
 and atomically commits qualified result partitions with their original operation
 and invocation owner; see `docs/verification/pr-05-result-preparation.md`.
 These slices add no available result/disclosure API or qualified physical-storage
-profile. The current no-migration internal continuation qualifies a subset of
-ranking and neighbor window witnesses; see that verification document for the
-precise cut and remaining approved shapes. Preserve SQL 0001–0034
+profile. The no-migration internal continuations qualify ranking, neighbor,
+multiple-window, grouped-window and aggregate ROWS-frame witnesses; see that
+verification document for the precise cuts and remaining approved shapes.
+Preserve SQL 0001–0034
 and earlier records;
 canonical lifecycle/projection stays PR-03-owned. Remaining integrated PR-05
 delivery and useful workload qualification are required before availability.

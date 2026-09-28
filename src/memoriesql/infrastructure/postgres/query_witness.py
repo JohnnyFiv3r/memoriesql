@@ -185,7 +185,7 @@ class NativeWitnessBuilder:
                     ],
                 )
             elif stage["operation"] == "window":
-                if len(value) != 6 or any(
+                if len(value) != 7 or any(
                     type(v) is not int or v < 1 for v in value[2:5]
                 ):
                     raise ValueError("invalid native window row")
@@ -217,6 +217,32 @@ class NativeWitnessBuilder:
                     elif value[5] is not None:
                         raise ValueError("invented native window neighbor")
                     details["neighbor_exists"] = 1 <= target <= len(ordered_refs)
+                if stage.get("frame") is None:
+                    if value[6] is not None:
+                        raise ValueError("unexpected native window frame")
+                elif value[6] is None:
+                    details["frame_empty"] = True
+                elif not isinstance(value[6], list):
+                    raise ValueError("invalid native window frame")
+                else:
+                    frame_refs = [str(bind(member, depth + 1)) for member in value[6]]
+                    if not frame_refs or not Counter(frame_refs) <= Counter(ordered_refs):
+                        raise ValueError("native window frame outside partition")
+                    inputs.extend(frame_refs)
+                    details["frame_input_refs"] = frame_refs
+                    details["frame_input_multiplicities"] = list(
+                        Counter(frame_refs).values()
+                    )
+                    possible = [
+                        start
+                        for start in range(len(ordered_refs) - len(frame_refs) + 1)
+                        if ordered_refs[start : start + len(frame_refs)] == frame_refs
+                    ]
+                    if len(possible) == 1:
+                        details["frame_span"] = [
+                            possible[0] + 1,
+                            possible[0] + len(frame_refs),
+                        ]
                 details.update(
                     partition_ref=str(partition_ref),
                     partition_id=value[2],
