@@ -76,7 +76,6 @@ class InternalResultCandidate:
             or request.parents
             or request.candidate_profile_ref
             or request.scope.source_refs
-            or request.recursion
             or datetime.fromisoformat(request.scope.known_at) != population.known_at
             or request.catalog_hash != population.catalog_hash
             or request.intent not in {"discover", "enumerate"}
@@ -85,12 +84,32 @@ class InternalResultCandidate:
         expected_query = {
             "sql": request.sql,
             "parameters": [p.model_dump(mode="json") for p in request.parameters],
+            "recursion": (
+                request.recursion.model_dump(mode="json")
+                if request.recursion else None
+            ),
         }
         actual = json.loads(execution.query_metadata)
         if any(actual[k] != value for k, value in expected_query.items()) or len(
             witness.row_provenance
         ) != len(execution.rows):
             raise ValueError("query execution binding mismatch")
+        witness_graph = json.loads(witness.bytes)
+        if request.recursion:
+            bound = request.recursion
+            if (
+                actual["derivation_program"].get("coverage")
+                != {"explicit_depth": bound.max_depth}
+                or not any(
+                    stage["operation"] == "recursion"
+                    and stage.get("phase") == "visit"
+                    and stage.get("cte") == bound.cte
+                    and stage.get("max_depth") == bound.max_depth
+                    and stage.get("reachable")
+                    for stage in witness_graph["stages"]
+                )
+            ):
+                raise ValueError("recursive result qualification unavailable")
         fingerprint = request_fingerprint(request)
         result_id, receipt = uuid4(), uuid4()
         rows = [
@@ -141,11 +160,15 @@ class InternalResultCandidate:
                 "population_basis": "limited_query"
                 if any(
                     s["operation"] == "limit"
-                    for s in json.loads(witness.bytes)["stages"]
+                    for s in witness_graph["stages"]
                 )
                 else "authorized_logical_scope",
                 "qualification": "internal_assessed_bag_only",
                 "semantic_quality": "unqualified",
+                **(
+                    {"explicit_depth": request.recursion.max_depth}
+                    if request.recursion else {}
+                ),
             },
         }
         dependencies = {

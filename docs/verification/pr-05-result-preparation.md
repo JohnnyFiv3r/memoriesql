@@ -226,6 +226,51 @@ pruned from an empty output. The repair retains an unowned top-level ledger,
 retains a CTE ledger only when its owner is reachable, and preserves the
 existing empty-left set-arm evaluation fence. Its failed log is retained.
 
+The next no-migration internal continuation starts from owner-merged #63 at
+public main `082ea10013c2c01e6cb3ec0540fb616593692762`. Its single claim is
+**bounded native CYCLE path witnesses over prepared assessed-relation rows,
+atomically published as private results**. Admission still requires the
+declared 1–8 depth bound, visible typed anchor, one UNION ALL self-reference,
+key-equality edge expansion, independent guard, native CYCLE and qualified
+support roots. The independently restricted reader uses bigint arithmetic and
+comparison for the depth literal; its exact native-CYCLE function allowlist
+adds only `record_eq(record,record)` and
+`array_cat(anycompatiblearray,anycompatiblearray)`. Neither is agent-callable
+through closed SQL admission.
+
+The recursive CTE remains native inside a materialized wrapper. Each seed and
+edge occurrence carries its original scan/join/filter trace and parent path;
+an explicit ledger enumerates every native CYCLE row, including cycling and
+depth-bound rows even when the outer SELECT selects a subset. Binding checks
+each node, iteration depth, parent progression and native cycle flag against
+the traced route. Duplicate anchors and diamond paths retain bag multiplicity;
+an empty result still retains the prepared protected population and the
+explicit depth coverage. Timeout, cancellation or witness overflow refuses
+the whole result. The private commit binds the request's exact recursion
+declaration to execution metadata and coverage before publishing immutable
+partitions. Restarts and lost acknowledgements use the existing private
+receipt/owner recovery; no disclosure API is activated.
+
+This cut qualifies the currently prepared `memory_v1.assessed_relations`
+anchor/edge population. Admission of an observation-seeded or correction-edge
+query alone does not make its unprepared relation executable; richer recursive
+arms and unused recursive CTEs refuse witness publication before reader
+dispatch. Canonical assessed lifecycle and protection remain PR-03-owned.
+No migration, approved-contract change, provider call, policy increase or
+public query/result access is included. Full installed artifact receipts and
+useful W1–W7 fit remain separate gates; fictional path correctness is not
+semantic answer or capacity certification.
+
+Development initially demonstrated the existing `unprepared_relation` refusal
+for an observation seed. A restricted-reader probe then exposed implicit
+bigint/integer depth operators and PostgreSQL's native CYCLE functions outside
+the exact authority allowlist. The repaired admission casts only the already
+verified structural depth literals to bigint; the two exact CYCLE built-ins
+are fingerprinted by the independent authority profile. An initial 8192-byte
+budget test expected a settled invocation but exhausted before dispatch; it
+now checks no invocation was created. These failures are not qualification
+receipts for the repaired head.
+
 Seen acceptance compares native values/schema/order to the witnessed statement,
 then independently checks contributions and multiplicities, empty/all-null facts,
 rejected groups, filtered unknown truth, compositional groups/sets, pinned C

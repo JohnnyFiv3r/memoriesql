@@ -77,6 +77,10 @@ def provision_fictional_reader(
         "int8(integer)",
         "int8(smallint)",
         "jsonb_eq(jsonb,jsonb)",
+        # Native CYCLE compares generated composite path entries. Agent SQL
+        # cannot call this function through the closed function admission list.
+        "record_eq(record,record)",
+        "array_cat(anycompatiblearray,anycompatiblearray)",
         "int8eq(bigint,bigint)",
         "int8ne(bigint,bigint)",
         "int8lt(bigint,bigint)",

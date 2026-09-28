@@ -1,9 +1,9 @@
 """Trusted native bag-witness compiler; no agent capability or SQL fallback.
 
 This qualification cut handles native bags, groups, collapsed values, sets,
-qualified windows and row-level subquery membership. General subquery forms and
-recursion remain private native SELECTs but cannot be committed through this
-witness compiler.
+qualified windows, row-level subquery membership and bounded assessed-relation
+paths. Other subquery/recursive forms remain private native SELECTs but cannot
+be committed through this witness compiler.
 No Python SQL evaluator is used: PostgreSQL evaluates values and membership in
 one statement over the same frozen population, under the original work bound.
 """
@@ -15,7 +15,11 @@ from typing import Any, TypeGuard
 
 from sqlglot import ErrorLevel, exp
 
-from memoriesql.application.agent_sql_admission import AdmittedQuery, _ClosedPostgres
+from memoriesql.application.agent_sql_admission import (
+    AdmittedQuery,
+    RecursionBound,
+    _ClosedPostgres,
+)
 from memoriesql.application.agent_sql_catalog import SqlAdmissionError, SqlRelation
 
 
@@ -81,7 +85,12 @@ def _tested_predicate_ok(value: exp.Expr) -> bool:
 
 
 class _Compiler:
-    def __init__(self, tree: exp.Expr, relations: dict[str, SqlRelation]) -> None:
+    def __init__(
+        self,
+        tree: exp.Expr,
+        relations: dict[str, SqlRelation],
+        recursion: RecursionBound | None = None,
+    ) -> None:
         names = {i.name for i in tree.find_all(exp.Identifier)}
         names.update(c.name for r in relations.values() for c in r.columns)
         ordinal = 0
@@ -90,6 +99,7 @@ class _Compiler:
             ordinal += 1
             self.hidden = "_mq_native_witness_" + str(ordinal)
         self.relations = relations
+        self.recursion = recursion
         self.stages: list[dict[str, Any]] = []
         self.names = names | {self.hidden}
         self.ctes: list[exp.CTE] = []
@@ -477,6 +487,108 @@ class _Compiler:
         )
         return join, lateral_alias, members, matches, unknowns, stage
 
+    def recursive_cte(
+        self, cte: exp.CTE, with_node: exp.With, ctes: dict[str, str]
+    ) -> str:
+        """Keep native CYCLE local while tracing every bounded path occurrence."""
+        bound = self.recursion
+        body = cte.this
+        cycle = with_node.args.get("search")
+        if (
+            bound is None
+            or not with_node.args.get("recursive")
+            or not isinstance(cycle, exp.RecursiveWithSearch)
+            or not isinstance(body, exp.Union)
+            or body.args.get("distinct") is not False
+            or not isinstance(body.this, exp.Select)
+            or not isinstance(body.expression, exp.Select)
+        ):
+            raise SqlAdmissionError("unsupported", "witness_qualification_pending")
+        names = [c.name for c in cte.args["alias"].args.get("columns") or ()]
+        if (
+            bound.cte != cte.alias
+            or bound.node_column not in names
+            or bound.depth_column not in names
+            or len(names) != len(body.this.expressions)
+        ):
+            raise SqlAdmissionError("unsupported", "witness_qualification_pending")
+        for arm in (body.this, body.expression):
+            if any(
+                arm.args.get(key)
+                for key in (
+                    "with_", "group", "having", "distinct", "order", "limit",
+                    "offset", "qualify",
+                )
+            ) or any(
+                isinstance(part, exp.AggFunc | exp.Window | exp.Subquery)
+                for part in arm.walk()
+            ):
+                raise SqlAdmissionError("unsupported", "witness_qualification_pending")
+        internal_name = self.fresh("recursive")
+        node_index, depth_index = (
+            names.index(bound.node_column), names.index(bound.depth_column)
+        )
+        seed = self.query(body.this, ctes)
+        step = self.query(body.expression, {**ctes, cte.alias: internal_name})
+        for phase, compiled_arm in (("seed", seed), ("step", step)):
+            compiled_arm.set("order", None)
+            expression = compiled_arm.expressions[-1]
+            stage = self.stage(
+                "recursion", phase=phase, cte=bound.cte, max_depth=bound.max_depth
+            )
+            node_value = compiled_arm.expressions[node_index]
+            depth_value = compiled_arm.expressions[depth_index]
+            expression.set(
+                "this",
+                self.tag(
+                    stage,
+                    expression.this.copy(),
+                    (depth_value.this if isinstance(depth_value, exp.Alias) else depth_value).copy(),
+                    (node_value.this if isinstance(node_value, exp.Alias) else node_value).copy(),
+                ),
+            )
+        body.set("this", seed)
+        body.set("expression", step)
+        body.set("order", None)
+        recursive_alias = cte.args["alias"].copy()
+        recursive_alias.set("this", exp.to_identifier(internal_name))
+        recursive_alias.append("columns", exp.to_identifier(self.hidden, quoted=True))
+        internal = exp.CTE(this=body, alias=recursive_alias)
+        source_alias = self.fresh("recursive_row")
+        cycle_flag = cycle.expression.name
+        visit = self.stage(
+            "recursion", phase="visit", cte=bound.cte,
+            max_depth=bound.max_depth, coverage="explicit_depth",
+        )
+        wrapper = exp.select(
+            *(exp.column(n, table=source_alias, quoted=True) for n in names),
+            exp.column(cycle_flag, table=source_alias, quoted=True),
+            exp.alias_(
+                self.tag(
+                    visit,
+                    exp.column(self.hidden, table=source_alias, quoted=True),
+                    exp.column(bound.depth_column, table=source_alias, quoted=True),
+                    exp.column(bound.node_column, table=source_alias, quoted=True),
+                    exp.column(cycle_flag, table=source_alias, quoted=True),
+                ),
+                self.hidden,
+                quoted=True,
+            ),
+        ).from_(
+            exp.Table(
+                this=exp.to_identifier(internal_name),
+                alias=exp.TableAlias(this=exp.to_identifier(source_alias)),
+            )
+        )
+        wrapper.set(
+            "with_", exp.With(expressions=[internal], recursive=True, search=cycle.copy())
+        )
+        wrapper_name = self.store(wrapper, "recursive_result")
+        ledger = exp.select(exp.column(self.hidden, quoted=True)).from_(wrapper_name)
+        ledger_name = self.store(ledger, "recursive_paths", ledger=True)
+        self.ledger_owners[ledger_name] = wrapper_name
+        return wrapper_name
+
     def query(self, node: exp.Expr, inherited: dict[str, str]) -> exp.Expr:
         if isinstance(node, exp.Subquery):
             node.set("this", self.query(node.this, inherited))
@@ -485,6 +597,9 @@ class _Compiler:
         with_node = node.args.get("with_")
         if with_node:
             for cte in with_node.expressions:
+                if self.recursion and cte.alias == self.recursion.cte:
+                    ctes[cte.alias] = self.recursive_cte(cte, with_node, ctes)
+                    continue
                 self.name_outputs(cte.this)
                 first_ledger = len(self.ledgers)
                 cte.set("this", self.query(cte.this, ctes))
@@ -2189,7 +2304,9 @@ def compile_bag_witness(
     """Compile only an already admitted, lowered tree; refuse pending shapes."""
     tree = exp.Expr.load(query.execution_tree)
     if query.recursion:
-        raise SqlAdmissionError("unsupported", "witness_qualification_pending")
+        top_with = tree.args.get("with_")
+        if not isinstance(top_with, exp.With) or not top_with.args.get("recursive"):
+            raise SqlAdmissionError("unsupported", "witness_qualification_pending")
     for subquery in tree.find_all(exp.Subquery):
         parent = subquery.parent
         if isinstance(
@@ -2220,10 +2337,17 @@ def compile_bag_witness(
         where = owner.args.get("where") if owner is not None else None
         if where is None or exists.find_ancestor(exp.Where) is not where:
             raise SqlAdmissionError("unsupported", "witness_qualification_pending")
-    compiler = _Compiler(tree, relations)
+    compiler = _Compiler(tree, relations, query.recursion)
     body = compiler.query(tree, {})
     semantic_check = bool(compiler.ledgers)
     rewritten = compiler.finish(body)
+    if query.recursion and not any(
+        stage["operation"] == "recursion"
+        and stage.get("phase") == "visit"
+        and stage["reachable"]
+        for stage in compiler.stages
+    ):
+        raise SqlAdmissionError("unsupported", "witness_qualification_pending")
     return WitnessPlan(
         rewritten.sql(
             dialect=_ClosedPostgres(),

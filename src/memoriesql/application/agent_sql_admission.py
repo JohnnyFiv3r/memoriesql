@@ -1083,11 +1083,29 @@ class _Binder:
         output = self.rename(self.query(arm, None, local), cte.args["alias"])
         for a, b in zip(relation.columns, output.columns, strict=True):
             _same(a.type, b.type, arm)
+        # The independently restricted reader grants bigint comparison, not
+        # PostgreSQL's implicit bigint/integer operator selected by a literal.
+        # Apply casts only after validating the original admitted expression.
+        guard.set(
+            "expression",
+            exp.Cast(
+                this=guard.expression.copy(), to=exp.DataType.build("BIGINT")
+            ),
+        )
+        step.set(
+            "expression",
+            exp.Cast(
+                this=step.expression.copy(), to=exp.DataType.build("BIGINT")
+            ),
+        )
         # Independent guard is emitted even after structurally verifying the user guard.
         predicates: list[exp.Expr] = [
             exp.LT(
                 this=exp.column(request.depth_column, table=alias),
-                expression=exp.Literal.number(request.max_depth),
+                expression=exp.Cast(
+                    this=exp.Literal.number(request.max_depth),
+                    to=exp.DataType.build("BIGINT"),
+                ),
             )
         ]
         for edge in edges:

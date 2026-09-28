@@ -15,6 +15,7 @@ from memoriesql.application.agent_sql_catalog import (
     SqlRelation,
     SqlType,
 )
+from memoriesql.application.agent_sql_witness import compile_bag_witness
 
 ANCHOR = "11111111-1111-4111-8111-111111111111"
 ANCHORS = frozenset({("bead_ref", ANCHOR)})
@@ -264,7 +265,9 @@ class AgentSqlAdmissionTests(unittest.TestCase):
                 admitted_anchors=ANCHORS,
                 recursion=RecursionBound("walk", "depth", "node", depth),
             )
-            self.assertGreaterEqual(result.sql.count("w.depth < " + str(depth)), 2)
+            self.assertGreaterEqual(
+                result.sql.count(f"w.depth < CAST({depth} AS BIGINT)"), 2
+            )
             self.assertIn("r.support_eligible = TRUE", result.sql)
             self.assertIn("r.roots_status = 'qualified'", result.sql)
             self.assertEqual(
@@ -286,6 +289,30 @@ class AgentSqlAdmissionTests(unittest.TestCase):
                     admitted_anchors=ANCHORS,
                     recursion=RecursionBound("walk", "depth", "node", 3),
                 )
+        # Reader grants for native CYCLE are not agent-callable SQL functions.
+        for direct in (
+            "SELECT pg_catalog.record_eq(ROW(1),ROW(1)) AS x",
+            "SELECT pg_catalog.array_cat(ARRAY[1],ARRAY[2]) AS x",
+            "SELECT ROW(1)=ROW(1) AS x",
+            "SELECT ARRAY[1] || ARRAY[2] AS x",
+        ):
+            with self.subTest(direct=direct), self.assertRaises(SqlAdmissionError):
+                admit_query(direct)
+
+    def test_unused_recursive_cte_refuses_without_forcing_a_path(self) -> None:
+        query = recursive_sql(2).replace(
+            "SELECT node, depth, is_cycle FROM walk",
+            "SELECT s.statement_id FROM memory_v1.statements s",
+        )
+        admitted = admit_query(
+            query,
+            (SqlParameter(1, "bead_ref", ANCHOR),),
+            admitted_anchors=ANCHORS,
+            recursion=RecursionBound("walk", "depth", "node", 2),
+        )
+        with self.assertRaises(SqlAdmissionError) as refused:
+            compile_bag_witness(admitted, SqlCatalog.installed().relations)
+        self.assertEqual(refused.exception.construct, "witness_qualification_pending")
 
     def test_evaluation_relation_is_unavailable_without_explicit_trusted_selection(
         self,
