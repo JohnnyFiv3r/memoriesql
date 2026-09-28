@@ -1,8 +1,8 @@
 # Public headless CLI
 
-Status: implementation in this development branch; no release or production
-source enrollment is claimed. Published `memoriesql==0.0.12` still has only the
-contract-catalog commands.
+Status: merged on main and prepared for the proposed 0.0.13 release; not yet
+published. Published `memoriesql==0.0.12` still has only the contract-catalog
+commands. No production source enrollment is claimed.
 
 The public package owns the single `memoriesql` executable. It is useful without
 Desktop and never loads private Python modules or arbitrary plugins. `contracts`,
