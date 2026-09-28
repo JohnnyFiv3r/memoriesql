@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import psycopg
 from psycopg import sql
@@ -311,6 +311,202 @@ class CliQueryResults(unittest.TestCase):
             "MEMORIESQL_WORKSPACE_ID": str(self.fixture.workspace),
             "MEMORIESQL_STATE_DIR": str(self.root / state),
         }
+
+    def request_cli(
+        self, arguments: list[str], payload: dict[str, object], environment: dict[str, str]
+    ) -> tuple[int, dict[str, Any]]:
+        path = self.root / f"request-{uuid4()}.json"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        status, output = self.cli(
+            [*arguments, "--request-file", str(path), "--json"], environment
+        )
+        return status, json.loads(output)
+
+    def scope_beads(self, scope: UUID) -> set[str]:
+        return {
+            str(row[0])
+            for row in self.db.execute(
+                "SELECT DISTINCT a.bead_id FROM memoriesql.accepted_bead_semantics a "
+                "JOIN memoriesql.beads b ON b.tenant_id=a.tenant_id "
+                "AND b.bead_id=a.bead_id WHERE b.access_scope_id=%s",
+                (scope,),
+            ).fetchall()
+        }
+
+    def enrolled_source(self, environment: dict[str, str]) -> tuple[UUID, UUID]:
+        """Enroll one exact source through the public command.
+
+        Only fictional capture setup follows, as remote_scope() does for its
+        explicit scope: the fixture's worker and attestor may write the new
+        scope, and the source gets producer and dispatch policies.
+        """
+
+        fx = self.fixture
+        row = self.db.execute(
+            "SELECT source_system, object_kind, schema_version "
+            "FROM memoriesql.source_objects WHERE source_object_id=%s",
+            (fx.source,),
+        ).fetchone()
+        assert row is not None
+        status, enrolled = self.request_cli(
+            ["sources", "enroll"],
+            {
+                "request_id": str(uuid4()),
+                "source_system": row[0],
+                "object_kind": row[1],
+                "external_object_id": "orchard/enrolled-agent-source",
+                "source_schema_version": row[2],
+                "exact_source_confirmed": True,
+            },
+            environment,
+        )
+        self.assertEqual(status, 0, enrolled)
+        scope = UUID(enrolled["receipt"]["access_scope_id"])
+        source = UUID(enrolled["receipt"]["source_object_id"])
+        pairings = self.db.execute(
+            "SELECT r.pairing_grant_id, r.revision, r.allowed_capabilities, "
+            "r.allowed_access_scope_ids FROM memoriesql.pairing_grant_revisions AS r "
+            "JOIN memoriesql.pairing_grants AS g USING (tenant_id, pairing_grant_id) "
+            "WHERE g.paired_principal_id IN (%s,%s) AND r.revision = ("
+            "SELECT max(l.revision) FROM memoriesql.pairing_grant_revisions AS l "
+            "WHERE l.tenant_id = r.tenant_id AND l.pairing_grant_id = r.pairing_grant_id)",
+            (fx.worker_principal, fx.attestor),
+        ).fetchall()
+        self.assertEqual(len(pairings), 2)
+        with self.db.transaction():
+            fx.begin()
+            for principal in (fx.worker_principal, fx.attestor):
+                self.db.execute(
+                    "SELECT memoriesql.create_access_grant(%s,%s,%s,%s,%s,%s)",
+                    (
+                        uuid4(),
+                        principal,
+                        scope,
+                        ["read", "write"],
+                        fx.now,
+                        fx.now + timedelta(hours=1),
+                    ),
+                )
+            for pairing, revision, capabilities, scopes in pairings:
+                self.db.execute(
+                    "SELECT memoriesql.revise_pairing_grant("
+                    "%s,%s,%s,%s,'active',%s,%s,%s)",
+                    (
+                        pairing,
+                        revision,
+                        capabilities,
+                        [*scopes, scope],
+                        fx.now,
+                        fx.now + timedelta(hours=1),
+                        fx.now,
+                    ),
+                )
+        producer, policy = uuid4(), uuid4()
+        self.db.execute(
+            "INSERT INTO memoriesql.evidence_producer_policies SELECT tenant_id,"
+            "workspace_id,%s,%s,%s,producer_principal_id,qualification_ref,"
+            "normalization_policy_version,qualification_evidence_sha256,"
+            "approved_by_principal_id,created_at,expires_at,status "
+            "FROM memoriesql.evidence_producer_policies WHERE producer_policy_id=%s",
+            (scope, producer, source, fx.policy),
+        )
+        self.db.execute(
+            "INSERT INTO memoriesql.complete_input_dispatch_policies SELECT tenant_id,"
+            "%s,workspace_id,%s,%s,attestor_principal_id,approved_by_principal_id,"
+            "qualification_evidence_sha256,created_at,expires_at,status,6 "
+            "FROM memoriesql.complete_input_dispatch_policies "
+            "WHERE dispatch_policy_id=%s",
+            (policy, scope, source, fx.dispatch_policy),
+        )
+        fx.producers[source], fx.policies[source] = producer, policy
+        fx.checkpoints[source], fx.positions[source] = "orchard.enrolled.raw", (0, 0)
+        return scope, source
+
+    def test_agent_paired_to_one_enrolled_source_reads_only_that_source(self) -> None:
+        owner_environment = self.trusted_environment(FIXTURE_SECRET, "owner-state")
+        self.fixture.bead("Fictional owner-private orchard note.", key="private")
+        private = self.scope_beads(self.fixture.scope)
+        self.assertTrue(private)
+        scope, source = self.enrolled_source(owner_environment)
+        self.fixture.assertion(scope=scope, source_object=source)
+        expected = self.scope_beads(scope)
+        self.assertGreaterEqual(len(expected), 2)
+        self.assertFalse(expected & private)
+
+        # Pair over that source's own explicit scope only, with an expiry.
+        expires = (self.fixture.now + timedelta(hours=1)).isoformat()
+        secret_file = self.root / "narrow-agent.secret"
+        request = self.root / "narrow-pair.json"
+        request.write_text(
+            json.dumps(
+                {
+                    "request_id": str(uuid4()),
+                    "capabilities": ["memory.query", "source.read"],
+                    "access_scope_ids": [str(scope)],
+                    "expires_at": expires,
+                    "exact_pairing_confirmed": True,
+                }
+            ),
+            encoding="utf-8",
+        )
+        status, output = self.cli(
+            [
+                "clients",
+                "pair",
+                "--request-file",
+                str(request),
+                "--secret-file",
+                str(secret_file),
+                "--json",
+            ],
+            owner_environment,
+        )
+        paired = json.loads(output)
+        self.assertEqual(status, 0, paired)
+        agent_environment = self.trusted_environment(
+            secret_file.read_text(encoding="ascii"), "narrow-agent-state"
+        )
+        text = "SELECT o.bead_id FROM memory_v1.observations o ORDER BY o.bead_id"
+        status, before, _ = self.query(text, environment=agent_environment)
+        self.assertEqual(status, 0, before)
+        self.assertEqual(before["result"]["total_rows"], "0", "no grant, no rows")
+
+        status, granted = self.request_cli(
+            ["sources", "grant"],
+            {
+                "request_id": str(uuid4()),
+                "source_object_id": str(source),
+                "target_principal_id": paired["receipt"]["principal_id"],
+                "permission_keys": ["read"],
+                "valid_from": self.fixture.now.isoformat(),
+                "expires_at": expires,
+            },
+            owner_environment,
+        )
+        self.assertEqual(status, 0, granted)
+        path = self.root / "narrow.sql"
+        path.write_text(text, encoding="utf-8")
+        status, output = self.cli(
+            [
+                "query",
+                "--file",
+                str(path),
+                "--intent",
+                "enumerate",
+                "--view",
+                "historical",
+                "--page-size",
+                "50",
+                "--json",
+            ],
+            agent_environment,
+        )
+        reply = json.loads(output)
+        self.assertEqual(status, 0, reply)
+        seen = {row["values"][0] for row in reply["page"]["rows"]}
+        self.assertEqual(seen, expected)
+        self.assertFalse(seen & private, "the owner-private scope stays unreadable")
+        self.assertEqual(reply["result"]["coverage"]["gaps"], [])
 
     def test_paired_agent_queries_the_owner_scope_under_its_own_pairing(self) -> None:
         self.fixture.assertion()
