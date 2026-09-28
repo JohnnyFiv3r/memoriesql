@@ -16,8 +16,17 @@ from pathlib import Path
 
 def main() -> int:
     sys.path.insert(0, str(Path.cwd()))
-    suite = unittest.defaultTestLoader.loadTestsFromName("query_host_acceptance")
+    # Every flat-copied host acceptance module: the host's own proof and any
+    # adapter proof layered on it (for example the public CLI's).
+    suite = unittest.defaultTestLoader.discover(
+        str(Path.cwd()),
+        pattern="query_host*acceptance.py",
+        top_level_dir=str(Path.cwd()),
+    )
     result = unittest.TextTestRunner(verbosity=2).run(suite)
+    if not result.testsRun:
+        print("no query host acceptance ran; refusing to pass", file=sys.stderr)
+        return 1
     if result.skipped:
         # A skipped database case is not proof of anything.
         print("query host acceptance skipped cases; refusing to pass", file=sys.stderr)

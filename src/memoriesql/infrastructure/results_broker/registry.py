@@ -152,3 +152,65 @@ def recorded_runs(
             }
         )
     return listing
+
+
+def record_cleanup(
+    state_dir: Path, reply: dict[str, Any], *, now: datetime | None = None
+) -> None:
+    """Keep the host's last expiry-cleanup outcome (noncontent counts only)."""
+    moment = now or datetime.now(UTC)
+    with _locked(state_dir, exclusive=True):
+        path = state_dir / "cleanup.json"
+        staged = path.with_name(f".{path.name}.{secrets.token_hex(8)}.new")
+        record = {
+            "at": moment.isoformat(),
+            "outcome": reply.get("outcome"),
+            "cleanup": reply.get("cleanup"),
+        }
+        descriptor = os.open(
+            staged,
+            os.O_WRONLY
+            | os.O_CREAT
+            | os.O_EXCL
+            | os.O_NOFOLLOW
+            | getattr(os, "O_CLOEXEC", 0),
+            0o600,
+        )
+        try:
+            os.write(descriptor, json.dumps(record, sort_keys=True).encode("utf-8"))
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+        os.replace(staged, path)
+
+
+def last_cleanup(state_dir: Path) -> dict[str, Any] | None:
+    with _locked(state_dir, exclusive=False):
+        try:
+            descriptor = os.open(
+                state_dir / "cleanup.json",
+                os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0),
+            )
+        except FileNotFoundError:
+            return None
+        try:
+            data = os.read(descriptor, 65536)
+        finally:
+            os.close(descriptor)
+    value = json.loads(data)
+    return value if isinstance(value, dict) else None
+
+
+def latest_principal(state_dir: Path, workspace_id: UUID) -> str | None:
+    """Credential digest of the most recent host-started run in the workspace."""
+    with _locked(state_dir, exclusive=False) as path:
+        runs = _load(path)
+    entries = sorted(
+        (
+            entry
+            for entry in runs.values()
+            if entry.get("workspace_id") == str(workspace_id)
+        ),
+        key=lambda entry: str(entry["started_at"]),
+    )
+    return str(entries[-1]["credential_sha256"]) if entries else None

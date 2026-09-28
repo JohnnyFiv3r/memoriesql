@@ -20,7 +20,7 @@ import stat
 import sys
 import sysconfig
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -47,6 +47,8 @@ from memoriesql.infrastructure.results_broker.config import (
     stage_config,
 )
 from memoriesql.infrastructure.results_broker.registry import (
+    last_cleanup,
+    latest_principal,
     mark_closed,
     recorded_runs,
     run_owner,
@@ -56,11 +58,14 @@ from memoriesql.infrastructure.results_broker.server import (
     EXIT_OK,
     EXIT_REFUSED,
     HostRefused,
+    TrustedHost,
     check_control_login,
     prepare_host,
 )
 from memoriesql.infrastructure.results_broker.wire import UNAVAILABLE_REPLY
 
+# `broker check` fails when the hourly cleanup has not completed for this long.
+CLEANUP_RECENT = timedelta(hours=2)
 DEFAULT_CONTROL_ROLE = "memoriesql_query_host"
 DEFAULT_READER_ROLE = "memoriesql_query_reader"
 SCRAM_ITERATIONS = 4096
@@ -397,11 +402,15 @@ def check(config_path: Path) -> int:
         record("state_directory", True)
     except ConfigurationRefused as refusal:
         record("state_directory", False, str(refusal))
+    host: TrustedHost | None = None
     try:
-        prepare_host(config)
+        host = prepare_host(config)
         record("database_authority", True)
     except HostRefused as refusal:
         record("database_authority", False, str(refusal))
+    record(*_cleanup_recent(config))
+    if host is not None:
+        record(*_cleanup_status(host))
     for role in (config.control.role, config.reader.role):
         record(
             f"passwordless_login_refused:{role}",
@@ -410,6 +419,71 @@ def check(config_path: Path) -> int:
     ok = all(item["ok"] for item in checks)
     _emit({"outcome": "available" if ok else "refused", "checks": checks})
     return EXIT_OK if ok else EXIT_REFUSED
+
+
+def _cleanup_recent(config: BrokerConfig) -> tuple[str, bool, str | None]:
+    """The serving host's own record of its last scheduled expiry cleanup."""
+    try:
+        last = last_cleanup(config.state_dir)
+    except (OSError, ValueError, ConfigurationRefused):
+        return "cleanup_recent", False, "cleanup record unavailable"
+    if last is None:
+        return "cleanup_recent", False, "no expiry cleanup has run"
+    age = datetime.now(UTC) - datetime.fromisoformat(str(last["at"]))
+    cleanup = last.get("cleanup") or {}
+    detail = (
+        f"last at {last['at']}: outcome {last.get('outcome')}, "
+        f"pending {cleanup.get('pending')}, failed {cleanup.get('failed')}"
+    )
+    ok = (
+        age <= CLEANUP_RECENT
+        and last.get("outcome") == "available"
+        and not cleanup.get("failed")
+    )
+    return "cleanup_recent", ok, detail
+
+
+def _cleanup_status(host: TrustedHost) -> tuple[str, bool, str | None]:
+    """PR-05's noncontent status for the workspace: nothing overdue or failed.
+
+    The status is read under the most recent host-started run's principal, the
+    only authenticated context the host keeps; before any run it is not needed,
+    because nothing can be due.
+    """
+    config = host.config
+    try:
+        principal = latest_principal(config.state_dir, config.workspace_id)
+    except (OSError, ValueError, ConfigurationRefused):
+        return "cleanup_status", False, "run registry unavailable"
+    if principal is None:
+        return "cleanup_status", True, "no host-started run yet"
+    try:
+        reply = json.loads(host.executor(principal).cleanup_status())
+    except ValueError:
+        return "cleanup_status", False, "status unavailable"
+    status = reply.get("cleanup")
+    if reply.get("outcome") != "available" or not isinstance(status, dict):
+        # A revoked or expired principal cannot read status; say so plainly.
+        return "cleanup_status", False, "status unavailable under the last principal"
+    overdue = status.get("overdue") or {}
+    failures = (status.get("failures") or {}).get("count") or 0
+    late = sum(int(value or 0) for value in overdue.values())
+    return (
+        "cleanup_status",
+        late == 0 and int(failures) == 0,
+        f"overdue {late}, failures {failures}",
+    )
+
+
+def cleanup(config_path: Path) -> int:
+    """Run the host's expiry cleanup once, now; prints PR-05's closed reply."""
+    try:
+        host = prepare_host(load_config(config_path))
+    except (ConfigurationRefused, HostRefused) as refusal:
+        return _refused(str(refusal))
+    reply = host.cleanup()
+    print(json.dumps(reply, ensure_ascii=True, sort_keys=True))
+    return EXIT_OK if reply.get("outcome") == "available" else EXIT_FAILED
 
 
 def list_runs(config_path: Path) -> int:
@@ -470,6 +544,7 @@ __all__ = [
     "EXIT_OK",
     "EXIT_REFUSED",
     "check",
+    "cleanup",
     "close_run",
     "integrity_findings",
     "list_runs",

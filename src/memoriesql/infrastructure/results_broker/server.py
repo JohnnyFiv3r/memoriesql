@@ -53,7 +53,10 @@ from memoriesql.infrastructure.results_broker.config import (
     load_config,
 )
 from memoriesql.infrastructure.results_broker.readers import read_core
-from memoriesql.infrastructure.results_broker.registry import record_run
+from memoriesql.infrastructure.results_broker.registry import (
+    record_cleanup,
+    record_run,
+)
 from memoriesql.infrastructure.results_broker.wire import (
     MAX_FRAME_BYTES,
     MAX_HEADER_BYTES,
@@ -77,6 +80,12 @@ REQUEST_DEADLINE_SECONDS = 10.0
 REPLY_DEADLINE_SECONDS = 30.0
 MAX_CONNECTIONS = 8
 DRAIN_SECONDS = 90.0
+# PR-05's 24-hour content-cleanup deadline holds only while the host runs its
+# expiry cleanup; hourly keeps a missed pass far inside that deadline.
+CLEANUP_INTERVAL_SECONDS = 3600.0
+# Expiry cleanup runs as the trusted role, not as a principal: the executor's
+# principal fields are never used by it. This digest matches no credential.
+_MAINTENANCE_CREDENTIAL = "0" * 64
 _TRUSTED_ROLE = "memoriesql_application"
 
 
@@ -177,6 +186,22 @@ class TrustedHost:
             credential_sha256=credential_sha256,
             workspace_id=self.config.workspace_id,
         )
+
+    def maintenance(self) -> PostgresAgentSqlResults:
+        """Executor used only for host-wide expiry cleanup (no principal)."""
+        return self.executor(_MAINTENANCE_CREDENTIAL)
+
+    def cleanup(self) -> dict[str, Any]:
+        """Run PR-05's expiry cleanup once and keep its noncontent outcome."""
+        try:
+            reply: dict[str, Any] = json.loads(self.maintenance().cleanup_expired())
+        except Exception:
+            reply = {"outcome": "execution_error", "cleanup": None}
+        try:
+            record_cleanup(self.config.state_dir, reply)
+        except Exception:
+            log("cleanup_record_failed")
+        return reply
 
     def paired_agent(self, credential_sha256: str) -> bool:
         """True only for a current paired agent principal of this workspace."""
@@ -285,9 +310,16 @@ def bind_listener(config: BrokerConfig) -> socket.socket:
 class Server:
     """Accept loop with bounded concurrency and a draining stop."""
 
-    def __init__(self, host: TrustedHost, listener: socket.socket) -> None:
+    def __init__(
+        self,
+        host: TrustedHost,
+        listener: socket.socket,
+        *,
+        cleanup_interval: float = CLEANUP_INTERVAL_SECONDS,
+    ) -> None:
         self._host = host
         self._listener = listener
+        self._cleanup_interval = cleanup_interval
         self._socket_identity = os.lstat(host.config.socket_path).st_ino
         self._stop = threading.Event()
         self._slots = threading.BoundedSemaphore(MAX_CONNECTIONS)
@@ -300,6 +332,8 @@ class Server:
     def run(self) -> None:
         self._listener.settimeout(0.5)
         log("serving", workspace_id=self._host.config.workspace_id)
+        maintenance = threading.Thread(target=self._cleanup_loop, daemon=True)
+        maintenance.start()
         while not self._stop.is_set():
             try:
                 connection, _ = self._listener.accept()
@@ -321,6 +355,21 @@ class Server:
             worker.start()
         self._close_listener()
         self._drain()
+
+    def _cleanup_loop(self) -> None:
+        """Expiry cleanup at start and then every interval, until stopped."""
+        while not self._stop.is_set():
+            reply = self._host.cleanup()
+            cleanup = reply.get("cleanup") or {}
+            log(
+                "cleanup",
+                outcome=reply.get("outcome"),
+                pending=cleanup.get("pending"),
+                failed=cleanup.get("failed"),
+                batches=cleanup.get("batches"),
+            )
+            if self._stop.wait(self._cleanup_interval):
+                return
 
     def _close_listener(self) -> None:
         self._listener.close()

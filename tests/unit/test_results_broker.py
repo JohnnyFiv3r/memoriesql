@@ -103,6 +103,7 @@ class StubHost:
         self.agent = agent
         self.authenticated: list[str] = []
         self.calls: list[tuple[str, bytes]] = []
+        self.cleanups: list[float] = []
 
     def paired_agent(self, credential_sha256: str) -> bool:
         self.authenticated.append(credential_sha256)
@@ -113,6 +114,10 @@ class StubHost:
 
     def control(self) -> Any:
         raise AssertionError("readers are patched in these tests")
+
+    def cleanup(self) -> dict[str, Any]:
+        self.cleanups.append(time.monotonic())
+        return {"outcome": "available", "cleanup": {"pending": 0, "failed": 0}}
 
 
 class Framing(unittest.TestCase):
@@ -371,6 +376,25 @@ class ServerBoundary(unittest.TestCase):
             raw.sendall(struct.pack(">I", MAX_FRAME_BYTES + 1))
             self.assertEqual(receive_frame(raw, MAX_FRAME_BYTES), UNAVAILABLE_REPLY)
         self.assertEqual([c for c in host.calls if c[0] == "handle"], [])
+
+    def test_expiry_cleanup_runs_at_start_and_on_schedule_until_stop(self) -> None:
+        root = short_directory(self)
+        host = StubHost(fictional_config(root))
+        listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        listener.bind(str(host.config.socket_path))
+        listener.listen(1)
+        server = Server(cast(TrustedHost, host), listener, cleanup_interval=0.2)
+        worker = threading.Thread(target=server.run, daemon=True)
+        worker.start()
+        deadline = time.monotonic() + 10
+        while len(host.cleanups) < 3 and time.monotonic() < deadline:
+            time.sleep(0.05)
+        server.stop()
+        worker.join(10)
+        self.assertGreaterEqual(len(host.cleanups), 3)
+        settled = len(host.cleanups)
+        time.sleep(0.5)
+        self.assertEqual(len(host.cleanups), settled)
 
     def test_stop_unlinks_its_socket(self) -> None:
         root = short_directory(self)

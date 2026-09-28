@@ -81,7 +81,9 @@ def _short_root() -> Path:
 @unittest.skipUnless(
     os.environ.get("N1_TEST_DATABASE_URL"), "disposable PostgreSQL required"
 )
-class QueryHostAcceptance(unittest.TestCase):
+class QueryHostHarness(unittest.TestCase):
+    """Provisioned host, paired agent and helpers; adapter proofs subclass it."""
+
     def setUp(self) -> None:
         self.h = commit_tests.QueryResultCommit(methodName="runTest")
         self.h.setUp()
@@ -238,11 +240,12 @@ class QueryHostAcceptance(unittest.TestCase):
         self.addCleanup(stop)
         return server
 
-    def spawn(self, *, fault: bool = False) -> subprocess.Popen[bytes]:
-        if fault:
+    def spawn(self, *, fault: str | None = None) -> subprocess.Popen[bytes]:
+        if fault is not None:
             code = (
                 "import sys; sys.path.insert(0, sys.argv[3]); "
-                "import query_host_fault as f; sys.exit(f.main(sys.argv[1], sys.argv[2]))"
+                "import query_host_fault as f; "
+                "sys.exit(f.main(sys.argv[1], sys.argv[2], sys.argv[4]))"
             )
         else:
             code = (
@@ -261,6 +264,7 @@ class QueryHostAcceptance(unittest.TestCase):
                 str(self.config_path),
                 str(self.gates),
                 str(Path(__file__).resolve().parent),
+                fault or "none",
             ],
             stdout=log,
             stderr=log,
@@ -341,6 +345,8 @@ class QueryHostAcceptance(unittest.TestCase):
             request["cursor"] = cursor
         return json.dumps(request).encode()
 
+
+class QueryHostAcceptance(QueryHostHarness):
     # -- acceptance ----------------------------------------------------------
 
     def test_replies_are_the_executors_bytes_and_readers_match_direct(self) -> None:
@@ -694,7 +700,7 @@ class QueryHostAcceptance(unittest.TestCase):
         )
 
     def test_sigkill_mid_query_keeps_capacity_until_reader_ends(self) -> None:
-        host = self.spawn(fault=True)
+        host = self.spawn(fault="reader")
         transport = self.transport()
         run = self.start(transport)
         lost = self.query_bytes(run, OBSERVATIONS)
@@ -734,7 +740,7 @@ class QueryHostAcceptance(unittest.TestCase):
         self.assertEqual(code, 0, closed)
 
     def test_lost_owner_connection_keeps_capacity_until_work_ends(self) -> None:
-        self.spawn(fault=True)
+        self.spawn(fault="reader")
         transport = self.transport()
         run = self.start(transport)
         lost = self.query_bytes(run, OBSERVATIONS)
@@ -774,6 +780,123 @@ class QueryHostAcceptance(unittest.TestCase):
             ),
             0,
         )
+
+    def owner_backend(self, run: dict[str, Any]) -> int:
+        """The executor's owner session: holder of the delivery's advisory lock."""
+        owner = self.scalar(
+            "SELECT l.pid FROM memoriesql.query_deliveries d "
+            "JOIN pg_locks l ON l.locktype='advisory' AND l.granted AND l.objsubid=1 "
+            "AND ((l.classid::bigint<<32)|l.objid::bigint)="
+            "hashtextextended(d.tenant_id::text||':query-delivery:'||d.delivery_ref::text,0) "
+            "WHERE d.run_ref=%s AND d.state='reserved'",
+            (run["run_ref"],),
+        )
+        self.assertIsNotNone(owner)
+        return int(owner)
+
+    def test_owner_loss_after_reader_settles_settles_once_without_receipt(
+        self,
+    ) -> None:
+        self.spawn(fault="commit")
+        transport = self.transport()
+        run = self.start(transport)
+        lost = self.query_bytes(run, OBSERVATIONS)
+        replies: list[bytes] = []
+        worker = threading.Thread(target=lambda: replies.append(transport.handle(lost)))
+        worker.start()
+        for _ in range(600):
+            if (self.gates / "commit.ready").exists():
+                break
+            time.sleep(0.05)
+        else:
+            self.fail("host never reached the result commit")
+        # The reader has finished and settled; only commit and disclosure remain.
+        self.assertEqual(
+            self.scalar(
+                "SELECT count(*) FROM memoriesql_query.invocations "
+                "WHERE run_ref=%s AND state<>'settled'",
+                (run["run_ref"],),
+            ),
+            0,
+        )
+        self.assertTrue(
+            self.scalar("SELECT pg_terminate_backend(%s)", (self.owner_backend(run),))
+        )
+        executor = prepare_host(self.config).executor(self.agent_hash)
+        for _ in range(100):
+            if executor.recover_abandoned():
+                break
+            time.sleep(0.05)
+        (self.gates / "commit.go").write_text("go")
+        worker.join(60)
+        self.assertEqual(len(replies), 1)
+        # A commit refused after its owner was abandoned is a known execution
+        # failure of that step, never a disclosure.
+        self.assertEqual(json.loads(replies[0])["outcome"], "execution_error", replies)
+        deliveries = self.db.execute(
+            "SELECT delivery_ref,state,outcome,charged_db_ms,reserved_db_ms "
+            "FROM memoriesql.query_deliveries WHERE run_ref=%s",
+            (run["run_ref"],),
+        ).fetchall()
+        self.assertEqual(len(deliveries), 1, deliveries)
+        delivery, state, outcome, charged, reserved = deliveries[0]
+        self.assertEqual((state, outcome), ("settled", "abandoned"))
+        self.assertGreaterEqual(charged, reserved)
+        self.assertEqual(
+            self.scalar(
+                "SELECT count(*) FROM memoriesql.query_disclosures WHERE delivery_ref=%s",
+                (delivery,),
+            ),
+            0,
+        )
+        invocations = self.scalar(
+            "SELECT count(*) FROM memoriesql_query.invocations WHERE run_ref=%s",
+            (run["run_ref"],),
+        )
+        self.assertEqual(invocations, 1)
+        # Exact redelivery never reruns the SELECT: the step's single-use
+        # preparation was discarded, which is a known execution failure.
+        again = json.loads(transport.handle(lost))
+        self.assertEqual(again["outcome"], "execution_error", again)
+        self.assertEqual(again["error"], {"code": "database"}, again)
+        self.assertEqual(
+            self.scalar(
+                "SELECT count(*) FROM memoriesql_query.invocations WHERE run_ref=%s",
+                (run["run_ref"],),
+            ),
+            invocations,
+        )
+        fresh = json.loads(transport.handle(self.query_bytes(run, OBSERVATIONS)))
+        self.assertEqual(fresh["outcome"], "available", fresh)
+
+    def test_host_runs_expiry_cleanup_and_check_reports_it(self) -> None:
+        self.serve_in_process()
+        self.start()
+        record = self.config.state_dir / "cleanup.json"
+        for _ in range(200):
+            if record.exists():
+                break
+            time.sleep(0.05)
+        self.assertEqual(json.loads(record.read_text())["outcome"], "available")
+        code, output = self.operator(admin.cleanup, self.config_path)
+        self.assertEqual(code, 0, output)
+        self.assertEqual(json.loads(output)["outcome"], "available")
+        code, report = self.operator(admin.check, self.config_path)
+        checks = {item["check"]: item for item in json.loads(report)["checks"]}
+        self.assertTrue(checks["cleanup_recent"]["ok"], report)
+        self.assertTrue(checks["cleanup_status"]["ok"], report)
+        record.write_text(
+            json.dumps(
+                {
+                    "at": "2000-01-01T00:00:00+00:00",
+                    "outcome": "available",
+                    "cleanup": {},
+                }
+            )
+        )
+        code, report = self.operator(admin.check, self.config_path)
+        checks = {item["check"]: item for item in json.loads(report)["checks"]}
+        self.assertFalse(checks["cleanup_recent"]["ok"], report)
 
 
 if __name__ == "__main__":
