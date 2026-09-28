@@ -159,6 +159,31 @@ never successful emptiness. These are fictional shape measurements, not W1–W7
 capacity or physical-storage certification; the original non-total-key probe
 and failure log remain retained.
 
+The next no-migration internal continuation starts from owner-merged #61 at
+public main `0bace52fcb12106db261041292a7d99b7e79755e`. Its single claim is
+**native row-level EXISTS/NOT EXISTS match bags composed with the existing atomic
+private result commit**. A WHERE predicate may contain multiple correlated or
+uncorrelated EXISTS clauses over one logical relation, with `=`, `IS NULL` and
+Boolean connectives over columns/bound scalars. The trusted
+compiler uses a lateral aggregate to evaluate each
+matching bag and its count once under the original restricted reader, frame and
+deadline; LATERAL is not added to agent SQL admission. PostgreSQL's ignored
+EXISTS projection is not evaluated for membership. The private witness links
+each outer occurrence to actual matching inner traces, preserves multiplicity,
+and retains the complete protected searched relation population for negative
+results. The binder checks emitted count against the exact trace bag. Missing
+privilege or incomplete execution never publishes a result.
+
+This is a deliberately bounded provenance qualification inside the approved
+composable interface, not a query template or product availability decision.
+EXISTS in projection, aggregate/set/window/limited inner queries, broader inner
+predicates, scalar/IN subqueries and bounded recursive CTEs remain
+`witness_qualification_pending`; they receive no empty or inferred witness.
+No migration, privilege expansion, numerical policy or approved contract blob
+changes. Full installed qualification and useful W1/W7 fit remain separate
+requirements; small fictional EXISTS cases cannot certify capacity or semantic
+answer quality.
+
 Seen acceptance compares native values/schema/order to the witnessed statement,
 then independently checks contributions and multiplicities, empty/all-null facts,
 rejected groups, filtered unknown truth, compositional groups/sets, pinned C

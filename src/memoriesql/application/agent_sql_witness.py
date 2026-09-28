@@ -1,8 +1,9 @@
 """Trusted native bag-witness compiler; no agent capability or SQL fallback.
 
-This qualification cut handles native bags, groups, collapsed values, sets and
-qualified windows. Correlated subqueries and recursion remain private native
-SELECTs but cannot be committed through this witness compiler.
+This qualification cut handles native bags, groups, collapsed values, sets,
+qualified windows and row-level EXISTS predicates. Other subquery forms and
+recursion remain private native SELECTs but cannot be committed through this
+witness compiler.
 No Python SQL evaluator is used: PostgreSQL evaluates values and membership in
 one statement over the same frozen population, under the original work bound.
 """
@@ -191,6 +192,110 @@ class _Compiler:
             tie_basis="native_trace_v1",
         )
 
+    def exists_predicate(
+        self, exists: exp.Exists, ctes: dict[str, str]
+    ) -> tuple[exp.Join, str, str, str, int]:
+        """Evaluate one pure row-level EXISTS and its native matches together."""
+        inner = exists.this
+        if not isinstance(inner, exp.Select) or any(
+            inner.args.get(name)
+            for name in (
+                "with_",
+                "joins",
+                "group",
+                "having",
+                "distinct",
+                "order",
+                "limit",
+                "offset",
+                "qualify",
+            )
+        ):
+            raise SqlAdmissionError("unsupported", "witness_qualification_pending")
+        source = inner.args.get("from_")
+        if (
+            not source
+            or not isinstance(source.this, exp.Table)
+            or not source.this.db
+            or source.this.db + "." + source.this.name not in self.relations
+        ):
+            raise SqlAdmissionError("unsupported", "witness_qualification_pending")
+        if any(
+            isinstance(part, exp.AggFunc | exp.Window | exp.Subquery | exp.Exists)
+            for part in inner.walk()
+        ):
+            raise SqlAdmissionError("unsupported", "witness_qualification_pending")
+
+        def value_ok(value: exp.Expr) -> bool:
+            if isinstance(value, exp.Column | exp.Literal | exp.Null | exp.Boolean):
+                return True
+            if isinstance(value, exp.Cast) and isinstance(value.this, exp.Placeholder):
+                return True
+            return isinstance(value, exp.Collate) and value_ok(value.this)
+
+        def predicate_ok(value: exp.Expr) -> bool:
+            if isinstance(value, exp.Paren):
+                return predicate_ok(value.this)
+            if isinstance(value, exp.And | exp.Or):
+                return predicate_ok(value.this) and predicate_ok(value.expression)
+            if isinstance(value, exp.Not):
+                return predicate_ok(value.this)
+            if isinstance(value, exp.EQ):
+                return value_ok(value.this) and value_ok(value.expression)
+            if isinstance(value, exp.Is):
+                return value_ok(value.this) and isinstance(value.expression, exp.Null)
+            return False
+
+        where = inner.args.get("where")
+        if where and not predicate_ok(where.this):
+            raise SqlAdmissionError("unsupported", "witness_qualification_pending")
+        original = inner.dump()
+        probe = inner.copy()
+        probe.set(
+            "expressions",
+            [exp.alias_(exp.Literal.number(1), self.fresh("exists_value"), quoted=True)],
+        )
+        qualified = self.query(probe, ctes)
+        member_alias = self.fresh("exists_rows")
+        members = self.fresh("exists_members")
+        count = self.fresh("exists_count")
+        lateral_alias = self.fresh("exists_probe")
+        aggregated = (
+            exp.select(
+                exp.alias_(
+                    self.aggregate(
+                        exp.column(self.hidden, table=member_alias, quoted=True)
+                    ),
+                    members,
+                    quoted=True,
+                ),
+                exp.alias_(exp.Count(this=exp.Star()), count, quoted=True),
+            )
+            .from_(
+                exp.Subquery(
+                    this=qualified,
+                    alias=exp.TableAlias(this=exp.to_identifier(member_alias)),
+                )
+            )
+        )
+        join = exp.Join(
+            this=exp.Lateral(
+                this=exp.Subquery(this=aggregated),
+                alias=exp.TableAlias(this=exp.to_identifier(lateral_alias)),
+            ),
+            kind="CROSS",
+        )
+        stage = self.stage("exists", query=original, evaluation="native_match_bag")
+        exists.replace(
+            exp.GT(
+                this=exp.column(count, table=lateral_alias, quoted=True),
+                expression=exp.Cast(
+                    this=exp.Literal.number(0), to=exp.DataType.build("BIGINT")
+                ),
+            )
+        )
+        return join, lateral_alias, members, count, stage
+
     def query(self, node: exp.Expr, inherited: dict[str, str]) -> exp.Expr:
         if isinstance(node, exp.Subquery):
             node.set("this", self.query(node.this, inherited))
@@ -291,8 +396,43 @@ class _Compiler:
                 right,
             )
         where = node.args.get("where")
+        original_where = where.this.dump() if where else None
         if where:
-            trace = self.tag(self.stage("filter", predicate=where.this.dump()), trace)
+            exists_predicates = list(where.find_all(exp.Exists))
+            expression_roots = list(node.expressions)
+            if node.args.get("order"):
+                expression_roots.extend(
+                    item.this for item in node.args["order"].expressions
+                )
+            if exists_predicates and (
+                not node.args.get("from_")
+                or node.args.get("group")
+                or node.args.get("having")
+                or any(
+                    isinstance(part, exp.AggFunc | exp.Window)
+                    for root in expression_roots
+                    for part in root.walk()
+                )
+            ):
+                raise SqlAdmissionError("unsupported", "witness_qualification_pending")
+            for exists in exists_predicates:
+                join, alias, members, count, stage = self.exists_predicate(exists, ctes)
+                node.append("joins", join)
+                trace = self.tag(
+                    stage,
+                    trace,
+                    exp.column(members, table=alias, quoted=True),
+                    exp.column(count, table=alias, quoted=True),
+                )
+        if where:
+            trace = self.tag(
+                self.stage(
+                    "filter",
+                    predicate=original_where,
+                    lowered_predicate=where.this.dump(),
+                ),
+                trace,
+            )
         window_roots = [*node.expressions]
         if node.args.get("order"):
             window_roots.extend(o.this for o in node.args["order"].expressions)
@@ -1786,19 +1926,22 @@ def compile_bag_witness(
     """Compile only an already admitted, lowered tree; refuse pending shapes."""
     tree = exp.Expr.load(query.execution_tree)
     if query.recursion or any(
-        isinstance(n, exp.Exists)
-        or (
-            isinstance(n, exp.Subquery)
-            and not isinstance(
-                n.parent,
-                exp.From | exp.Join | exp.CTE | exp.Subquery | exp.SetOperation,
-            )
+        isinstance(n, exp.Subquery)
+        and not isinstance(
+            n.parent,
+            exp.From | exp.Join | exp.CTE | exp.Subquery | exp.SetOperation,
         )
         for n in tree.walk()
     ):
         raise SqlAdmissionError("unsupported", "witness_qualification_pending")
     compiler = _Compiler(tree, relations)
     body = compiler.query(tree, {})
+    if any(
+        isinstance(n, exp.Exists)
+        for root in [body, *compiler.ctes]
+        for n in root.walk()
+    ):
+        raise SqlAdmissionError("unsupported", "witness_qualification_pending")
     semantic_check = bool(compiler.ledgers)
     rewritten = compiler.finish(body)
     return WitnessPlan(
