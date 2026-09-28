@@ -1446,7 +1446,7 @@
     },
     {
       "disposition": "include",
-      "expected_record_count": 61,
+      "expected_record_count": 62,
       "filename": "json-schema.json",
       "kind": "json_schema",
       "note": "Provider-neutral capture, host, source-range, transcript-fold, and harness-lifecycle schemas."
@@ -1645,14 +1645,14 @@
       "version": "1"
     },
     {
-      "canonical_payload_sha256": "3f93f936b9010ad7c583d4bce686a15249d20465ade980bbb6a1fe105a592acf",
+      "canonical_payload_sha256": "fcba0c39d0d12d2b629d2a1c38b4a16e6d5e8f4f6e1bfef41be25e34b7cb83d8",
       "catalog": "cli",
       "classification": "proposed_open_core",
       "id": "memoriesql.core-cli.v1",
       "package_disposition": "include",
       "path": "contracts/records/memoriesql-core-cli-v1.json",
-      "public_sha256": "d88f2ec60dd609ccf08e307094704c77cf122e5f04a95e8711efe4c689b49613",
-      "reason": "Owner-approved public CLI ownership with installed core reads, exact source authority, local client pairing and explicit pending capabilities.",
+      "public_sha256": "5a8849c3bceac29277ca390553fa2e7f11aaacfaa439e9daf19cfddefbaa810e",
+      "reason": "Owner-approved public CLI ownership with installed core reads, exact source authority, one-time initialization, local client pairing and explicit pending capabilities.",
       "version": "1"
     },
     {
@@ -1915,6 +1915,17 @@
       "path": "contracts/records/memoriesql-logical-unit-materialization-v1.json",
       "public_sha256": "2d4ac51829c54bd3bc7f4a9294e25c9e089f0f128906181c0d97a17e968a66c8",
       "reason": "Public-authored canonical materialization and unavailable complete-input task binding.",
+      "version": "1"
+    },
+    {
+      "canonical_payload_sha256": "703f16042350f676068b4c9f935bca823d115061e8b41dcbdffa5f8538d95ac3",
+      "catalog": "json_schema",
+      "classification": "proposed_open_core",
+      "id": "memoriesql.personal-local-initialization.v1",
+      "package_disposition": "include",
+      "path": "contracts/records/memoriesql-personal-local-initialization-v1.json",
+      "public_sha256": "74c02ce80de701ac819d7a5b4ddc18050b34787db6ff7812a288077fd63cf237",
+      "reason": "Public-authored one-time personal-local owner initialization over the existing bootstrap under operator database access.",
       "version": "1"
     },
     {

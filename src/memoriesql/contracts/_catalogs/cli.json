@@ -6,7 +6,7 @@
   "entries": [
     {
       "contract": {
-        "authentication": "existing_local_credential_and_workspace_context_for_reads_exact_source_authority_and_client_pairing",
+        "authentication": "existing_local_credential_and_workspace_context_for_reads_exact_source_authority_and_client_pairing; operator_database_login_for_init",
         "client_pairing": {
           "pair": "PairLocalClient / LocalClientPairing v1",
           "result_envelope": "available receipt, unavailable reason or failed reason",
@@ -25,7 +25,8 @@
           "sources grant",
           "sources revoke",
           "clients pair",
-          "clients revoke"
+          "clients revoke",
+          "init"
         ],
         "entrypoint": "memoriesql.cli:main",
         "executable": "memoriesql",
@@ -33,6 +34,12 @@
           "available": 0,
           "failed_or_budget_exhausted": 3,
           "unavailable": 2
+        },
+        "initialization": {
+          "authority": "operator database login that can assume the application role; once per database",
+          "init": "InitializePersonalLocal / PersonalLocalInitialization v1",
+          "result_envelope": "available receipt, unavailable reason or failed reason",
+          "secret_delivery": "a new caller-named owner-only file created exclusively before the database call; never printed, logged or accepted as input; removed when nothing commits or on replay"
         },
         "read_contracts": {
           "inspect": "InspectStoredBead / StoredBeadInspection v1",
@@ -57,7 +64,7 @@
       },
       "id": "memoriesql.core-cli.v1",
       "status": "available",
-      "summary": "One public executable with contract catalog, configuration health, authorized stored reads, exact provider-neutral source authority and local agent client pairing; no private routing or PR-05 retrieval claim.",
+      "summary": "One public executable with contract catalog, configuration health, authorized stored reads, exact provider-neutral source authority, one-time personal-local initialization and local agent client pairing; no private routing or PR-05 retrieval claim.",
       "version": "1"
     }
   ],
