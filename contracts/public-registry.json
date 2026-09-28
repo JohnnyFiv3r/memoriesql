@@ -1645,6 +1645,7 @@
       "version": "1"
     },
     {
+      "canonical_payload_sha256": "e9be0d830432877730b050a98580bf05a782a590518f15586d934f1c2f81d0f2",
       "catalog": "cli",
       "classification": "proposed_open_core",
       "id": "memoriesql.core-cli.v1",
