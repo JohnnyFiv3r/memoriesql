@@ -31,6 +31,10 @@ from memoriesql.application.local_client_pairing import (
     PairLocalClient,
     RevokeLocalClient,
 )
+from memoriesql.application.personal_local_initialization import (
+    InitializePersonalLocal,
+    PersonalLocalInitialization,
+)
 from memoriesql.application.relation_inspection import InspectBeadRelationsV2
 from memoriesql.application.source_enrollment import (
     EnrollExactSource,
@@ -51,6 +55,10 @@ from memoriesql.contracts import (
 from memoriesql.infrastructure.postgres.local_client_pairing import (
     PairingRevisionConflict,
     PostgresLocalClientPairing,
+)
+from memoriesql.infrastructure.postgres.personal_local_initialization import (
+    AlreadyInitialized,
+    PostgresPersonalLocalInitialization,
 )
 from memoriesql.infrastructure.postgres.relation_assessment import (
     PostgresRelationAssessments,
@@ -151,6 +159,18 @@ def _parser() -> argparse.ArgumentParser:
         )
         operation.add_argument("--request-file", required=True, type=Path)
         operation.add_argument("--json", action="store_true")
+
+    init = commands.add_parser(
+        "init", help="Initialize the single personal-local owner once, as an operator."
+    )
+    init.add_argument("--request-file", required=True, type=Path)
+    init.add_argument(
+        "--secret-file",
+        required=True,
+        type=Path,
+        help="New owner-only file for the owner credential; never overwritten.",
+    )
+    init.add_argument("--json", action="store_true")
 
     clients = commands.add_parser(
         "clients", help="Pair or revoke one local agent client with current authority."
@@ -334,6 +354,51 @@ def _pair_client(
     }
 
 
+def _initialize(
+    request: InitializePersonalLocal,
+    secret_file: Path,
+    environment: Mapping[str, str],
+) -> dict[str, object]:
+    database = environment.get("MEMORIESQL_DATABASE_URL")
+    if not database:
+        return {"outcome": "unavailable", "reason": "database_not_configured"}
+    try:
+        secret = _write_new_secret(secret_file)
+    except FileExistsError:
+        # Never read, overwrite or reuse a secret file this command did not create.
+        return {"outcome": "failed", "reason": "stale_secret_file"}
+    except OSError:
+        return {"outcome": "failed", "reason": "secret_file_unavailable"}
+    receipt: PersonalLocalInitialization | None = None
+    refusal: dict[str, object] = {
+        "outcome": "failed",
+        "reason": "initialization_failed",
+    }
+    try:
+        with psycopg.connect(database, autocommit=True) as connection:
+            receipt = PostgresPersonalLocalInitialization(connection).initialize(
+                request, session_secret_sha256=LocalCredential(secret).sha256()
+            )
+    except AlreadyInitialized:
+        refusal = {"outcome": "unavailable", "reason": "already_initialized"}
+    except PermissionError:
+        refusal = {"outcome": "unavailable", "reason": "resource_unavailable"}
+    except Exception:
+        # Never echo the secret, connection string or server diagnostics.
+        pass
+    if receipt is None or receipt.replayed:
+        # No credential was issued for this secret: remove it. On a replay the
+        # first run's secret file remains the owner's only credential.
+        secret_file.unlink(missing_ok=True)
+    if receipt is None:
+        return refusal
+    return {
+        "outcome": "available",
+        "receipt": receipt.model_dump(mode="json"),
+        "secret_file_written": not receipt.replayed,
+    }
+
+
 def _revoke_client(
     request: RevokeLocalClient, environment: Mapping[str, str]
 ) -> dict[str, object]:
@@ -462,6 +527,18 @@ def main(arguments: Sequence[str] | None = None) -> int:
                 machine=args.json,
             )
         return _emit_result(receipt, machine=args.json)
+
+    if args.command == "init":
+        try:
+            init_request = _request_file(args.request_file, InitializePersonalLocal)
+        except (OSError, ValueError):
+            return _emit_result(
+                {"outcome": "failed", "reason": "invalid_initialization_request"},
+                machine=args.json,
+            )
+        return _emit_result(
+            _initialize(init_request, args.secret_file, os.environ), machine=args.json
+        )
 
     if args.command == "clients":
         client_request: PairLocalClient | RevokeLocalClient

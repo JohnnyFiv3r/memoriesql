@@ -228,6 +228,12 @@
     },
     {
       "path": "src/memoriesql/infrastructure/postgres/local_client_pairing.py"
+    },
+    {
+      "path": "src/memoriesql/application/personal_local_initialization.py"
+    },
+    {
+      "path": "src/memoriesql/infrastructure/postgres/personal_local_initialization.py"
     }
   ]
 }
