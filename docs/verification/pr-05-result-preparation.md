@@ -135,6 +135,12 @@ work/physical-storage accounting and measured useful W1–W7 fit. Correct timeou
 settlement and the fictional window cases below cannot certify capacity or
 semantic answer quality. Full installed receipts and exact-head CI belong to the
 PR; no hosted paid qualification is authorized by this continuation.
+The first full installed 3.13 convergence at `275e3b7` exposed a stale
+pending-shape regression that still expected a now-qualified ROWS window to
+refuse before reader dispatch. The corrected refusal case uses an admitted
+correlated scalar subquery, which remains witness-publication pending. The
+failed head and logs are retained; only a fresh exact-head convergence can
+qualify the correction.
 
 Seen acceptance compares native values/schema/order to the witnessed statement,
 then independently checks contributions and multiplicities, empty/all-null facts,

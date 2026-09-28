@@ -350,12 +350,14 @@ class QueryResultCommit(unittest.TestCase):
             0,
         )
 
-    def test_pending_witness_shapes_have_no_fake_or_empty_witness_fallback(
+    def test_pending_correlated_scalar_has_no_fake_or_empty_witness_fallback(
         self,
     ) -> None:
         self.fixture.assertion()
         request = self.request(
-            "SELECT relation_id,count(*) OVER (ORDER BY relation_id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS n FROM memory_v1.assessed_relations"
+            "SELECT r.relation_id,(SELECT count(*) FROM memory_v1.relation_statements s "
+            "WHERE s.relation_id=r.relation_id) AS n "
+            "FROM memory_v1.assessed_relations r"
         )
         owner = self.reserve_request(request)
         with (
