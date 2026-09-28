@@ -16,12 +16,13 @@ These slices add no available result/disclosure API or qualified physical-storag
 profile. The no-migration internal continuations qualify ranking, neighbor,
 multiple-window, grouped-window and aggregate ROWS-frame witnesses; see that
 verification document for the precise cuts and remaining approved shapes.
-The merged no-migration #62 and #63 continuations qualify row-level
-EXISTS/NOT EXISTS, IN/NOT IN, and direct-projection scalar witnesses. The next
-internal continuation qualifies bounded native CYCLE paths over prepared
-assessed-relation rows; other recursive seed/edge populations and richer
-subquery contexts remain pending.
-Preserve SQL 0001–0034
+The merged no-migration #62–#64 continuations qualify row-level
+EXISTS/NOT EXISTS, IN/NOT IN, direct-projection scalar witnesses and bounded
+native CYCLE paths over prepared assessed-relation rows. The forward schema-35
+continuation adds only private original-identity and whole-closure authorization
+checks for standalone saved results; it returns no rows, bytes or public result
+response. Other recursive seed/edge populations, richer subquery contexts and
+governed disclosure/erasure/accounting remain pending. Preserve SQL 0001–0034
 and earlier records;
 canonical lifecycle/projection stays PR-03-owned. Remaining integrated PR-05
 delivery and useful workload qualification are required before availability.

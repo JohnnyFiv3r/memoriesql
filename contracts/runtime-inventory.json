@@ -213,6 +213,9 @@
     },
     {
       "path": "src/memoriesql/infrastructure/postgres/query_result_commit.py"
+    },
+    {
+      "path": "src/memoriesql/infrastructure/postgres/query_result_closure.py"
     }
   ]
 }
