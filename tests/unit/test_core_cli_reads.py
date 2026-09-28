@@ -12,10 +12,19 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 from uuid import UUID
 
+from memoriesql.application.source_enrollment import ExactSourceEnrollment
 from memoriesql.cli import main
 
 BEAD = UUID(int=11)
 WORKSPACE = UUID(int=12)
+SOURCE_REQUEST = {
+    "request_id": str(UUID(int=13)),
+    "source_system": "fictional-orchard",
+    "object_kind": "transcript",
+    "external_object_id": "exact-selected-session",
+    "source_schema_version": 1,
+    "exact_source_confirmed": True,
+}
 LOCAL_ENV = {
     "MEMORIESQL_DATABASE_URL": "postgresql://fictional.example/fictional",
     "MEMORIESQL_LOCAL_CREDENTIAL": "fictional-local-credential-with-ample-length",
@@ -55,6 +64,15 @@ class CoreCLIReadTests(unittest.TestCase):
         self.assertIsInstance(unavailable, dict)
         assert isinstance(unavailable, dict)
         self.assertEqual(unavailable["query"], "pr05_query_result_not_released")
+        self.assertIn("sources enroll", commands)
+        self.assertEqual(unavailable["sources connect"], "provider_adapter_not_routed")
+        self.assertEqual(unavailable["sources"], "source_inventory_not_released")
+        status, inventory = invoke(["sources", "--json"])
+        self.assertEqual(status, 2)
+        self.assertEqual(
+            inventory,
+            {"outcome": "unavailable", "reason": "source_inventory_not_released"},
+        )
 
     def test_read_without_identity_is_unavailable_before_database_contact(self) -> None:
         with (
@@ -136,6 +154,94 @@ class CoreCLIReadTests(unittest.TestCase):
         self.assertEqual(status, 3)
         self.assertEqual(result, {"outcome": "failed", "reason": "core_read_failed"})
         self.assertNotIn(LOCAL_ENV["MEMORIESQL_LOCAL_CREDENTIAL"], str(result))
+
+    def test_source_authority_requires_valid_exact_request_and_local_identity(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "request.json"
+            path.write_text(json.dumps(SOURCE_REQUEST), encoding="utf-8")
+            with (
+                patch.dict(os.environ, {}, clear=True),
+                patch("memoriesql.cli.psycopg.connect", side_effect=AssertionError),
+            ):
+                status, result = invoke(
+                    ["sources", "enroll", "--request-file", str(path), "--json"]
+                )
+            self.assertEqual(status, 2)
+            self.assertEqual(
+                result,
+                {"outcome": "unavailable", "reason": "local_source_authority_required"},
+            )
+
+            path.write_text(
+                json.dumps(SOURCE_REQUEST | {"exact_source_confirmed": False}),
+                encoding="utf-8",
+            )
+            with (
+                patch.dict(os.environ, LOCAL_ENV),
+                patch("memoriesql.cli.psycopg.connect", side_effect=AssertionError),
+            ):
+                status, result = invoke(
+                    ["sources", "enroll", "--request-file", str(path), "--json"]
+                )
+            self.assertEqual(status, 3)
+            self.assertEqual(result, {"outcome": "failed", "reason": "invalid_source_request"})
+
+    def test_source_authority_returns_typed_receipt_without_exposing_secret(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "request.json"
+            path.write_text(json.dumps(SOURCE_REQUEST), encoding="utf-8")
+            connection = MagicMock()
+            connection.__enter__.return_value = connection
+            authority = MagicMock()
+            authority.enroll.return_value = ExactSourceEnrollment(
+                source_object_id=UUID(int=13),
+                access_scope_id=UUID(int=14),
+                policy_revision_id=UUID(int=15),
+                replayed=False,
+            )
+            with (
+                patch.dict(os.environ, LOCAL_ENV),
+                patch("memoriesql.cli.psycopg.connect", return_value=connection),
+                patch(
+                    "memoriesql.cli.PostgresSourceEnrollment", return_value=authority
+                ) as adapter,
+            ):
+                status, result = invoke(
+                    ["sources", "enroll", "--request-file", str(path), "--json"]
+                )
+            self.assertEqual(status, 0)
+            self.assertEqual(result["outcome"], "available")
+            receipt = result["receipt"]
+            self.assertIsInstance(receipt, dict)
+            assert isinstance(receipt, dict)
+            self.assertEqual(receipt["source_object_id"], str(UUID(int=13)))
+            self.assertEqual(authority.enroll.call_args.args[0].source_system, "fictional-orchard")
+            self.assertEqual(adapter.call_args.kwargs["workspace_id"], WORKSPACE)
+            self.assertNotIn(LOCAL_ENV["MEMORIESQL_LOCAL_CREDENTIAL"], str(result))
+
+    def test_source_authority_denial_is_indistinguishable_and_sanitized(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "request.json"
+            path.write_text(json.dumps(SOURCE_REQUEST), encoding="utf-8")
+            connection = MagicMock()
+            connection.__enter__.return_value = connection
+            authority = MagicMock()
+            authority.enroll.side_effect = PermissionError(SOURCE_REQUEST["external_object_id"])
+            with (
+                patch.dict(os.environ, LOCAL_ENV),
+                patch("memoriesql.cli.psycopg.connect", return_value=connection),
+                patch("memoriesql.cli.PostgresSourceEnrollment", return_value=authority),
+            ):
+                status, result = invoke(
+                    ["sources", "enroll", "--request-file", str(path), "--json"]
+                )
+            self.assertEqual(status, 2)
+            self.assertEqual(result, {"outcome": "unavailable", "reason": "resource_unavailable"})
+            self.assertNotIn(SOURCE_REQUEST["external_object_id"], str(result))
 
 
 if __name__ == "__main__":

@@ -141,6 +141,10 @@
     {
       "filename": "0035_query_result_closure.sql",
       "sha256": "05b7712cf912c6771e476ed3da3949354a301697d32192ffe60d1f47c1cd7b5f"
+    },
+    {
+      "filename": "0036_exact_source_enrollment.sql",
+      "sha256": "73d86b8b9b1a7f280bf40f267a384eb280d797adf95c01e7f1839540d5688505"
     }
   ]
 }

@@ -1446,7 +1446,7 @@
     },
     {
       "disposition": "include",
-      "expected_record_count": 59,
+      "expected_record_count": 60,
       "filename": "json-schema.json",
       "kind": "json_schema",
       "note": "Provider-neutral capture, host, source-range, transcript-fold, and harness-lifecycle schemas."
@@ -1645,14 +1645,14 @@
       "version": "1"
     },
     {
-      "canonical_payload_sha256": "e9be0d830432877730b050a98580bf05a782a590518f15586d934f1c2f81d0f2",
+      "canonical_payload_sha256": "5f8afdac29e8b83674cf27507a69ed231776c388069e7a3e4be00f29b3a077fa",
       "catalog": "cli",
       "classification": "proposed_open_core",
       "id": "memoriesql.core-cli.v1",
       "package_disposition": "include",
       "path": "contracts/records/memoriesql-core-cli-v1.json",
-      "public_sha256": "235d67e0562f0be97e2cf65ed933ac8d2d07f9239d12311f2ed32c0809d53fc0",
-      "reason": "Owner-approved public CLI ownership with installed core reads and explicit pending capabilities.",
+      "public_sha256": "56ce80380c07e9e70bef2144747f4d21d635fa55ebdcd0d3fd57278a21ed9fac",
+      "reason": "Owner-approved public CLI ownership with installed core reads, exact source authority and explicit pending capabilities.",
       "version": "1"
     },
     {
@@ -1940,6 +1940,17 @@
       "reviewed_spike_record_sha256": "a6bd1f0c7ff590c271baac31afac526e788c387b4b126843d1e60f7415bfe792",
       "reviewed_spike_source_sha256": "98e67ebaeae7d255b3fd9b65d972b265f1751fa67389f8d59e3b616e087f5861",
       "version": "4"
+    },
+    {
+      "canonical_payload_sha256": "09ba907ff08603ffa09b9a69f93101d4781bdc077506d234e1ada84bd9bc7604",
+      "catalog": "json_schema",
+      "classification": "proposed_open_core",
+      "id": "memoriesql.source-enrollment.v1",
+      "package_disposition": "include",
+      "path": "contracts/records/memoriesql-source-enrollment-v1.json",
+      "public_sha256": "1aa1171989c257b5d9a5bcd1f47f85bbe5005166334c7ffdd2a4429d3f440422",
+      "reason": "Public-authored exact provider-neutral source authority under the current authenticated human context.",
+      "version": "1"
     },
     {
       "catalog": "python",
