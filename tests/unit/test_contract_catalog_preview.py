@@ -45,7 +45,20 @@ class ContractCatalogPreviewTests(unittest.TestCase):
         self.assertEqual(unavailable["status"], "not_implemented")
         self.assertEqual(unavailable["entries"], [])
 
-        self.assertEqual(len(iter_contracts()), 65)
+        self.assertEqual(len(iter_contracts()), 66)
+        cli = load_catalog("cli")
+        self.assertEqual(cli["status"], "available")
+        entries = cli["entries"]
+        self.assertIsInstance(entries, list)
+        assert isinstance(entries, list)
+        self.assertEqual(len(entries), 1)
+        reference = get_contract("memoriesql.core-cli.v1")["contract"]
+        self.assertIsInstance(reference, dict)
+        assert isinstance(reference, dict)
+        self.assertEqual(
+            reference["entrypoint"],
+            "memoriesql.cli:main",
+        )
         with self.assertRaises(ContractNotFoundError):
             get_contract("memoriesql.unlisted-provider")
 

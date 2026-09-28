@@ -50,8 +50,8 @@ class PublicBootstrapTests(unittest.TestCase):
 
     def test_registry_is_explicit_complete_and_default_deny(self) -> None:
         records = load_registry()
-        self.assertEqual(len(records), 65)
-        self.assertEqual(len({record["id"] for record in records}), 65)
+        self.assertEqual(len(records), 66)
+        self.assertEqual(len({record["id"] for record in records}), 66)
         catalogs = load_catalog_definitions()
         self.assertEqual(tuple(item.kind for item in catalogs), CATALOG_KINDS)
         counts = {item.kind: 0 for item in catalogs}
@@ -62,7 +62,8 @@ class PublicBootstrapTests(unittest.TestCase):
         self.assertEqual(counts["json_schema"], 59)
         self.assertEqual(counts["python"], 5)
         self.assertEqual(counts["connector"], 1)
-        self.assertEqual(sum(counts.values()), 65)
+        self.assertEqual(counts["cli"], 1)
+        self.assertEqual(sum(counts.values()), 66)
 
     def test_generated_catalogs_have_no_drift(self) -> None:
         for path, expected in expected_outputs().items():
@@ -70,7 +71,7 @@ class PublicBootstrapTests(unittest.TestCase):
 
     def test_boundary_scan_is_clean(self) -> None:
         result = verify()
-        self.assertEqual(result["record_count"], 65)
+        self.assertEqual(result["record_count"], 66)
         self.assertEqual(result["default_policy"], "deny")
         self.assertEqual(result["private_boundary_leaks"], [])
 
@@ -163,7 +164,9 @@ class PublicBootstrapTests(unittest.TestCase):
         )
         self.assertIn('test "$failed" -eq 0', compatibility)
 
-    def test_paid_matrix_is_explicit_and_automatic_checks_cancel_only_superseded(self) -> None:
+    def test_paid_matrix_is_explicit_and_automatic_checks_cancel_only_superseded(
+        self,
+    ) -> None:
         workflow = (ROOT / ".github/workflows/python-package.yml").read_text()
         package, compatibility = workflow.split("  compatibility:")
         self.assertIn("  workflow_dispatch:", package)
@@ -175,9 +178,14 @@ class PublicBootstrapTests(unittest.TestCase):
         self.assertIn("needs: package", compatibility)
         self.assertIn("timeout-minutes: 60", compatibility)
         self.assertIn("timeout-minutes: 15", package)
-        self.assertIn("github.event_name == 'workflow_dispatch' && github.run_id", package)
+        self.assertIn(
+            "github.event_name == 'workflow_dispatch' && github.run_id", package
+        )
         self.assertIn("github.event.pull_request.number || github.ref", package)
-        self.assertIn("cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}", package)
+        self.assertIn(
+            "cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}",
+            package,
+        )
 
 
 if __name__ == "__main__":

@@ -82,8 +82,10 @@ schemas = load_catalog("json_schema")
 cursor_contract = get_contract("memoriesql.capture.connector-cursor")
 ```
 
-The CLI currently exposes contract inspection, not a one-command running memory
-service.
+Published `memoriesql==0.0.12` exposes contract inspection, not a one-command
+running memory service. The [public CLI development cut](docs/cli.md) adds
+authenticated stored-bead, exact-source and relation reads on the single public
+executable; those commands are not in the published 0.0.12 package.
 
 ### Compose a runtime deliberately
 
@@ -155,8 +157,9 @@ artifact verification live in [release guidance](docs/releasing.md), not in this
 introduction.
 
 The next product proof connects real authorship to visible, authorized source
-inspection. Agent-led recall and richer relationship/maintenance behavior remain
-development goals, not capabilities provided by the current catalog CLI.
+inspection. The development CLI can read authorized stored records; agent-led
+recall and richer relationship/maintenance behavior remain separate development
+and qualification goals.
 
 The [PR-05 public interface decision packet](docs/agent-sql-results-v1.md) specifies
 agent-authored SQL recall, immutable reusable results and durable branching
