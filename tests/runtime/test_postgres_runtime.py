@@ -143,7 +143,11 @@ class PostgresRuntime(unittest.TestCase):
         self.secret_hash = hashlib.sha256(
             b"fictional orchard session for public acceptance"
         ).hexdigest()
-        self.now = datetime.now(UTC)
+        # Authorization policies are evaluated by PostgreSQL's clock. Fixture
+        # creation must use the same clock when the host and database drift.
+        database_clock = self.db.execute("SELECT clock_timestamp()").fetchone()
+        assert database_clock is not None
+        self.now = database_clock[0]
         with self.db.transaction():
             self.db.execute("SET LOCAL ROLE memoriesql_application")
             self.db.execute(
