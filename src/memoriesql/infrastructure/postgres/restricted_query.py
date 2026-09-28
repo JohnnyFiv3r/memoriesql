@@ -307,6 +307,15 @@ class PostgresRestrictedQuery:
                         {"position": p.position, "type": p.type, "value": p.value}
                         for p in parameters
                     ],
+                    "recursion": (
+                        {
+                            "cte": recursion.cte,
+                            "depth_column": recursion.depth_column,
+                            "node_column": recursion.node_column,
+                            "max_depth": recursion.max_depth,
+                        }
+                        if recursion else None
+                    ),
                     "derivation_program": query.derivation_program,
                 }
             )

@@ -120,6 +120,30 @@ class NativeWitnessBuilder:
             ):
                 raise ValueError("invalid native witness")
             stage = self.plan.stages[value[0]]
+
+            def path_parent(trace: Any) -> Any | None:
+                """Find the one recursive CTE input inside a native arm trace."""
+                found: list[Any] = []
+
+                def visit(part: Any) -> None:
+                    if not isinstance(part, list) or not part:
+                        return
+                    ordinal = part[0]
+                    if type(ordinal) is int and 0 <= ordinal < len(self.plan.stages):
+                        candidate = self.plan.stages[ordinal]
+                        if candidate["operation"] == "recursion" and candidate.get(
+                            "phase"
+                        ) in {"seed", "step"}:
+                            found.append(part)
+                            return
+                    for child in part[1:]:
+                        visit(child)
+
+                visit(trace)
+                if len(found) > 1:
+                    raise ValueError("ambiguous native recursive parent")
+                return found[0] if found else None
+
             cache_key = result_json_bytes(value)
             if cache_key in self.cache:
                 return self.cache[cache_key]
@@ -139,6 +163,75 @@ class NativeWitnessBuilder:
                 if member is None:
                     raise ValueError("unknown frozen logical key")
                 member_refs.append(str(member))
+            elif stage["operation"] == "recursion":
+                phase = stage.get("phase")
+                maximum = stage.get("max_depth")
+                if (
+                    type(maximum) is not int
+                    or not 1 <= maximum <= 8
+                    or len(value) not in (4, 5)
+                    or type(value[2]) is not int
+                    or not 0 <= value[2] <= maximum
+                    or not isinstance(value[3], str)
+                ):
+                    raise ValueError("invalid native recursive path")
+                try:
+                    node_value = str(UUID(value[3]))
+                except ValueError:
+                    raise ValueError("invalid native recursive node") from None
+                child_ref = str(bind(value[1], depth + 1))
+                inputs = [child_ref]
+                if phase in {"seed", "step"} and len(value) == 4:
+                    parent = path_parent(value[1])
+                    if phase == "seed":
+                        if value[2] != 0 or parent is not None:
+                            raise ValueError("invalid native recursive seed")
+                        nodes = [node_value]
+                    else:
+                        if parent is None or value[2] == 0:
+                            raise ValueError("missing native recursive parent")
+                        parent_ref = str(bind(parent, depth + 1))
+                        previous = self.nodes[UUID(parent_ref)]
+                        previous_nodes = previous.get("path_nodes")
+                        if (
+                            previous.get("depth") != value[2] - 1
+                            or not isinstance(previous_nodes, list)
+                            or previous_nodes[-1] in previous_nodes[:-1]
+                        ):
+                            raise ValueError("invalid native recursive expansion")
+                        nodes = [*previous_nodes, node_value]
+                        details["path_parent_ref"] = parent_ref
+                    details.update(depth=value[2], path_node=node_value, path_nodes=nodes)
+                elif phase == "visit" and len(value) == 5:
+                    child = value[1]
+                    if (
+                        not isinstance(child, list)
+                        or not child
+                        or type(child[0]) is not int
+                        or not 0 <= child[0] < len(self.plan.stages)
+                        or self.plan.stages[child[0]]["operation"] != "recursion"
+                        or self.plan.stages[child[0]].get("phase")
+                        not in {"seed", "step"}
+                        or type(value[4]) is not bool
+                    ):
+                        raise ValueError("invalid native recursive visit")
+                    previous = self.nodes[UUID(child_ref)]
+                    visit_nodes = previous.get("path_nodes")
+                    if (
+                        previous.get("depth") != value[2]
+                        or previous.get("path_node") != node_value
+                        or not isinstance(visit_nodes, list)
+                        or len(visit_nodes) != value[2] + 1
+                        or value[4] != (node_value in visit_nodes[:-1])
+                    ):
+                        raise ValueError("native recursive cycle/path mismatch")
+                    details.update(
+                        depth=value[2], path_node=node_value,
+                        path_nodes=visit_nodes, cycle=value[4],
+                        path_length=len(visit_nodes), explicit_depth=maximum,
+                    )
+                else:
+                    raise ValueError("invalid native recursive phase")
             elif stage["operation"] == "exists" and stage.get("kind") == "in":
                 if (
                     len(value) != 5
