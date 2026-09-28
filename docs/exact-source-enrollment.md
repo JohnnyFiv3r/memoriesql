@@ -1,9 +1,9 @@
-# Exact source enrollment (development contract)
+# Exact source enrollment
 
 The `memoriesql.source-enrollment.v1` contract and migration 0036 provide a
-provider-neutral authority step for one explicitly selected source. This is a
-development candidate after migration 0035, not a published capability in
-`memoriesql==0.0.12`. It does not discover local sources, read files, parse a
+provider-neutral authority step for one explicitly selected source. It is merged
+after migration 0035 and prepared for the proposed 0.0.13 release; it is not a
+published capability in `memoriesql==0.0.12`. It does not discover local sources, read files, parse a
 provider format, capture bytes, pair a device, start a worker, or activate the
 private product UI. No source is enrolled merely because it is discoverable.
 
@@ -36,7 +36,7 @@ The typed application requests and PostgreSQL adapter live in
 `memoriesql.infrastructure.postgres.source_enrollment`. Product connections
 must use the installed adapter with an authenticated credential and an idle
 connection that the adapter can own for its short transaction. The installed
-contract catalog describes the request and receipt shapes. The development CLI
+contract catalog describes the request and receipt shapes. The public CLI
 binds these operations as `sources enroll|grant|revoke --request-file` and
 returns typed receipts; it does not discover or validate provider objects. A
 future Desktop binding must preserve the exact native selection and recheck
