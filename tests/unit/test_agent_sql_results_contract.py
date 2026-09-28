@@ -97,7 +97,30 @@ class AgentSqlResultsContract(unittest.TestCase):
         )
         self.assertEqual(coverage["population_basis"], "limited_query")
         self.assertEqual(coverage["truncation"], "explicit_limit")
-        self.assertEqual(len(coverage["gaps"]), 3)
+        self.assertEqual(
+            coverage["gaps"],
+            [
+                {"facet": "source_units.occurrence_ref", "reason": "unsupported"},
+                {"facet": "source_units.trust_label", "reason": "unsupported"},
+                {
+                    "facet": "source_units.search_text",
+                    "reason": "normalized_text_not_exact_source",
+                },
+            ],
+        )
+        labelled = wire_coverage(
+            relations=["memory_v1.source_units"],
+            limited=False,
+            recursion=False,
+            source_text_labels=("normalized_projection:fictional.v1",),
+        )
+        self.assertEqual(
+            labelled["gaps"][-1],
+            {
+                "facet": "source_units.search_text",
+                "reason": "normalized_projection:fictional.v1",
+            },
+        )
         # Missing caller capabilities are disclosed per family, never as absence.
         withheld = wire_coverage(
             relations=["memory_v1.assessed_relations", "memory_v1.observations"],

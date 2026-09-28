@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
@@ -90,6 +91,10 @@ class RelationPopulationError(ValueError):
         super().__init__(code)
 
 
+_TEXT_LABEL = re.compile(
+    r"(normalized_projection|package_exclusion|package_unresolved):[^\x00-\x1f]{1,256}"
+)
+
 @dataclass(frozen=True, slots=True)
 class EvidenceBinding:
     statement_id: UUID
@@ -118,6 +123,9 @@ class PreparedRelationPopulation:
     # The caller's own capabilities, disclosed as coverage gaps when missing.
     relation_raw_authority: bool = True
     source_read_authority: bool = True
+    # Labels of served package text: normalized projection versions and the
+    # packages' declared coverage limits, disclosed wherever units are used.
+    source_text_labels: tuple[str, ...] = ()
 
 
 def _time(value: str) -> datetime:
@@ -156,11 +164,13 @@ def _prepare(
     view: str | None = None
     relation_manifest: str | None = None
     raw_authority = source_authority = True
+    labels: tuple[str, ...] = ()
     if revision == 2:
         view = raw["frame"].get("view")
         relation_manifest = raw["frame"].get("relation_manifest_sha256")
         raw_authority = raw["frame"].get("relation_raw_authority")
         source_authority = raw["frame"].get("source_read_authority")
+        served = raw["frame"].get("source_text_labels")
         if (
             raw.get("population_revision") != 2
             or view not in {"resolved", "historical"}
@@ -168,8 +178,14 @@ def _prepare(
             or len(relation_manifest) != 64
             or type(raw_authority) is not bool
             or type(source_authority) is not bool
+            or type(served) is not list
+            or not all(
+                type(label) is str and _TEXT_LABEL.fullmatch(label) for label in served
+            )
+            or served != sorted(set(served))
         ):
             raise RelationPopulationError("projection_mismatch")
+        labels = tuple(served)
     elif revision != 1 or "population_revision" in raw:
         raise RelationPopulationError("projection_mismatch")
     rows: dict[str, list[dict[str, Any]]] = {name: [] for name in names}
@@ -335,6 +351,7 @@ def _prepare(
         relation_manifest_sha256=relation_manifest,
         relation_raw_authority=raw_authority,
         source_read_authority=source_authority,
+        source_text_labels=labels,
     )
 
 

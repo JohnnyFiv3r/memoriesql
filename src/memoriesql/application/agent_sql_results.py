@@ -103,9 +103,10 @@ PREPARED_RELATIONS = RELATION_TABLES | OBSERVATION_TABLES
 # canonical fact is represented yet; disclosed as coverage gaps when used.
 UNSUPPORTED_SOURCE_FACETS = (
     "source_units.occurrence_ref",
-    "source_units.package_revision_id",
     "source_units.trust_label",
 )
+# Unit text is retained or normalized projection text, never exact source bytes.
+SEARCH_TEXT_FACET = "source_units.search_text"
 
 MAX_RESPONSE_BYTES = 262144
 MAX_PAGE_ROWS = 50
@@ -146,19 +147,24 @@ def wire_coverage(
     recursion: bool,
     relation_raw_authority: bool = True,
     source_read_authority: bool = True,
+    source_text_labels: Sequence[str] = (),
 ) -> dict[str, Any]:
     """Complete query execution never proves source coverage or absence.
 
     Missing caller capabilities are gaps, not absence: without raw source
     authority PR-03's assessed relations are withheld, and without source.read
     the observation families are. The flags describe only the caller's own
-    grants, never whether protected data exists.
+    grants, never whether protected data exists. Served package text is
+    labelled with its normalized projection version and the package's own
+    declared coverage limits.
     """
     gaps = (
         [
             {"facet": facet, "reason": "unsupported"}
             for facet in UNSUPPORTED_SOURCE_FACETS
         ]
+        + [{"facet": SEARCH_TEXT_FACET, "reason": "normalized_text_not_exact_source"}]
+        + [{"facet": SEARCH_TEXT_FACET, "reason": label} for label in source_text_labels]
         if "memory_v1.source_units" in relations
         else []
     )

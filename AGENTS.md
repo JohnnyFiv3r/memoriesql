@@ -26,10 +26,11 @@ family beside the assessed relations and delivers standalone `query` and
 `reuse_result` through the trusted `PostgresAgentSqlResults` executor. That covers
 runs, admitted and accounted accesses, receipted whole-closure disclosure,
 cursors, owner close and crash recovery; see
-`docs/verification/pr-05-public-results.md`. Checkpoints/saves, saved-input
-refinement, inspection/hydration through this contract, erasure/cleanup, other
-recursive populations and measured W1–W7 fit remain pending, and credential
-isolation gates any agent-facing deployment. Preserve SQL 0001–0036 and earlier
+`docs/verification/pr-05-public-results.md`. Owned expiry cleanup is delivered;
+hosts must schedule `cleanup_expired()`, and governed erasure is unavailable in
+this preview. Checkpoints/saves, saved-input refinement, inspection/hydration
+through this contract, other recursive populations and measured W1–W7 fit remain
+pending, and credential isolation gates any agent-facing deployment. Preserve SQL 0001–0036 and earlier
 records;
 canonical lifecycle/projection stays PR-03-owned. Remaining integrated PR-05
 delivery and useful workload qualification are required before availability.

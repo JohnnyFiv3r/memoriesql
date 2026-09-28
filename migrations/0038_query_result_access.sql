@@ -35,7 +35,7 @@ CREATE TABLE memoriesql.query_run_closures (
 CREATE TABLE memoriesql.query_steps (
  tenant_id uuid NOT NULL, run_ref uuid NOT NULL, step_key uuid NOT NULL,
  kind text NOT NULL CHECK(kind IN ('query','reuse_result')),
- request_fingerprint text NOT NULL CHECK(request_fingerprint ~ '^[a-f0-9]{64}$'),
+ request_fingerprint text CHECK(request_fingerprint IS NULL OR request_fingerprint ~ '^[a-f0-9]{64}$'),
  state text NOT NULL CHECK(state IN ('executing','complete','failed')),
  outcome text CHECK(outcome IS NULL OR outcome IN ('unavailable','unsupported_query',
   'invalid_request','budget_exhausted','cancelled','execution_error')),
@@ -45,11 +45,18 @@ CREATE TABLE memoriesql.query_steps (
  row_count integer CHECK(row_count IS NULL OR row_count BETWEEN 0 AND 50),
  page_size integer CHECK(page_size IS NULL OR page_size BETWEEN 1 AND 50),
  created_at timestamptz NOT NULL, completed_at timestamptz,
+ -- Expiry cleanup removes the request digest and page binding; the opaque
+ -- identifiers, terminal state and timestamps remain as the tombstone.
+ purged_at timestamptz,
  PRIMARY KEY(tenant_id,run_ref,step_key),
  FOREIGN KEY(tenant_id,run_ref) REFERENCES memoriesql.query_runs(tenant_id,run_ref),
  CHECK((state='executing')=(completed_at IS NULL)),
- CHECK((state='complete')=(result_id IS NOT NULL AND content_digest IS NOT NULL
-  AND first_row IS NOT NULL AND row_count IS NOT NULL AND page_size IS NOT NULL)),
+ CHECK((purged_at IS NULL)=(request_fingerprint IS NOT NULL)),
+ CHECK(purged_at IS NULL OR (state<>'executing' AND content_digest IS NULL
+  AND first_row IS NULL AND row_count IS NULL AND page_size IS NULL)),
+ CHECK((state='complete')=(result_id IS NOT NULL AND (purged_at IS NOT NULL
+  OR (content_digest IS NOT NULL AND first_row IS NOT NULL AND row_count IS NOT NULL
+   AND page_size IS NOT NULL)))),
  CHECK((state='failed')=(outcome IS NOT NULL))
 );
 -- Every admitted access (original, retry or redelivery) is one delivery. Its
@@ -216,6 +223,12 @@ BEGIN
  END IF;
  c:=memoriesql.result_preparation_authority_v1();
  PERFORM pg_advisory_xact_lock(hashtextextended(c.tenant_id::text||':query-access:'||c.workspace_id::text,0));
+ -- The host runs a bounded cleanup pass for this workspace just before (in its
+ -- own read-committed transaction). Content cleanup more than 24 hours past due
+ -- (missed or failed) refuses new runs until it succeeds.
+ IF memoriesql.query_cleanup_overdue_v1(c.tenant_id,c.workspace_id) THEN
+  RETURN jsonb_build_object('refused','cleanup');
+ END IF;
  IF (SELECT count(*) FROM memoriesql.query_runs WHERE tenant_id=c.tenant_id
      AND workspace_id=c.workspace_id AND expires_at>now_at
      AND NOT EXISTS(SELECT 1 FROM memoriesql.query_run_closures k
@@ -311,7 +324,7 @@ BEGIN
  SELECT * INTO s FROM memoriesql.query_steps WHERE tenant_id=c.tenant_id AND run_ref=run
   AND step_key=step FOR UPDATE;
  replay:=FOUND;
- IF replay AND (s.kind<>requested_kind OR s.request_fingerprint<>fingerprint) THEN
+ IF replay AND (s.kind<>requested_kind OR s.request_fingerprint IS DISTINCT FROM fingerprint) THEN
   RETURN jsonb_build_object('refused','idempotency','remaining',remaining);
  END IF;
  -- One executing operation per workspace; unsettled or uncertain earlier work
@@ -447,9 +460,9 @@ END $$;
 REVOKE ALL ON FUNCTION memoriesql.abandon_query_delivery_v1(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION memoriesql.abandon_query_delivery_v1(uuid) TO memoriesql_application;
 
--- Host recovery: abandon this workspace's reserved deliveries whose owning
--- sessions have ended (each charged its full reservation). Steps stay open for
--- exact redelivery; nothing is rerun, refunded or disclosed here.
+-- Host recovery: abandon this workspace's reserved or uncertain deliveries whose
+-- owning sessions have ended (each charged its full reservation). Steps stay
+-- open for exact redelivery; nothing is rerun, refunded or disclosed here.
 CREATE FUNCTION memoriesql.abandon_query_deliveries_v1() RETURNS integer
 LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,memoriesql
  SET row_security=off SET lock_timeout='500ms' AS $$
@@ -457,7 +470,7 @@ DECLARE c memoriesql.authorization_contexts%ROWTYPE; d record; settled integer:=
 BEGIN
  c:=memoriesql.result_preparation_authority_v1();
  FOR d IN SELECT delivery_ref FROM memoriesql.query_deliveries WHERE tenant_id=c.tenant_id
-  AND workspace_id=c.workspace_id AND state='reserved' ORDER BY admitted_at LOOP
+  AND workspace_id=c.workspace_id AND state<>'settled' ORDER BY admitted_at LOOP
   IF memoriesql.abandon_query_delivery_v1(d.delivery_ref) THEN settled:=settled+1; END IF;
  END LOOP;
  RETURN settled;
@@ -618,3 +631,366 @@ BEGIN
 END $$;
 REVOKE ALL ON FUNCTION memoriesql.resolve_query_cursor_v1(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION memoriesql.resolve_query_cursor_v1(uuid) TO memoriesql_application;
+
+-- Owned expiry cleanup (owner Decision 1, item 3). Disclosure already ends at
+-- expiry through the whole-closure verdict; cleanup then removes the content
+-- and every sensitive copy: result bodies, witnesses and dependency records
+-- (including query text and parameters), request and content digests, manifest
+-- hashes, disclosure receipts, delivered refs and cursors. A noncontent
+-- tombstone remains for 30 days (opaque run/step/result identifiers, terminal
+-- state, timestamps, work charges and idempotency disposition), then is deleted
+-- with its retained journal charge. Each subject is purged atomically, so an
+-- interrupted pass leaves nothing partial and the next pass completes it.
+-- Failures are recorded with their SQLSTATE and retried every pass.
+--
+-- Deadline mechanism: the database cannot run without a caller. The host runs
+-- a bounded pass for the workspace before every run start, and the trusted host
+-- must schedule `purge_expired_query_state_v1` for all workspaces. Content
+-- cleanup more than 24 hours past due, whether missed or failed, refuses new
+-- runs in that workspace and is reported by `query_cleanup_status_v1`.
+CREATE TABLE memoriesql.query_run_purges (
+ tenant_id uuid NOT NULL, run_ref uuid NOT NULL, purged_at timestamptz NOT NULL,
+ PRIMARY KEY(tenant_id,run_ref),
+ FOREIGN KEY(tenant_id,run_ref) REFERENCES memoriesql.query_runs(tenant_id,run_ref)
+);
+CREATE TABLE memoriesql.query_result_purges (
+ tenant_id uuid NOT NULL, result_id uuid NOT NULL, workspace_id uuid NOT NULL,
+ run_ref uuid NOT NULL, operation_ref uuid NOT NULL,
+ expired_at timestamptz NOT NULL, purged_at timestamptz NOT NULL,
+ PRIMARY KEY(tenant_id,result_id)
+);
+CREATE INDEX query_result_purges_run ON memoriesql.query_result_purges(tenant_id,run_ref);
+CREATE TABLE memoriesql.query_purge_failures (
+ tenant_id uuid NOT NULL, workspace_id uuid NOT NULL,
+ subject_kind text NOT NULL CHECK(subject_kind IN ('run','result','tombstone')),
+ subject_ref uuid NOT NULL, attempts integer NOT NULL CHECK(attempts>0),
+ first_failed_at timestamptz NOT NULL, last_failed_at timestamptz NOT NULL,
+ error_code text NOT NULL CHECK(error_code ~ '^[0-9A-Z]{5}$'),
+ PRIMARY KEY(tenant_id,subject_kind,subject_ref)
+);
+-- Owned cleanup deletes invocations; the foreign-key check on their staged
+-- rows runs as the row table's owner, which M0033 left without builtin access.
+GRANT EXECUTE ON FUNCTION pg_catalog.uuid_eq(uuid,uuid) TO memoriesql_query_view_owner;
+CREATE INDEX query_result_creations_expiry ON memoriesql.query_result_creations(expires_at);
+CREATE INDEX query_runs_expiry ON memoriesql.query_runs(expires_at);
+ALTER TABLE memoriesql.query_run_purges ENABLE ROW LEVEL SECURITY;
+ALTER TABLE memoriesql.query_run_purges FORCE ROW LEVEL SECURITY;
+ALTER TABLE memoriesql.query_result_purges ENABLE ROW LEVEL SECURITY;
+ALTER TABLE memoriesql.query_result_purges FORCE ROW LEVEL SECURITY;
+ALTER TABLE memoriesql.query_purge_failures ENABLE ROW LEVEL SECURITY;
+ALTER TABLE memoriesql.query_purge_failures FORCE ROW LEVEL SECURITY;
+REVOKE ALL ON memoriesql.query_run_purges,memoriesql.query_result_purges,
+ memoriesql.query_purge_failures FROM PUBLIC,memoriesql_application;
+CREATE TRIGGER query_run_purges_no_update BEFORE UPDATE ON memoriesql.query_run_purges
+ FOR EACH ROW EXECUTE FUNCTION memoriesql.reject_immutable_change();
+CREATE TRIGGER query_result_purges_no_update BEFORE UPDATE ON memoriesql.query_result_purges
+ FOR EACH ROW EXECUTE FUNCTION memoriesql.reject_immutable_change();
+
+-- Purge one expired run's own sensitive copies. Ended owners' deliveries settle
+-- exactly as in host recovery (confirmed reader termination, full reservation);
+-- live or uncertain work keeps the run pending. A stranded preparation can no
+-- longer commit (its invocations are settled and past their deadline and the
+-- run admits nothing), so its reservation drops to the journal charge.
+CREATE FUNCTION memoriesql.purge_query_run_v1(t uuid,run uuid) RETURNS text
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,memoriesql,memoriesql_query
+ SET row_security=off AS $$
+DECLARE r memoriesql.query_runs%ROWTYPE; d record; o record; s record; created uuid;
+ now_at timestamptz;
+BEGIN
+ SELECT * INTO r FROM memoriesql.query_runs WHERE tenant_id=t AND run_ref=run;
+ IF NOT FOUND THEN RETURN 'skipped'; END IF;
+ PERFORM pg_advisory_xact_lock(hashtextextended(t::text||':query-access:'||r.workspace_id::text,0));
+ now_at:=clock_timestamp();
+ IF now_at<r.expires_at OR EXISTS(SELECT 1 FROM memoriesql.query_run_purges
+   WHERE tenant_id=t AND run_ref=run) THEN RETURN 'skipped'; END IF;
+ FOR d IN SELECT delivery_ref FROM memoriesql.query_deliveries WHERE tenant_id=t AND run_ref=run
+  AND state<>'settled' ORDER BY admitted_at LOOP
+  IF NOT memoriesql.abandon_query_delivery_v1(d.delivery_ref) THEN RETURN 'pending'; END IF;
+ END LOOP;
+ now_at:=clock_timestamp();
+ IF EXISTS(SELECT 1 FROM memoriesql_query.invocations i WHERE i.tenant_id=t AND i.run_ref=run
+   AND (i.state<>'settled' OR i.deadline>now_at)) THEN RETURN 'pending'; END IF;
+ FOR o IN SELECT run_ref,step_key FROM memoriesql.result_preparation_operations
+  WHERE tenant_id=t AND run_ref=run ORDER BY step_key LOOP
+  PERFORM pg_advisory_xact_lock(hashtextextended(t::text||':result-preparation-operation:'||o.run_ref::text||':'||o.step_key::text,0));
+ END LOOP;
+ PERFORM pg_advisory_xact_lock(hashtextextended(t::text||':result-preparation:'||r.workspace_id::text,0));
+ INSERT INTO memoriesql.result_preparation_allocators VALUES(t,r.workspace_id,1)
+ ON CONFLICT(tenant_id,workspace_id) DO UPDATE SET revision=memoriesql.result_preparation_allocators.revision+1;
+ FOR o IN SELECT * FROM memoriesql.result_preparation_operations WHERE tenant_id=t AND run_ref=run
+  AND state<>'sealed' ORDER BY operation_ref FOR UPDATE LOOP
+  DELETE FROM memoriesql_query.population_rows p USING memoriesql_query.invocations i
+   WHERE i.tenant_id=t AND i.operation_ref=o.operation_ref AND p.invocation_ref=i.invocation_ref;
+  DELETE FROM memoriesql_query.invocations WHERE tenant_id=t AND operation_ref=o.operation_ref;
+  IF o.state='reserved' THEN
+   UPDATE memoriesql.result_preparation_operations SET state='discarded',request_fingerprint=NULL,
+    encoded_bytes=0,allocation_bytes=8192 WHERE tenant_id=t AND operation_ref=o.operation_ref;
+  END IF;
+ END LOOP;
+ -- Unresolved steps get their terminal disposition: a committed result makes
+ -- the step complete; anything else is execution_error, never a rerun.
+ FOR s IN SELECT step_key FROM memoriesql.query_steps WHERE tenant_id=t AND run_ref=run
+  AND state='executing' FOR UPDATE LOOP
+  SELECT cr.result_id INTO created FROM memoriesql.result_preparation_operations op
+   JOIN memoriesql.query_result_creations cr ON cr.tenant_id=op.tenant_id
+    AND cr.operation_ref=op.operation_ref
+   WHERE op.tenant_id=t AND op.run_ref=run AND op.step_key=s.step_key;
+  UPDATE memoriesql.query_steps SET state=CASE WHEN created IS NULL THEN 'failed' ELSE 'complete' END,
+   outcome=CASE WHEN created IS NULL THEN 'execution_error' END,
+   error_code=CASE WHEN created IS NULL THEN 'database' END,result_id=created,
+   request_fingerprint=NULL,content_digest=NULL,first_row=NULL,row_count=NULL,page_size=NULL,
+   completed_at=now_at,purged_at=now_at
+   WHERE tenant_id=t AND run_ref=run AND step_key=s.step_key;
+ END LOOP;
+ UPDATE memoriesql.query_steps SET request_fingerprint=NULL,content_digest=NULL,first_row=NULL,
+  row_count=NULL,page_size=NULL,purged_at=now_at
+  WHERE tenant_id=t AND run_ref=run AND purged_at IS NULL;
+ UPDATE memoriesql.query_deliveries SET response_sha256=NULL
+  WHERE tenant_id=t AND run_ref=run AND response_sha256 IS NOT NULL;
+ DELETE FROM memoriesql.query_visible_refs WHERE tenant_id=t AND run_ref=run;
+ INSERT INTO memoriesql.query_run_purges VALUES(t,run,now_at);
+ RETURN 'purged';
+END $$;
+REVOKE ALL ON FUNCTION memoriesql.purge_query_run_v1(uuid,uuid) FROM PUBLIC;
+
+-- Purge one expired result: its body, witness and dependency records, creation
+-- and identity rows, invocation hashes, receipts and cursors. Retained
+-- allocation drops to the noncontent journal charge. A child or checkpoint
+-- hold would keep required bytes; none can exist in this contract cut.
+CREATE FUNCTION memoriesql.purge_query_result_v1(t uuid,result uuid) RETURNS text
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,memoriesql,memoriesql_query
+ SET row_security=off AS $$
+DECLARE c memoriesql.query_result_creations%ROWTYPE; o memoriesql.result_preparation_operations%ROWTYPE;
+ now_at timestamptz;
+BEGIN
+ SELECT * INTO c FROM memoriesql.query_result_creations WHERE tenant_id=t AND result_id=result;
+ IF NOT FOUND THEN RETURN 'skipped'; END IF;
+ SELECT * INTO o FROM memoriesql.result_preparation_operations
+  WHERE tenant_id=t AND operation_ref=c.operation_ref;
+ PERFORM pg_advisory_xact_lock(hashtextextended(t::text||':query-access:'||o.workspace_id::text,0));
+ PERFORM pg_advisory_xact_lock(hashtextextended(t::text||':result-preparation-operation:'||o.run_ref::text||':'||o.step_key::text,0));
+ PERFORM pg_advisory_xact_lock(hashtextextended(t::text||':result-preparation:'||o.workspace_id::text,0));
+ INSERT INTO memoriesql.result_preparation_allocators VALUES(t,o.workspace_id,1)
+ ON CONFLICT(tenant_id,workspace_id) DO UPDATE SET revision=memoriesql.result_preparation_allocators.revision+1;
+ SELECT * INTO c FROM memoriesql.query_result_creations WHERE tenant_id=t AND result_id=result FOR UPDATE;
+ now_at:=clock_timestamp();
+ IF NOT FOUND OR now_at<c.expires_at THEN RETURN 'skipped'; END IF;
+ IF EXISTS(SELECT 1 FROM memoriesql.result_preparation_parent_holds
+   WHERE tenant_id=t AND parent_ref=result) THEN RETURN 'held'; END IF;
+ DELETE FROM memoriesql.query_cursors WHERE tenant_id=t AND result_id=result;
+ DELETE FROM memoriesql.query_disclosures WHERE tenant_id=t AND result_id=result;
+ DELETE FROM memoriesql.result_preparation_parent_holds WHERE tenant_id=t AND child_ref=result;
+ DELETE FROM memoriesql.result_preparation_artifacts WHERE tenant_id=t AND artifact_ref=result;
+ DELETE FROM memoriesql_query.population_rows p USING memoriesql_query.invocations i
+  WHERE i.tenant_id=t AND i.operation_ref=o.operation_ref AND p.invocation_ref=i.invocation_ref;
+ DELETE FROM memoriesql_query.invocations WHERE tenant_id=t AND operation_ref=o.operation_ref;
+ UPDATE memoriesql.result_preparation_operations SET state='discarded',request_fingerprint=NULL,
+  encoded_bytes=0,allocation_bytes=8192 WHERE tenant_id=t AND operation_ref=o.operation_ref;
+ INSERT INTO memoriesql.query_result_purges
+  VALUES(t,result,o.workspace_id,o.run_ref,o.operation_ref,c.expires_at,now_at);
+ RETURN 'purged';
+END $$;
+REVOKE ALL ON FUNCTION memoriesql.purge_query_result_v1(uuid,uuid) FROM PUBLIC;
+
+-- Delete a purged run's tombstone 30 days after its last purge, with the
+-- journal rows and their retained charge. Unpurged results of the run, or
+-- receipts and cursors still bound to its deliveries, keep it pending.
+CREATE FUNCTION memoriesql.expire_query_tombstone_v1(t uuid,run uuid) RETURNS text
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,memoriesql,memoriesql_query
+ SET row_security=off AS $$
+DECLARE r memoriesql.query_runs%ROWTYPE; marker memoriesql.query_run_purges%ROWTYPE;
+ last_purge timestamptz;
+BEGIN
+ SELECT * INTO r FROM memoriesql.query_runs WHERE tenant_id=t AND run_ref=run;
+ IF NOT FOUND THEN RETURN 'skipped'; END IF;
+ PERFORM pg_advisory_xact_lock(hashtextextended(t::text||':query-access:'||r.workspace_id::text,0));
+ PERFORM pg_advisory_xact_lock(hashtextextended(t::text||':result-preparation:'||r.workspace_id::text,0));
+ INSERT INTO memoriesql.result_preparation_allocators VALUES(t,r.workspace_id,1)
+ ON CONFLICT(tenant_id,workspace_id) DO UPDATE SET revision=memoriesql.result_preparation_allocators.revision+1;
+ SELECT * INTO marker FROM memoriesql.query_run_purges WHERE tenant_id=t AND run_ref=run;
+ IF NOT FOUND THEN RETURN 'skipped'; END IF;
+ IF EXISTS(SELECT 1 FROM memoriesql.result_preparation_operations
+   WHERE tenant_id=t AND run_ref=run AND state<>'discarded')
+  OR EXISTS(SELECT 1 FROM memoriesql.query_disclosures x JOIN memoriesql.query_deliveries d
+   ON d.tenant_id=x.tenant_id AND d.delivery_ref=x.delivery_ref WHERE d.tenant_id=t AND d.run_ref=run)
+  OR EXISTS(SELECT 1 FROM memoriesql.query_cursors x JOIN memoriesql.query_deliveries d
+   ON d.tenant_id=x.tenant_id AND d.delivery_ref=x.issued_by_delivery
+   WHERE d.tenant_id=t AND d.run_ref=run) THEN
+  RETURN 'pending';
+ END IF;
+ SELECT GREATEST(marker.purged_at,max(purged_at)) INTO last_purge
+  FROM memoriesql.query_result_purges WHERE tenant_id=t AND run_ref=run;
+ IF clock_timestamp()<COALESCE(last_purge,marker.purged_at)+interval '30 days' THEN
+  RETURN 'skipped';
+ END IF;
+ DELETE FROM memoriesql.query_result_purges WHERE tenant_id=t AND run_ref=run;
+ DELETE FROM memoriesql.query_visible_refs WHERE tenant_id=t AND run_ref=run;
+ DELETE FROM memoriesql.query_deliveries WHERE tenant_id=t AND run_ref=run;
+ DELETE FROM memoriesql.query_steps WHERE tenant_id=t AND run_ref=run;
+ DELETE FROM memoriesql.query_run_closures WHERE tenant_id=t AND run_ref=run;
+ DELETE FROM memoriesql_query.population_rows p USING memoriesql_query.invocations i
+  WHERE i.tenant_id=t AND i.run_ref=run AND p.invocation_ref=i.invocation_ref;
+ DELETE FROM memoriesql_query.invocations WHERE tenant_id=t AND run_ref=run;
+ DELETE FROM memoriesql.result_preparation_operations WHERE tenant_id=t AND run_ref=run;
+ DELETE FROM memoriesql.query_purge_failures WHERE tenant_id=t AND subject_ref=run;
+ DELETE FROM memoriesql.query_run_purges WHERE tenant_id=t AND run_ref=run;
+ DELETE FROM memoriesql.query_runs WHERE tenant_id=t AND run_ref=run;
+ RETURN 'purged';
+END $$;
+REVOKE ALL ON FUNCTION memoriesql.expire_query_tombstone_v1(uuid,uuid) FROM PUBLIC;
+
+-- One bounded cleanup pass over due subjects (optionally one workspace): runs,
+-- then results, then tombstones, oldest first, with previously failing
+-- subjects last so they cannot starve healthy ones. Each subject runs in its
+-- own subtransaction; a failure records its SQLSTATE and the pass continues.
+CREATE FUNCTION memoriesql.purge_expired_query_state_v1(max_items integer,
+ only_tenant uuid DEFAULT NULL,only_workspace uuid DEFAULT NULL) RETURNS jsonb
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,memoriesql,memoriesql_query
+ SET row_security=off SET lock_timeout='500ms' AS $$
+DECLARE item record; outcome text; code text; started timestamptz:=clock_timestamp();
+ runs integer:=0; results integer:=0; tombstones integer:=0; pending integer:=0; failed integer:=0;
+BEGIN
+ IF max_items IS NULL OR max_items NOT BETWEEN 1 AND 256
+  OR (only_tenant IS NULL)<>(only_workspace IS NULL) THEN
+  RAISE EXCEPTION 'invalid_query_cleanup' USING ERRCODE='22023';
+ END IF;
+ FOR item IN
+  SELECT due.* FROM (
+   SELECT 1 AS phase,'run'::text AS kind,r.tenant_id,r.workspace_id,r.run_ref AS subject,
+    r.expires_at AS due_at
+    FROM memoriesql.query_runs r WHERE r.expires_at<=started
+     AND NOT EXISTS(SELECT 1 FROM memoriesql.query_run_purges p
+      WHERE p.tenant_id=r.tenant_id AND p.run_ref=r.run_ref)
+   UNION ALL
+   SELECT 2,'result',c.tenant_id,o.workspace_id,c.result_id,c.expires_at
+    FROM memoriesql.query_result_creations c JOIN memoriesql.result_preparation_operations o
+     ON o.tenant_id=c.tenant_id AND o.operation_ref=c.operation_ref
+    WHERE c.expires_at<=started
+   UNION ALL
+   SELECT 3,'tombstone',p.tenant_id,r.workspace_id,p.run_ref,p.purged_at+interval '30 days'
+    FROM memoriesql.query_run_purges p JOIN memoriesql.query_runs r
+     ON r.tenant_id=p.tenant_id AND r.run_ref=p.run_ref
+    WHERE p.purged_at<=started-interval '30 days'
+  ) due
+  LEFT JOIN memoriesql.query_purge_failures f ON f.tenant_id=due.tenant_id
+   AND f.subject_kind=due.kind AND f.subject_ref=due.subject
+  WHERE only_tenant IS NULL OR (due.tenant_id=only_tenant AND due.workspace_id=only_workspace)
+  ORDER BY f.subject_ref IS NOT NULL,due.phase,due.due_at,due.subject
+  LIMIT max_items
+ LOOP
+  EXIT WHEN clock_timestamp()-started>interval '5 seconds';
+  BEGIN
+   outcome:=CASE item.kind
+    WHEN 'run' THEN memoriesql.purge_query_run_v1(item.tenant_id,item.subject)
+    WHEN 'result' THEN memoriesql.purge_query_result_v1(item.tenant_id,item.subject)
+    ELSE memoriesql.expire_query_tombstone_v1(item.tenant_id,item.subject) END;
+   IF outcome='purged' THEN
+    CASE item.kind WHEN 'run' THEN runs:=runs+1; WHEN 'result' THEN results:=results+1;
+     ELSE tombstones:=tombstones+1; END CASE;
+    DELETE FROM memoriesql.query_purge_failures WHERE tenant_id=item.tenant_id
+     AND subject_kind=item.kind AND subject_ref=item.subject;
+   ELSIF outcome IN ('pending','held') THEN
+    pending:=pending+1;
+   END IF;
+  EXCEPTION WHEN OTHERS THEN
+   GET STACKED DIAGNOSTICS code=RETURNED_SQLSTATE;
+   failed:=failed+1;
+   INSERT INTO memoriesql.query_purge_failures VALUES(item.tenant_id,item.workspace_id,item.kind,
+    item.subject,1,clock_timestamp(),clock_timestamp(),code)
+   ON CONFLICT(tenant_id,subject_kind,subject_ref) DO UPDATE
+    SET attempts=memoriesql.query_purge_failures.attempts+1,
+     last_failed_at=EXCLUDED.last_failed_at,error_code=EXCLUDED.error_code;
+  END;
+ END LOOP;
+ RETURN jsonb_build_object('purged',jsonb_build_object('runs',runs,'results',results,
+  'tombstones',tombstones),'pending',pending,'failed',failed);
+END $$;
+REVOKE ALL ON FUNCTION memoriesql.purge_expired_query_state_v1(integer,uuid,uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION memoriesql.purge_expired_query_state_v1(integer,uuid,uuid) TO memoriesql_application;
+
+-- The caller's own workspace only; any authenticated principal of the workspace
+-- may trigger it, since it removes nothing that is still accessible.
+CREATE FUNCTION memoriesql.purge_workspace_query_state_v1(max_items integer) RETURNS jsonb
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,memoriesql
+ SET row_security=off AS $$
+DECLARE c memoriesql.authorization_contexts%ROWTYPE;
+BEGIN
+ SELECT * INTO c FROM memoriesql.current_authorization_context();
+ IF c.context_id IS NULL THEN
+  RAISE EXCEPTION 'query_cleanup_unavailable' USING ERRCODE='42501';
+ END IF;
+ RETURN memoriesql.purge_expired_query_state_v1(max_items,c.tenant_id,c.workspace_id);
+END $$;
+REVOKE ALL ON FUNCTION memoriesql.purge_workspace_query_state_v1(integer) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION memoriesql.purge_workspace_query_state_v1(integer) TO memoriesql_application;
+
+-- Content cleanup more than 24 hours past due in one workspace.
+CREATE FUNCTION memoriesql.query_cleanup_overdue_v1(t uuid,w uuid) RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog,memoriesql SET row_security=off AS $$
+ SELECT EXISTS(SELECT 1 FROM memoriesql.query_runs r WHERE r.tenant_id=t AND r.workspace_id=w
+   AND r.expires_at<clock_timestamp()-interval '24 hours'
+   AND NOT EXISTS(SELECT 1 FROM memoriesql.query_run_purges p
+    WHERE p.tenant_id=r.tenant_id AND p.run_ref=r.run_ref))
+  OR EXISTS(SELECT 1 FROM memoriesql.query_result_creations c
+   JOIN memoriesql.result_preparation_operations o
+    ON o.tenant_id=c.tenant_id AND o.operation_ref=c.operation_ref
+   WHERE c.tenant_id=t AND o.workspace_id=w
+    AND c.expires_at<clock_timestamp()-interval '24 hours')
+$$;
+REVOKE ALL ON FUNCTION memoriesql.query_cleanup_overdue_v1(uuid,uuid) FROM PUBLIC;
+
+-- Noncontent cleanup status of the caller's workspace for the trusted host or
+-- operator: due and overdue subjects, failures and whether admission is open.
+CREATE FUNCTION memoriesql.query_cleanup_status_v1() RETURNS jsonb
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=pg_catalog,memoriesql SET row_security=off AS $$
+DECLARE c memoriesql.authorization_contexts%ROWTYPE; now_at timestamptz:=clock_timestamp();
+ due_runs bigint; due_results bigint; due_tombstones bigint; late_runs bigint; late_results bigint;
+ late_tombstones bigint; oldest timestamptz; failures bigint; failed_at timestamptz; failed_code text;
+ purged timestamptz;
+BEGIN
+ c:=memoriesql.result_preparation_authority_v1();
+ SELECT count(*) FILTER (WHERE true),count(*) FILTER (WHERE r.expires_at<now_at-interval '24 hours'),
+  min(r.expires_at) FILTER (WHERE r.expires_at<now_at-interval '24 hours')
+  INTO due_runs,late_runs,oldest
+  FROM memoriesql.query_runs r WHERE r.tenant_id=c.tenant_id AND r.workspace_id=c.workspace_id
+   AND r.expires_at<=now_at AND NOT EXISTS(SELECT 1 FROM memoriesql.query_run_purges p
+    WHERE p.tenant_id=r.tenant_id AND p.run_ref=r.run_ref);
+ SELECT count(*),count(*) FILTER (WHERE x.expires_at<now_at-interval '24 hours'),
+  LEAST(oldest,min(x.expires_at) FILTER (WHERE x.expires_at<now_at-interval '24 hours'))
+  INTO due_results,late_results,oldest
+  FROM memoriesql.query_result_creations x JOIN memoriesql.result_preparation_operations o
+   ON o.tenant_id=x.tenant_id AND o.operation_ref=x.operation_ref
+  WHERE x.tenant_id=c.tenant_id AND o.workspace_id=c.workspace_id AND x.expires_at<=now_at;
+ SELECT count(*),count(*) FILTER (WHERE p.purged_at<now_at-interval '31 days')
+  INTO due_tombstones,late_tombstones
+  FROM memoriesql.query_run_purges p JOIN memoriesql.query_runs r
+   ON r.tenant_id=p.tenant_id AND r.run_ref=p.run_ref
+  WHERE p.tenant_id=c.tenant_id AND r.workspace_id=c.workspace_id
+   AND p.purged_at<=now_at-interval '30 days';
+ SELECT count(*),max(last_failed_at) INTO failures,failed_at FROM memoriesql.query_purge_failures
+  WHERE tenant_id=c.tenant_id AND workspace_id=c.workspace_id;
+ SELECT error_code INTO failed_code FROM memoriesql.query_purge_failures
+  WHERE tenant_id=c.tenant_id AND workspace_id=c.workspace_id
+  ORDER BY last_failed_at DESC,subject_ref LIMIT 1;
+ SELECT max(x) INTO purged FROM (
+  SELECT max(p.purged_at) x FROM memoriesql.query_run_purges p JOIN memoriesql.query_runs r
+   ON r.tenant_id=p.tenant_id AND r.run_ref=p.run_ref
+   WHERE p.tenant_id=c.tenant_id AND r.workspace_id=c.workspace_id
+  UNION ALL
+  SELECT max(purged_at) FROM memoriesql.query_result_purges
+   WHERE tenant_id=c.tenant_id AND workspace_id=c.workspace_id) latest;
+ RETURN jsonb_build_object(
+  'checked_at',to_char(now_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+  'cleanup_sla_hours',24,'tombstone_days',30,
+  'due',jsonb_build_object('runs',due_runs,'results',due_results,'tombstones',due_tombstones),
+  'overdue',jsonb_build_object('runs',late_runs,'results',late_results,'tombstones',late_tombstones),
+  'oldest_overdue_due_at',to_char(oldest AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+  'failures',jsonb_build_object('count',failures,
+   'last_failed_at',to_char(failed_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+   'last_error_code',failed_code),
+  'last_purged_at',to_char(purged AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+  'admission',CASE WHEN memoriesql.query_cleanup_overdue_v1(c.tenant_id,c.workspace_id)
+   THEN 'blocked' ELSE 'open' END);
+END $$;
+REVOKE ALL ON FUNCTION memoriesql.query_cleanup_status_v1() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION memoriesql.query_cleanup_status_v1() TO memoriesql_application;
