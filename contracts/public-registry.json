@@ -1424,11 +1424,11 @@
   "authority": "This explicit registry is the sole catalog-generation authority for the public repository.",
   "catalogs": [
     {
-      "disposition": "empty",
-      "expected_record_count": 0,
+      "disposition": "include",
+      "expected_record_count": 1,
       "filename": "cli.json",
       "kind": "cli",
-      "note": "No product command records are included in this preview."
+      "note": "The core-only headless command surface; unreleased/private capabilities remain explicit."
     },
     {
       "disposition": "include",
@@ -1642,6 +1642,16 @@
       "path": "contracts/records/memoriesql-complete-input-execution-v1.json",
       "public_sha256": "34a7d0d91a6c4ea5d78435fd1f9dab2a677df02320376914692dd0202ffdf899",
       "reason": "Public-authored forward complete-input execution and bounded reader contracts.",
+      "version": "1"
+    },
+    {
+      "catalog": "cli",
+      "classification": "proposed_open_core",
+      "id": "memoriesql.core-cli.v1",
+      "package_disposition": "include",
+      "path": "contracts/records/memoriesql-core-cli-v1.json",
+      "public_sha256": "235d67e0562f0be97e2cf65ed933ac8d2d07f9239d12311f2ed32c0809d53fc0",
+      "reason": "Owner-approved public CLI ownership with installed core reads and explicit pending capabilities.",
       "version": "1"
     },
     {
