@@ -451,3 +451,9 @@ and an unavailable delegated-grant fixture. Subsequent drafts exposed a bad
 fixture expiry timestamp and a fixture DDL change inside a held projection
 frame. Those are preserved as failed development logs; exact-head installed
 qualification and CI are required separately.
+
+The first complete installed Python 3.13 draft at `cd6c6d5` retained one
+failure: the installed-runtime ownership fixture still expected 71 modules
+after this private gate added the 72nd. All three shard logs and that failed
+exact head remain historical evidence; changing the fixture requires a fresh
+complete convergence at the new head. No partial shard pass qualifies it.
