@@ -16,6 +16,8 @@ These slices add no available result/disclosure API or qualified physical-storag
 profile. The no-migration internal continuations qualify ranking, neighbor,
 multiple-window, grouped-window and aggregate ROWS-frame witnesses; see that
 verification document for the precise cuts and remaining approved shapes.
+The next no-migration internal continuation qualifies row-level EXISTS/NOT EXISTS
+match bags from merged #61; scalar/IN subqueries and recursion remain pending.
 Preserve SQL 0001–0034
 and earlier records;
 canonical lifecycle/projection stays PR-03-owned. Remaining integrated PR-05

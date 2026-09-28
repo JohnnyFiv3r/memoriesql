@@ -139,6 +139,24 @@ class NativeWitnessBuilder:
                 if member is None:
                     raise ValueError("unknown frozen logical key")
                 member_refs.append(str(member))
+            elif stage["operation"] == "exists":
+                if (
+                    len(value) != 4
+                    or not isinstance(value[2], list)
+                    or type(value[3]) is not int
+                    or value[3] != len(value[2])
+                ):
+                    raise ValueError("invalid native EXISTS population")
+                outer_ref = str(bind(value[1], depth + 1))
+                match_refs = [str(bind(match, depth + 1)) for match in value[2]]
+                match_counts = Counter(match_refs)
+                inputs = [outer_ref, *match_counts]
+                details.update(
+                    match_refs=match_refs,
+                    match_multiplicities=list(match_counts.values()),
+                    match_count=value[3],
+                    exists_truth=value[3] > 0,
+                )
             elif stage["operation"] == "window_partition":
                 if (
                     len(value) != 3
