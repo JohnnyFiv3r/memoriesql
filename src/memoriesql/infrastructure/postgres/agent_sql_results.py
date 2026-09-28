@@ -197,6 +197,57 @@ class PostgresAgentSqlResults:
             }
         )
 
+    def close_run(self, run_ref: str) -> bytes:
+        """Owner-only early close; refused while any of its work is unsettled.
+
+        Closing frees the run's active-run slot but refunds nothing: charges
+        stay in the rolling workspace window and the run cannot be reopened.
+        """
+        try:
+            with self._control() as connection:
+                with relation_projection_frame(
+                    connection,
+                    credential_sha256=self._credential,
+                    workspace_id=self._workspace,
+                ) as frame:
+                    row = frame.execute(
+                        "SELECT memoriesql.close_query_run_v1(%s)", (UUID(run_ref),)
+                    ).fetchone()
+        except (PermissionError, Error, ValueError):
+            row = None
+        data: dict[str, Any] = row[0] if row and row[0] else {"refused": "unavailable"}
+        refused = data.get("refused")
+        if refused:
+            outcome, code = _REFUSALS[refused]
+            return result_json_bytes(
+                {
+                    "contract_version": CONTRACT_VERSION,
+                    "outcome": outcome,
+                    "error": {"code": code},
+                }
+            )
+        return result_json_bytes(
+            {"contract_version": CONTRACT_VERSION, "outcome": "available", "closed": data}
+        )
+
+    def recover_abandoned(self) -> int:
+        """Host recovery after an executor crash; returns deliveries settled.
+
+        Only deliveries whose owning sessions have ended are abandoned, each
+        charged its full reservation. Their steps resolve on exact redelivery
+        from committed state; nothing is rerun, refunded or disclosed.
+        """
+        with self._control() as connection:
+            with relation_projection_frame(
+                connection,
+                credential_sha256=self._credential,
+                workspace_id=self._workspace,
+            ) as frame:
+                row = frame.execute(
+                    "SELECT memoriesql.abandon_query_deliveries_v1()"
+                ).fetchone()
+        return int(row[0]) if row else 0
+
     def handle(self, data: bytes) -> bytes:
         """One closed request in, one closed reply out; never raises for input."""
         try:

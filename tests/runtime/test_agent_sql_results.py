@@ -6,6 +6,7 @@ import json
 import os
 import unittest
 from typing import TYPE_CHECKING, Any
+from unittest.mock import patch
 from uuid import uuid4
 
 import psycopg
@@ -17,15 +18,18 @@ from memoriesql.application.agent_sql_results import POLICY_HASH
 from memoriesql.infrastructure.postgres.agent_sql_results import (
     PostgresAgentSqlResults,
 )
+from memoriesql.infrastructure.postgres.query_reader_provisioning import (
+    provision_query_reader,
+)
 
 if TYPE_CHECKING:
-    from tests.runtime import query_authority_fixture as authority_fixture
     from tests.runtime import test_query_result_commit as commit_tests
     from tests.runtime.test_postgres_runtime import migrate
 else:
-    import query_authority_fixture as authority_fixture
     import test_query_result_commit as commit_tests
     from test_postgres_runtime import migrate
+
+READER_PASSWORD = "fictional-reader-only-0001"
 
 
 @unittest.skipUnless(
@@ -39,11 +43,9 @@ class AgentSqlResults(unittest.TestCase):
         self.fixture = self.h.fixture
         self.db = self.h.db
         migrate(self.db, expected_current_version=34, target_version=38)
-        # Reviewed fictional reader for all fourteen prepared relations.
+        # The production reviewed provisioning path, on fictional data.
         self.reader = "pr05_results_" + uuid4().hex
-        self.profile = authority_fixture.provision_fictional_reader(
-            self.db, self.reader
-        )
+        self.profile = provision_query_reader(self.db, self.reader, READER_PASSWORD)
         self.addCleanup(self.drop_reader)
 
     def drop_reader(self) -> None:
@@ -56,7 +58,7 @@ class AgentSqlResults(unittest.TestCase):
                 os.environ["N1_TEST_DATABASE_URL"],
                 dbname=self.db.info.dbname,
                 user=self.reader,
-                password="fictional-only",
+                password=READER_PASSWORD,
             ),
             autocommit=True,
         )
@@ -298,6 +300,170 @@ class AgentSqlResults(unittest.TestCase):
             lineage["page"]["rows"][0]["values"], [str(target), str(corrected)]
         )
 
+
+    def test_run_admission_expiry_and_no_budget_reset(self) -> None:
+        first = self.start()
+        self.start()
+        third = json.loads(self.service().start_run())
+        self.assertEqual(third["outcome"], "budget_exhausted", third)
+        self.assertEqual(third["error"], {"code": "database"})
+        self.db.execute(
+            "ALTER TABLE memoriesql.query_runs DISABLE TRIGGER query_runs_no_update"
+        )
+        try:
+            self.db.execute(
+                "UPDATE memoriesql.query_runs SET "
+                "started_at=started_at-interval '31 minutes',"
+                "expires_at=expires_at-interval '31 minutes',"
+                "default_known_at=default_known_at-interval '31 minutes' "
+                "WHERE run_ref=%s",
+                (first["run_ref"],),
+            )
+        finally:
+            self.db.execute(
+                "ALTER TABLE memoriesql.query_runs ENABLE TRIGGER query_runs_no_update"
+            )
+        _, expired = self.query(first, "SELECT bead_id FROM memory_v1.observations")
+        self.assertEqual(expired["outcome"], "budget_exhausted", expired)
+        self.assertEqual(expired["error"], {"code": "time"})
+        self.assertEqual(json.loads(self.service().start_run())["outcome"], "available")
+
+    def test_crash_after_commit_redelivers_same_result_without_rerun(self) -> None:
+        self.fixture.assertion()
+        run = self.start()
+        request, _ = self.request_only(run, "SELECT bead_id FROM memory_v1.observations")
+
+        class Crash(BaseException):
+            pass
+
+        def crash(*args: Any, **kwargs: Any) -> bytes:
+            raise Crash()
+
+        with patch.object(PostgresAgentSqlResults, "_disclose", crash):
+            with self.assertRaises(Crash):
+                self.send(request)
+        # The owner session is gone, so other work is refused as unsettled.
+        _, blocked = self.query(run, "SELECT bead_version_id FROM memory_v1.observations")
+        self.assertEqual(blocked["outcome"], "budget_exhausted", blocked)
+        self.assertEqual(blocked["error"], {"code": "settlement"})
+        before = self.invocations()
+        again = self.send(request)
+        self.assertEqual(again["outcome"], "available", again)
+        self.assertEqual(self.invocations(), before)
+        charged = self.h.scalar(
+            "SELECT charged_db_ms FROM memoriesql.query_deliveries WHERE outcome='abandoned'"
+        )
+        self.assertEqual(charged, 30000)
+        _, after = self.query(run, "SELECT bead_version_id FROM memory_v1.observations")
+        self.assertEqual(after["outcome"], "available", after)
+
+    def test_host_recovery_abandons_dead_owner_without_disclosure(self) -> None:
+        self.fixture.assertion()
+        run = self.start()
+        request, _ = self.request_only(run, "SELECT bead_id FROM memory_v1.observations")
+
+        class Crash(BaseException):
+            pass
+
+        def crash(*args: Any, **kwargs: Any) -> bytes:
+            raise Crash()
+
+        with patch.object(PostgresAgentSqlResults, "_execute", crash):
+            with self.assertRaises(Crash):
+                self.send(request)
+        self.assertEqual(self.service().recover_abandoned(), 1)
+        self.assertEqual(self.service().recover_abandoned(), 0)
+        # A single-use preparation owner is never replayed into a new SELECT:
+        # the lost attempt fails truthfully and a new step key executes.
+        again = self.send(request)
+        self.assertEqual(again["outcome"], "execution_error", again)
+        self.assertEqual(self.send(request)["outcome"], "execution_error")
+        _, fresh = self.query(run, "SELECT bead_id FROM memory_v1.observations")
+        self.assertEqual(fresh["outcome"], "available", fresh)
+        self.assertEqual(self.invocations(), 1)
+
+    def test_owner_close_frees_slot_without_refund(self) -> None:
+        first = self.start()
+        self.start()
+        _, reply = self.query(first, "SELECT bead_id FROM memory_v1.observations")
+        self.assertEqual(reply["outcome"], "available", reply)
+        closed = json.loads(self.service().close_run(first["run_ref"]))
+        self.assertEqual(closed["outcome"], "available", closed)
+        self.assertEqual(json.loads(self.service().close_run(first["run_ref"])), closed)
+        _, after = self.query(first, "SELECT bead_id FROM memory_v1.observations")
+        self.assertEqual(after["outcome"], "budget_exhausted", after)
+        self.assertEqual(json.loads(self.service().start_run())["outcome"], "available")
+        window = self.h.scalar(
+            "SELECT sum(charged_db_ms) FROM memoriesql.query_deliveries WHERE run_ref=%s",
+            (first["run_ref"],),
+        )
+        self.assertGreater(window, 0)
+
+    def test_composition_shapes_over_prepared_observation_relations(self) -> None:
+        self.fixture.assertion()
+        run = self.start()
+        for text in (
+            "SELECT o.bead_type_key,count(*) AS n FROM memory_v1.observations o "
+            "GROUP BY o.bead_type_key",
+            "SELECT s.statement_id,row_number() OVER "
+            "(PARTITION BY s.bead_id ORDER BY s.statement_id) AS position "
+            "FROM memory_v1.statements s",
+            "SELECT bead_id FROM memory_v1.observations UNION ALL "
+            "SELECT bead_id FROM memory_v1.statements",
+            "SELECT o.bead_id FROM memory_v1.observations o WHERE EXISTS "
+            "(SELECT s.statement_id FROM memory_v1.statements s "
+            "WHERE s.bead_id=o.bead_id)",
+            "SELECT u.source_kind,count(DISTINCT u.source_unit_id) AS units "
+            "FROM memory_v1.source_units u GROUP BY u.source_kind",
+            "SELECT o.title,r.type_key FROM memory_v1.assessed_relations r "
+            "JOIN memory_v1.observations o ON o.bead_id=r.target_bead_id",
+        ):
+            with self.subTest(text=text):
+                _, reply = self.query(run, text, page_size=5)
+                self.assertEqual(reply["outcome"], "available", reply)
+                self.assertGreater(int(reply["result"]["total_rows"]), 0)
+        _, related = self.query(
+            run,
+            "SELECT r.type_key,s.text FROM memory_v1.assessed_relations r "
+            "JOIN memory_v1.relation_statements s ON s.relation_id=r.relation_id",
+        )
+        frame = related["result"]["frame"]
+        self.assertEqual(frame["lifecycle_projection_version"], 1)
+        self.assertRegex(frame["projection_manifest_sha256"], "^[0-9a-f]{64}$")
+        _, sources = self.query(
+            run, "SELECT source_unit_id,text_state FROM memory_v1.source_units"
+        )
+        self.assertEqual(
+            [gap["facet"] for gap in sources["result"]["coverage"]["gaps"]],
+            [
+                "source_units.occurrence_ref",
+                "source_units.package_revision_id",
+                "source_units.trust_label",
+            ],
+        )
+
+    def request_only(
+        self, run: dict[str, Any], text: str
+    ) -> tuple[dict[str, Any], None]:
+        return {
+            "contract_version": 1,
+            "run_ref": run["run_ref"],
+            "step_key": str(uuid4()),
+            "kind": "query",
+            "catalog_hash": SqlCatalog.installed().hash,
+            "sql": text,
+            "parameters": [],
+            "inputs": [],
+            "parents": [],
+            "scope": {
+                "source_refs": [],
+                "known_at": run["default_known_at"],
+                "view": "historical",
+            },
+            "intent": "enumerate",
+            "max_result_bytes": 64 * 1024 * 1024,
+            "page_size": 2,
+        }, None
 
 if __name__ == "__main__":
     unittest.main()

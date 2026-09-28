@@ -25,6 +25,13 @@ CREATE TABLE memoriesql.query_runs (
  CHECK(expires_at=started_at+interval '30 minutes' AND default_known_at=started_at)
 );
 CREATE INDEX query_runs_workspace_active ON memoriesql.query_runs(tenant_id,workspace_id,expires_at);
+-- An owner may end its own run early (trusted host only). Closing refunds
+-- nothing, keeps every charge in the rolling window and cannot be reopened.
+CREATE TABLE memoriesql.query_run_closures (
+ tenant_id uuid NOT NULL, run_ref uuid NOT NULL, closed_at timestamptz NOT NULL,
+ PRIMARY KEY(tenant_id,run_ref),
+ FOREIGN KEY(tenant_id,run_ref) REFERENCES memoriesql.query_runs(tenant_id,run_ref)
+);
 CREATE TABLE memoriesql.query_steps (
  tenant_id uuid NOT NULL, run_ref uuid NOT NULL, step_key uuid NOT NULL,
  kind text NOT NULL CHECK(kind IN ('query','reuse_result')),
@@ -108,6 +115,8 @@ CREATE TABLE memoriesql.query_cursors (
 );
 ALTER TABLE memoriesql.query_runs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE memoriesql.query_runs FORCE ROW LEVEL SECURITY;
+ALTER TABLE memoriesql.query_run_closures ENABLE ROW LEVEL SECURITY;
+ALTER TABLE memoriesql.query_run_closures FORCE ROW LEVEL SECURITY;
 ALTER TABLE memoriesql.query_steps ENABLE ROW LEVEL SECURITY;
 ALTER TABLE memoriesql.query_steps FORCE ROW LEVEL SECURITY;
 ALTER TABLE memoriesql.query_deliveries ENABLE ROW LEVEL SECURITY;
@@ -118,10 +127,13 @@ ALTER TABLE memoriesql.query_visible_refs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE memoriesql.query_visible_refs FORCE ROW LEVEL SECURITY;
 ALTER TABLE memoriesql.query_cursors ENABLE ROW LEVEL SECURITY;
 ALTER TABLE memoriesql.query_cursors FORCE ROW LEVEL SECURITY;
+REVOKE ALL ON memoriesql.query_run_closures FROM PUBLIC,memoriesql_application;
 REVOKE ALL ON memoriesql.query_runs,memoriesql.query_steps,memoriesql.query_deliveries,
  memoriesql.query_disclosures,memoriesql.query_visible_refs,memoriesql.query_cursors
  FROM PUBLIC,memoriesql_application;
 CREATE TRIGGER query_runs_no_update BEFORE UPDATE ON memoriesql.query_runs
+ FOR EACH ROW EXECUTE FUNCTION memoriesql.reject_immutable_change();
+CREATE TRIGGER query_run_closures_no_update BEFORE UPDATE ON memoriesql.query_run_closures
  FOR EACH ROW EXECUTE FUNCTION memoriesql.reject_immutable_change();
 CREATE TRIGGER query_disclosures_no_update BEFORE UPDATE ON memoriesql.query_disclosures
  FOR EACH ROW EXECUTE FUNCTION memoriesql.reject_immutable_change();
@@ -205,7 +217,9 @@ BEGIN
  c:=memoriesql.result_preparation_authority_v1();
  PERFORM pg_advisory_xact_lock(hashtextextended(c.tenant_id::text||':query-access:'||c.workspace_id::text,0));
  IF (SELECT count(*) FROM memoriesql.query_runs WHERE tenant_id=c.tenant_id
-     AND workspace_id=c.workspace_id AND expires_at>now_at)>=2 THEN
+     AND workspace_id=c.workspace_id AND expires_at>now_at
+     AND NOT EXISTS(SELECT 1 FROM memoriesql.query_run_closures k
+      WHERE k.tenant_id=query_runs.tenant_id AND k.run_ref=query_runs.run_ref))>=2 THEN
   RETURN jsonb_build_object('refused','run_admission');
  END IF;
  INSERT INTO memoriesql.query_runs VALUES(c.tenant_id,uuidv7(),c.workspace_id,c.principal_id,
@@ -215,6 +229,52 @@ BEGIN
 END $$;
 REVOKE ALL ON FUNCTION memoriesql.start_query_run_v1(text,text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION memoriesql.start_query_run_v1(text,text) TO memoriesql_application;
+
+-- Liveness of the owning executor session; a held session lock proves nothing
+-- stopped, while an acquirable one proves only that the owner session ended.
+CREATE FUNCTION memoriesql.query_delivery_owner_gone_v1(delivery uuid) RETURNS boolean
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,memoriesql
+ SET row_security=off AS $$
+DECLARE d memoriesql.query_deliveries%ROWTYPE; key bigint; acquired boolean;
+BEGIN
+ SELECT * INTO d FROM memoriesql.query_deliveries WHERE delivery_ref=delivery;
+ IF NOT FOUND THEN RAISE EXCEPTION 'query_delivery_unavailable' USING ERRCODE='42501'; END IF;
+ key:=hashtextextended(d.tenant_id::text||':query-delivery:'||d.delivery_ref::text,0);
+ acquired:=pg_try_advisory_lock(key);
+ IF acquired THEN PERFORM pg_advisory_unlock(key); END IF;
+ RETURN acquired;
+END $$;
+REVOKE ALL ON FUNCTION memoriesql.query_delivery_owner_gone_v1(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION memoriesql.query_delivery_owner_gone_v1(uuid) TO memoriesql_application;
+
+-- Owner-only early close from the trusted host (never an agent wire action).
+-- Refused while any of the run's deliveries is unsettled: open or uncertain
+-- work is never abandoned by closing. Idempotent; the run stays charged.
+CREATE FUNCTION memoriesql.close_query_run_v1(run uuid) RETURNS jsonb
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,memoriesql
+ SET row_security=off SET lock_timeout='500ms' AS $$
+DECLARE c memoriesql.authorization_contexts%ROWTYPE; r memoriesql.query_runs%ROWTYPE;
+ k memoriesql.query_run_closures%ROWTYPE;
+BEGIN
+ c:=memoriesql.result_preparation_authority_v1();
+ PERFORM pg_advisory_xact_lock(hashtextextended(c.tenant_id::text||':query-access:'||c.workspace_id::text,0));
+ SELECT * INTO r FROM memoriesql.query_runs WHERE tenant_id=c.tenant_id AND run_ref=run FOR UPDATE;
+ IF NOT FOUND OR NOT memoriesql.query_run_owner_v1(r,c) THEN
+  RETURN jsonb_build_object('refused','unavailable');
+ END IF;
+ SELECT * INTO k FROM memoriesql.query_run_closures WHERE tenant_id=c.tenant_id AND run_ref=run;
+ IF NOT FOUND THEN
+  IF EXISTS(SELECT 1 FROM memoriesql.query_deliveries WHERE tenant_id=c.tenant_id
+   AND run_ref=run AND state<>'settled') THEN
+   RETURN jsonb_build_object('refused','settlement');
+  END IF;
+  INSERT INTO memoriesql.query_run_closures VALUES(c.tenant_id,run,clock_timestamp()) RETURNING * INTO k;
+ END IF;
+ RETURN jsonb_build_object('run_ref',run,
+  'closed_at',to_char(k.closed_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'));
+END $$;
+REVOKE ALL ON FUNCTION memoriesql.close_query_run_v1(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION memoriesql.close_query_run_v1(uuid) TO memoriesql_application;
 
 -- Admit exactly one access for (run,step): idempotent step identity, workspace
 -- serialization, cumulative run and rolling workspace allowances. Refusals write
@@ -242,7 +302,8 @@ BEGIN
   RETURN jsonb_build_object('refused','unavailable');
  END IF;
  remaining:=memoriesql.query_run_remaining_v1(r);
- IF now_at>=r.expires_at THEN
+ IF now_at>=r.expires_at OR EXISTS(SELECT 1 FROM memoriesql.query_run_closures
+   WHERE tenant_id=c.tenant_id AND run_ref=run) THEN
   RETURN jsonb_build_object('refused','run_expired','remaining',remaining);
  END IF;
  SELECT * INTO s FROM memoriesql.query_steps WHERE tenant_id=c.tenant_id AND run_ref=run
@@ -259,7 +320,8 @@ BEGIN
  IF FOUND THEN
   RETURN jsonb_build_object('refused',CASE
     WHEN blocking.run_ref=run AND blocking.step_key=step THEN 'pending_self'
-    WHEN blocking.state='settlement_pending' OR blocking.deadline<=now_at THEN 'settlement'
+    WHEN blocking.state='settlement_pending' OR blocking.deadline<=now_at
+     OR memoriesql.query_delivery_owner_gone_v1(blocking.delivery_ref) THEN 'settlement'
     ELSE 'busy' END,
    'blocking_delivery',CASE WHEN blocking.run_ref=run AND blocking.step_key=step
     THEN to_jsonb(blocking.delivery_ref) ELSE 'null'::jsonb END,
@@ -347,22 +409,6 @@ END $$;
 REVOKE ALL ON FUNCTION memoriesql.settle_query_delivery_v1(uuid,text,text,bigint,bigint,text,boolean) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION memoriesql.settle_query_delivery_v1(uuid,text,text,bigint,bigint,text,boolean) TO memoriesql_application;
 
--- Liveness of the owning executor session; a held session lock proves nothing
--- stopped, while an acquirable one proves only that the owner session ended.
-CREATE FUNCTION memoriesql.query_delivery_owner_gone_v1(delivery uuid) RETURNS boolean
-LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,memoriesql
- SET row_security=off AS $$
-DECLARE d memoriesql.query_deliveries%ROWTYPE; key bigint; acquired boolean;
-BEGIN
- SELECT * INTO d FROM memoriesql.query_deliveries WHERE delivery_ref=delivery;
- IF NOT FOUND THEN RAISE EXCEPTION 'query_delivery_unavailable' USING ERRCODE='42501'; END IF;
- key:=hashtextextended(d.tenant_id::text||':query-delivery:'||d.delivery_ref::text,0);
- acquired:=pg_try_advisory_lock(key);
- IF acquired THEN PERFORM pg_advisory_unlock(key); END IF;
- RETURN acquired;
-END $$;
-REVOKE ALL ON FUNCTION memoriesql.query_delivery_owner_gone_v1(uuid) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION memoriesql.query_delivery_owner_gone_v1(uuid) TO memoriesql_application;
 
 -- Recovery only: settle a reserved delivery whose owning executor session has
 -- ended. Unknown timing and transport keep the FULL reservation as the charge;
@@ -385,6 +431,24 @@ BEGIN
 END $$;
 REVOKE ALL ON FUNCTION memoriesql.abandon_query_delivery_v1(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION memoriesql.abandon_query_delivery_v1(uuid) TO memoriesql_application;
+
+-- Host recovery: abandon this workspace's reserved deliveries whose owning
+-- sessions have ended (each charged its full reservation). Steps stay open for
+-- exact redelivery; nothing is rerun, refunded or disclosed here.
+CREATE FUNCTION memoriesql.abandon_query_deliveries_v1() RETURNS integer
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,memoriesql
+ SET row_security=off SET lock_timeout='500ms' AS $$
+DECLARE c memoriesql.authorization_contexts%ROWTYPE; d record; settled integer:=0;
+BEGIN
+ c:=memoriesql.result_preparation_authority_v1();
+ FOR d IN SELECT delivery_ref FROM memoriesql.query_deliveries WHERE tenant_id=c.tenant_id
+  AND workspace_id=c.workspace_id AND state='reserved' ORDER BY admitted_at LOOP
+  IF memoriesql.abandon_query_delivery_v1(d.delivery_ref) THEN settled:=settled+1; END IF;
+ END LOOP;
+ RETURN settled;
+END $$;
+REVOKE ALL ON FUNCTION memoriesql.abandon_query_deliveries_v1() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION memoriesql.abandon_query_deliveries_v1() TO memoriesql_application;
 
 -- Read one page of a standalone result ONLY after the revision-2 whole-closure
 -- verdict in this same authority-fenced transaction. No write happens here; the
