@@ -195,6 +195,22 @@ personal-local owner holds. `--known-at` takes an ISO 8601 timestamp with a UTC
 offset and is sent as UTC with a literal `Z`; without it the run's default
 cutoff applies.
 
+`memory_v1.source_units.search_text` is the normalized text of an authorized
+source unit. For a materialized unit it is the pinned package's normalized
+projection when every part is producer-normalized; otherwise `text_state` is
+`unsupported` and only the citation is returned. It is never raw bytes, exact
+source or a clause-level citation. A reply that uses `source_units` always says
+so as a coverage gap (`normalized_text_not_exact_source`), and also names any
+normalized projection, excluded package or unresolved package. Text inequality
+(`<>`, or `NOT (a = $n)`, which the planner rewrites to it) is outside the
+reviewed operator closure and replies `unavailable`; filter with equality
+instead.
+
+The trusted host must run its expired-result cleanup on a schedule. While that
+cleanup is more than a day overdue, new runs are refused as
+`budget_exhausted`/`settlement`, and the human view names this as host
+maintenance rather than a query error.
+
 The CLI keeps one run per authenticated principal and workspace in an owner-only
 state file under `MEMORIESQL_STATE_DIR` (default `$XDG_STATE_HOME/memoriesql`),
 reuses it across invocations and starts a new run shortly before the stored run

@@ -608,6 +608,19 @@ def _emit_reply(reply: bytes, *, machine: bool) -> int:
         _write_json(payload)
         for gap in coverage_gaps(payload):
             print(f"coverage gap: {gap}", file=sys.stderr)
+        error = payload.get("error")
+        if (
+            payload.get("outcome") == "budget_exhausted"
+            and isinstance(error, dict)
+            and error.get("code") == "settlement"
+            and "run_ref" not in payload
+        ):
+            # A refused new run: the host's expiry cleanup is overdue or failed.
+            print(
+                "maintenance: the trusted host must run its expired-result "
+                "cleanup before new runs are admitted",
+                file=sys.stderr,
+            )
     outcome = payload.get("outcome")
     if outcome == "available":
         return 0

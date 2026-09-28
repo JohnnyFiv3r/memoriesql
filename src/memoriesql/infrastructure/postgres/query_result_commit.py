@@ -190,6 +190,7 @@ class InternalResultCandidate:
                 recursion=bool(request.recursion),
                 relation_raw_authority=population.relation_raw_authority,
                 source_read_authority=population.source_read_authority,
+                source_text_labels=population.source_text_labels,
             )
             body["wire_frame"] = wire_frame(
                 frame_ref=str(witness.frame_ref),

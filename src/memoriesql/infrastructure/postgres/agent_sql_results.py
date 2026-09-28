@@ -22,13 +22,14 @@ from uuid import UUID, uuid4
 
 from psycopg import Connection, Error
 
-from memoriesql.application.agent_sql_admission import RecursionBound
-from memoriesql.application.agent_sql_catalog import SqlCatalog
+from memoriesql.application.agent_sql_admission import RecursionBound, admit_query
+from memoriesql.application.agent_sql_catalog import SqlAdmissionError, SqlCatalog
 from memoriesql.application.agent_sql_results import (
     ALLOCATION_PROFILE_HASH,
     CONTRACT_VERSION,
     MAX_RESPONSE_BYTES,
     POLICY_HASH,
+    PREPARED_RELATIONS,
     EvidenceIndex,
     ref_key,
     remaining_after,
@@ -45,6 +46,7 @@ from memoriesql.application.investigation_contracts import (
     result_json_bytes,
 )
 from memoriesql.infrastructure.postgres.agent_sql_authority import QueryAuthorityProfile
+from memoriesql.infrastructure.postgres.authorization import PostgresAuthorizationPort
 from memoriesql.infrastructure.postgres.query_result_commit import (
     InternalResultCandidate,
     PostgresQueryResultCommit,
@@ -160,7 +162,13 @@ class PostgresAgentSqlResults:
     # -- public operations -------------------------------------------------
 
     def start_run(self) -> bytes:
-        """Start a run for the authenticated principal; callers set nothing."""
+        """Start a run for the authenticated principal; callers set nothing.
+
+        A bounded expiry-cleanup pass for this workspace runs first, in its own
+        transaction. Content cleanup more than 24 hours past due (missed or
+        failed) refuses the run as `budget_exhausted` / `settlement`.
+        """
+        self._cleanup_workspace()
         try:
             with self._control() as connection:
                 with relation_projection_frame(
@@ -182,11 +190,12 @@ class PostgresAgentSqlResults:
             )
         data: dict[str, Any] = row[0] if row else {"refused": "unavailable"}
         if "run" not in data:
+            code = "settlement" if data.get("refused") == "cleanup" else "database"
             return result_json_bytes(
                 {
                     "contract_version": CONTRACT_VERSION,
                     "outcome": "budget_exhausted",
-                    "error": {"code": "database"},
+                    "error": {"code": code},
                 }
             )
         return result_json_bytes(
@@ -251,6 +260,93 @@ class PostgresAgentSqlResults:
                     "SELECT memoriesql.abandon_query_deliveries_v1()"
                 ).fetchone()
         return int(row[0]) if row else 0
+
+    def cleanup_expired(self, *, batch_size: int = 16, max_batches: int = 64) -> bytes:
+        """Trusted-host/operator expiry cleanup for every workspace.
+
+        Never an agent wire action. Each batch commits on its own, so an
+        interrupted pass leaves nothing partial and the next pass continues.
+        The 24-hour deadline holds only while the host schedules this; missed
+        or failed cleanup becomes visible and refuses new runs (M0038).
+        """
+        if not 1 <= batch_size <= 256 or not 1 <= max_batches <= 1024:
+            raise ValueError("invalid cleanup bounds")
+        totals = {"runs": 0, "results": 0, "tombstones": 0}
+        pending = failed = batches = 0
+        try:
+            with self._control() as connection:
+                while batches < max_batches:
+                    with connection.transaction():
+                        connection.execute("SET LOCAL lock_timeout='500ms'")
+                        connection.execute("SET LOCAL statement_timeout='10000ms'")
+                        connection.execute("SET LOCAL ROLE memoriesql_application")
+                        row = connection.execute(
+                            "SELECT memoriesql.purge_expired_query_state_v1(%s)",
+                            (batch_size,),
+                        ).fetchone()
+                    batches += 1
+                    data: dict[str, Any] = row[0] if row else {}
+                    purged = data.get("purged", {})
+                    for key in totals:
+                        totals[key] += int(purged.get(key, 0))
+                    pending = int(data.get("pending", 0))
+                    failed = int(data.get("failed", 0))
+                    if not any(int(purged.get(key, 0)) for key in totals):
+                        break
+        except Error:
+            return result_json_bytes(
+                {
+                    "contract_version": CONTRACT_VERSION,
+                    "outcome": "execution_error",
+                    "error": {"code": "database"},
+                    "cleanup": {
+                        "purged": totals,
+                        "pending": pending,
+                        "failed": failed,
+                        "batches": batches,
+                    },
+                }
+            )
+        return result_json_bytes(
+            {
+                "contract_version": CONTRACT_VERSION,
+                "outcome": "available",
+                "cleanup": {
+                    "purged": totals,
+                    "pending": pending,
+                    "failed": failed,
+                    "batches": batches,
+                },
+            }
+        )
+
+    def cleanup_status(self) -> bytes:
+        """Noncontent cleanup status of this workspace, for the host or operator."""
+        try:
+            with self._control() as connection:
+                with relation_projection_frame(
+                    connection,
+                    credential_sha256=self._credential,
+                    workspace_id=self._workspace,
+                ) as frame:
+                    row = frame.execute(
+                        "SELECT memoriesql.query_cleanup_status_v1()"
+                    ).fetchone()
+        except (PermissionError, Error):
+            return result_json_bytes(
+                {
+                    "contract_version": CONTRACT_VERSION,
+                    "outcome": "unavailable",
+                    "error": {"code": "unavailable"},
+                }
+            )
+        return result_json_bytes(
+            {
+                "contract_version": CONTRACT_VERSION,
+                "outcome": "available",
+                "cleanup": row[0] if row else None,
+            }
+        )
 
     def handle(self, data: bytes) -> bytes:
         """One closed request in, one closed reply out; never raises for input."""
@@ -386,6 +482,7 @@ class PostgresAgentSqlResults:
             raise _Failure(
                 "unsupported_query", "feature", feature=feature or request.intent
             )
+        self._screen(request)
         with self._control() as store_connection:
             store = PostgresResultPreparation(
                 store_connection,
@@ -432,21 +529,8 @@ class PostgresAgentSqlResults:
         deadline: float,
     ) -> bytes:
         known_at = datetime.fromisoformat(request.scope.known_at.replace("Z", "+00:00"))
-        catalog = SqlCatalog.installed()
-        try:
-            parameters = tuple(p.sql_parameter(catalog) for p in request.parameters)
-        except InvestigationRequestError as error:
-            raise _Failure(error.outcome, error.code) from None
-        recursion = (
-            RecursionBound(
-                request.recursion.cte,
-                request.recursion.depth_column,
-                request.recursion.node_column,
-                request.recursion.max_depth,
-            )
-            if request.recursion
-            else None
-        )
+        parameters = self._parameters(request)
+        recursion = self._recursion(request)
         committed = False
         try:
             with self._control() as source:
@@ -550,6 +634,51 @@ class PostgresAgentSqlResults:
             1,
             request.page_size,
         )
+
+    @staticmethod
+    def _parameters(request: QueryRequest) -> tuple[Any, ...]:
+        catalog = SqlCatalog.installed()
+        try:
+            return tuple(p.sql_parameter(catalog) for p in request.parameters)
+        except InvestigationRequestError as error:
+            raise _Failure(error.outcome, error.code) from None
+
+    @staticmethod
+    def _recursion(request: QueryRequest) -> RecursionBound | None:
+        if not request.recursion:
+            return None
+        return RecursionBound(
+            request.recursion.cte,
+            request.recursion.depth_column,
+            request.recursion.node_column,
+            request.recursion.max_depth,
+        )
+
+    def _screen(self, request: QueryRequest) -> None:
+        """Refuse SQL the text alone decides, before any reservation or work.
+
+        Only reference anchors depend on the prepared population, so a
+        `parameter_anchor` refusal is left to the full admission after
+        preparation; every other admission outcome is final here.
+        """
+        try:
+            screened = admit_query(
+                request.sql,
+                self._parameters(request),
+                recursion=self._recursion(request),
+            )
+        except SqlAdmissionError as error:
+            if error.construct == "parameter_anchor":
+                return
+            outcome = "unsupported_query" if error.code == "unsupported" else error.code
+            code, feature = _admission_error(outcome, error.construct)
+            raise _Failure(
+                outcome, code, feature=feature, position=error.position
+            ) from None
+        if not set(screened.relations) <= PREPARED_RELATIONS:
+            raise _Failure(
+                "unsupported_query", "feature", feature="unprepared_relation"
+            )
 
     def _recover_query(
         self,
@@ -943,6 +1072,28 @@ class PostgresAgentSqlResults:
                 connection.execute("SET LOCAL statement_timeout='2500ms'")
                 row = connection.execute(statement, values).fetchone()
         return row[0] if row else None
+
+    def _cleanup_workspace(self) -> None:
+        """One bounded owned expiry-cleanup pass for this workspace.
+
+        Item failures are recorded by the database and retried on every pass;
+        a missed or failed pass is enforced by the run-start overdue refusal.
+        """
+        try:
+            with self._control() as connection:
+                with connection.transaction():
+                    connection.execute("SET LOCAL lock_timeout='500ms'")
+                    connection.execute("SET LOCAL statement_timeout='10000ms'")
+                    connection.execute("SET LOCAL ROLE memoriesql_application")
+                    PostgresAuthorizationPort(connection).begin_context(
+                        credential_sha256=self._credential,
+                        requested_workspace_id=self._workspace,
+                    )
+                    connection.execute(
+                        "SELECT memoriesql.purge_workspace_query_state_v1(8)"
+                    )
+        except (PermissionError, Error):
+            pass
 
     def _discard(self, store: PostgresResultPreparation, ownership: Any) -> None:
         try:

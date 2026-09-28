@@ -22,20 +22,60 @@ accessed or received.
 (M0032) and adds observations, statements, statement_sources, source_units and
 corrections at the same explicit cutoff, under the same authority fence and
 repeatable-read frame. It adds no second authorization evaluator. Each family is
-admitted only if the canonical predicates used by bounded stored-bead inspection
-authorize all of the following:
+admitted only if all of the following are authorized:
 
-- the bead's event, for `memory.query`;
-- its accepted version and statements;
-- every unit whose text the catalog exposes, for both `memory.query` and
-  `source.read`;
+- the bead's event, for `memory.query`, and its accepted version and statements.
+  These are bounded stored-bead inspection's predicates.
+- every unit whose retained text the catalog exposes, for `memory.query` and
+  `source.read` on its event. This is the canonical source-unit row authority
+  of M0006.
 - **every correction neighbour visible at the frame**.
 
 Otherwise the whole family is withheld, so no successor count, branch or
-older-as-current presentation escapes. Raw source-range authority is not
-required, because no raw captured bytes are exposed. The protected records
+older-as-current presentation escapes. The protected records
 (`query_bead_records_v1`) have PR-03's record shapes and join one deduplicated
 dependency manifest.
+
+Unlike stored-bead inspection's source parts, this requires no raw source
+authority. `source.raw.read` gates exact raw bytes, evidence packages and source
+revisiting, and none of those are exposed here. `source_units.search_text` is
+**retained unit text, not exact raw bytes or part hydration**.
+
+**Owner decision (2026-09-28, at or before 17:15 CDT, relayed by the
+coordinator):** paired agents holding `source.read` may read retained
+source-unit text and unit facts through their own run-bound, receipted query
+results. They also need `memory.query` on the bead's event, plus version and
+statement authorization. `source.raw.read` stays owner-only. No PR-03 authority
+or interface changes.
+
+**Owner decision (2026-09-28, relayed by the coordinator): extend to package
+text.** A materialized logical unit (M0017) retains no text of its own. An
+authorized agent now receives its normalized projection, within these bounds:
+
+- **Pinned package only.** Text comes only from the package pinned by the unit's
+  materialization binding, never a newer representation of the same occurrence.
+  The pin must still match the sealed inventory.
+- **Normalized parts only.** Every part must be `producer_normalized`. A package
+  with any `identity_utf8` (raw) part yields no text: the citation keeps the
+  evidence ref, unit ID, pinned package and content SHA-256, with `text_state`
+  `unsupported`.
+- **Exact inventory.** The text is the sealed parts concatenated in ordinal
+  order, unmodified. No neighbouring unit, unrelated part or raw source reader is
+  reached.
+- **Visible binding.** `package_revision_id` is the pinned package, and the
+  unit's `content_sha256` is that package's inventory hash.
+- **Labels.** Every result using `source_units` carries the coverage gap
+  `source_units.search_text` / `normalized_text_not_exact_source`. Served
+  package text adds `normalized_projection:<normalization version>` and the
+  package's own declared limits (`package_exclusion:…`, `package_unresolved:…`).
+  It is never described as raw evidence or as sanitized.
+- **Closure.** The pin, its parts' hashes and derivations, and their raw lineage
+  join the sealed dependency closure as a `unit_package` record. Reuse
+  reauthorizes it whole, and the disclosure receipt binds the exact delivered
+  response. The raw lineage is noncontent provenance that is never disclosed to
+  agents; raw bytes stay owner-only.
+
+Units that retain their own text (not materialized) return it as before.
 
 PR-03's nine assessed relations keep their unchanged projection and its
 raw-source-gated provenance records. Only `personal_owner` holds
@@ -108,6 +148,38 @@ These remain qualification targets, not measured capacity.
   - A committed result is then disclosed without rerunning.
   - A single-use preparation that never committed fails as `execution_error`;
     the client uses a new step key.
+- **Expiry cleanup** (owner Decision 1, item 3). Access ends at expiry through
+  the closure verdict. Owned cleanup then removes the content and every
+  sensitive copy:
+  - **At run expiry** (30 minutes): step request digests and page bindings,
+    delivery response digests and delivered refs. Ended owners' work settles
+    first, exactly as in host recovery. A stranded preparation can no longer
+    commit, so its reservation drops to the journal charge, and its unresolved
+    step gets the terminal `execution_error` disposition.
+  - **At result expiry** (30 days): the body, witnesses and dependency records
+    (including query text and parameters), creation and identity rows,
+    invocation hashes, disclosure receipts and cursors. Retained allocation
+    drops to the 8 KiB noncontent journal charge.
+  - **Thirty days after the last purge:** the noncontent tombstone and its
+    journal charge. The tombstone holds opaque run, step and result
+    identifiers, terminal state, timestamps, work charges and idempotency
+    disposition.
+
+  Each subject is purged atomically, so an interrupted pass leaves nothing
+  partial and the next pass completes it. Failures are recorded with their
+  SQLSTATE and retried on every pass, after healthy subjects. M0038 grants the
+  staged-row owner EXECUTE on `uuid_eq`, because the foreign-key check runs as
+  that owner when cleanup deletes an invocation.
+- **Cleanup deadline.** The database cannot run without a caller. The host runs
+  a bounded pass for its workspace before every run start. It must also
+  schedule `cleanup_expired()` for all workspaces, for example hourly.
+  - Content cleanup more than 24 hours past due, whether missed or failed,
+    refuses new runs in that workspace as `budget_exhausted` / `settlement`.
+    `cleanup_status()` reports it.
+  - A workspace whose host schedules nothing and starts no runs keeps expired,
+    already inaccessible content past 24 hours; its status shows it overdue.
+  - Rows are deleted logically. PostgreSQL vacuum reclaims their space, and WAL
+    and backups follow their own storage lifecycle.
 
 **Extension outside the approved packet (owner decision #11):**
 `close_run(run_ref)` is a trusted-host, owner-only early close, never an agent
@@ -121,6 +193,8 @@ maximum are unchanged.
 `PostgresAgentSqlResults(control_factory, reader_factory, authority_profile,
 credential_sha256, workspace_id)` exposes `start_run()`, `handle(request_bytes)`
 for `query` and `reuse_result`, `close_run(run_ref)` and `recover_abandoned()`.
+`cleanup_expired()` and `cleanup_status()` are trusted-host/operator
+operations, never agent wire actions.
 Replies are the packet's closed envelopes in result-json-v1 bytes. Other action
 kinds reply `unsupported_query` with their kind as the feature. Unsupported
 query features (saved inputs, parents, candidate profiles, source scopes) reply
@@ -131,6 +205,17 @@ closure: SELECT on the fourteen prepared views, the reviewed builtins and the
 two invocation predicates. `reviewed_query_reader_profile` rebuilds the profile
 from that specification at host start, and the executor independently
 re-qualifies it before every invocation.
+
+A least-privilege control login (not a superuser; an inheriting member of
+`memoriesql_application`) additionally needs three operator provisioning steps,
+found by the trusted-host lane:
+- USAGE on schemas `memoriesql_query` and `memory_v1`, so the reviewed profile
+  can resolve its names;
+- `ALTER DEFAULT PRIVILEGES FOR ROLE <control> REVOKE EXECUTE ON FUNCTIONS FROM
+  PUBLIC`, which the authority qualification requires of every creator role;
+- the reader role granted to the control login `WITH INHERIT TRUE, SET FALSE`, so
+  it can observe the reader backend's identity in `pg_stat_activity`. This is
+  narrower than `pg_read_all_stats`.
 
 **The executor holds both connection classes.** Credential isolation against the
 agent's actual shell, filesystem and process capabilities is not qualified here
@@ -155,10 +240,26 @@ lists source refs as hydration-required.
 
 ## Acceptance and preserved development failures
 
-Fictional installed tests (`test_agent_sql_results`, 14 cases) use the
+Fictional installed tests (`test_agent_sql_results`, 21 cases) use the
 production reader provisioning path. They cover:
 
 - query, page, cursor and reuse
+- a paired agent citing a finding to its supporting units under its own grant:
+  statement evidence refs, unit content SHA-256 and the pinned package, with
+  raw authority refused and identity-package units cited without text
+- the pinned normalized package text: authorized access to exactly the pinned
+  projection with its labels; a raw (identity) neighbour cited without text;
+  raw bytes, a foreign unit and a newer representation of the same occurrence
+  never delivered; saved-result reuse refused after revocation
+- hostile requests through `handle()` (malformed envelopes, unknown fields,
+  oversized pages, offset times, catalog/physical/DML/multi-statement SQL,
+  functions, settings and literals, forged pins and cursors): closed refusals,
+  no result or rows, and no preparation or invocation for refused SQL
+- expiry cleanup: run purge keeping live results reusable, result purge with a
+  scan of every PR-05 table for the query text, parameter, digests and
+  delivered refs, tombstone expiry, stranded-reservation reclamation, an
+  interrupted pass leaving nothing partial, and a visible failure that refuses
+  runs until cleanup recovers
 - a paired agent (pairing plus access grant, never the owner) reading its own
   granted observation families, with relation tables disclosed as a
   raw-authority gap, revocation ending reuse, and a `memory.query`-only agent
@@ -190,6 +291,15 @@ Development failures retained:
     parameters.
   - A lost single-use preparation correctly fails instead of rerunning.
 - Inventory hashes drifted during SQL edits.
+- The hostile-request test found that refused SQL still reserved, then
+  discarded, a preparation. SQL is now screened before any reservation. Only
+  the population-dependent reference-anchor check waits for full admission.
+- **Open finding:** `NOT (text = $1)` is rewritten by the planner to `<>`,
+  whose `textne` lies outside the reviewed builtin closure. Such queries fail as
+  `unavailable` rather than `unsupported_query`.
+- Cleanup initially failed with `permission denied for function uuid_eq`: M0033
+  had revoked builtins from the staged-row owner. It was fixed with the narrow
+  grant above.
 - **Paired agents saw zero observation rows** (PR-06 repro). The first
   observation families reused PR-03's provenance records, which require
   `source.raw.read`, a capability the `paired_agent` role can never hold. The
@@ -197,23 +307,43 @@ Development failures retained:
 
 Exact-head installed 3.13/3.14 qualification and CI belong on the PR.
 
-## Before any release: owner approvals required
+## Before any release
 
-Releasing this cut as a labelled preview needs John's explicit approval of:
+The owner's Decision 1 is recorded in `../approvals/pr-05-preview-amendments.md`.
+It allows only a labelled preview with these terms:
 
-1. **Availability gating.** Delivery before the packet's availability gates:
-   - W1–W7 measured fit;
-   - a physical storage profile;
-   - integrated adversarial acceptance, including credential isolation;
-   - checkpoints;
-   - cleanup and erasure.
+- **Measured range.** The preview range is whatever the small-workspace
+  qualification measures, never an extrapolation.
+- **Logical accounting.** Allocation accounting is temporarily logical, with a
+  before/after database-growth measurement. The 512 MiB quota is a logical
+  allocation, never a statement about disk usage.
+- **Erasure wording.** Every preview description states, verbatim:
 
-   Interface shapes and numeric policy are unchanged.
-2. **No physical purge yet.** Result bytes are not purged. Access ends at 30
-   days or on authority loss, but the 24-hour purge commitment is not met.
-   Allocations accumulate toward the 512 MiB workspace quota.
-3. **Credential posture.** The credential and transport posture of any
-   agent-facing deployment.
+  > Governed erasure is unavailable in this preview. Revocation prevents
+  > subsequent authorized disclosure; it does not delete retained data or recall
+  > previously delivered copies. Regrant may restore access while the result
+  > remains valid. Expired derived-result content is removed through qualified
+  > expiry cleanup. Canonical source deletion and immediate erasure are not
+  > provided by this release.
 
-No release, version, tag, publication, provider call, owner data, evaluation run
-or Desktop consumption is authorized by this slice.
+Expired-result deletion is required work, not an exception. It is implemented
+in this cut (see Schema 38) and qualifies with the exact-head run.
+
+Still gating any preview release:
+
+- the measured small-workspace qualification, with database growth;
+- exact-head qualification of expiry cleanup, and a host schedule for
+  `cleanup_expired()`;
+- integrated adversarial acceptance, including credential isolation against the
+  agent's actual shell, filesystem and process access;
+- **agent-identity access.** It is not available until the combined end-to-end
+  proof passes: capture, then authoring, then the agent's own query through the
+  trusted host, then the agent's source inspection. The paired-agent regression
+  tests above prove only the population fix.
+- the Desktop lane's trust boundary;
+- the credential and transport posture of any agent-facing deployment.
+
+Decision 1 implies no security waiver, no full-acceptance claim, no release
+authorization and no owner-credential fallback for agents. No release, version,
+tag, publication, provider call, owner data, evaluation run or Desktop
+consumption is authorized by this slice.

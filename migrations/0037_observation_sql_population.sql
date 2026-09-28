@@ -3,15 +3,56 @@
 -- nine assessed relations are consumed unchanged. No agent grant, result API or
 -- entity/alias/mention/topic population is added; those remain unsupported.
 
--- Query-level protected records for one accepted observation family, using the
--- same canonical predicates as bounded stored-bead inspection: memory.query on
--- the bead's event, accepted-version and statement authorization, and both
--- memory.query and source.read for every unit whose text the catalog exposes.
--- Raw source-range authority is not required because no raw captured bytes are
--- exposed. Record shapes equal PR-03's so shared records deduplicate exactly.
+-- Query-level protected records for one accepted observation family. Beads,
+-- accepted versions and statements use bounded stored-bead inspection's
+-- predicates (memory.query on the bead's event, version and statement
+-- authorization). Every unit whose retained text the catalog exposes needs
+-- memory.query plus source.read on its event, the canonical source-unit row
+-- authority (M0006). Raw captured bytes, evidence packages and source revisiting
+-- stay gated by source.raw.read and are not exposed here. Record shapes equal
+-- PR-03's so shared records deduplicate exactly.
+-- The pinned evidence package of one materialized logical unit (owner decision,
+-- 2026-09-28: agents with current query/source-read authority may receive the
+-- normalized text of their authorized units). Only the package pinned by the
+-- unit's materialization binding is read, never a newer representation, and
+-- its text is served only when the pin still matches the sealed inventory and
+-- every part is producer-normalized. An identity (raw) or mixed package yields
+-- no text. The derivation link (parts, hashes, raw lineage) is noncontent
+-- dependency provenance and is never disclosed to agents. Callers authorize
+-- the unit first; this grants nothing by itself.
+CREATE FUNCTION memoriesql.query_unit_package_v1(t uuid,id uuid) RETURNS jsonb
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog,memoriesql SET row_security=off AS $$
+ SELECT jsonb_build_object(
+  'package_id',p.package_id,'sealed_receipt_id',p.sealed_receipt_id,
+  'inventory_sha256',p.inventory_hash,
+  'normalization_policy_version',p.declaration->>'normalization_policy_version',
+  'package_revision',p.declaration->'package_revision',
+  'required_parts',m.package_pin->'required_parts',
+  'exclusions',COALESCE(p.declaration#>'{qualification,exclusions}','[]'::jsonb),
+  'unresolved_coverage',COALESCE(p.declaration#>'{qualification,unresolved_coverage}','[]'::jsonb),
+  'normalized',p.sealed_receipt_id IS NOT NULL
+   AND m.package_pin->>'inventory_sha256'=p.inventory_hash
+   AND count(pp.part_id)=(m.package_pin->>'required_parts')::integer
+   AND bool_and(pp.inventory->>'derivation'='producer_normalized'),
+  'text',CASE WHEN p.sealed_receipt_id IS NOT NULL
+   AND m.package_pin->>'inventory_sha256'=p.inventory_hash
+   AND count(pp.part_id)=(m.package_pin->>'required_parts')::integer
+   AND bool_and(pp.inventory->>'derivation'='producer_normalized')
+   THEN string_agg(pp.content,'' ORDER BY pp.ordinal) END,
+  'parts',jsonb_agg(jsonb_build_object('part_id',pp.part_id,'ordinal',pp.ordinal,
+   'content_sha256',pp.inventory->'content_sha256','derivation',pp.inventory->'derivation',
+   'lineage',pp.inventory->'lineage') ORDER BY pp.ordinal))
+ FROM memoriesql.logical_unit_materializations m
+ JOIN memoriesql.evidence_packages p ON p.tenant_id=m.tenant_id AND p.package_id=m.package_id
+ JOIN memoriesql.evidence_package_parts pp ON pp.tenant_id=p.tenant_id AND pp.package_id=p.package_id
+ WHERE m.tenant_id=t AND m.source_unit_id=id
+ GROUP BY p.package_id,p.sealed_receipt_id,p.inventory_hash,p.declaration,m.package_pin
+$$;
+REVOKE ALL ON FUNCTION memoriesql.query_unit_package_v1(uuid,uuid) FROM PUBLIC;
+
 CREATE FUNCTION memoriesql.query_unit_records_v1(t uuid,id uuid,known timestamptz) RETURNS jsonb
 LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,memoriesql SET row_security=off AS $$
-DECLARE u record;
+DECLARE u record; pkg jsonb;
 BEGIN
  SELECT su.*,ev.source_object_id,ev.recorded_at,ev.content_hash event_content_hash INTO u
   FROM memoriesql.source_units su JOIN memoriesql.source_events ev ON ev.tenant_id=su.tenant_id AND ev.event_id=su.event_id
@@ -20,7 +61,10 @@ BEGIN
   OR NOT memoriesql.current_context_event_authorized(u.access_scope_id,u.event_id,'source.read','read') THEN
   RAISE EXCEPTION 'dependency_unavailable' USING ERRCODE='42501';
  END IF;
- RETURN jsonb_build_array(
+ pkg:=memoriesql.query_unit_package_v1(t,id);
+ RETURN CASE WHEN pkg IS NULL THEN '[]'::jsonb ELSE jsonb_build_array(jsonb_build_object(
+  'kind','unit_package','id',id::text,'row',(pkg-'text')||jsonb_build_object('source_unit_id',id)))
+ END || jsonb_build_array(
   jsonb_build_object('kind','source_unit','id',id::text,'row',jsonb_build_object('source_unit_id',id,'event_id',u.event_id,'content_sha256',u.content_hash,'created_at',memoriesql.relation_packet_time(u.created_at))),
   jsonb_build_object('kind','source_event','id',u.event_id::text,'row',jsonb_build_object('event_id',u.event_id,'source_object_id',u.source_object_id,'content_sha256',u.event_content_hash,'recorded_at',memoriesql.relation_packet_time(u.recorded_at))),
   jsonb_build_object('kind','source_object','id',u.source_object_id::text,'row',jsonb_build_object('source_object_id',u.source_object_id)));
@@ -80,7 +124,7 @@ DECLARE
     effective timestamptz; seen_units uuid[] := '{}';
     observations jsonb := '[]'; statements jsonb := '[]'; sources jsonb := '[]';
     units jsonb := '[]'; corrections jsonb := '[]'; deps jsonb; manifest jsonb; result jsonb;
-    estimate bigint;
+    estimate bigint; pkg jsonb; unit_text text; text_labels text[] := '{}';
 BEGIN
     IF byte_budget IS NULL OR byte_budget NOT BETWEEN 8192 AND 67108864
        OR requested_view IS NULL OR requested_view NOT IN ('resolved','historical') THEN
@@ -220,12 +264,26 @@ BEGIN
               FROM memoriesql.source_units su
               JOIN memoriesql.source_events ev ON ev.tenant_id=su.tenant_id AND ev.event_id=su.event_id
              WHERE su.tenant_id=c.tenant_id AND su.source_unit_id=unit_id;
+            -- A materialized unit's text is its pinned package's normalized
+            -- projection, labelled with its version and declared limits; an
+            -- identity (raw) or mixed package leaves only the citation.
+            pkg := memoriesql.query_unit_package_v1(c.tenant_id,unit_id);
+            unit_text := COALESCE(u.content_text,
+                CASE WHEN (pkg->>'normalized')::boolean THEN pkg->>'text' END);
+            IF u.content_text IS NULL AND unit_text IS NOT NULL THEN
+                text_labels := text_labels
+                    || ('normalized_projection:'||(pkg->>'normalization_policy_version'))
+                    || ARRAY(SELECT 'package_exclusion:'||x
+                             FROM jsonb_array_elements_text(pkg->'exclusions') x)
+                    || ARRAY(SELECT 'package_unresolved:'||x
+                             FROM jsonb_array_elements_text(pkg->'unresolved_coverage') x);
+            END IF;
             units := units || jsonb_build_array(jsonb_build_object(
                 'source_unit_id',u.source_unit_id,'content_sha256',u.content_hash,
                 'event_id',u.event_id,'source_object_id',u.source_object_id,
-                'source_kind',u.source_type,'package_revision_id',NULL,
-                'search_text',u.content_text,
-                'text_state',CASE WHEN u.content_text IS NULL THEN 'unsupported' ELSE 'available' END,
+                'source_kind',u.source_type,'package_revision_id',pkg->>'package_id',
+                'search_text',unit_text,
+                'text_state',CASE WHEN unit_text IS NULL THEN 'unsupported' ELSE 'available' END,
                 'source_occurred_at',memoriesql.relation_packet_time(
                     COALESCE(u.unit_source_occurred_at,u.source_occurred_at)),
                 'source_time_original',CASE WHEN u.unit_source_occurred_at IS NULL
@@ -274,7 +332,11 @@ BEGIN
             -- relation records require raw source authority, and observation
             -- families require source.read. Missing ones are disclosed as gaps.
             'relation_raw_authority',memoriesql.current_context_has_capability('source.raw.read'),
-            'source_read_authority',memoriesql.current_context_has_capability('source.read')),
+            'source_read_authority',memoriesql.current_context_has_capability('source.read'),
+            -- Labels of served package text: its normalized projection version
+            -- and the package's own declared coverage limits.
+            'source_text_labels',COALESCE((SELECT jsonb_agg(x ORDER BY x COLLATE "C")
+                FROM (SELECT DISTINCT l AS x FROM unnest(text_labels) l) d),'[]'::jsonb)),
         'dependency_records_json',memoriesql.lifecycle_canonical_json_v1(deps),
         'dependency_manifest_json',memoriesql.lifecycle_canonical_json_v1(manifest));
     IF octet_length(result::text) + 8192 > byte_budget THEN

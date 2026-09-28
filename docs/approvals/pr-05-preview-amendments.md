@@ -17,11 +17,12 @@ The exact interface was reverified from Git blob bytes before recording:
 
 ## Source
 
-The PR-05 coordinator relayed the owner's confirmation. It reached the
-implementer at 2026-09-28T21:26:24.818Z (16:26 CDT). The relay gives the time of
-the confirmation as "~16:45 CDT"; the receipt time is the verified upper bound.
-The same coordinator's earlier recommendation, received at 21:21:35Z, carried the
-reviewer's qualifications. The record quotes the confirmed texts verbatim.
+The PR-05 coordinator relayed the owner's confirmation. The owner confirmed on
+or before 2026-09-28T21:26:24.818Z (16:26 CDT), the time the relay reached the
+implementer. The coordinator withdrew an earlier unchecked time estimate from the
+relay; only this receipt bound is recorded. The same coordinator's earlier
+recommendation, received at 21:21:35Z, carried the reviewer's qualifications. The
+record quotes the confirmed texts verbatim.
 
 ## Amendments
 
