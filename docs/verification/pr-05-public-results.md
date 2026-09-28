@@ -188,6 +188,66 @@ refunds nothing, keeps charges in the rolling window and cannot be reopened.
 "Active" means neither expired nor closed; the two-run cap and 30-minute
 maximum are unchanged.
 
+## Measured preview range (Decision 1, items 1 and 2)
+
+Fictional workspaces were built through the real capture, package, materialize
+and author path, from dev builds of head `dab96f2`. Each has one assessed
+relation; every other observation is a unit carrying about 2 KB of normalized
+conversation-projection text. Environment:
+
+- Apple M3 Max host;
+- Docker VM with 16 CPUs and 7.75 GiB;
+- the pinned PostgreSQL 18.4 image (`a02db8ca…`) with default settings.
+
+Each size ran eight useful query shapes three times: enumeration, aggregation,
+a statement join, a window, a set operation, EXISTS, a finding-to-source
+citation and a relation join. Each run also paged forward and reused every result
+from a second run. The driver, logs and manifest are archived as fictional dev
+evidence under `memoriesql-evidence/pr-05/measure-dab96f2`. They are not W1–W7
+and not a capacity guarantee.
+
+| Observations | Packaged text | Prepared population | Dependency records | Query median (worst) | Next page | Cross-run reuse | Logical allocation per result |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 50 | 0.10 MB | 0.52 MB | 461 (0.18 MB) | 1.9–2.1 s (2.3 s) | ≤1.0 s | ≤1.0 s | 0.59–0.90 MB |
+| 100 | 0.20 MB | 1.03 MB | 911 (0.36 MB) | 2.9–3.3 s (3.3 s) | ≤1.6 s | ≤1.6 s | 1.16–1.76 MB |
+| 200 | 0.41 MB | 2.05 MB | 1,811 (0.71 MB) | 5.4–6.1 s (6.3 s) | ≤3.1 s | ≤3.1 s | 2.29–3.49 MB |
+
+(MB = 10^6 bytes.)
+
+- **Preview range.** The preview is qualified only within this measured range:
+  up to 200 accepted observations with about 2 KB of unit text each, on the
+  declared machine. Every useful query shape completed at every size, well
+  inside the 30 s operation limit. Beyond 200 observations is unmeasured and
+  not claimed.
+- **Cost grows with the whole authorized population.** Each query prepares it,
+  and every page and reuse re-verifies the whole closure.
+- **Allocation binds before time.** Each result seals the population's
+  dependency records, so it retains about 15 KB of logical allocation per
+  observation. At 200 observations, the 128 MiB run allocation holds roughly
+  40–60 results, and the 512 MiB workspace allocation roughly 150–230.
+  Results live 30 days, so sustained querying can exhaust the workspace
+  allocation (`budget_exhausted` / `storage`) until expiry cleanup reclaims it.
+- **Budget exhaustion is clean.** At every size, a result budget smaller than
+  the prepared population failed as `budget_exhausted` / `storage`, with no
+  published result, no unsettled delivery or invocation, and a discarded
+  preparation.
+- **Database growth** is measured separately from logical allocation. The
+  workload was 24 results with their pages and reuses:
+
+  | Observations | Logical allocation | PR-05 tables growth | Database growth | PR-05 tables after cleanup and VACUUM |
+  | --- | --- | --- | --- | --- |
+  | 50 | 17.6 MB | +9.5 MB | +13.2 MB | 1.8 MB |
+  | 100 | 34.4 MB | +18.4 MB | +22.1 MB | 2.3 MB |
+  | 200 | 68.1 MB | +32.6 MB | +36.1 MB | 2.7 MB |
+
+  Physical growth was about half the logical charge, because of TOAST
+  compression. Logical allocation is not a physical disk guarantee, and the
+  512 MiB quota is a logical allocation, never a statement about disk usage.
+  Rows deleted by cleanup keep their space until VACUUM. WAL and backups were
+  not measured.
+- **Not measured here:** owner source inspection through the existing raw-gated
+  readers, which this cut leaves unchanged.
+
 ## Host interface
 
 `PostgresAgentSqlResults(control_factory, reader_factory, authority_profile,
@@ -331,7 +391,8 @@ in this cut (see Schema 38) and qualifies with the exact-head run.
 
 Still gating any preview release:
 
-- the measured small-workspace qualification, with database growth;
+- keeping any preview within the measured range above (up to 200
+  observations);
 - exact-head qualification of expiry cleanup, and a host schedule for
   `cleanup_expired()`;
 - integrated adversarial acceptance, including credential isolation against the
