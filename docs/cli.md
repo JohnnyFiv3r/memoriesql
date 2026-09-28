@@ -219,13 +219,13 @@ transport failure is the executor's canonical `unavailable` reply (exit 2). The
 host authenticates each request as a current paired agent of its workspace, so
 a paired agent's authority is exactly its pairing and grants.
 
-Through the host, a paired agent can use `schema`, `query` and `result`, whose
-observation, statement and source-unit tables return unit text under
-`memory.query` and `source.read`. `inspect`, `source` and `relations` currently
-answer `resource_unavailable` to paired agents, because those stored-bead
-readers require raw-source authority that the paired-agent role cannot hold.
-`capabilities --json` reports this as `paired_agent_reads`, along with the host
-protocol version.
+Through the host, a paired agent uses `schema`, `query` and `result`. It cites
+sources through query results: `memory_v1.source_units` returns the retained
+text of each authorized unit under `memory.query` and `source.read`. The exact
+source readers `inspect`, `source` and `relations` are owner-only. They answer
+`resource_unavailable` to paired agents, because they require raw-source
+authority that the paired-agent role cannot hold. `capabilities --json` reports
+this as `paired_agent_reads`, along with the host protocol version.
 
 The host's operator runs `broker provision` once to create both host logins with
 generated secrets and the private configuration. It reads the database

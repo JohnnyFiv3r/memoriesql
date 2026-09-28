@@ -146,19 +146,22 @@ def _parser() -> argparse.ArgumentParser:
     )
     capabilities.add_argument("--json", action="store_true")
 
-    inspect = commands.add_parser("inspect", help="Read one authorized stored bead.")
+    inspect = commands.add_parser(
+        "inspect", help="Read one authorized stored bead (owner-only; agents use query)."
+    )
     inspect.add_argument("bead_id", type=UUID)
     inspect.add_argument("--json", action="store_true")
 
     source = commands.add_parser(
-        "source", help="Read one exact authorized source selection for a bead."
+        "source",
+        help="Read one exact source selection for a bead (owner-only; agents use query).",
     )
     source.add_argument("bead_id", type=UUID)
     source.add_argument("--selection-file", required=True, type=Path)
     source.add_argument("--json", action="store_true")
 
     relations = commands.add_parser(
-        "relations", help="Read authorized relations for one bead."
+        "relations", help="Read authorized relations for one bead (owner-only)."
     )
     relations.add_argument("bead_id", type=UUID)
     relations.add_argument("--known-at", type=_aware_time)
