@@ -24,8 +24,11 @@ class ExportDenialTests(unittest.TestCase):
             outputs[generate_catalogs.OUTPUT_ROOT / "synthetic-cli.json"]
         )
         self.assertEqual(wrapper["note"], "Synthetic registry-owned note.")
-        self.assertEqual(wrapper["entries"], [])
-        self.assertEqual(wrapper["status"], "not_implemented")
+        self.assertEqual(
+            [entry["id"] for entry in wrapper["entries"]],
+            ["memoriesql.core-cli.v1"],
+        )
+        self.assertEqual(wrapper["status"], "available")
 
     def test_registry_denies_invalid_catalog_declarations(self) -> None:
         original = json.loads(generate_catalogs.REGISTRY_PATH.read_text())
@@ -40,7 +43,7 @@ class ExportDenialTests(unittest.TestCase):
         unsafe["catalogs"][0]["filename"] = "../unregistered.json"
         mutations.append(unsafe)
         disposition = deepcopy(original)
-        disposition["catalogs"][0]["disposition"] = "include"
+        disposition["catalogs"][0]["disposition"] = "empty"
         mutations.append(disposition)
         wrong_count = deepcopy(original)
         wrong_count["catalogs"][1]["expected_record_count"] = 2
@@ -64,7 +67,11 @@ class ExportDenialTests(unittest.TestCase):
 
     def test_unregistered_empty_catalog_is_denied(self) -> None:
         document = json.loads(generate_catalogs.REGISTRY_PATH.read_text())
-        document["catalogs"].pop(0)
+        document["catalogs"] = [
+            catalog
+            for catalog in document["catalogs"]
+            if catalog["kind"] != "http_openapi"
+        ]
         with (
             patch.object(generate_catalogs, "_read_registry", return_value=document),
             self.assertRaisesRegex(ValueError, "unregistered generated catalog"),
