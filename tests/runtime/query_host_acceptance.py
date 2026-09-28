@@ -579,6 +579,28 @@ class QueryHostAcceptance(unittest.TestCase):
         with self.assertRaisesRegex(HostRefused, "superuser"):
             prepare_host(after)
         self.db.execute(sql.SQL("ALTER ROLE {} NOSUPERUSER").format(control))
+        reader = sql.Identifier(after.reader.role)
+        self.db.execute(sql.SQL("REVOKE {} FROM {}").format(reader, control))
+        with self.assertRaisesRegex(HostRefused, "inherit its reader role"):
+            prepare_host(after)
+        self.db.execute(
+            sql.SQL("GRANT {} TO {} WITH INHERIT TRUE, SET FALSE").format(
+                reader, control
+            )
+        )
+        self.db.execute(
+            sql.SQL(
+                "ALTER DEFAULT PRIVILEGES FOR ROLE {} GRANT EXECUTE ON FUNCTIONS TO PUBLIC"
+            ).format(control)
+        )
+        with self.assertRaisesRegex(HostRefused, "default_procedure_privileges"):
+            prepare_host(after)
+        self.db.execute(
+            sql.SQL(
+                "ALTER DEFAULT PRIVILEGES FOR ROLE {} REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC"
+            ).format(control)
+        )
+        prepare_host(after)
         with self.assertRaisesRegex(HostRefused, "pinned profile"):
             prepare_host(after.model_copy(update={"profile_sha256": "f" * 64}))
         code, report = self.operator(admin.check, self.config_path)

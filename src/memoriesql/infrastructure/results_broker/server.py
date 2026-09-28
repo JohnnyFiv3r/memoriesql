@@ -134,6 +134,30 @@ def check_control_login(connection: Connection[Any]) -> None:
         raise HostRefused(inherit_refusal)
 
 
+def check_host_grants(connection: Connection[Any], reader_role: str) -> None:
+    """Refuse a control login that lacks the host-only grants provisioning makes.
+
+    The host must observe and settle its own reader backends, which PostgreSQL
+    shows only to a role inheriting the reader role; that inheritance also
+    carries the query schemas' USAGE needed to re-derive the reviewed profile.
+    """
+    row = connection.execute(
+        """SELECT has_schema_privilege(current_user, 'memoriesql_query', 'USAGE'),
+                  has_schema_privilege(current_user, 'memory_v1', 'USAGE'),
+                  pg_has_role(current_user, %s, 'USAGE')""",
+        (reader_role,),
+    ).fetchone()
+    if row is None or not row[2]:
+        raise HostRefused(
+            "control login must inherit its reader role "
+            "(GRANT <reader> TO <control> WITH INHERIT TRUE, SET FALSE)"
+        )
+    if not (row[0] and row[1]):
+        raise HostRefused(
+            "control login needs USAGE on schemas memoriesql_query and memory_v1"
+        )
+
+
 @dataclass(frozen=True)
 class TrustedHost:
     config: BrokerConfig
@@ -186,6 +210,7 @@ def prepare_host(config: BrokerConfig) -> TrustedHost:
     try:
         with psycopg.connect(config.control_conninfo(), autocommit=True) as control:
             check_control_login(control)
+            check_host_grants(control, config.reader.role)
             profile = reviewed_query_reader_profile(control, config.reader.role)
             authority = qualify_query_authority(control, profile)
         if authority.profile_sha256 != config.profile_sha256:
@@ -197,8 +222,14 @@ def prepare_host(config: BrokerConfig) -> TrustedHost:
     except HostRefused:
         raise
     except SqlAdmissionError as error:
+        hint = (
+            "; run ALTER DEFAULT PRIVILEGES FOR ROLE <control> REVOKE EXECUTE ON "
+            "FUNCTIONS FROM PUBLIC (broker provision does this)"
+            if error.construct == "default_procedure_privileges"
+            else ""
+        )
         raise HostRefused(
-            f"reviewed reader authority refused: {error.construct}"
+            f"reviewed reader authority refused: {error.construct}{hint}"
         ) from None
     except psycopg.Error as error:
         # SQLSTATE only: server messages can echo roles, hosts or settings.
