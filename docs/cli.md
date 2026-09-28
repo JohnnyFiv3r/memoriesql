@@ -24,6 +24,7 @@ Desktop and never loads private Python modules or arbitrary plugins. `contracts`
 | `schema` | Describes the installed logical query catalog, which relations are prepared, reserved or not prepared, the grants each prepared table family needs, the admission rules and delivery limits. It contacts no database and starts no run. |
 | `query --file query.sql --intent discover\|enumerate --view resolved\|historical` | Submits one caller-authored admitted SELECT with typed `$n` parameters through the trusted results executor and prints its closed reply. |
 | `result <result-id> --digest <content-digest> [--cursor C]` | Pages one retained immutable result by its exact pin under current authority, without rerunning its query. |
+| `broker serve\|provision\|check\|runs\|close-run --config PATH` | Operator-only commands of the local trusted query host, run as its service user with its private configuration. Each prints one JSON line. |
 
 Bare `sources` reports `source_inventory_not_released`; there is no public
 source-inventory reader yet. Provider-specific `sources connect` remains a
@@ -218,6 +219,36 @@ it as `login_role_not_ready`. Never
 give those values to an agent's shell, files or processes: an agent that can
 read them could bypass admitted SQL. Without them `query` and `result` report
 `trusted_query_host_not_configured`.
+
+An agent reaches memory through the local trusted query host instead. The host
+is one process running as a dedicated service user. It alone holds both database
+logins, and it serves a Unix socket. With `MEMORIESQL_RESULTS_SOCKET` set to that
+socket, `query`, `result`, `inspect`, `source` and `relations` go only to the
+host. The agent's environment then needs only its own paired credential
+(`MEMORIESQL_LOCAL_CREDENTIAL`) and `MEMORIESQL_WORKSPACE_ID`, and never a
+database URL; one in the same environment is ignored, never used as a fallback.
+Before sending anything, the client checks that the socket is served by the uid
+that owns its directory and that this uid is not the caller's own. Every
+transport failure is the executor's canonical `unavailable` reply (exit 2). The
+host authenticates each request as a current paired agent of its workspace, so
+a paired agent's authority is exactly its pairing and grants.
+
+Through the host, a paired agent can use `schema`, `query` and `result`, whose
+observation, statement and source-unit tables return unit text under
+`memory.query` and `source.read`. `inspect`, `source` and `relations` currently
+answer `resource_unavailable` to paired agents, because those stored-bead
+readers require raw-source authority that the paired-agent role cannot hold.
+`capabilities --json` reports this as `paired_agent_reads`, along with the host
+protocol version.
+
+The host's operator runs `broker provision` once to create both host logins with
+generated secrets and the private configuration. It reads the database
+administrator URL without echo and has no flag for it; `--control-role` and
+`--reader-role` override the default role names. `broker serve` runs the host
+until SIGTERM or SIGINT, then drains. `broker check` verifies the configuration,
+logins and file permissions; `broker runs` lists the runs the host recorded; and
+`broker close-run RUN_REF` closes one of them. Run these as the service user,
+never from an agent session.
 
 This slice does not route Desktop's Textual interface or provider adapters. A
 future, reviewed static service/client seam must preserve public core commands,

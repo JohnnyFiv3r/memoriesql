@@ -1645,13 +1645,13 @@
       "version": "1"
     },
     {
-      "canonical_payload_sha256": "e67205be0716920616595ba0ca612e51ab6df99a4301b6d30706e41d0c9a6ab0",
+      "canonical_payload_sha256": "5bfb9de874b717436fc3773abbdb4443dec052768d9860a1db8b22184e2e8942",
       "catalog": "cli",
       "classification": "proposed_open_core",
       "id": "memoriesql.core-cli.v1",
       "package_disposition": "include",
       "path": "contracts/records/memoriesql-core-cli-v1.json",
-      "public_sha256": "c47c4def9e34ba95e05c7f907aa00413aec3320a2e3d1bcc793158ad074ebe97",
+      "public_sha256": "047d31fbb47cbcca883f4faae34874cd002a4dc50286fb8b46cf0dd33f2a3b45",
       "reason": "Owner-approved public CLI ownership with installed core reads, exact source authority, one-time initialization, local client pairing, governed query/result reuse and explicit pending capabilities.",
       "version": "1"
     },
