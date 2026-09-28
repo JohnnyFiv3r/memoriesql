@@ -29,9 +29,14 @@ else:
     import test_query_result_commit as result_fixture
 
 
-def path_sql(depth: int, *, seed: str = "memory_v1.observations") -> str:
+def path_sql(
+    depth: int,
+    *,
+    seed: str = "memory_v1.observations",
+    outer_filter: str | None = None,
+) -> str:
     column = "bead_id" if seed.endswith("observations") else "source_bead_id"
-    return (
+    statement = (
         "WITH RECURSIVE walk(node, depth) AS ("
         f"SELECT a.{column}, 0 FROM {seed} a WHERE a.{column}=$1 "
         "UNION ALL SELECT r.target_bead_id, w.depth+1 "
@@ -40,6 +45,7 @@ def path_sql(depth: int, *, seed: str = "memory_v1.observations") -> str:
         f"WHERE w.depth < {depth}) CYCLE node SET is_cycle USING path "
         "SELECT node,depth,is_cycle FROM walk"
     )
+    return statement + (f" WHERE {outer_filter}" if outer_filter else "")
 
 
 def native_population(
@@ -74,10 +80,15 @@ class QueryRecursiveNative(unittest.TestCase):
         native_fixture.AgentSqlNative.tearDownClass()
 
     def evaluate(
-        self, depth: int, anchor: UUID, *, seed: str = "memory_v1.observations"
+        self,
+        depth: int,
+        anchor: UUID,
+        *,
+        seed: str = "memory_v1.observations",
+        outer_filter: str | None = None,
     ) -> tuple[dict[str, Any], tuple[tuple[Any, ...], ...], list[Any]]:
         fixture = native_fixture.AgentSqlNative
-        sql = path_sql(depth, seed=seed)
+        sql = path_sql(depth, seed=seed, outer_filter=outer_filter)
         query = admit_query(
             sql,
             (SqlParameter(1, "bead_ref", str(anchor)),),
@@ -187,6 +198,22 @@ class QueryRecursiveNative(unittest.TestCase):
             ],
             3,
         )
+
+    def test_outer_filter_cannot_erase_unselected_native_paths(self) -> None:
+        _, all_rows, _ = self.evaluate(3, native_fixture.identity(1))
+        graph, rows, _ = self.evaluate(
+            3, native_fixture.identity(1), outer_filter="is_cycle"
+        )
+        self.assertEqual(len(rows), 2)
+        self.assertTrue(all(row[2] is True for row in rows))
+        self.assertEqual(len(graph["row_provenance"]), 2)
+        self.assertEqual(len(graph["tested_nodes"]), len(all_rows))
+        visits = [
+            n for n in graph["nodes"]
+            if n["operation"] == "recursion" and "cycle" in n
+        ]
+        self.assertEqual(len(visits), len(all_rows))
+        self.assertEqual(sum(n["cycle"] for n in visits), 2)
 
     def test_native_cycle_tamper_is_refused(self) -> None:
         graph, _, transported = self.evaluate(3, native_fixture.identity(1))

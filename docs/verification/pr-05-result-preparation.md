@@ -269,7 +269,10 @@ verified structural depth literals to bigint; the two exact CYCLE built-ins
 are fingerprinted by the independent authority profile. An initial 8192-byte
 budget test expected a settled invocation but exhausted before dispatch; it
 now checks no invocation was created. These failures are not qualification
-receipts for the repaired head.
+receipts for the repaired head. A later filtered-path development assertion
+hard-coded seven tested paths after a high-degree fixture had added 20 more;
+the corrected case compares the filtered result with the complete independent
+native path population and verifies every unselected path remains in the ledger.
 
 Seen acceptance compares native values/schema/order to the witnessed statement,
 then independently checks contributions and multiplicities, empty/all-null facts,
