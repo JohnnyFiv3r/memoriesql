@@ -184,6 +184,15 @@ changes. Full installed qualification and useful W1/W7 fit remain separate
 requirements; small fictional EXISTS cases cannot certify capacity or semantic
 answer quality.
 
+The first installed 3.13/3.14 convergence at `608ebd6` retained 18 failures
+per lane: a post-compilation guard mistook trusted EXISTS guards for skipped
+INTERSECT/EXCEPT arms for unqualified agent-authored EXISTS. Moving that check
+to the original admitted tree restores the existing set witnesses without
+loosening the qualification boundary. A focused regression also caught a
+projection EXISTS with no outer WHERE slipping past an absent-clause identity
+check; the corrected guard explicitly requires the owning WHERE. The failed
+installed logs remain historical evidence, not qualification of the repair.
+
 Seen acceptance compares native values/schema/order to the witnessed statement,
 then independently checks contributions and multiplicities, empty/all-null facts,
 rejected groups, filtered unknown truth, compositional groups/sets, pinned C

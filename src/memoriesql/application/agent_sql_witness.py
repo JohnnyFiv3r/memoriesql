@@ -1934,14 +1934,15 @@ def compile_bag_witness(
         for n in tree.walk()
     ):
         raise SqlAdmissionError("unsupported", "witness_qualification_pending")
+    # Inspect only agent-authored EXISTS nodes. Set witnesses later introduce
+    # trusted EXISTS guards to avoid evaluating a natively skipped right arm.
+    for exists in tree.find_all(exp.Exists):
+        owner = exists.find_ancestor(exp.Select)
+        where = owner.args.get("where") if owner is not None else None
+        if where is None or exists.find_ancestor(exp.Where) is not where:
+            raise SqlAdmissionError("unsupported", "witness_qualification_pending")
     compiler = _Compiler(tree, relations)
     body = compiler.query(tree, {})
-    if any(
-        isinstance(n, exp.Exists)
-        for root in [body, *compiler.ctes]
-        for n in root.walk()
-    ):
-        raise SqlAdmissionError("unsupported", "witness_qualification_pending")
     semantic_check = bool(compiler.ledgers)
     rewritten = compiler.finish(body)
     return WitnessPlan(
