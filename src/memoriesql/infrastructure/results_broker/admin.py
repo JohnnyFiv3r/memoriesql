@@ -249,13 +249,6 @@ def _apply_roles(admin: Connection[Any], config: BrokerConfig, *, rotate: bool) 
             "GRANT memoriesql_application TO {} WITH INHERIT TRUE, SET TRUE"
         ).format(control)
     )
-    # The host re-derives the reviewed reader profile by name at every start;
-    # name lookup needs schema USAGE, which grants no access to the objects.
-    admin.execute(
-        sql.SQL("GRANT USAGE ON SCHEMA memoriesql_query, memory_v1 TO {}").format(
-            control
-        )
-    )
     # Qualification refuses a profile whose creators would grant PUBLIC EXECUTE
     # on future functions, PostgreSQL's implicit default.
     admin.execute(
@@ -268,7 +261,9 @@ def _apply_roles(admin: Connection[Any], config: BrokerConfig, *, rotate: bool) 
     # The host must observe, cancel and confirm the end of its own reader
     # backends; PostgreSQL shows another role's session identity only to a role
     # that inherits it. This is narrower than cluster-wide pg_read_all_stats and
-    # gives the reader nothing: it gains no membership of its own.
+    # gives the reader nothing: it gains no membership of its own. Inheriting
+    # the reader also gives the control login the query schemas' USAGE, which
+    # re-deriving the reviewed profile by name at every start requires.
     admin.execute(
         sql.SQL("GRANT {} TO {} WITH INHERIT TRUE, SET FALSE").format(
             sql.Identifier(config.reader.role), control
