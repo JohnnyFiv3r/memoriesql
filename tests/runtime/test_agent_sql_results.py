@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import time
 import unittest
+from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import psycopg
 from psycopg import sql
@@ -75,8 +77,8 @@ class AgentSqlResults(unittest.TestCase):
             workspace_id=self.fixture.workspace,
         )
 
-    def start(self) -> dict[str, Any]:
-        data = json.loads(self.service().start_run())
+    def start(self, secret: str | None = None) -> dict[str, Any]:
+        data = json.loads(self.service(secret).start_run())
         self.assertEqual(data["outcome"], "available", data)
         run: dict[str, Any] = data["run"]
         self.assertEqual(run["policy_hash"], POLICY_HASH)
@@ -91,6 +93,7 @@ class AgentSqlResults(unittest.TestCase):
         parameters: list[dict[str, Any]] | None = None,
         view: str = "historical",
         page_size: int = 2,
+        secret: str | None = None,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         request = {
             "contract_version": 1,
@@ -111,7 +114,7 @@ class AgentSqlResults(unittest.TestCase):
             "max_result_bytes": 64 * 1024 * 1024,
             "page_size": page_size,
         }
-        return request, self.send(request)
+        return request, self.send(request, secret=secret)
 
     def reuse(
         self,
@@ -146,6 +149,43 @@ class AgentSqlResults(unittest.TestCase):
             self.service(secret).handle(json.dumps(request).encode())
         )
         return data
+
+    def pair_agent(self, scope: UUID, capabilities: list[str]) -> tuple[UUID, str]:
+        """A paired agent through the canonical pairing path, never the owner."""
+        grant = uuid4()
+        secret = hashlib.sha256(
+            ("fictional paired agent " + ",".join(capabilities)).encode()
+        ).hexdigest()
+        with self.db.transaction():
+            self.fixture.begin()
+            principal = uuid4()
+            self.db.execute(
+                "SELECT memoriesql.pair_local_client("
+                "%s,%s,%s,%s,'agent','paired_agent',%s,%s,%s,%s,%s)",
+                (
+                    principal,
+                    uuid4(),
+                    grant,
+                    uuid4(),
+                    capabilities,
+                    [scope],
+                    secret,
+                    self.fixture.now,
+                    self.fixture.now + timedelta(hours=1),
+                ),
+            )
+            self.db.execute(
+                "SELECT memoriesql.create_access_grant(%s,%s,%s,%s,%s,%s)",
+                (
+                    uuid4(),
+                    principal,
+                    scope,
+                    ["read"],
+                    self.fixture.now,
+                    self.fixture.now + timedelta(hours=1),
+                ),
+            )
+        return grant, secret
 
     def invocations(self) -> int:
         return int(self.h.scalar("SELECT count(*) FROM memoriesql_query.invocations"))
@@ -270,6 +310,98 @@ class AgentSqlResults(unittest.TestCase):
         _, other_secret = self.fixture.second_human(scope)
         stolen = self.reuse(run, reply["result"], secret=other_secret)
         self.assertEqual(stolen["outcome"], "unavailable", stolen)
+
+    def test_paired_agent_reads_observations_under_its_own_grants(self) -> None:
+        # Regression (PR-06 repro): a paired agent holding memory.query and
+        # source.read got an available zero-row result, because observation
+        # families required raw source authority that paired_agent cannot hold.
+        scope, source_object, _ = self.fixture.remote_scope()
+        self.fixture.assertion(scope=scope, source_object=source_object)
+        expected = {
+            str(row[0])
+            for row in self.db.execute(
+                "SELECT DISTINCT a.bead_id FROM memoriesql.accepted_bead_semantics a "
+                "JOIN memoriesql.beads b ON b.tenant_id=a.tenant_id "
+                "AND b.bead_id=a.bead_id WHERE b.access_scope_id=%s",
+                (scope,),
+            ).fetchall()
+        }
+        self.assertGreaterEqual(len(expected), 2)
+        text = "SELECT o.bead_id FROM memory_v1.observations o ORDER BY o.bead_id"
+        count = "SELECT count(*) AS n FROM memory_v1.assessed_relations"
+        owner_run = self.start()
+        _, owner = self.query(owner_run, text, page_size=50)
+        self.assertEqual(owner["outcome"], "available", owner)
+        owner_beads = {row["values"][0] for row in owner["page"]["rows"]}
+        self.assertLessEqual(expected, owner_beads)
+        _, owner_relations = self.query(owner_run, count)
+        self.assertEqual(owner_relations["outcome"], "available", owner_relations)
+        self.assertNotEqual(owner_relations["page"]["rows"][0]["values"], ["0"])
+        self.assertNotIn(
+            "relation_tables",
+            [g["facet"] for g in owner_relations["result"]["coverage"]["gaps"]],
+        )
+
+        grant, agent = self.pair_agent(
+            scope, ["memory.inspect", "memory.query", "source.read"]
+        )
+        run = self.start(agent)
+        _, reply = self.query(run, text, page_size=50, secret=agent)
+        self.assertEqual(reply["outcome"], "available", reply)
+        self.assertEqual({row["values"][0] for row in reply["page"]["rows"]}, expected)
+        self.assertEqual(reply["result"]["coverage"]["gaps"], [])
+        _, statements = self.query(
+            run,
+            "SELECT s.statement_id,u.source_unit_id FROM memory_v1.statements s "
+            "JOIN memory_v1.statement_sources u ON u.statement_id=s.statement_id",
+            secret=agent,
+        )
+        self.assertEqual(statements["outcome"], "available", statements)
+        self.assertGreater(int(statements["result"]["total_rows"]), 0)
+        # Assessed relations keep PR-03's raw-source-gated provenance. Zero rows
+        # are never presented as absence: the missing capability is a gap.
+        _, relations = self.query(run, count, secret=agent)
+        self.assertEqual(relations["outcome"], "available", relations)
+        self.assertEqual(relations["page"]["rows"][0]["values"], ["0"])
+        self.assertIn(
+            {"facet": "relation_tables", "reason": "source_raw_read_required"},
+            relations["result"]["coverage"]["gaps"],
+        )
+        # The agent's own result stays reusable under its grants and ends with them.
+        again = self.reuse(run, reply["result"], page_size=50, secret=agent)
+        self.assertEqual(again["outcome"], "available", again)
+        with self.db.transaction():
+            self.fixture.begin()
+            self.db.execute(
+                "SELECT memoriesql.revise_pairing_grant("
+                "%s,1,%s,%s,'revoked',%s,%s,%s)",
+                (
+                    grant,
+                    ["memory.inspect", "memory.query", "source.read"],
+                    [scope],
+                    self.fixture.now,
+                    self.fixture.now + timedelta(hours=1),
+                    self.fixture.now,
+                ),
+            )
+        revoked = self.reuse(run, reply["result"], page_size=50, secret=agent)
+        self.assertEqual(revoked["outcome"], "unavailable", revoked)
+        self.assertNotIn("result", revoked)
+
+    def test_agent_without_source_read_sees_disclosed_gap_not_absence(self) -> None:
+        scope, source_object, _ = self.fixture.remote_scope()
+        self.fixture.assertion(scope=scope, source_object=source_object)
+        _, agent = self.pair_agent(scope, ["memory.query"])
+        run = self.start(agent)
+        _, reply = self.query(
+            run, "SELECT o.bead_id FROM memory_v1.observations o", secret=agent
+        )
+        self.assertEqual(reply["outcome"], "available", reply)
+        self.assertEqual(reply["result"]["total_rows"], "0")
+        self.assertIn(
+            {"facet": "observation_tables", "reason": "source_read_required"},
+            reply["result"]["coverage"]["gaps"],
+        )
 
     def test_resolved_view_withholds_corrected_predecessor(self) -> None:
         _, target, _ = self.fixture.assertion()
@@ -482,6 +614,12 @@ class AgentSqlResults(unittest.TestCase):
             ),
             30000,
         )
+        # Recovery alone releases the workspace: a new step is admitted without
+        # replaying the lost one, and the lost step is never rerun.
+        _, fresh = self.query(run, "SELECT bead_version_id FROM memory_v1.observations")
+        self.assertEqual(fresh["outcome"], "available", fresh)
+        lost = self.send(request)
+        self.assertEqual(lost["outcome"], "execution_error", lost)
         closed = json.loads(self.service().close_run(run["run_ref"]))
         self.assertEqual(closed["outcome"], "available", closed)
 

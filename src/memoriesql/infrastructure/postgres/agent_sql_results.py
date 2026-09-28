@@ -227,7 +227,11 @@ class PostgresAgentSqlResults:
                 }
             )
         return result_json_bytes(
-            {"contract_version": CONTRACT_VERSION, "outcome": "available", "closed": data}
+            {
+                "contract_version": CONTRACT_VERSION,
+                "outcome": "available",
+                "closed": data,
+            }
         )
 
     def recover_abandoned(self) -> int:

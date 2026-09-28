@@ -115,6 +115,9 @@ class PreparedRelationPopulation:
     revision: int = 1
     view: str | None = None
     relation_manifest_sha256: str | None = None
+    # The caller's own capabilities, disclosed as coverage gaps when missing.
+    relation_raw_authority: bool = True
+    source_read_authority: bool = True
 
 
 def _time(value: str) -> datetime:
@@ -152,14 +155,19 @@ def _prepare(
     names = RELATIONS if revision == 1 else RELATIONS + OBSERVATION_RELATIONS
     view: str | None = None
     relation_manifest: str | None = None
+    raw_authority = source_authority = True
     if revision == 2:
         view = raw["frame"].get("view")
         relation_manifest = raw["frame"].get("relation_manifest_sha256")
+        raw_authority = raw["frame"].get("relation_raw_authority")
+        source_authority = raw["frame"].get("source_read_authority")
         if (
             raw.get("population_revision") != 2
             or view not in {"resolved", "historical"}
             or type(relation_manifest) is not str
             or len(relation_manifest) != 64
+            or type(raw_authority) is not bool
+            or type(source_authority) is not bool
         ):
             raise RelationPopulationError("projection_mismatch")
     elif revision != 1 or "population_revision" in raw:
@@ -325,6 +333,8 @@ def _prepare(
         revision=revision,
         view=view,
         relation_manifest_sha256=relation_manifest,
+        relation_raw_authority=raw_authority,
+        source_read_authority=source_authority,
     )
 
 

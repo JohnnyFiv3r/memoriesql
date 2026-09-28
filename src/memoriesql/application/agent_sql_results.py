@@ -140,9 +140,20 @@ def wire_frame(
 
 
 def wire_coverage(
-    *, relations: Sequence[str], limited: bool, recursion: bool
+    *,
+    relations: Sequence[str],
+    limited: bool,
+    recursion: bool,
+    relation_raw_authority: bool = True,
+    source_read_authority: bool = True,
 ) -> dict[str, Any]:
-    """Complete query execution never proves source coverage or absence."""
+    """Complete query execution never proves source coverage or absence.
+
+    Missing caller capabilities are gaps, not absence: without raw source
+    authority PR-03's assessed relations are withheld, and without source.read
+    the observation families are. The flags describe only the caller's own
+    grants, never whether protected data exists.
+    """
     gaps = (
         [
             {"facet": facet, "reason": "unsupported"}
@@ -151,6 +162,10 @@ def wire_coverage(
         if "memory_v1.source_units" in relations
         else []
     )
+    if not relation_raw_authority and set(relations) & RELATION_TABLES:
+        gaps.append({"facet": "relation_tables", "reason": "source_raw_read_required"})
+    if not source_read_authority and set(relations) & OBSERVATION_TABLES:
+        gaps.append({"facet": "observation_tables", "reason": "source_read_required"})
     return {
         "query_result": "complete",
         "population_basis": "limited_query" if limited else "authorized_logical_scope",

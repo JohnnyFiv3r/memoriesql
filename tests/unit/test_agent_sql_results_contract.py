@@ -98,6 +98,30 @@ class AgentSqlResultsContract(unittest.TestCase):
         self.assertEqual(coverage["population_basis"], "limited_query")
         self.assertEqual(coverage["truncation"], "explicit_limit")
         self.assertEqual(len(coverage["gaps"]), 3)
+        # Missing caller capabilities are disclosed per family, never as absence.
+        withheld = wire_coverage(
+            relations=["memory_v1.assessed_relations", "memory_v1.observations"],
+            limited=False,
+            recursion=False,
+            relation_raw_authority=False,
+            source_read_authority=False,
+        )
+        self.assertEqual(
+            withheld["gaps"],
+            [
+                {"facet": "relation_tables", "reason": "source_raw_read_required"},
+                {"facet": "observation_tables", "reason": "source_read_required"},
+            ],
+        )
+        self.assertEqual(
+            wire_coverage(
+                relations=["memory_v1.observations"],
+                limited=False,
+                recursion=False,
+                relation_raw_authority=False,
+            )["gaps"],
+            [],
+        )
 
     def test_evidence_refs_come_only_from_sealed_population_pins(self) -> None:
         catalog = SqlCatalog.installed()

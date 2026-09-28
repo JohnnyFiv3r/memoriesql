@@ -185,7 +185,11 @@ class InternalResultCandidate:
             limited = any(s["operation"] == "limit" for s in witness_graph["stages"])
             body["population_revision"] = 2
             body["coverage"] = wire_coverage(
-                relations=relations, limited=limited, recursion=bool(request.recursion)
+                relations=relations,
+                limited=limited,
+                recursion=bool(request.recursion),
+                relation_raw_authority=population.relation_raw_authority,
+                source_read_authority=population.source_read_authority,
             )
             body["wire_frame"] = wire_frame(
                 frame_ref=str(witness.frame_ref),
