@@ -45,6 +45,43 @@ RELATIONS = (
     "relation_corrections",
     "relation_replacements",
 )
+# Population revision 2 adds the accepted-observation family in the same frame.
+# Entity, alias, mention and topic relations remain unprepared (unsupported).
+OBSERVATION_RELATIONS = (
+    "observations",
+    "statements",
+    "statement_sources",
+    "source_units",
+    "corrections",
+)
+_ENUMS: dict[tuple[str, str], frozenset[str]] = {
+    ("observations", "render_state"): frozenset({"present", "unsupported"}),
+    ("observations", "effective_basis"): frozenset({"authored", "source", "unknown"}),
+    ("observations", "correction_state"): frozenset(
+        {"unsuperseded", "superseded", "branched"}
+    ),
+    ("statements", "kind"): frozenset(
+        {"observation", "context", "qualification", "correction"}
+    ),
+    ("source_units", "source_kind"): frozenset(
+        {"transcript", "document", "media", "relational", "operational"}
+    ),
+    ("source_units", "text_state"): frozenset({"available", "unsupported"}),
+    ("source_units", "source_precision"): frozenset(
+        {
+            "instant",
+            "second",
+            "minute",
+            "hour",
+            "day",
+            "month",
+            "year",
+            "interval",
+            "unknown",
+        }
+    ),
+}
+_HASHES = frozenset({("statement_sources", "content_sha256"), ("source_units", "content_sha256")})
 
 
 class RelationPopulationError(ValueError):
@@ -73,6 +110,14 @@ class PreparedRelationPopulation:
     dependency_manifest_sha256: str
     preparation_bytes: int
     source_context: bytes | None = None
+    # Revision 1 is the nine assessed relations; revision 2 is all fourteen
+    # prepared relations, with the observation view recorded in the frame.
+    revision: int = 1
+    view: str | None = None
+    relation_manifest_sha256: str | None = None
+    # The caller's own capabilities, disclosed as coverage gaps when missing.
+    relation_raw_authority: bool = True
+    source_read_authority: bool = True
 
 
 def _time(value: str) -> datetime:
@@ -102,10 +147,32 @@ def _native(value: Any, pg_type: str, nullable: bool) -> Any:
     raise RelationPopulationError("projection_mismatch")
 
 
-def _prepare(data: str, byte_budget: int) -> PreparedRelationPopulation:
+def _prepare(
+    data: str, byte_budget: int, *, revision: int = 1
+) -> PreparedRelationPopulation:
     raw = json.loads(data, parse_float=Decimal)
     catalog = SqlCatalog.installed()
-    rows: dict[str, list[dict[str, Any]]] = {name: [] for name in RELATIONS}
+    names = RELATIONS if revision == 1 else RELATIONS + OBSERVATION_RELATIONS
+    view: str | None = None
+    relation_manifest: str | None = None
+    raw_authority = source_authority = True
+    if revision == 2:
+        view = raw["frame"].get("view")
+        relation_manifest = raw["frame"].get("relation_manifest_sha256")
+        raw_authority = raw["frame"].get("relation_raw_authority")
+        source_authority = raw["frame"].get("source_read_authority")
+        if (
+            raw.get("population_revision") != 2
+            or view not in {"resolved", "historical"}
+            or type(relation_manifest) is not str
+            or len(relation_manifest) != 64
+            or type(raw_authority) is not bool
+            or type(source_authority) is not bool
+        ):
+            raise RelationPopulationError("projection_mismatch")
+    elif revision != 1 or "population_revision" in raw:
+        raise RelationPopulationError("projection_mismatch")
+    rows: dict[str, list[dict[str, Any]]] = {name: [] for name in names}
     records = raw["dependency_records_json"].encode("utf-8")
     manifest = raw["dependency_manifest_json"].encode("utf-8")
     digest = hashlib.sha256(manifest).hexdigest()
@@ -202,9 +269,19 @@ def _prepare(data: str, byte_budget: int) -> PreparedRelationPopulation:
             }
             for pin in correction["pins"]
         )
+    if revision == 2:
+        # Accepted-observation family rows are copied exactly; the same evidence
+        # binding shares one private evidence_ref with relation evidence rows.
+        rows["observations"] = list(raw["observations"])
+        rows["statements"] = list(raw["statements"])
+        rows["statement_sources"] = [
+            item | {"evidence_ref": str(evidence_ref(item, "content_sha256"))}
+            for item in raw["statement_sources"]
+        ]
+        rows["source_units"] = list(raw["source_units"])
+        rows["corrections"] = list(raw["observation_corrections"])
     schemas = {
-        "memory_v1." + name: catalog.relations["memory_v1." + name]
-        for name in RELATIONS
+        "memory_v1." + name: catalog.relations["memory_v1." + name] for name in names
     }
     native: dict[str, tuple[tuple[Any, ...], ...]] = {}
     for name, items in rows.items():
@@ -214,6 +291,16 @@ def _prepare(data: str, byte_budget: int) -> PreparedRelationPopulation:
         for item in items:
             if set(item) != expected:
                 raise RelationPopulationError("projection_mismatch")
+            for column, value in item.items():
+                allowed = _ENUMS.get((name, column))
+                if allowed is not None and value not in allowed:
+                    raise RelationPopulationError("projection_mismatch")
+                if (name, column) in _HASHES and (
+                    type(value) is not str
+                    or len(value) != 64
+                    or any(ch not in "0123456789abcdef" for ch in value)
+                ):
+                    raise RelationPopulationError("projection_mismatch")
             row = tuple(
                 _native(item[c.name], c.type.pg_type, c.type.nullable)
                 for c in schema.columns
@@ -243,6 +330,11 @@ def _prepare(data: str, byte_budget: int) -> PreparedRelationPopulation:
         manifest,
         digest,
         size,
+        revision=revision,
+        view=view,
+        relation_manifest_sha256=relation_manifest,
+        relation_raw_authority=raw_authority,
+        source_read_authority=source_authority,
     )
 
 
@@ -270,17 +362,80 @@ def prepare_relation_population(
         )
     ):
         raise RelationPopulationError("invalid_request")
+    with _population_frame(
+        connection,
+        credential_sha256=credential_sha256,
+        workspace_id=workspace_id,
+        statement="SELECT memoriesql.prepare_relation_sql_population_v1(%s,%s)::text",
+        values=(known_at, byte_budget),
+        byte_budget=byte_budget,
+        revision=1,
+    ) as population:
+        yield population
+
+
+@contextmanager
+def prepare_query_population(
+    connection: Connection[Any],
+    *,
+    credential_sha256: str,
+    workspace_id: UUID,
+    known_at: datetime | None,
+    view: str,
+    byte_budget: int,
+    statement_timeout_ms: int = 2500,
+) -> Iterator[PreparedRelationPopulation]:
+    """All fourteen prepared relations in one frame (population revision 2).
+
+    Observation families are withheld whole when any record or visible
+    correction neighbour is unreadable; `view` affects only `observations`.
+    """
+    if (
+        type(byte_budget) is not int
+        or not 8192 <= byte_budget <= 64 * 1024 * 1024
+        or view not in {"resolved", "historical"}
+        or (
+            known_at is not None
+            and (not isinstance(known_at, datetime) or known_at.utcoffset() is None)
+        )
+    ):
+        raise RelationPopulationError("invalid_request")
+    with _population_frame(
+        connection,
+        credential_sha256=credential_sha256,
+        workspace_id=workspace_id,
+        statement="SELECT memoriesql.prepare_query_sql_population_v2(%s,%s,%s)::text",
+        values=(known_at, view, byte_budget),
+        byte_budget=byte_budget,
+        revision=2,
+        statement_timeout_ms=statement_timeout_ms,
+    ) as population:
+        yield population
+
+
+@contextmanager
+def _population_frame(
+    connection: Connection[Any],
+    *,
+    credential_sha256: str,
+    workspace_id: UUID,
+    statement: str,
+    values: tuple[Any, ...],
+    byte_budget: int,
+    revision: int,
+    statement_timeout_ms: int = 2500,
+) -> Iterator[PreparedRelationPopulation]:
     try:
         with relation_projection_frame(
-            connection, credential_sha256=credential_sha256, workspace_id=workspace_id
+            connection,
+            credential_sha256=credential_sha256,
+            workspace_id=workspace_id,
+            statement_timeout_ms=statement_timeout_ms,
         ) as frame:
-            fetched = frame.execute(
-                "SELECT memoriesql.prepare_relation_sql_population_v1(%s,%s)::text",
-                (known_at, byte_budget),
-            ).fetchone()
+            fetched = frame.execute(statement, values).fetchone()
             if fetched is None or fetched[0] is None:
                 raise RelationPopulationError("unavailable")
-            population = _prepare(fetched[0], byte_budget)
+            population = _prepare(fetched[0], byte_budget, revision=revision)
             context = frame.execute(
                 "SELECT to_jsonb(c)::text FROM memoriesql.current_authorization_context() c"
             ).fetchone()
