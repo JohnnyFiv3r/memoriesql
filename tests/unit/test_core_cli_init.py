@@ -15,6 +15,8 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 from uuid import UUID
 
+import psycopg
+
 from memoriesql.application.authorization import LocalCredential
 from memoriesql.application.personal_local_initialization import (
     PersonalLocalInitialization,
@@ -156,6 +158,55 @@ class CoreCLIInitTests(unittest.TestCase):
                 )[1]
             )["secret_file_written"]
         )
+
+    def test_lost_commit_keeps_the_owner_secret_for_an_identical_replay(self) -> None:
+        adapter = MagicMock()
+        adapter.initialize.side_effect = psycopg.OperationalError(
+            "server closed the connection unexpectedly"
+        )
+        status, output = self.run_init(DATABASE, adapter)
+        self.assertEqual(status, 3)
+        self.assertEqual(
+            json.loads(output),
+            {
+                "outcome": "failed",
+                "reason": "initialization_outcome_unknown",
+                "secret_file_retained": True,
+            },
+        )
+        secret = self.secret.read_text(encoding="ascii")
+        self.assertNotIn(secret, output)
+        self.assertEqual(stat.S_IMODE(self.secret.stat().st_mode), 0o600)
+        self.assertEqual(
+            adapter.initialize.call_args.kwargs["session_secret_sha256"],
+            LocalCredential(secret).sha256(),
+        )
+
+    def test_unreachable_database_removes_the_unissued_secret(self) -> None:
+        output = io.StringIO()
+        with (
+            patch.dict(os.environ, DATABASE, clear=True),
+            patch(
+                "memoriesql.cli.psycopg.connect",
+                side_effect=psycopg.OperationalError("postgresql://secret@fictional"),
+            ),
+            redirect_stdout(output),
+        ):
+            status = main(
+                [
+                    "init",
+                    "--request-file",
+                    str(self.request),
+                    "--secret-file",
+                    str(self.secret),
+                    "--json",
+                ]
+            )
+        self.assertEqual(
+            (status, json.loads(output.getvalue())),
+            (3, {"outcome": "failed", "reason": "initialization_failed"}),
+        )
+        self.assertFalse(self.secret.exists())
 
 
 if __name__ == "__main__":

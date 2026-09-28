@@ -407,7 +407,13 @@ def _initialize(
         "reason": "initialization_failed",
     }
     try:
-        with psycopg.connect(database, autocommit=True) as connection:
+        connection = psycopg.connect(database, autocommit=True)
+    except Exception:
+        # Nothing can have committed without a connection.
+        secret_file.unlink(missing_ok=True)
+        return refusal
+    try:
+        with connection:
             receipt = PostgresPersonalLocalInitialization(connection).initialize(
                 request, session_secret_sha256=LocalCredential(secret).sha256()
             )
@@ -415,9 +421,16 @@ def _initialize(
         refusal = {"outcome": "unavailable", "reason": "already_initialized"}
     except PermissionError:
         refusal = {"outcome": "unavailable", "reason": "resource_unavailable"}
-    except Exception:
+    except Exception as error:
         # Never echo the secret, connection string or server diagnostics.
-        pass
+        if receipt is None and _commit_outcome_unknown(error):
+            # The owner may exist now: keep its only secret. An identical replay
+            # with a new file reports whether this file is the credential.
+            return {
+                "outcome": "failed",
+                "reason": "initialization_outcome_unknown",
+                "secret_file_retained": True,
+            }
     if receipt is None or receipt.replayed:
         # No credential was issued for this secret: remove it. On a replay the
         # first run's secret file remains the owner's only credential.

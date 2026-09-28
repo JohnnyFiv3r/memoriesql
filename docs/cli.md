@@ -114,7 +114,11 @@ receipt with `replayed: true`, issues no new credential and removes the new
 `--secret-file`; the first run's secret file remains the owner's credential. An
 existing secret file is refused as `stale_secret_file` and never read or
 overwritten: after an interrupted run, rerun with a new path, and delete the old
-file only if that replay reports nothing was initialized. The receipt carries
+file only if that replay reports nothing was initialized. If the connection
+fails while the commit's outcome is unknown, `init` keeps the file and reports
+`initialization_outcome_unknown`; recover the same way. A replay reporting
+`replayed: true` means the kept file is the owner credential, and a fresh
+initialization means it is not. The receipt carries
 identifiers and expiry, including the workspace to export as
 `MEMORIESQL_WORKSPACE_ID`.
 

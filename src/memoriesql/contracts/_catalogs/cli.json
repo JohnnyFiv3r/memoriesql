@@ -39,7 +39,7 @@
           "authority": "operator database login that can assume the application role; once per database",
           "init": "InitializePersonalLocal / PersonalLocalInitialization v1",
           "result_envelope": "available receipt, unavailable reason or failed reason",
-          "secret_delivery": "a new caller-named owner-only file created exclusively before the database call; never printed, logged or accepted as input; removed when nothing commits or on replay"
+          "secret_delivery": "a new caller-named owner-only file created exclusively before the database call; never printed, logged or accepted as input; removed when nothing commits or on replay; kept and reported as initialization_outcome_unknown when a lost connection leaves the commit unknown"
         },
         "read_contracts": {
           "inspect": "InspectStoredBead / StoredBeadInspection v1",
