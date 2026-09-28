@@ -20,8 +20,15 @@
       "sources revoke",
       "clients pair",
       "clients revoke",
-      "init"
+      "init",
+      "schema",
+      "query",
+      "result"
     ],
+    "doctor": {
+      "--check-database": "read-only reachability, schema compatibility and login role readiness; never migrates, grants or repairs",
+      "default": "configuration only; no database or model"
+    },
     "entrypoint": "memoriesql.cli:main",
     "executable": "memoriesql",
     "exit_status": {
@@ -40,6 +47,14 @@
       "relations": "InspectBeadRelationsV2 / BeadRelationsInspectionV2",
       "source": "ReadStoredBeadEvidence / StoredBeadEvidence v1"
     },
+    "results": {
+      "contract": "memoriesql.agent-sql-results.v1",
+      "query": "QueryRequest (discover|enumerate, resolved|historical view) through a trusted executor; closed reply printed unchanged",
+      "result": "ReuseRequest with the exact result_id and content_digest pin, optional cursor",
+      "run": "one persisted run per principal and workspace in an owner-only state file; rotated before expiry; --new-run; never retried",
+      "schema": "installed logical catalog, prepared/reserved/not-prepared relations, admission rules and delivery limits; no database or run",
+      "trusted_host": "control login, reviewed restricted reader and optional pinned profile hash, configured only in a credential-isolated process; otherwise trusted_query_host_not_configured"
+    },
     "source_authority": {
       "enroll": "EnrollExactSource / ExactSourceEnrollment v1",
       "grant": "GrantExactSource / ExactSourceGrant v1",
@@ -49,8 +64,6 @@
     "unavailable": {
       "ask": "qualified_recall_not_released",
       "investigations": "pr05_checkpoint_not_released",
-      "query": "pr05_query_result_not_released",
-      "result": "pr05_query_result_not_released",
       "sources": "source_inventory_not_released",
       "sources connect": "provider_adapter_not_routed",
       "ui": "private_textual_surface_not_routed"
@@ -58,6 +71,6 @@
   },
   "id": "memoriesql.core-cli.v1",
   "status": "available",
-  "summary": "One public executable with contract catalog, configuration health, authorized stored reads, exact provider-neutral source authority, one-time personal-local initialization and local agent client pairing; no private routing or PR-05 retrieval claim.",
+  "summary": "One public executable with contract catalog, configuration health, authorized stored reads, exact provider-neutral source authority, one-time personal-local initialization, local agent client pairing and governed query/result reuse through a trusted executor; no private routing claim.",
   "version": "1"
 }

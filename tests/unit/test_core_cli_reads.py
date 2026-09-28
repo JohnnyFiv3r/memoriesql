@@ -63,7 +63,8 @@ class CoreCLIReadTests(unittest.TestCase):
         unavailable = capabilities["unavailable"]
         self.assertIsInstance(unavailable, dict)
         assert isinstance(unavailable, dict)
-        self.assertEqual(unavailable["query"], "pr05_query_result_not_released")
+        self.assertNotIn("query", unavailable)
+        self.assertIn("query", commands)
         self.assertIn("sources enroll", commands)
         self.assertEqual(unavailable["sources connect"], "provider_adapter_not_routed")
         self.assertEqual(unavailable["sources"], "source_inventory_not_released")
