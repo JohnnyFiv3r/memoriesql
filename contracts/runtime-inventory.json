@@ -5,34 +5,10 @@
       "path": "src/memoriesql/application/__init__.py"
     },
     {
-      "path": "src/memoriesql/application/agent_sql_admission.py"
-    },
-    {
-      "path": "src/memoriesql/application/agent_sql_catalog.py"
-    },
-    {
-      "path": "src/memoriesql/application/agent_sql_witness.py"
-    },
-    {
-      "path": "src/memoriesql/application/assessed_relation_lifecycle.py"
-    },
-    {
-      "path": "src/memoriesql/application/authored_relations.py"
-    },
-    {
       "path": "src/memoriesql/application/authorization.py"
     },
     {
-      "path": "src/memoriesql/application/bead_classification.py"
-    },
-    {
-      "path": "src/memoriesql/application/builtin_semantic_tasks.py"
-    },
-    {
       "path": "src/memoriesql/application/canonical_transactions.py"
-    },
-    {
-      "path": "src/memoriesql/application/capture/__init__.py"
     },
     {
       "path": "src/memoriesql/application/capture/contracts.py"
@@ -50,55 +26,10 @@
       "path": "src/memoriesql/application/capture/transcript_fold.py"
     },
     {
-      "path": "src/memoriesql/application/complete_input_execution.py"
-    },
-    {
-      "path": "src/memoriesql/application/declared_evidence_scope.py"
-    },
-    {
-      "path": "src/memoriesql/application/evidence_packages.py"
-    },
-    {
-      "path": "src/memoriesql/application/fold_recovery.py"
-    },
-    {
-      "path": "src/memoriesql/application/investigation_contracts.py"
-    },
-    {
-      "path": "src/memoriesql/application/local_client_pairing.py"
-    },
-    {
-      "path": "src/memoriesql/application/local_entity_mentions.py"
-    },
-    {
-      "path": "src/memoriesql/application/logical_unit_materialization.py"
-    },
-    {
-      "path": "src/memoriesql/application/managed_dispatch.py"
-    },
-    {
       "path": "src/memoriesql/application/model_accounting.py"
     },
     {
       "path": "src/memoriesql/application/module_registry.py"
-    },
-    {
-      "path": "src/memoriesql/application/observation_commands.py"
-    },
-    {
-      "path": "src/memoriesql/application/observation_tasks.py"
-    },
-    {
-      "path": "src/memoriesql/application/relation_assessment.py"
-    },
-    {
-      "path": "src/memoriesql/application/relation_inspection.py"
-    },
-    {
-      "path": "src/memoriesql/application/relation_lifecycle.py"
-    },
-    {
-      "path": "src/memoriesql/application/relation_profile.py"
     },
     {
       "path": "src/memoriesql/application/semantic_identity.py"
@@ -108,18 +39,6 @@
     },
     {
       "path": "src/memoriesql/application/semantic_task_registry.py"
-    },
-    {
-      "path": "src/memoriesql/application/source_enrollment.py"
-    },
-    {
-      "path": "src/memoriesql/application/source_revisiting.py"
-    },
-    {
-      "path": "src/memoriesql/application/source_stable_identity.py"
-    },
-    {
-      "path": "src/memoriesql/application/stored_bead_inspection.py"
     },
     {
       "path": "src/memoriesql/domain/__init__.py"
@@ -137,31 +56,16 @@
       "path": "src/memoriesql/infrastructure/jobs/__init__.py"
     },
     {
-      "path": "src/memoriesql/infrastructure/jobs/complete_input_access.py"
-    },
-    {
       "path": "src/memoriesql/infrastructure/jobs/integrated_semantic_worker.py"
     },
     {
       "path": "src/memoriesql/infrastructure/jobs/postgres_semantic_queue.py"
     },
     {
-      "path": "src/memoriesql/infrastructure/jobs/relation_assessment_access.py"
-    },
-    {
-      "path": "src/memoriesql/infrastructure/jobs/source_revisiting_access.py"
-    },
-    {
       "path": "src/memoriesql/infrastructure/models/__init__.py"
     },
     {
       "path": "src/memoriesql/infrastructure/models/pydanticai_executor.py"
-    },
-    {
-      "path": "src/memoriesql/infrastructure/postgres/agent_sql_authority.py"
-    },
-    {
-      "path": "src/memoriesql/infrastructure/postgres/assessed_relation_lifecycle.py"
     },
     {
       "path": "src/memoriesql/infrastructure/postgres/authorization.py"
@@ -173,40 +77,133 @@
       "path": "src/memoriesql/infrastructure/postgres/capture.py"
     },
     {
-      "path": "src/memoriesql/infrastructure/postgres/complete_input_execution.py"
+      "path": "src/memoriesql/infrastructure/postgres/model_accounting.py"
+    },
+    {
+      "path": "src/memoriesql/infrastructure/postgres/source_range.py"
+    },
+    {
+      "path": "src/memoriesql/infrastructure/postgres/transcript_fold.py"
+    },
+    {
+      "path": "src/memoriesql/application/builtin_semantic_tasks.py"
+    },
+    {
+      "path": "src/memoriesql/application/capture/__init__.py"
+    },
+    {
+      "path": "src/memoriesql/application/observation_commands.py"
+    },
+    {
+      "path": "src/memoriesql/application/observation_tasks.py"
+    },
+    {
+      "path": "src/memoriesql/application/evidence_packages.py"
     },
     {
       "path": "src/memoriesql/infrastructure/postgres/evidence_packages.py"
     },
     {
-      "path": "src/memoriesql/infrastructure/postgres/fold_recovery.py"
-    },
-    {
-      "path": "src/memoriesql/infrastructure/postgres/local_client_pairing.py"
+      "path": "src/memoriesql/application/logical_unit_materialization.py"
     },
     {
       "path": "src/memoriesql/infrastructure/postgres/logical_unit_materialization.py"
     },
     {
-      "path": "src/memoriesql/infrastructure/postgres/model_accounting.py"
+      "path": "src/memoriesql/application/complete_input_execution.py"
     },
     {
-      "path": "src/memoriesql/infrastructure/postgres/query_result_closure.py"
+      "path": "src/memoriesql/infrastructure/jobs/complete_input_access.py"
     },
     {
-      "path": "src/memoriesql/infrastructure/postgres/query_result_commit.py"
+      "path": "src/memoriesql/infrastructure/postgres/complete_input_execution.py"
     },
     {
-      "path": "src/memoriesql/infrastructure/postgres/query_witness.py"
+      "path": "src/memoriesql/application/fold_recovery.py"
     },
     {
-      "path": "src/memoriesql/infrastructure/postgres/relation_assessment.py"
+      "path": "src/memoriesql/infrastructure/postgres/fold_recovery.py"
+    },
+    {
+      "path": "src/memoriesql/application/source_revisiting.py"
+    },
+    {
+      "path": "src/memoriesql/infrastructure/jobs/source_revisiting_access.py"
+    },
+    {
+      "path": "src/memoriesql/application/source_enrollment.py"
+    },
+    {
+      "path": "src/memoriesql/infrastructure/postgres/source_enrollment.py"
+    },
+    {
+      "path": "src/memoriesql/application/source_stable_identity.py"
+    },
+    {
+      "path": "src/memoriesql/application/local_entity_mentions.py"
+    },
+    {
+      "path": "src/memoriesql/application/bead_classification.py"
+    },
+    {
+      "path": "src/memoriesql/application/stored_bead_inspection.py"
+    },
+    {
+      "path": "src/memoriesql/infrastructure/postgres/stored_bead_inspection.py"
+    },
+    {
+      "path": "src/memoriesql/application/declared_evidence_scope.py"
+    },
+    {
+      "path": "src/memoriesql/application/managed_dispatch.py"
+    },
+    {
+      "path": "src/memoriesql/application/authored_relations.py"
+    },
+    {
+      "path": "src/memoriesql/application/relation_lifecycle.py"
     },
     {
       "path": "src/memoriesql/infrastructure/postgres/relation_lifecycle.py"
     },
     {
+      "path": "src/memoriesql/application/relation_profile.py"
+    },
+    {
+      "path": "src/memoriesql/application/relation_assessment.py"
+    },
+    {
+      "path": "src/memoriesql/application/relation_inspection.py"
+    },
+    {
+      "path": "src/memoriesql/infrastructure/jobs/relation_assessment_access.py"
+    },
+    {
+      "path": "src/memoriesql/infrastructure/postgres/relation_assessment.py"
+    },
+    {
+      "path": "src/memoriesql/application/agent_sql_catalog.py"
+    },
+    {
+      "path": "src/memoriesql/application/agent_sql_admission.py"
+    },
+    {
+      "path": "src/memoriesql/infrastructure/postgres/agent_sql_authority.py"
+    },
+    {
+      "path": "src/memoriesql/application/investigation_contracts.py"
+    },
+    {
+      "path": "src/memoriesql/application/assessed_relation_lifecycle.py"
+    },
+    {
+      "path": "src/memoriesql/infrastructure/postgres/assessed_relation_lifecycle.py"
+    },
+    {
       "path": "src/memoriesql/infrastructure/postgres/relation_projection.py"
+    },
+    {
+      "path": "src/memoriesql/infrastructure/postgres/result_preparation.py"
     },
     {
       "path": "src/memoriesql/infrastructure/postgres/relation_sql_population.py"
@@ -215,19 +212,22 @@
       "path": "src/memoriesql/infrastructure/postgres/restricted_query.py"
     },
     {
-      "path": "src/memoriesql/infrastructure/postgres/result_preparation.py"
+      "path": "src/memoriesql/application/agent_sql_witness.py"
     },
     {
-      "path": "src/memoriesql/infrastructure/postgres/source_enrollment.py"
+      "path": "src/memoriesql/infrastructure/postgres/query_witness.py"
     },
     {
-      "path": "src/memoriesql/infrastructure/postgres/source_range.py"
+      "path": "src/memoriesql/infrastructure/postgres/query_result_commit.py"
     },
     {
-      "path": "src/memoriesql/infrastructure/postgres/stored_bead_inspection.py"
+      "path": "src/memoriesql/infrastructure/postgres/query_result_closure.py"
     },
     {
-      "path": "src/memoriesql/infrastructure/postgres/transcript_fold.py"
+      "path": "src/memoriesql/application/local_client_pairing.py"
+    },
+    {
+      "path": "src/memoriesql/infrastructure/postgres/local_client_pairing.py"
     }
   ]
 }
