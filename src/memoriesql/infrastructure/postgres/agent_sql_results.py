@@ -250,6 +250,9 @@ class PostgresAgentSqlResults:
 
     def handle(self, data: bytes) -> bytes:
         """One closed request in, one closed reply out; never raises for input."""
+        # Charged duration includes parsing and admission bookkeeping; the local
+        # deadline starts no later than the database's own delivery deadline.
+        started = time.monotonic()
         try:
             request = parse_investigation_request(data)
         except InvestigationRequestError as error:
@@ -303,7 +306,7 @@ class PostgresAgentSqlResults:
                     admission.get("remaining"),
                 )
             break
-        return self._deliver(request, kind, fingerprint, admission)
+        return self._deliver(request, kind, fingerprint, admission, started)
 
     # -- delivery --------------------------------------------------------------
 
@@ -313,8 +316,8 @@ class PostgresAgentSqlResults:
         kind: str,
         fingerprint: str,
         admission: dict[str, Any],
+        start: float,
     ) -> bytes:
-        start = time.monotonic()
         deadline = start + int(admission["reserved_db_ms"]) / 1000
         key = int(admission["owner_lock_key"])
         owner = self._control()
