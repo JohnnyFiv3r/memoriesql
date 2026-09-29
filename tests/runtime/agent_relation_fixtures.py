@@ -145,7 +145,9 @@ def assessed_relation_for_agent(
         scope=target_scope,
         source=target_object,
     )
-    fixture.activate_relations(source, (target,))
+    # Its own idempotency key: an existing fixture may already have activated a
+    # relation under the fixture's default key.
+    fixture.activate_relations(source, (target,), key="agent-relation-" + tag)
     fixture.propose(
         lambda packet: [
             fixture.proposal(
