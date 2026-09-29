@@ -898,11 +898,12 @@ class QueryHostAcceptance(QueryHostHarness):
         (self.gates / "commit.go").write_text("go")
         worker.join(60)
         self.assertEqual(len(replies), 1)
-        # The late commit after abandonment is refused without disclosure. Its
-        # exact refusal code is PR-05's executor contract (tested there); the
-        # host must pass it through and never turn it into a disclosure.
+        # The late commit itself succeeds (its issuer is alive), but the access
+        # was taken over by recovery: the host thread may not disclose, and its
+        # outcome is settlement_pending, never a false failure or a discard.
         late = json.loads(replies[0])
-        self.assertIn(late["outcome"], {"execution_error", "unavailable"}, late)
+        self.assertEqual(late["outcome"], "settlement_pending", late)
+        self.assertEqual(late["error"], {"code": "settlement"}, late)
         self.assertNotIn("result", late)
         self.assertNotIn("page", late)
         deliveries = self.db.execute(
@@ -926,11 +927,22 @@ class QueryHostAcceptance(QueryHostHarness):
             (run["run_ref"],),
         )
         self.assertEqual(invocations, 1)
-        # Exact redelivery never reruns the SELECT: the step's single-use
-        # preparation was discarded, which is a known execution failure.
+        # A committed result is immutable: a failed first disclosure never
+        # discards it.
+        committed = self.db.execute(
+            "SELECT o.state,x.result_id FROM memoriesql.result_preparation_operations o "
+            "JOIN memoriesql.query_result_creations x ON x.tenant_id=o.tenant_id "
+            "AND x.operation_ref=o.operation_ref WHERE o.run_ref=%s",
+            (run["run_ref"],),
+        ).fetchall()
+        self.assertEqual(len(committed), 1, committed)
+        self.assertEqual(committed[0][0], "sealed")
+        # Exact redelivery discloses that committed result under current
+        # authority, with a new access receipt and without rerunning the SELECT.
         again = json.loads(transport.handle(lost))
-        self.assertEqual(again["outcome"], "execution_error", again)
-        self.assertEqual(again["error"], {"code": "database"}, again)
+        self.assertEqual(again["outcome"], "available", again)
+        self.assertEqual(again["result"]["result_id"], str(committed[0][1]))
+        self.assertNotEqual(again["access_receipt_ref"], late["access_receipt_ref"])
         self.assertEqual(
             self.scalar(
                 "SELECT count(*) FROM memoriesql_query.invocations WHERE run_ref=%s",
