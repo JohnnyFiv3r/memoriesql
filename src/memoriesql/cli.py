@@ -729,6 +729,9 @@ def _database_health(environment: Mapping[str, str]) -> dict[str, object]:
         result |= {"outcome": "failed", "reason": "login_role_not_ready"}
     elif compatible is False:
         result |= {"outcome": "failed", "reason": "schema_version_mismatch"}
+    elif compatible is None:
+        # No verified schema is never a passing check, e.g. an empty database.
+        result |= {"outcome": "failed", "reason": "schema_version_unknown"}
     return result
 
 

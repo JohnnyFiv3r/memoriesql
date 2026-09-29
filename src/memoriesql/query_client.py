@@ -8,10 +8,10 @@ executes SQL, repairs a refusal or retries a budgeted operation.
 
 from __future__ import annotations
 
-import fcntl
 import hashlib
 import json
 import os
+import sys
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -182,7 +182,7 @@ class RunStore:
             0o600,
         )
         try:
-            fcntl.flock(lock, fcntl.LOCK_EX)
+            _lock_exclusive(lock)
             run = None if fresh else self._load()
             if run is not None and _expires(run) - RUN_ROTATION_MARGIN > now:
                 return run
@@ -234,6 +234,23 @@ class RunStore:
             stream.flush()
             os.fsync(stream.fileno())
         os.replace(temporary, self._path)
+
+
+def _lock_exclusive(descriptor: int) -> None:
+    """Serialize run-store updates; the lock ends when the descriptor closes.
+
+    The platform lock is imported here, so importing the CLI never depends on
+    a Unix-only module.
+    """
+
+    if sys.platform == "win32":
+        import msvcrt
+
+        msvcrt.locking(descriptor, msvcrt.LK_LOCK, 1)
+    else:
+        import fcntl
+
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
 
 
 def _expires(run: Mapping[str, Any]) -> datetime:

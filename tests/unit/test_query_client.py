@@ -177,5 +177,22 @@ class WireFormatTests(unittest.TestCase):
         )
 
 
+class PortableImportTests(unittest.TestCase):
+    def test_cli_imports_without_a_unix_only_lock_module(self) -> None:
+        import subprocess
+        import sys
+
+        # Import the CLI in a fresh interpreter that cannot import fcntl, as on
+        # Windows; the run-store lock is imported only when a run is stored.
+        code = (
+            "import sys; sys.modules['fcntl'] = None; "
+            "import memoriesql.cli, memoriesql.query_client; print('imported')"
+        )
+        completed = subprocess.run(
+            [sys.executable, "-c", code], capture_output=True, text=True, check=False
+        )
+        self.assertEqual(completed.stdout.strip(), "imported", completed.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()

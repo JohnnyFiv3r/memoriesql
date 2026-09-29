@@ -79,6 +79,9 @@ class DoctorDatabaseTests(unittest.TestCase):
         self.assertTrue(report["database"]["schema_compatible"])
         status, behind = invoke(DATABASE, connection(ready, INSTALLED - 1))
         self.assertEqual((status, behind["reason"]), (3, "schema_version_mismatch"))
+        status, empty = invoke(DATABASE, connection(ready, None))
+        self.assertEqual((status, empty["reason"]), (3, "schema_version_unknown"))
+        self.assertIsNone(empty["database"]["schema_compatible"])
 
     def test_builtin_denied_or_noinherit_login_is_not_ready(self) -> None:
         status, denied = invoke(
