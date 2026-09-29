@@ -1,0 +1,206 @@
+{
+  "access_separation": {
+    "distinct_os_principals_claimed": false,
+    "limitation": "Agents sharing the same operating-system account are not distinct filesystem security principals.",
+    "outside_all_implementation_repositories": true,
+    "owner_only_read_only_filesystem_modes": true,
+    "pack_content_confined_to_independent_custodian_context": true,
+    "questions_gold_hints_or_private_access_paths_shared": false
+  },
+  "algorithm": "sha256",
+  "approval_provenance": {
+    "authority_decisions": "Two owner decisions ascribed in the exact committed authority record and owner-relayed notice: retained source-unit text under current source.read plus observation authority, and the authorized unit pinned package text only when every part is producer_normalized.",
+    "authorization_context": "Issue final content-free reconciliation now for the reviewed source-text authority change, binding its exact record and attributable owner approvals to ea-3 while preserving frozen evaluation rules. PR-05 completion is not a prerequisite.",
+    "authorization_context_message_id": "msg_09e9c1e2f229f756016abb055d60d887d1bb1f465499e01755",
+    "original_owner_issuance_message_and_context_independently_verified": true,
+    "owner_reconciliation_authorization": {
+      "at": "2026-09-29T00:25:14.217Z",
+      "exact_text": "send it",
+      "message_id": "msg_01a0ea8d-26e9-7901-af72-a03be63dec87",
+      "task_id": "01a0676f-6eaa-7d70-b034-cb9be5832167",
+      "turn_id": "01a0ea8d-263f-7121-ba38-2376bdd41a61"
+    },
+    "owner_relay_notice": {
+      "bytes": 2315,
+      "sha256": "b17bb8d9aeb25c2017fc67ef0ff863cb9408d214730ebac6e9b5741d5b036021"
+    },
+    "prior_decision_attribution": "The committed record attributes both decisions to the owner through the PR-05 coordinator. Its approximate time and quoted package-extension phrase are preserved as recorded; no precise original decision timestamp is invented."
+  },
+  "approved_interface_record": {
+    "amendments": [
+      {
+        "amendment_ref": "https://github.com/JohnnyFiv3r/memoriesql/pull/48#issuecomment-5851120561",
+        "supersedes": {
+          "algorithm": "sha256",
+          "dependencies": [
+            {
+              "commit": "2baffc688291dbfdeccaa46f7ca05f6e9ef0e12c",
+              "path": "docs/relation-assessment.md",
+              "sha256": "69a0d985466c6610a3a2abc73bcef9242749ff9535cb709e32867c7e06414d2a"
+            }
+          ],
+          "packet_commit": "2baffc688291dbfdeccaa46f7ca05f6e9ef0e12c",
+          "packet_path": "docs/agent-sql-results-v1.md",
+          "packet_sha256": "ba9e94b75b581949ff55e9b06b7271e2d4d0c79d6423e1dc6184d72245c585bb"
+        }
+      }
+    ],
+    "approval_ref": "https://github.com/JohnnyFiv3r/memoriesql/pull/49#issuecomment-5851352880",
+    "interface": {
+      "algorithm": "sha256",
+      "dependencies": [
+        {
+          "commit": "b3865f307b50bd94681b387ad0f3b16fbb20213a",
+          "path": "docs/relation-assessment.md",
+          "sha256": "69a0d985466c6610a3a2abc73bcef9242749ff9535cb709e32867c7e06414d2a"
+        }
+      ],
+      "packet_commit": "b3865f307b50bd94681b387ad0f3b16fbb20213a",
+      "packet_path": "docs/agent-sql-results-v1.md",
+      "packet_sha256": "78bbc04eaeffd0fd47b0576e270f25eaa30e07a90b42e53d27e64308dfd8269e"
+    },
+    "version": 2
+  },
+  "attestation_revision": "ea-4",
+  "authority_record": {
+    "bytes": 2606,
+    "commit": "dab96f2dc9fa9ab8fcb483a12653f179fd1532aa",
+    "path": "docs/approvals/pr-05-agent-source-text.md",
+    "reference": "https://github.com/JohnnyFiv3r/memoriesql/blob/dab96f2dc9fa9ab8fcb483a12653f179fd1532aa/docs/approvals/pr-05-agent-source-text.md",
+    "repository": "JohnnyFiv3r/memoriesql",
+    "sha256": "63ecbb4c9b270e4e79af18c3c2cc00e077c8b5e2d98b88fe2200235c31c15697"
+  },
+  "custodian": {
+    "role": "independent PR-04 evaluation custodian",
+    "task_id": "01a0d40a-b91a-73a0-b5b3-8067f150c880"
+  },
+  "evaluation_conditions": [
+    {
+      "name": "fixed PostgreSQL FTS/pg_trgm",
+      "profile_id": "fts-trgm-v1",
+      "profile_manifest_revision": "ep-1",
+      "profile_manifest_sha256": "1b7086621dcb6a508114cb5bf4bcbbe6380d0e594b9da4827ca51be7e47125c6",
+      "role": "evaluation-only lexical peer"
+    },
+    {
+      "name": "optional in-Postgres vector condition",
+      "profile_id": "fts-trgm-vector-v1",
+      "profile_manifest_revision": "ep-1",
+      "profile_manifest_sha256": "1b7086621dcb6a508114cb5bf4bcbbe6380d0e594b9da4827ca51be7e47125c6",
+      "role": "evaluation-only lexical-plus-exact-vector peer"
+    }
+  ],
+  "execution": {
+    "database_or_checkpoint_execution": false,
+    "evaluation_runs": 0,
+    "implementation": false,
+    "model_calls": 0,
+    "spending": false
+  },
+  "exposure_incidents": [],
+  "format": "pr04-independent-custody-reconciliation-v1",
+  "frozen_at": "2026-09-26T22:01:04Z",
+  "implementation_reference": {
+    "blobs": [
+      {
+        "path": "migrations/0037_observation_sql_population.sql",
+        "sha256": "f8e2d46829258da4c49d011c6766711d55cb48940b3476681d8ad9dffcad1d1b"
+      },
+      {
+        "path": "migrations/0038_query_result_access.sql",
+        "sha256": "76d94068ec9e3b5e5814b51be606de80981c2163a3d7675df778b818853b6d44"
+      }
+    ],
+    "commit": "9a396dd95ba0c2f50d1e2e160070d88854fab148",
+    "meaning": "Exact-byte linkage only; no runtime correctness or safety certification."
+  },
+  "issued_at": "2026-09-29T00:28:38Z",
+  "matched_opportunities_and_budgets": true,
+  "preregistration_complete": true,
+  "reconciles": {
+    "attestation_revision": "ea-3",
+    "bytes": 12916,
+    "original_record_preserved": true,
+    "sha256": "12e802be3664a2c971ae144f692e993e43344e9d68dfff569cfc16f77547e60b"
+  },
+  "reconciliation": {
+    "determination": "The owner-approved authority and evidence semantics are reconciled now with the unchanged frozen evaluation policies. This separately retained record binds the authority amendment to ea-3; it is not a replacement freeze or a claim that newly implemented behavior has passed evaluation.",
+    "frozen_content_change": false,
+    "grading_and_missing_capabilities": "Required, optional and forbidden evidence, authorized-population and coverage expectations, denominators, metrics, thresholds, safety gates, exclusions and rerun rules remain unchanged. Unsupported required operations or missing required evidence do not pass or disappear from the schedule. Predeclared deferrals retain their existing meaning.",
+    "historical_evidence": "Original freeze records, prior attestations, case-specific normalization and historical failures remain intact. No questions, gold, source content, profiles or thresholds were rewritten or retuned.",
+    "matched_conditions": "Both named peers use the same admitted source population, principal, scope, frame, eligible representation bytes and current authorization rules before ranking and disclosure. No condition receives extra text, hidden access or a relaxed receipt requirement. Existing ranking, vector provenance/preparation, planner settings and budgets are unchanged.",
+    "normalized_package_text": "Only the exact authorized materialized unit pinned package may supply text, and only when every part is producer_normalized. Identity/raw or mixed packages supply no package text through this path. Unrelated parts, neighboring units and newer representations are excluded. Preserve exact package/revision, part/hash and derivation bindings.",
+    "numeric_policy_change": false,
+    "preview_scope": "This reconciliation adds no preview exception to frozen evaluation requirements and does not convert the separate preview limitations into full acceptance.",
+    "profile_change": false,
+    "query_and_evidence_credit": "A query disclosure receipt proves delivery of its exact response. Query disclosure alone earns no hydration or exact-source credit. Inspection, hydration, exact binding, byte/span, attribution and receipt obligations remain exactly as preregistered; normalized text may receive only the evidence credit those existing obligations permit.",
+    "raw_boundary": "Raw captured bytes, direct evidence-package and raw-source access, source revisiting, source.raw.read and existing raw-gated readers remain owner-only. Noncontent raw-lineage dependency provenance does not grant agent access or become agent-visible raw evidence.",
+    "remaining_semantic_choices": [],
+    "replacement_freeze_required": false,
+    "representation_and_coverage": "Normalized text remains an explicitly labelled projection with its declared exclusions and unresolved coverage. Normalization is not sanitization, source completeness or exact raw-byte equivalence. Preserve original source bytes and mappings; do not replace frozen evidence with plausibly matching text.",
+    "retained_unit_text": "Paired-agent access requires current source.read on the unit event plus required memory.query, accepted-version and statement authority. No grant, scope or principal is inferred from returned text or a result handle.",
+    "reuse_and_revocation": "Whole-result current reauthorization and revocation remain mandatory for query, reuse and every permitted disclosure. Representation access cannot bypass any protected dependency or restore an invalid disclosure context."
+  },
+  "revisions": {
+    "approved_policy": {
+      "revision": "pr05-evaluation-preregistration-v3",
+      "sha256": "6bdf6b0e790cb7b0ef71337de5b494f03913ec5c47cb3c1d746686594bc545db"
+    },
+    "pack": {
+      "digest_scope": "frozen inventory of exact constituent bytes",
+      "revision": "ef-1",
+      "sha256": "e6e7844592ae4694266b9890f328e90f19f2795eeb1c38f7b28d786ba46fabdd"
+    },
+    "preregistration": {
+      "revision": "er-1",
+      "sha256": "21d6ce7a08eaa084a779db175f0e68fabffa9e42c0f1961c2b25495bb70ce9a9"
+    },
+    "profiles": {
+      "revision": "ep-1",
+      "sha256": "1b7086621dcb6a508114cb5bf4bcbbe6380d0e594b9da4827ca51be7e47125c6"
+    },
+    "supplemental_approval": {
+      "revision": "pr04-custody-policy-approval-v1",
+      "sha256": "3b0170773413c9e772abb93c3f93de92cdeb9d7fe6cd59894eab8891eac47a00"
+    },
+    "thresholds": {
+      "revision": "et-1",
+      "sha256": "cb8d09abf5cd4eaf632eb142c88a7a0cdc12dbfd88c67b63d32d788dc227a236"
+    }
+  },
+  "scope": "Final custody reconciliation of approved authority/evidence semantics only. Runtime correctness, security qualification, implementation completion and release readiness are separate. No live evaluation, inference, merge, release/publication, deployment, owner-data access, new source access or spending authorization is added. No messages to other tasks are authorized by this record.",
+  "seen_and_unseen_results_separate": true,
+  "serialization": {
+    "encoding": "UTF-8 without BOM",
+    "final_newline": true,
+    "hash_scope": "Exact complete JSON document bytes; detached SHA-256 is not embedded in this document.",
+    "json": "Python json.dumps ensure_ascii=False, sort_keys=True, indent=2",
+    "line_endings": "LF"
+  },
+  "source_attributed_loadable_corpus": {
+    "evidence_commit": "84f93ec272cc1e868efffb0765b8366bdc5bf987",
+    "evidence_repository": "JohnnyFiv3r/memoriesql-desktop",
+    "foundation_proof_revision": "pr04-replay-proof-v1",
+    "foundation_proof_sha256": "0581e6e0d0a7372517e7a07cdf96689ff5a602abec9083090dd0483b1ac468db",
+    "installed_dependency_in_retained_proof": "memoriesql==0.0.12",
+    "profiles": [
+      "foundation-v1",
+      "relations-v1"
+    ],
+    "qualification_of_new_interface_or_unseen_evaluation_executed": false,
+    "ready": true,
+    "relation_proof_revision": "pr04-relation-replay-proof-v1",
+    "relation_proof_sha256": "55a6dd09889a2c044e7516523c9432a5bf38b89dd61a2ed3dbe9b9dfb1900f74",
+    "retained_source_fidelity_repeat_resume_clean_replay": "passed",
+    "scope": "Delivered PR-04 capture-native foundation and supported relation replay corpus; retained evidence, not a new database run or qualification of unreleased PR-05 runtime.",
+    "source_inventory_sha256": "e3d98a0995bc9d9b060247eaaa7b5e56af2bc2f59a126368c7fe2a39f922d10a"
+  },
+  "status": "issued_authority_and_evidence_semantics_reconciled",
+  "verification": {
+    "authority_record_and_notice_exact_bytes_verified": true,
+    "base_record_equals_ea3_approved_record": true,
+    "case_content_or_access_paths_in_this_record": false,
+    "implementation_hashes_verified": true,
+    "original_ea3_and_every_frozen_constituent_hash_verified_unchanged": true
+  }
+}
