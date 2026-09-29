@@ -1446,7 +1446,7 @@
     },
     {
       "disposition": "include",
-      "expected_record_count": 60,
+      "expected_record_count": 61,
       "filename": "json-schema.json",
       "kind": "json_schema",
       "note": "Provider-neutral capture, host, source-range, transcript-fold, and harness-lifecycle schemas."
@@ -1645,14 +1645,14 @@
       "version": "1"
     },
     {
-      "canonical_payload_sha256": "5f8afdac29e8b83674cf27507a69ed231776c388069e7a3e4be00f29b3a077fa",
+      "canonical_payload_sha256": "3f93f936b9010ad7c583d4bce686a15249d20465ade980bbb6a1fe105a592acf",
       "catalog": "cli",
       "classification": "proposed_open_core",
       "id": "memoriesql.core-cli.v1",
       "package_disposition": "include",
       "path": "contracts/records/memoriesql-core-cli-v1.json",
-      "public_sha256": "56ce80380c07e9e70bef2144747f4d21d635fa55ebdcd0d3fd57278a21ed9fac",
-      "reason": "Owner-approved public CLI ownership with installed core reads, exact source authority and explicit pending capabilities.",
+      "public_sha256": "d88f2ec60dd609ccf08e307094704c77cf122e5f04a95e8711efe4c689b49613",
+      "reason": "Owner-approved public CLI ownership with installed core reads, exact source authority, local client pairing and explicit pending capabilities.",
       "version": "1"
     },
     {
@@ -1882,6 +1882,17 @@
       "reviewed_spike_commit": "ea29499d7107802dfa2566332ccb2b6ed0119bd1",
       "reviewed_spike_record_sha256": "44c90789470e410174bfdad84f81d6c96ab63030319b766e45334d95762eed8a",
       "reviewed_spike_source_sha256": "765f8dd3d4b5e594980ba38f6e1ac11f29d3198746299217361e1c56b360cf26",
+      "version": "1"
+    },
+    {
+      "canonical_payload_sha256": "247910c2a0cbeba7ecaddf39e07a255fb495c80ae5710086d11a95ab11c0676d",
+      "catalog": "json_schema",
+      "classification": "proposed_open_core",
+      "id": "memoriesql.local-client-pairing.v1",
+      "package_disposition": "include",
+      "path": "contracts/records/memoriesql-local-client-pairing-v1.json",
+      "public_sha256": "44bc1e8733be52feacfc80adb04fa16582a0f1824ea0a12ef4c22aa22aa61cbe",
+      "reason": "Public-authored pairing and revocation of one local agent client under the current authenticated human context.",
       "version": "1"
     },
     {
