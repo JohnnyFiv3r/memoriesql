@@ -496,8 +496,14 @@ BEGIN
  c:=memoriesql.result_preparation_authority_v1();
  SELECT * INTO d FROM memoriesql.query_deliveries WHERE tenant_id=c.tenant_id AND delivery_ref=delivery;
  SELECT * INTO r FROM memoriesql.query_runs WHERE tenant_id=c.tenant_id AND run_ref=d.run_ref;
- IF d.delivery_ref IS NULL OR d.state<>'reserved' OR r.run_ref IS NULL
-  OR NOT memoriesql.query_run_owner_v1(r,c) OR clock_timestamp()>=d.deadline THEN
+ IF d.delivery_ref IS NULL OR r.run_ref IS NULL OR NOT memoriesql.query_run_owner_v1(r,c) THEN
+  RAISE EXCEPTION 'query_delivery_unavailable' USING ERRCODE='42501';
+ END IF;
+ -- Recovery already settled this access; the exact redelivery discloses.
+ IF d.state<>'reserved' THEN
+  RAISE EXCEPTION 'query_delivery_settled' USING ERRCODE='55000';
+ END IF;
+ IF clock_timestamp()>=d.deadline THEN
   RAISE EXCEPTION 'query_delivery_unavailable' USING ERRCODE='42501';
  END IF;
  PERFORM memoriesql.check_query_result_closure_v2(result_ref,digest);
@@ -538,8 +544,11 @@ DECLARE c memoriesql.authorization_contexts%ROWTYPE; d memoriesql.query_deliveri
 BEGIN
  c:=memoriesql.result_preparation_authority_v1();
  SELECT * INTO d FROM memoriesql.query_deliveries WHERE tenant_id=c.tenant_id AND delivery_ref=delivery;
- IF NOT FOUND OR d.state<>'reserved' THEN
+ IF NOT FOUND THEN
   RAISE EXCEPTION 'query_delivery_unavailable' USING ERRCODE='42501';
+ END IF;
+ IF d.state<>'reserved' THEN
+  RAISE EXCEPTION 'query_delivery_settled' USING ERRCODE='55000';
  END IF;
  SELECT COALESCE(array_agg(ref_key ORDER BY ref_key),'{}') INTO result
   FROM memoriesql.query_visible_refs WHERE tenant_id=c.tenant_id AND run_ref=d.run_ref
@@ -574,9 +583,14 @@ BEGIN
  SELECT * INTO d FROM memoriesql.query_deliveries WHERE tenant_id=c.tenant_id
   AND delivery_ref=delivery FOR UPDATE;
  SELECT * INTO r FROM memoriesql.query_runs WHERE tenant_id=c.tenant_id AND run_ref=d.run_ref FOR UPDATE;
- IF d.delivery_ref IS NULL OR d.state<>'reserved' OR r.run_ref IS NULL
+ IF d.delivery_ref IS NULL OR r.run_ref IS NULL
   OR NOT memoriesql.query_run_owner_v1(r,c) OR transport_bytes>d.reserved_transport THEN
   RAISE EXCEPTION 'query_delivery_unavailable' USING ERRCODE='42501';
+ END IF;
+ -- Recovery already settled this access while it ran (its owner ended). The
+ -- committed result stays; its disclosure belongs to the exact redelivery.
+ IF d.state<>'reserved' THEN
+  RAISE EXCEPTION 'query_delivery_settled' USING ERRCODE='55000';
  END IF;
  IF clock_timestamp()>=d.deadline THEN
   RAISE EXCEPTION 'query_delivery_work_exhausted' USING ERRCODE='54000';

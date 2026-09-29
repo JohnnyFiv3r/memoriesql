@@ -170,6 +170,10 @@ These remain qualification targets, not measured capacity.
     the exact redelivery of a step whose preparation was discarded.
     `unavailable` stays reserved for missing, denied or dependency-lost IDs,
     including authority lost at the fence.
+  - A committed result is immutable. A failed first disclosure never discards
+    it. If recovery settled the access while the commit was in flight, the
+    host replies `settlement_pending` and the exact redelivery discloses the
+    committed result without rerunning.
 - **Expiry cleanup** (owner Decision 1, item 3). Access ends at expiry through
   the closure verdict. Owned cleanup then removes the content and every
   sensitive copy:
@@ -322,7 +326,7 @@ lists source refs as hydration-required.
 
 ## Acceptance and preserved development failures
 
-Fictional installed tests (`test_agent_sql_results`, 22 cases) use the
+Fictional installed tests (`test_agent_sql_results`, 23 cases) use the
 production reader provisioning path. They cover:
 
 - query, page, cursor and reuse
@@ -361,6 +365,9 @@ production reader provisioning path. They cover:
 - owner loss after the reader settles and before commit: the delivery settles
   once as `abandoned` with no receipt, the refused commit discards the
   preparation, and the exact redelivery is `execution_error` with no rerun
+- a late commit that succeeds after the access was abandoned: the host replies
+  `settlement_pending`, the committed result stays sealed, and the exact
+  redelivery discloses that same result with no rerun
 - group, window, set, EXISTS and relation-join shapes, with frame lifecycle
   fields and coverage gaps
 
@@ -381,6 +388,12 @@ Development failures retained:
   `unavailable`, contrary to this document. Redelivery now probes the caller's
   own step preparation first, and ownership-refused commits map to
   `execution_error`. A regression test reproduces the case in-process.
+- The trusted-host lane's late-commit case found that a successful commit
+  followed by a refused first disclosure deleted the committed result through
+  the generic failure path, and replied `unavailable`. That disclosure was
+  refused because recovery had already settled the access. Committed results
+  now survive failed disclosures. A settled access is reported distinctly
+  (`query_delivery_settled`) and replies `settlement_pending`.
 - The hostile-request test found that refused SQL still reserved, then
   discarded, a preparation. SQL is now screened before any reservation. Only
   the population-dependent reference-anchor check waits for full admission.

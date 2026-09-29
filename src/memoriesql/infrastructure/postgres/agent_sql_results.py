@@ -108,6 +108,9 @@ class _Failure(Exception):
         self.feature = feature
         self.position = position
         self.pending = pending
+        # Set once the result is committed: it is immutable, and a failed
+        # first disclosure never discards it.
+        self.committed = False
 
     def error(self) -> dict[str, Any] | None:
         if self.code is None:
@@ -520,7 +523,7 @@ class PostgresAgentSqlResults:
                     request, store, ownership, admission, start, deadline
                 )
             except _Failure as failure:
-                if not failure.pending:
+                if not failure.pending and not failure.committed:
                     self._discard(store, ownership)
                 raise
 
@@ -639,16 +642,22 @@ class PostgresAgentSqlResults:
             ) from None
         if not committed:
             raise _Failure("settlement_pending", "settlement", pending=True)
-        return self._disclose(
-            request,
-            admission,
-            start,
-            deadline,
-            candidate.result_id,
-            candidate.content_digest,
-            1,
-            request.page_size,
-        )
+        try:
+            return self._disclose(
+                request,
+                admission,
+                start,
+                deadline,
+                candidate.result_id,
+                candidate.content_digest,
+                1,
+                request.page_size,
+            )
+        except _Failure as failure:
+            # Committed results are immutable: exact redelivery or reuse
+            # discloses them later under current authority, never a rerun.
+            failure.committed = True
+            raise
 
     @staticmethod
     def _parameters(request: QueryRequest) -> tuple[Any, ...]:
@@ -858,6 +867,12 @@ class PostgresAgentSqlResults:
                         ),
                     )
             except Error as error:
+                if error.diag.message_primary == "query_delivery_settled":
+                    # Recovery settled this access while it ran: its outcome
+                    # belongs to the exact redelivery, never a false failure.
+                    raise _Failure(
+                        "settlement_pending", "settlement", pending=True
+                    ) from None
                 code = _STATE_CODES.get(error.sqlstate or "", "database")
                 raise _Failure(
                     "unavailable"
