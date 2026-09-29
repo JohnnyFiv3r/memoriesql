@@ -192,10 +192,15 @@ including `unsupported_query`, `invalid_request`, `budget_exhausted` and
 absence. The caller's own grants decide what is returned, and a missing
 capability is named in `result.coverage.gaps`, which the human view also prints
 on stderr. Observation tables need `memory.query` and `source.read` over the
-scope; the assessed relation tables also need `source.raw.read`, which only the
-personal-local owner holds. `--known-at` takes an ISO 8601 timestamp with a UTC
-offset and is sent as UTC with a literal `Z`; without it the run's default
-cutoff applies.
+scope. An assessed relation is returned only when the caller holds
+`memory.query` and `source.read` over every member of its disclosed dependency
+closure; one unreadable member withholds the whole relation without disclosure,
+and raw-source provenance records stay owner-only. Relation history
+(`relation_events`, `relation_event_evidence` and `relation_pairs`) is also
+owner-only: a paired agent reads those tables empty, with the gap
+`relation_history` (`owner_only`) whenever its query names them. `--known-at`
+takes an ISO 8601 timestamp with a UTC offset and is sent as UTC with a literal
+`Z`; without it the run's default cutoff applies.
 
 `memory_v1.source_units.search_text` is the normalized text of an authorized
 source unit. For a materialized unit it is the pinned package's normalized

@@ -73,7 +73,7 @@ class CliQueryResults(unittest.TestCase):
         self.addCleanup(self.h.doCleanups)
         self.fixture = self.h.fixture
         self.db = self.h.db
-        migrate(self.db, expected_current_version=34, target_version=38)
+        migrate(self.db, expected_current_version=34, target_version=39)
         self.reader = "pr06_cli_" + uuid4().hex
         self.profile = provision_query_reader(self.db, self.reader, READER_PASSWORD)
         self.addCleanup(self.drop_reader)
@@ -470,6 +470,17 @@ class CliQueryResults(unittest.TestCase):
         status, before, _ = self.query(text, environment=agent_environment)
         self.assertEqual(status, 0, before)
         self.assertEqual(before["result"]["total_rows"], "0", "no grant, no rows")
+        # Before the source grant every member of the relation's closure is
+        # unreadable: the relation is simply absent, with no gap or count, and
+        # the query stays available.
+        count = "SELECT count(*) AS n FROM memory_v1.assessed_relations"
+        status, owner_relations, _ = self.query(count, environment=owner_environment)
+        self.assertEqual(status, 0, owner_relations)
+        self.assertGreaterEqual(int(owner_relations["page"]["rows"][0]["values"][0]), 1)
+        status, absent, _ = self.query(count, environment=agent_environment)
+        self.assertEqual(status, 0, absent)
+        self.assertEqual(absent["page"]["rows"][0]["values"], ["0"])
+        self.assertEqual(absent["result"]["coverage"]["gaps"], [])
 
         status, granted = self.request_cli(
             ["sources", "grant"],
@@ -507,9 +518,18 @@ class CliQueryResults(unittest.TestCase):
         self.assertEqual(seen, expected)
         self.assertFalse(seen & private, "the owner-private scope stays unreadable")
         self.assertEqual(reply["result"]["coverage"]["gaps"], [])
+        # With the grant the whole closure is readable: the agent reads the
+        # owner's relation, still with no gap.
+        status, present, _ = self.query(count, environment=agent_environment)
+        self.assertEqual(status, 0, present)
+        self.assertEqual(
+            present["page"]["rows"][0]["values"],
+            owner_relations["page"]["rows"][0]["values"],
+        )
+        self.assertEqual(present["result"]["coverage"]["gaps"], [])
 
     def test_paired_agent_queries_the_owner_scope_under_its_own_pairing(self) -> None:
-        self.fixture.assertion()
+        subject, _, _ = self.fixture.assertion()
         mode = self.db.execute(
             "SELECT mode FROM memoriesql.access_scopes WHERE access_scope_id=%s",
             (self.fixture.scope,),
@@ -573,32 +593,46 @@ class CliQueryResults(unittest.TestCase):
         self.assertEqual(status, 0, pinned)
         self.assertEqual(pinned["result"]["total_rows"], reply["result"]["total_rows"])
 
-        # Relations keep raw-source provenance the paired role cannot hold; the
-        # human view names the gap on stderr instead of implying absence.
+        # The agent holds memory.query and source.read over the whole owner
+        # scope, so every accepted assessed relation's disclosed dependency
+        # closure is readable: it reads the owner's relations with no relation
+        # gap. Raw-source provenance stays owner-only and is never selectable.
         path = self.root / "relations.sql"
         path.write_text(
             "SELECT count(*) AS n FROM memory_v1.assessed_relations", encoding="utf-8"
         )
-        errors = io.StringIO()
-        with redirect_stderr(errors):
-            status, output = self.cli(
-                [
-                    "query",
-                    "--file",
-                    str(path),
-                    "--intent",
-                    "enumerate",
-                    "--view",
-                    "resolved",
-                ],
-                agent_environment,
-            )
-        relations = json.loads(output)
-        self.assertEqual(status, 0, relations)
-        self.assertEqual(relations["page"]["rows"][0]["values"], ["0"])
-        self.assertIn(
-            "coverage gap: relation_tables (source_raw_read_required)",
-            errors.getvalue(),
+        counts = []
+        for environment in (owner_environment, agent_environment):
+            errors = io.StringIO()
+            with redirect_stderr(errors):
+                status, output = self.cli(
+                    [
+                        "query",
+                        "--file",
+                        str(path),
+                        "--intent",
+                        "enumerate",
+                        "--view",
+                        "resolved",
+                    ],
+                    environment,
+                )
+            relations = json.loads(output)
+            self.assertEqual(status, 0, relations)
+            self.assertEqual(relations["result"]["coverage"]["gaps"], [])
+            self.assertNotIn("coverage gap:", errors.getvalue())
+            counts.append(relations["page"]["rows"][0]["values"])
+        self.assertEqual(counts[1], counts[0])
+        self.assertGreaterEqual(int(counts[1][0]), 1)
+        agent_relations = relations["result"]
+
+        # The exact relation reader stays owner-only for a paired agent.
+        status, output = self.cli(
+            ["relations", str(subject), "--json"], agent_environment
+        )
+        self.assertEqual(
+            (status, json.loads(output)),
+            (2, {"outcome": "unavailable", "reason": "resource_unavailable"}),
         )
 
         revoke = self.root / "revoke.json"
@@ -622,6 +656,19 @@ class CliQueryResults(unittest.TestCase):
         status, refused, _ = self.query(text, environment=agent_environment)
         self.assertEqual((status, refused["outcome"]), (2, "unavailable"), refused)
         self.assertNotIn("page", refused)
+        status, output = self.cli(
+            [
+                "result",
+                agent_relations["result_id"],
+                "--digest",
+                agent_relations["content_digest"],
+                "--json",
+            ],
+            agent_environment,
+        )
+        redisclosed = json.loads(output)
+        self.assertEqual((status, redisclosed["outcome"]), (2, "unavailable"), redisclosed)
+        self.assertNotIn("page", redisclosed)
 
 
 if __name__ == "__main__":

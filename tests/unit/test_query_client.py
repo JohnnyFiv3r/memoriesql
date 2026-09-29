@@ -149,13 +149,13 @@ class WireFormatTests(unittest.TestCase):
             "result": {
                 "coverage": {
                     "gaps": [
-                        {"facet": "relation_tables", "reason": "source_raw_read_required"}
+                        {"facet": "relation_tables", "reason": "source_read_required"}
                     ]
                 }
             },
         }
         self.assertEqual(
-            coverage_gaps(reply), ["relation_tables (source_raw_read_required)"]
+            coverage_gaps(reply), ["relation_tables (source_read_required)"]
         )
         malformed: tuple[dict[str, Any], ...] = (
             {},
@@ -171,12 +171,24 @@ class WireFormatTests(unittest.TestCase):
             authority["observation_tables"]["requires"], ["memory.query", "source.read"]
         )
         self.assertIn("memory_v1.observations", authority["observation_tables"]["relations"])
+        relation = authority["relation_tables"]
+        self.assertEqual(relation["requires"], ["memory.query", "source.read"])
+        self.assertIn("every member", relation["requires_over"])
+        self.assertIn("withheld", relation["unreadable_dependency"])
+        self.assertEqual(relation["raw_source_provenance"], "owner_only")
+        self.assertEqual(relation["gap_reason"], "source_read_required")
+        self.assertIn("memory_v1.assessed_relations", relation["relations"])
+        history = authority["relation_history"]
+        self.assertEqual(history["gap_reason"], "owner_only")
         self.assertEqual(
-            authority["relation_tables"]["gap_reason"], "source_raw_read_required"
+            set(history["relations"]),
+            {
+                "memory_v1.relation_events",
+                "memory_v1.relation_event_evidence",
+                "memory_v1.relation_pairs",
+            },
         )
-        self.assertIn(
-            "memory_v1.assessed_relations", authority["relation_tables"]["relations"]
-        )
+        self.assertFalse(set(history["relations"]) & set(relation["relations"]))
 
 
 class LostConnectionExecutor:
