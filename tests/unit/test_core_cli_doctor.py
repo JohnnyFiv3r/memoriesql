@@ -33,7 +33,12 @@ def invoke(environment: dict[str, str], connection: Any) -> tuple[int, dict[str,
     return status, json.loads(output.getvalue())
 
 
-def connection(login: tuple[Any, ...] | Exception, schema: int | None) -> MagicMock:
+def connection(
+    login: tuple[Any, ...] | Exception,
+    schema: int | None | Exception,
+    *,
+    present: bool = True,
+) -> MagicMock:
     db = MagicMock()
     db.__enter__.return_value = db
 
@@ -43,7 +48,11 @@ def connection(login: tuple[Any, ...] | Exception, schema: int | None) -> MagicM
             if isinstance(login, Exception):
                 raise login
             cursor.fetchone.return_value = login
+        elif "to_regclass" in statement:
+            cursor.fetchone.return_value = (present,)
         elif "schema_migrations" in statement:
+            if isinstance(schema, Exception):
+                raise schema
             cursor.fetchone.return_value = (schema,)
         else:
             cursor.fetchone.return_value = (1,)
@@ -79,9 +88,33 @@ class DoctorDatabaseTests(unittest.TestCase):
         self.assertTrue(report["database"]["schema_compatible"])
         status, behind = invoke(DATABASE, connection(ready, INSTALLED - 1))
         self.assertEqual((status, behind["reason"]), (3, "schema_version_mismatch"))
-        status, empty = invoke(DATABASE, connection(ready, None))
-        self.assertEqual((status, empty["reason"]), (3, "schema_version_unknown"))
-        self.assertIsNone(empty["database"]["schema_compatible"])
+        status, empty = invoke(DATABASE, connection(ready, None, present=False))
+        self.assertEqual((status, empty["reason"]), (3, "schema_not_installed"))
+        status, blank = invoke(DATABASE, connection(ready, None))
+        self.assertEqual((status, blank["reason"]), (3, "schema_version_unknown"))
+        # An application login cannot read the owner-only history: reported as
+        # unverified, never as a verified match and never as a login failure.
+        status, member = invoke(
+            DATABASE, connection(ready, InsufficientPrivilege("owner only"))
+        )
+        self.assertEqual(status, 0, member)
+        self.assertFalse(member["database"]["schema_version_readable"])
+        self.assertEqual(member["database"]["schema_compatibility"], "unverified")
+        self.assertEqual(member["database_check"], "login_ready_schema_unverified")
+        self.assertIn("migration administrator", member["notice"])
+
+    def test_unreadable_version_never_reports_compatible(self) -> None:
+        ready = (False, True, True, True, True, True, 180004)
+        for error in (InsufficientPrivilege("owner only"), OperationalError("gone")):
+            with self.subTest(error=type(error).__name__):
+                status, report = invoke(DATABASE, connection(ready, error))
+                database = report["database"]
+                self.assertIsNot(database["schema_compatible"], True)
+                self.assertNotEqual(database["schema_compatibility"], "compatible")
+                self.assertNotEqual(report.get("database_check"), "passed")
+        status, verified = invoke(DATABASE, connection(ready, INSTALLED))
+        self.assertEqual(verified["database"]["schema_compatibility"], "compatible")
+        self.assertEqual(verified["database_check"], "passed")
 
     def test_builtin_denied_or_noinherit_login_is_not_ready(self) -> None:
         status, denied = invoke(

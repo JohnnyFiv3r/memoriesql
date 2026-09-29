@@ -92,10 +92,30 @@ class CliDoctorDatabase(unittest.TestCase):
         status, member = self.doctor(self.login("member"))
         self.assertEqual(status, 0, member)
         self.assertTrue(member["database"]["login"]["application_ready"])
+        # The migration history is owner-only, so a member cannot verify it.
+        self.assertTrue(member["database"]["schema_present"])
+        self.assertFalse(member["database"]["schema_version_readable"])
+        self.assertEqual(member["database"]["schema_compatibility"], "unverified")
+        self.assertEqual(member["database_check"], "login_ready_schema_unverified")
+        self.assertEqual(superuser["database_check"], "passed")
         status, noinherit = self.doctor(self.login("noinherit"))
         self.assertEqual((status, noinherit["reason"]), (3, "login_role_not_ready"))
         self.assertFalse(noinherit["database"]["login"]["prologue_builtins_executable"])
         self.assertNotIn("fictional-doctor-pass", json.dumps(noinherit))
+
+    def test_empty_database_is_not_installed(self) -> None:
+        empty = self.database + "_empty"
+        with psycopg.connect(self.admin, autocommit=True) as admin:
+            admin.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(empty)))
+        try:
+            status, report = self.doctor(make_conninfo(self.admin, dbname=empty))
+        finally:
+            with psycopg.connect(self.admin, autocommit=True) as admin:
+                admin.execute(
+                    sql.SQL("DROP DATABASE {} WITH (FORCE)").format(sql.Identifier(empty))
+                )
+        self.assertEqual((status, report["reason"]), (3, "schema_not_installed"))
+        self.assertFalse(report["database"]["schema_present"])
 
 
 if __name__ == "__main__":

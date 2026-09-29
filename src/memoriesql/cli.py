@@ -732,6 +732,8 @@ def _database_health(environment: Mapping[str, str]) -> dict[str, object]:
     installed = _installed_schema_version()
     row: tuple[Any, ...] | None = None
     schema_version: int | None = None
+    schema_present: bool | None = None
+    schema_readable = False
     try:
         with psycopg.connect(database, autocommit=True, connect_timeout=5) as db:
             db.execute("SELECT 1").fetchone()
@@ -741,12 +743,24 @@ def _database_health(environment: Mapping[str, str]) -> dict[str, object]:
                 # This login cannot even execute ordinary catalog builtins.
                 row = None
             try:
-                version_row = db.execute(
-                    "SELECT max(version) FROM memoriesql.schema_migrations"
+                present = db.execute(
+                    "SELECT pg_catalog.to_regclass('memoriesql.schema_migrations')"
+                    " IS NOT NULL"
                 ).fetchone()
-                schema_version = version_row[0] if version_row else None
+                schema_present = bool(present[0]) if present else None
             except psycopg.Error:
-                schema_version = None
+                schema_present = None
+            if schema_present:
+                try:
+                    version_row = db.execute(
+                        "SELECT max(version) FROM memoriesql.schema_migrations"
+                    ).fetchone()
+                    schema_version = version_row[0] if version_row else None
+                    schema_readable = True
+                except psycopg.Error:
+                    # The history is owner-only: an application login cannot
+                    # read it, so the version is reported as unverified.
+                    schema_version = None
     except psycopg.Error:
         # Never echo the connection string, role names or server diagnostics.
         return {
@@ -779,16 +793,43 @@ def _database_health(environment: Mapping[str, str]) -> dict[str, object]:
             "schema_version": schema_version,
             "installed_schema_version": installed,
             "schema_compatible": compatible,
+            "schema_compatibility": (
+                "not_installed"
+                if schema_present is False
+                else "unverified"
+                if not schema_readable
+                else "unknown"
+                if compatible is None
+                else "compatible"
+                if compatible
+                else "mismatch"
+            ),
+            "schema_present": schema_present,
+            "schema_version_readable": schema_readable,
             "login": login,
         },
     }
     if not application_ready:
         result |= {"outcome": "failed", "reason": "login_role_not_ready"}
+    elif schema_present is False:
+        # An empty database, for example: nothing is installed to verify.
+        result |= {"outcome": "failed", "reason": "schema_not_installed"}
     elif compatible is False:
         result |= {"outcome": "failed", "reason": "schema_version_mismatch"}
-    elif compatible is None:
-        # No verified schema is never a passing check, e.g. an empty database.
+    elif schema_readable and compatible is None:
+        # A readable history with no version is never a passing check.
         result |= {"outcome": "failed", "reason": "schema_version_unknown"}
+    elif not schema_readable:
+        # Never a full pass: the login is ready but compatibility is unverified.
+        result |= {
+            "database_check": "login_ready_schema_unverified",
+            "notice": (
+                "schema compatibility is unverified for this login; verify it with "
+                "the owner or migration administrator login"
+            ),
+        }
+    else:
+        result |= {"database_check": "passed"}
     return result
 
 
@@ -881,6 +922,9 @@ def main(arguments: Sequence[str] | None = None) -> int:
         }
         if args.check_database:
             report |= _database_health(os.environ)
+            notice = report.get("notice")
+            if notice and not args.json:
+                print(f"notice: {notice}", file=sys.stderr)
         return _emit_result(report, machine=args.json)
 
     if args.command == "capabilities":
