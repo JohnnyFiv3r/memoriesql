@@ -8,6 +8,8 @@ acceptance lives in tests/runtime/query_host_acceptance.py.
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import os
 import pwd
@@ -321,6 +323,54 @@ class ServerBoundary(unittest.TestCase):
         )
         self.assertEqual(len(set(host.authenticated)), 1)
         self.assertNotIn(SECRET, "".join(host.authenticated))
+
+    def test_request_log_correlates_by_identifier_never_content(self) -> None:
+        root = short_directory(self)
+        host = StubHost(fictional_config(root))
+        path = self.serve(host)
+        run, receipt = str(uuid4()), str(uuid4())
+        replies = [
+            json.dumps(
+                {
+                    "outcome": "available",
+                    "run_ref": run,
+                    "access_receipt_ref": receipt,
+                    "page": {"rows": [{"values": ["fictional row content"]}]},
+                }
+            ).encode(),
+            json.dumps(
+                {
+                    "outcome": "available",
+                    "run_ref": "fictional non-identifier",
+                    "access_receipt_ref": {"nested": run},
+                }
+            ).encode(),
+        ]
+        log = io.StringIO()
+        with (
+            patch.object(StubExecutor, "handle", lambda _self, _body: replies.pop(0)),
+            contextlib.redirect_stderr(log),
+        ):
+            for _ in range(2):
+                self.transport(path).handle(b"{}")
+            # The host logs each request after replying; wait for both lines.
+            for _ in range(200):
+                if log.getvalue().count('"event": "request"') == 2:
+                    break
+                time.sleep(0.01)
+        events = [
+            json.loads(line)
+            for line in log.getvalue().splitlines()
+            if '"event": "request"' in line
+        ]
+        self.assertEqual(len(events), 2, log.getvalue())
+        self.assertEqual(
+            (events[0]["run_ref"], events[0]["access_receipt_ref"]), (run, receipt)
+        )
+        self.assertNotIn("run_ref", events[1])
+        self.assertNotIn("access_receipt_ref", events[1])
+        self.assertNotIn("fictional row content", log.getvalue())
+        self.assertNotIn("fictional non-identifier", log.getvalue())
 
     def test_reader_bytes_pass_through_unchanged(self) -> None:
         root = short_directory(self)

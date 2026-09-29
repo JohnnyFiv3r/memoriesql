@@ -24,7 +24,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from types import FrameType
-from typing import Any
+from typing import Any, TypeGuard
+from uuid import UUID
 
 import psycopg
 from psycopg import Connection
@@ -395,6 +396,7 @@ class Server:
         started = time.monotonic()
         operation = None
         outcome = None
+        refs: dict[str, str] = {}
         pid = peer_pid(connection)
         try:
             try:
@@ -417,7 +419,7 @@ class Server:
                 return
             operation = header.operation
             reply = self._dispatch(header, body)
-            outcome = _outcome(reply)
+            outcome, refs = _outcome(reply)
             self._reply(connection, reply)
         except Exception:
             outcome = "host_error"
@@ -437,6 +439,7 @@ class Server:
                     "request",
                     op=operation,
                     outcome=outcome,
+                    **refs,
                     peer_pid=pid,
                     ms=round((time.monotonic() - started) * 1000),
                 )
@@ -521,13 +524,38 @@ class Server:
             log("run_registry_failed")
 
 
-def _outcome(reply: bytes) -> str | None:
+def _outcome(reply: bytes) -> tuple[str | None, dict[str, str]]:
+    """The reply's outcome and its run and access-receipt identifiers.
+
+    The identifiers correlate a log line with the executor's receipts; only
+    canonical UUID strings are kept, so no reply content can reach the log.
+    """
     try:
         value = json.loads(reply)
     except ValueError:
-        return None
-    outcome = value.get("outcome") if isinstance(value, dict) else None
-    return outcome if isinstance(outcome, str) else None
+        return None, {}
+    if not isinstance(value, dict):
+        return None, {}
+    run = value.get("run")
+    refs = {
+        "run_ref": value.get("run_ref")
+        or (run.get("run_ref") if isinstance(run, dict) else None),
+        "access_receipt_ref": value.get("access_receipt_ref"),
+    }
+    outcome = value.get("outcome")
+    return (
+        outcome if isinstance(outcome, str) else None,
+        {key: ref for key, ref in refs.items() if _identifier(ref)},
+    )
+
+
+def _identifier(value: object) -> TypeGuard[str]:
+    if not isinstance(value, str):
+        return False
+    try:
+        return str(UUID(value)) == value
+    except ValueError:
+        return False
 
 
 def open_server(config: BrokerConfig) -> Server:

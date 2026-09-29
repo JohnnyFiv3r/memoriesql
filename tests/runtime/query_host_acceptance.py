@@ -476,8 +476,23 @@ class QueryHostAcceptance(QueryHostHarness):
                     json.dumps({"bead_id": sentinel}).encode(),
                 )
             )
+            # The host logs each request after replying: start plus three.
+            for _ in range(500):
+                if log.getvalue().count('"event": "request"') >= 4:
+                    break
+                time.sleep(0.01)
         outcomes = [json.loads(reply).get("outcome") for reply in replies]
         self.assertEqual(outcomes[1], "available", replies[1])
+        # The log correlates with the executor's receipts by identifier only.
+        answered = json.loads(replies[1])
+        logged = [
+            (event.get("run_ref"), event.get("access_receipt_ref"))
+            for event in map(json.loads, log.getvalue().splitlines())
+            if event.get("event") == "request"
+        ]
+        self.assertIn(
+            (answered["run_ref"], answered["access_receipt_ref"]), logged, logged
+        )
         for reply in replies:
             self.assertNotIn(sentinel.encode(), reply)
         self.assertNotIn(sentinel, log.getvalue())
