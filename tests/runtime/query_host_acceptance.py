@@ -60,9 +60,11 @@ from memoriesql.infrastructure.results_broker.wire import (
 )
 
 if TYPE_CHECKING:
+    from tests.runtime import agent_relation_fixtures as relation_agents
     from tests.runtime import test_query_result_commit as commit_tests
     from tests.runtime.test_postgres_runtime import migrate
 else:
+    import agent_relation_fixtures as relation_agents
     import test_query_result_commit as commit_tests
     from test_postgres_runtime import migrate
 
@@ -90,7 +92,7 @@ class QueryHostHarness(unittest.TestCase):
         self.addCleanup(self.h.doCleanups)
         self.fixture = self.h.fixture
         self.db = self.h.db
-        migrate(self.db, expected_current_version=34, target_version=38)
+        migrate(self.db, expected_current_version=34, target_version=39)
         self.root = _short_root()
         self.addCleanup(shutil.rmtree, self.root, True)
         (self.root / "config").mkdir(mode=0o700)
@@ -122,6 +124,7 @@ class QueryHostHarness(unittest.TestCase):
         self.config = load_config(self.config_path)
         self.scope, source_object, _ = self.fixture.remote_scope()
         self.fixture.assertion(scope=self.scope, source_object=source_object)
+        self.principals: dict[UUID, UUID] = {}
         self.grant, self.agent_secret = self.pair_agent(AGENT_CAPABILITIES)
         self.agent_hash = LocalCredential(self.agent_secret).sha256()
         self.processes: list[subprocess.Popen[bytes]] = []
@@ -153,6 +156,7 @@ class QueryHostHarness(unittest.TestCase):
         self,
         capabilities: list[str],
         *,
+        scopes: list[UUID] | None = None,
         issued_ago: timedelta = timedelta(0),
         lifetime: timedelta = timedelta(hours=1),
     ) -> tuple[UUID, str]:
@@ -160,6 +164,7 @@ class QueryHostHarness(unittest.TestCase):
         grant, principal = uuid4(), uuid4()
         secret = secrets.token_urlsafe(32)
         issued = self.fixture.now - issued_ago
+        targets = scopes or [self.scope]
         with self.db.transaction():
             self.fixture.begin()
             self.db.execute(
@@ -171,23 +176,25 @@ class QueryHostHarness(unittest.TestCase):
                     grant,
                     uuid4(),
                     capabilities,
-                    [self.scope],
+                    targets,
                     LocalCredential(secret).sha256(),
                     issued,
                     issued + lifetime,
                 ),
             )
-            self.db.execute(
-                "SELECT memoriesql.create_access_grant(%s,%s,%s,%s,%s,%s)",
-                (
-                    uuid4(),
-                    principal,
-                    self.scope,
-                    ["read"],
-                    self.fixture.now,
-                    self.fixture.now + timedelta(hours=1),
-                ),
-            )
+            for scope in targets:
+                self.db.execute(
+                    "SELECT memoriesql.create_access_grant(%s,%s,%s,%s,%s,%s)",
+                    (
+                        uuid4(),
+                        principal,
+                        scope,
+                        ["read"],
+                        self.fixture.now,
+                        self.fixture.now + timedelta(hours=1),
+                    ),
+                )
+        self.principals[grant] = principal
         return grant, secret
 
     def revoke(self, grant: UUID) -> None:
@@ -302,7 +309,12 @@ class QueryHostHarness(unittest.TestCase):
         return run
 
     def query_bytes(
-        self, run: dict[str, Any], text: str, *, step: str | None = None
+        self,
+        run: dict[str, Any],
+        text: str,
+        *,
+        step: str | None = None,
+        page_size: int = 1,
     ) -> bytes:
         return json.dumps(
             {
@@ -322,7 +334,7 @@ class QueryHostHarness(unittest.TestCase):
                 },
                 "intent": "enumerate",
                 "max_result_bytes": 64 * 1024 * 1024,
-                "page_size": 1,
+                "page_size": page_size,
             }
         ).encode()
 
@@ -1048,3 +1060,163 @@ class QueryHostAcceptance(QueryHostHarness):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# PR-05's AM-5 reads (tests/runtime/test_agent_sql_results.py), trimmed to the
+# columns these cases compare. Rows are selected, never filtered by id: admission
+# refuses literals, and a relation_ref parameter must be an admitted anchor.
+RELATION_READS = {
+    "assessed_relations": (
+        "SELECT r.relation_id,r.type_key,r.basis,r.state "
+        "FROM memory_v1.assessed_relations r ORDER BY r.relation_id"
+    ),
+    "relation_statements": (
+        "SELECT s.relation_id,s.role,s.statement_id "
+        "FROM memory_v1.relation_statements s "
+        "ORDER BY s.relation_id,s.role,s.statement_id"
+    ),
+    "relation_evidence": (
+        "SELECT e.relation_id,e.statement_id,e.source_unit_id "
+        "FROM memory_v1.relation_evidence e "
+        "ORDER BY e.relation_id,e.statement_id,e.source_unit_id"
+    ),
+    "relation_types": (
+        "SELECT t.type_key,t.type_revision FROM memory_v1.relation_types t "
+        "ORDER BY t.type_key,t.type_revision"
+    ),
+}
+WITHHELD: dict[str, list[list[Any]]] = {table: [] for table in RELATION_READS}
+
+
+class QueryHostRelationReads(QueryHostHarness):
+    """AM-5 through the socket: an agent reads a relation whole or not at all."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        # PR-05's shared fixture: a real accepted relation between beads in two
+        # new explicit scopes, which the harness agent's single pairing now reads.
+        self.relation = relation_agents.assessed_relation_for_agent(
+            self.db, self.fixture, self.principals[self.grant]
+        )
+        self.serve_in_process()
+
+    def ask(
+        self, transport: BrokerTransport, run: dict[str, Any], text: str
+    ) -> dict[str, Any]:
+        reply: dict[str, Any] = json.loads(
+            transport.handle(self.query_bytes(run, text, page_size=50))
+        )
+        self.assertEqual(reply["outcome"], "available", reply)
+        return reply
+
+    def relation_rows(
+        self, transport: BrokerTransport, run: dict[str, Any]
+    ) -> dict[str, list[list[Any]]]:
+        """Each agent relation table's rows of the fixture relation, via the host."""
+        seen: dict[str, list[list[Any]]] = {}
+        for table, text in RELATION_READS.items():
+            reply = self.ask(transport, run, text)
+            self.assertFalse(reply["page"]["has_more"], table)
+            self.assertEqual(reply["result"]["coverage"]["gaps"], [], table)
+            key = (
+                "supports"
+                if table == "relation_types"
+                else str(self.relation.relation_id)
+            )
+            rows = [row["values"] for row in reply["page"]["rows"]]
+            seen[table] = [values for values in rows if values[0] == key]
+        return seen
+
+    def test_an_agent_reads_a_whole_relation_as_the_executors_bytes(self) -> None:
+        captured: list[bytes] = []
+        handle = PostgresAgentSqlResults.handle
+
+        def spy(executor: PostgresAgentSqlResults, data: bytes) -> bytes:
+            captured.append(handle(executor, data))
+            return captured[-1]
+
+        transport = self.transport()
+        run = self.start(transport)
+        with patch.object(PostgresAgentSqlResults, "handle", spy):
+            raw = transport.handle(
+                self.query_bytes(
+                    run, RELATION_READS["assessed_relations"], page_size=50
+                )
+            )
+        self.assertEqual(raw, captured[-1])
+        seen = self.relation_rows(transport, run)
+        self.assertEqual(
+            [values[1:] for values in seen["assessed_relations"]],
+            [["supports", "agent_inferred", "active"]],
+        )
+        self.assertEqual(
+            {values[1] for values in seen["relation_statements"]}, {"source", "target"}
+        )
+        self.assertTrue(seen["relation_evidence"])
+        self.assertEqual(len(seen["relation_types"]), 1)
+
+    def test_one_unreadable_member_withholds_the_relation_whole(self) -> None:
+        transport = self.transport()
+        run = self.start(transport)
+        saved = self.ask(transport, run, RELATION_READS["assessed_relations"])
+        relation = str(self.relation.relation_id)
+        self.assertIn(relation, {row["values"][0] for row in saved["page"]["rows"]})
+        self.assertEqual(len(self.relation_rows(transport, run)["relation_types"]), 1)
+        relation_agents.revoke_member(self.db, self.fixture, self.relation)
+        log = io.StringIO()
+        with contextlib.redirect_stderr(log):
+            # A fresh step of the same run: absent everywhere, no gap or type pin.
+            after = self.relation_rows(transport, run)
+            again = json.loads(
+                transport.handle(self.reuse_bytes(run, saved["result"], None))
+            )
+            for _ in range(500):
+                if log.getvalue().count('"event": "request"') >= 5:
+                    break
+                time.sleep(0.01)
+        self.assertEqual(after, WITHHELD)
+        # The saved result that held it is no longer disclosed at all.
+        self.assertEqual(again["outcome"], "unavailable", again)
+        self.assertNotIn("result", again)
+        self.assertNotIn(relation, log.getvalue())
+        # The source endpoint stays readable on its own.
+        observations = self.ask(transport, run, OBSERVATIONS)
+        self.assertIn(
+            str(self.relation.source_bead_id),
+            {row["values"][0] for row in observations["page"]["rows"]},
+        )
+
+    def test_without_source_read_relation_tables_are_a_gap(self) -> None:
+        # memory.query over every closure scope but no source.read: only the
+        # agent gate withholds the relation.
+        _grant, blind = self.pair_agent(
+            ["memory.inspect", "memory.query"],
+            scopes=[self.relation.source_scope, self.relation.remote_scope],
+        )
+        transport = self.transport(blind)
+        run = self.start(transport)
+        reply = self.ask(transport, run, RELATION_READS["assessed_relations"])
+        self.assertEqual(reply["page"]["rows"], [])
+        self.assertEqual(
+            reply["result"]["coverage"]["gaps"],
+            [{"facet": "relation_tables", "reason": "source_read_required"}],
+        )
+
+    def test_relation_history_and_the_inspection_reader_stay_owner_only(self) -> None:
+        transport = self.transport()
+        run = self.start(transport)
+        for table in ("relation_events", "relation_event_evidence", "relation_pairs"):
+            reply = self.ask(
+                transport, run, f"SELECT count(*) AS n FROM memory_v1.{table} t"
+            )
+            self.assertEqual(reply["page"]["rows"][0]["values"], ["0"], table)
+            self.assertEqual(
+                reply["result"]["coverage"]["gaps"],
+                [{"facet": "relation_history", "reason": "owner_only"}],
+                table,
+            )
+        request = InspectBeadRelationsV2(bead_id=self.relation.source_bead_id)
+        inspected = json.loads(
+            transport.read("relations", request.model_dump_json().encode())
+        )
+        self.assertEqual(inspected["outcome"], "unavailable")
