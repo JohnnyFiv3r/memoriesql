@@ -79,7 +79,10 @@ Units that retain their own text (not materialized) return it as before.
 
 **Custody for this extension is pending.** ea-3 is not claimed to cover the
 package-text extension until the independent custodian separately retains a
-content-free reconciliation. That reconciliation binds the authority record
+content-free reconciliation. The custodian's determination on the source-text
+notice is stored verbatim, with all its limitations, in
+`../approvals/pr-05-custody-source-text-determination.txt`; the owner relayed it
+and approved committing it. That reconciliation binds the authority record
 (`../approvals/pr-05-agent-source-text.md`, SHA-256 `63ecbb4c…`) to ea-3 and to
 the attributable owner approvals. The PR-05 part of the rules it names:
 
