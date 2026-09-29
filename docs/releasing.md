@@ -1,104 +1,128 @@
-# 0.0.12 release: preparation, owner gates and publication record
+# 0.0.13 release: preparation, owner gates and publication record
 
-## Publication record
+## Preparation status
 
-Under the owner's direction, `v0.0.12` was pushed at release main
-`61bd53366ea653aeed1ac13b3df38e63f4b0cb91` on 2026-09-25 (13:37Z), after the
-exact-main package run [36140624584](https://github.com/JohnnyFiv3r/memoriesql/actions/runs/36140624584)
-succeeded. The publishing run
-[36142106238](https://github.com/JohnnyFiv3r/memoriesql/actions/runs/36142106238)
-verified the two archived artifacts against the committed inventory and, after
-the owner's protected approval, uploaded them to PyPI at 13:48Z. Independent
-verification afterwards, using public unauthenticated reads only: the PyPI wheel
-(`bfc00c11…418ce`, 720,620 bytes) and sdist (`dd8f11dc…efbd3`, 643,655 bytes) are
-byte-identical to the archived CI artifacts and match the committed inventory;
-each carries a trusted-publishing attestation for `JohnnyFiv3r/memoriesql`,
-`publish-pypi.yml` and environment `pypi`; PyPI metadata reports version 0.0.12,
-`>=3.13,<3.15` and the three pinned dependencies, and neither file is yanked; a
-fresh hash-pinned installation from the PyPI index reports version 0.0.12, 64
-contracts, 29 migrations and intact `RECORD` hashes, and passes the
-package-isolation and release-installation proofs. `memoriesql==0.0.12` may now be
-pinned. Publication is not private adoption: consumers still pin, qualify and
-compose it separately. The preparation record below is retained as written.
+**Prepared for owner review; not directed, tagged or published.** `0.0.13` is the
+proposed next plain numeric version; the owner selects the version. No owner
+release direction, environment tag-rule change, hosted qualification request,
+tag or protected upload approval is recorded for it. Published
+`memoriesql==0.0.12` remains the current release.
 
 This preparation packages merged main
-`95b160709bda3dc794f139ac761772e70d681aeb` (PR #42 merged 2026-09-25), whose
-exact-main package run is [run 36138162249](https://github.com/JohnnyFiv3r/memoriesql/actions/runs/36138162249)
-(package and both installed-route compatibility jobs). The release changes
-metadata, exact publication controls, a new artifact inventory and guidance.
-Relative to published 0.0.11 it carries two owner-authorized forward capabilities:
-the canonical-apply refusal reason (schema 28) and
-[relation assessment after acceptance](relation-assessment.md) (schema 29, task
-`memory.semantic.assess-relations` revision 1). It preserves the bytes of
-migrations 0001–0027, all 63 published contract payloads, dependencies,
-authorization and accounting, and adds migrations 0028 and 0029 and one contract
-record (64 in total).
+`5290ad1194997e00f2a4ab86de8bff8738b2f59e` (PR #69 merged 2026-09-28). Its tree
+`f825518cc452f0586f9cd5905409d42835e1ec77` is identical to the PR #69 head
+`7a065f0342f231ab69f24974df39f6db7ddd57d0`, whose retained local evidence covers
+587 installed fictional PostgreSQL 18.4 tests on each of Python 3.13.5 and 3.14.0,
+byte-identical sdist-to-wheel rebuilds and fresh-process recovery proofs. That
+evidence predates this metadata change and is development qualification, not
+publication qualification. The release changes metadata, exact publication
+controls, a new artifact inventory and guidance. Relative to published 0.0.12 it
+carries these forward changes:
 
-On 2026-09-25 the owner directed the 0.0.12 release to its protected upload
-approval: preparing it, merging its exact qualified release PR and
-creating/pushing `v0.0.12` once at subsequently verified current release main;
-that direction is recorded in `AGENTS.md`. That merge SHA, not the earlier merged
-main or PR head, is the release identity. Protected upload approval remains
-exclusively the owner's action. Stop when the actual publishing workflow waits for
-that approval; never approve, bypass or upload directly. The 0.0.11 authorization
-is historical, not authority for this release.
+- The [assessed-relation lifecycle](verification/pr-03-lifecycle.md), schema 30
+  and contract `memoriesql.assessed-relation-lifecycle.v1`: authenticated humans
+  with current authority confirm, dispute or retract an authored or assessed
+  relation assertion through append-only governed events, and
+  `InspectBeadRelationsV3` reads its current or as-of state. Accepted beads,
+  statements and assertions are never rewritten; agents and services cannot make
+  lifecycle judgments.
+- Internal agent-SQL mechanics, schemas 31–35: result-preparation journals, the
+  assessed-relation SQL population, a restricted query bridge with owned
+  settlement, atomic private result commitment and whole-closure authorization
+  checks, with the new runtime dependency `sqlglot==30.19.0` (MIT). These add no
+  available query, result, checkpoint or disclosure API; retrieval remains
+  unqualified. See [agent SQL results](agent-sql-results-v1.md).
+- [Exact source enrollment](exact-source-enrollment.md), schema 36 and contract
+  `memoriesql.source-enrollment.v1`: an authenticated human with current
+  workspace and source management/share capabilities enrolls one explicitly
+  confirmed provider-neutral source, grants bounded read/write access subject to
+  membership and pairing authority, or terminally revokes it with a receipt. It
+  discovers, parses and captures nothing.
+- The [public headless CLI](cli.md), contract `memoriesql.core-cli.v1`: `doctor`,
+  `capabilities`, authorized `inspect`, `source` and `relations` reads and
+  `sources enroll|grant|revoke` on the single `memoriesql` executable. It has no
+  private product routing, source inventory, capture, worker or retrieval command.
+
+Schema 33 changes database-wide privileges; see the
+[upgrade caution](migrations.md). Consumers must qualify their actual database
+roles on a disposable upgraded database before adopting this release.
+
+It preserves the bytes of migrations 0001–0029 and all 64 published contract
+payloads, adds migrations 0030–0036 and three contract records (67 in total), and
+adds one runtime dependency. After publication, migrations 0030–0036 and the three
+new payloads are immutable; later changes need forward migrations and new
+contract versions.
 
 ## Exact release identity
 
-| Setting | Prepared value |
+| Setting | Proposed value |
 | --- | --- |
-| Distribution / version | `memoriesql` / `0.0.12` |
+| Distribution / version | `memoriesql` / `0.0.13` (owner selects) |
 | Repository / ID | `JohnnyFiv3r/memoriesql` / `1357510758` |
-| Only accepted new tag | `v0.0.12` |
+| Only accepted new tag | `v0.0.13` |
 | Workflow / environment | `.github/workflows/publish-pypi.yml` / `pypi` |
-| Authoritative release inventory | `docs/verification/runtime-0.0.12-package-artifact-inventory.json` |
+| Authoritative release inventory | `docs/verification/runtime-0.0.13-package-artifact-inventory.json` |
 
-On 2026-09-25 the owner advanced the environment tag rule to `v0.0.12` and stated
-that the PyPI configuration is already set: the existing Trusted Publisher for
-project `memoriesql`, repository `JohnnyFiv3r/memoriesql`, workflow
-`publish-pypi.yml` and environment `pypi` needs no change, and automation performs
-no PyPI sign-in or check. Immediately before tagging, a read-only check must find
-no `v0.0.12` tag in this repository. Stop if the tag is unavailable; never select
-another version or move a tag. Do not change publisher configuration or access
-credential values.
+The existing Trusted Publisher for project `memoriesql`, repository
+`JohnnyFiv3r/memoriesql`, workflow `publish-pypi.yml` and environment `pypi` needs
+no change, and automation performs no PyPI sign-in or check. Advancing the `pypi`
+environment tag rule to `v0.0.13` is an owner action. Immediately before tagging,
+a read-only check must find no `v0.0.13` tag in this repository. Stop if the tag
+is unavailable; never select another version or move a tag. Do not change
+publisher configuration or access credential values.
+
+## Owner gates, in order
+
+1. Select the version and direct the release; record that direction in
+   `AGENTS.md` in the release PR.
+2. Merge only the reviewed release head after exact-head `package` CI and an
+   independent comparison of its archives with the committed inventory.
+3. Request the paid full hosted qualification at merged release main
+   (`workflow_dispatch` with `expected_sha` and `owner_approval_ref`), then verify
+   its `package`, `compatibility (3.13)` and `compatibility (3.14)` jobs and archives.
+4. Advance the environment tag rule and create/push `v0.0.13` once at verified
+   release main.
+5. Approve the protected upload when the publishing run waits for it. Afterwards,
+   independently verify the PyPI files, hashes, attestations, metadata and a fresh
+   hash-pinned installation.
+
+Automation never approves upload, bypasses a gate, uploads directly or changes
+external settings. Earlier release directions and approvals are historical, not
+authority for this release.
 
 ## Development qualification and historical verification
 
-**Current CI policy:** routine pushes now run only inexpensive package checks.
-Full Python 3.13/3.14 installed database qualification remains mandatory locally;
+**Current CI policy:** routine pushes run only inexpensive package checks. Full
+Python 3.13/3.14 installed database qualification remains mandatory locally;
 hosted full qualification requires explicit owner approval. See
 [CI cost policy](ci-policy.md). Skipped compatibility jobs are not qualification.
-This changes future release verification, not the historical 0.0.12 publication
-record above or its approved artifacts.
 
 Development receipts bind full checkout SHA, filenames, sizes/hashes and
 `unreleased-development`; they never authorize publication. Compatibility jobs
 verify that receipt, rebuild a wheel from sdist, prove it byte-identical to the
 reviewed wheel, and qualify the installed route with checkout access denied on
-each supported interpreter. Development archives retaining 0.0.11 metadata are
-not published 0.0.11 and cannot be renamed or reused as 0.0.12.
+each supported interpreter. Development archives retaining 0.0.12 metadata are
+not published 0.0.12 and cannot be renamed or reused as 0.0.13.
 
-Published archives, tags, migrations and contract payloads remain immutable. After
-the `v0.0.10` tag the owner retired historical inventories, baseline fixtures and
-the frozen-source reproduction from the repository; the tagged source and the
-published archives are the record. This preparation likewise replaces the 0.0.11
-inventory with the 0.0.12 one.
+Published archives, tags, migrations and contract payloads remain immutable. The
+repository keeps only the current release inventory; this preparation replaces
+the 0.0.12 inventory with the 0.0.13 one. The tagged `v0.0.12` source and the
+published archives remain the record of that release.
 
-Fresh 0.0.12 wheel/sdist builds and an independent sdist-to-wheel reconstruction
+Fresh 0.0.13 wheel/sdist builds and an independent sdist-to-wheel reconstruction
 must agree. Independently download final-head hosted archives and compare them
-with the committed 0.0.12 release inventory and exact-head development receipt. A
+with the committed 0.0.13 release inventory and exact-head development receipt. A
 changed downloaded receipt cannot override the committed release hashes.
 
 ## Existing fail-closed publication path
 
-Only creation of exactly `v0.0.12` in this repository can trigger publication.
+Only creation of exactly `v0.0.13` in this repository can trigger publication.
 PRs, branch pushes, manual dispatch, wildcard and historical tags cannot upload.
-The tag must target current main with genuine 0.0.12 metadata. Under the current
+The tag must target current main with genuine 0.0.13 metadata. Under the current
 cost policy, the latest explicitly requested full package qualification on main
 at that exact SHA must be successful, including actual successful `package`,
 `compatibility (3.13)` and `compatibility (3.14)` jobs. A cheap main-push run,
-skipped jobs or PR qualification alone is insufficient. The pre-policy main-push
-publication evidence above remains a historical record, not a new dispatch.
+skipped jobs or PR qualification alone is insufficient.
 
 The verify job downloads only `memoriesql-python-<exact SHA>` from that selected
 run and checks the two filenames, sizes and SHA-256 values against the committed
@@ -114,7 +138,7 @@ or `skip-existing`. Automation must not approve upload or change external settin
    inexpensive main-push check cannot substitute for that qualification.
 2. Recheck tag availability and GitHub environment protections. Stop on a
    mismatch or missing approval gate.
-3. Create/push `v0.0.12` once at verified release main under the owner's
+3. Create/push `v0.0.13` once at verified release main under the owner's
    direction. Observe release verification and provide the actual waiting
    publishing run, release SHA/tag and matched archive hashes. Do not invent a URL.
 4. Stop for owner-only protected approval. After a separate owner action, actual
@@ -123,30 +147,17 @@ or `skip-existing`. Automation must not approve upload or change external settin
 
 ## Candidate capabilities and caller composition
 
-The candidate retains published schemas 1–27 and every 0.0.11 capability:
+The candidate retains published schemas 1–29 and every 0.0.12 capability:
 canonical runtime, evidence recovery/revisiting, local mentions, attributable
 classification, stored-result inspection, hard-bounded model admission, declared
 evidence scopes, explicit supervised managed dispatch, the run-reference binding,
-canonical-apply refusal settlement and authored claims and relations. It adds two
-forward capabilities:
-
-- Schema 28 keeps why canonical apply refused an attempt's output, as a bounded
-  diagnostic record written before the attempt settles
-  ([runtime](runtime.md#run-references-and-canonical-apply-refusals)).
-- [Relation assessment after acceptance](relation-assessment.md), schema 29: a
-  separate, explicitly activated task pins explicitly supplied accepted beads and
-  exact relation-type revisions; an author proposes relations between their
-  existing statements and covers every pinned pair; and code accepts a proposal
-  only when a provider-neutral specialist finds that exact assertion consistent.
-  Disagreement stays unaccepted. The task never changes a bead or vetoes
-  acceptance, reconsideration is explicit and linked, and each task runs one
-  attempt with no automatic retry. Revision 1 is an explicitly incomplete
-  mechanical substrate: assessed assertions have no governed confirm, dispute or
-  retract, and append-only dispute and retraction must exist before assessed
-  relations are used durably in live memory or qualified for recall.
-
-These capabilities are published in 0.0.12; publication is not a claim of
-real-provider quality.
+canonical-apply refusal settlement, authored claims and relations and relation
+assessment after acceptance. It adds the four forward changes listed above.
+Relation-aware recall still needs qualified retrieval over the lifecycle
+projection; enrollment and the CLI do not supply source discovery, capture,
+workers or provider routes. These capabilities are prepared for 0.0.13;
+publication is not a claim of real-provider quality, retrieval availability or
+product readiness.
 
 <a id="caller-composition-and-explicit-opt-in"></a>
 
@@ -168,11 +179,11 @@ Retain the worker/event loop through `wait_for_cleanup()`. Foreground cancellati
 and `cleanup_pending` do not establish rollback, remote termination or reconciled
 usage. Started writes and late usage remain owned; uncertain settlement stays explicit.
 
-Python remains `>=3.13,<3.15`; dependencies remain `psycopg[binary]==3.3.3`,
-`pydantic==2.13.3` and `pydantic-ai-slim==2.27.0`, without provider extras.
-Use the reviewed local 0.0.12 artifact before publication; only after independently
-verified publication pin `memoriesql==0.0.12`. Existing execution budgets and
-experimental API bounds are unchanged.
+Python remains `>=3.13,<3.15`; dependencies are `psycopg[binary]==3.3.3`,
+`pydantic==2.13.3`, `pydantic-ai-slim==2.27.0` and `sqlglot==30.19.0`, without
+provider extras. Use the reviewed local 0.0.13 artifact before publication; only
+after independently verified publication pin `memoriesql==0.0.13`. Existing
+execution budgets and experimental API bounds are unchanged.
 
 ## Qualification and remaining gates
 
@@ -183,11 +194,34 @@ Retain completed capability/lifecycle reviews; this release scope receives one
 broad review and at most one focused rereview.
 
 Public release precedes separately authorized private pinned consumption. Provider
-composition, relation-specialist binding, relation-quality evaluation and live
-runs, source fidelity/classification-abstention, total request/token/latency
-quality, Q's human inspection path, owner-data proof and CP-2 follow-ups remain
-gated. No private work, provider activation/spending, deployment, production
-migration or checkpoint is authorized by this release preparation or tag permission.
+composition, source discovery and capture adapters, relation-specialist binding,
+relation-quality evaluation and live runs, public retrieval/results/checkpoints,
+source fidelity/classification-abstention, total request/token/latency quality,
+owner-data proof and CP-2 follow-ups remain gated. No private work, provider
+activation/spending, deployment, production migration or checkpoint is authorized
+by this release preparation or tag permission.
+
+## 0.0.12 publication record
+
+Under the owner's direction, `v0.0.12` was pushed at release main
+`61bd53366ea653aeed1ac13b3df38e63f4b0cb91` on 2026-09-25 (13:37Z), after the
+exact-main package run [36140624584](https://github.com/JohnnyFiv3r/memoriesql/actions/runs/36140624584)
+succeeded. The publishing run
+[36142106238](https://github.com/JohnnyFiv3r/memoriesql/actions/runs/36142106238)
+verified the two archived artifacts against the committed inventory and, after
+the owner's protected approval, uploaded them to PyPI at 13:48Z. Independent
+verification afterwards, using public unauthenticated reads only: the PyPI wheel
+(`bfc00c11…418ce`, 720,620 bytes) and sdist (`dd8f11dc…efbd3`, 643,655 bytes) are
+byte-identical to the archived CI artifacts and match the committed inventory;
+each carries a trusted-publishing attestation for `JohnnyFiv3r/memoriesql`,
+`publish-pypi.yml` and environment `pypi`; PyPI metadata reports version 0.0.12,
+`>=3.13,<3.15` and the three pinned dependencies, and neither file is yanked; a
+fresh hash-pinned installation from the PyPI index reports version 0.0.12, 64
+contracts, 29 migrations and intact `RECORD` hashes, and passes the
+package-isolation and release-installation proofs. `memoriesql==0.0.12` may now be
+pinned. Publication is not private adoption: consumers still pin, qualify and
+compose it separately. Its preparation record is retained in the tagged `v0.0.12`
+source.
 
 ## 0.0.11 publication record
 
