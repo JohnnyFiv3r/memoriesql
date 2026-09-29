@@ -1,0 +1,39 @@
+{
+  "change_commit": "92f7ccf965876db134b348dbeaf156de2694c892",
+  "determination": "A further implementation linkage update is required and recorded for the stated final head. No new authority/evidence-semantic reconciliation or replacement freeze is required for this delta.",
+  "final_implementation_commit": "f6b1de2a7ce041d7e86559031f0c9e36f809177d",
+  "grading": "Existing outcome, disclosure and failure grading remain unchanged. A committed result or settlement_pending response is not successful receipted disclosure. No new exclusion, passing credit, budget reset or threshold change is created.",
+  "kind": "append-only implementation-reference update",
+  "migration_0038": {
+    "final_sha256": "8835d25eff00d30e88a167813259cb68c19a1b4770d15727d793f6242246c03c",
+    "path": "migrations/0038_query_result_access.sql",
+    "previous_sha256": "99545d94ca3aa0bc181504f9b9e994522f06a007b1644c74e12ba79bfb64917f"
+  },
+  "parent_attestation": {
+    "bytes": 12447,
+    "original_bytes_unchanged": true,
+    "repository_copy_at_final_head_byte_identical": true,
+    "revision": "ea-4",
+    "sha256": "d118ded2578e7672d404b33c7c521f630bf4444e61cf57ca7e10cf6e2cea91f9"
+  },
+  "preservation": "Original ea-4, ea-4-link-1, frozen content, profiles, thresholds and all prior evidence are preserved. This note advances exact implementation linkage only.",
+  "previous_implementation_commit": "6aca83047673f7c5ae45a1479bc1c1e9ac2ec0f3",
+  "previous_linkage": {
+    "bytes": 2501,
+    "original_bytes_unchanged": true,
+    "record_ref": "ea-4-link-1",
+    "sha256": "20447b37135ff4ae4bd09f3d5490fe610372c770aaa2a27c53742aec2c8b9252"
+  },
+  "record_ref": "ea-4-link-2",
+  "recorded_at": "2026-09-29T01:53:32Z",
+  "repository": "JohnnyFiv3r/memoriesql",
+  "request_basis": "Owner content-free follow-up to ea-4-link-1 naming the final head, change commit and new migration 0038 digest.",
+  "review_basis": "Exact Git blob hashes, migration diff and corresponding executor diff reviewed. Migration 0038 is the only changed migration. The delta preserves committed results after first-disclosure failure and maps an access already settled by recovery to the existing settlement_pending outcome, with exact redelivery rather than re-execution. No source-text population, representation or authority/evidence rule is amended.",
+  "scope": "No runtime correctness, security, CI or release-readiness certification. No tests or evaluation run, no messages to other tasks, and no implementation, publication or release action.",
+  "serialization": "UTF-8 without BOM; JSON sort_keys=True, ensure_ascii=False, indent=2; LF with one final LF. SHA-256 is detached.",
+  "unchanged": {
+    "authority_record_sha256": "63ecbb4c9b270e4e79af18c3c2cc00e077c8b5e2d98b88fe2200235c31c15697",
+    "migration_0037_sha256": "f8e2d46829258da4c49d011c6766711d55cb48940b3476681d8ad9dffcad1d1b",
+    "original_frozen_at": "2026-09-26T22:01:04Z"
+  }
+}

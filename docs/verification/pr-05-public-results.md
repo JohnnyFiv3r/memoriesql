@@ -102,6 +102,20 @@ migration 0038 is `76d94068…`. This PR's final head changes migration 0038 to
 None of it touches populations, source authority, search candidates or evidence
 availability. Migration 0037 (`f8e2d468…`) is unchanged.
 
+**Implementation linkage: ea-4-link-2 → `f6b1de2`** (migration 0038
+`8835d25e…`). The custodian recorded it at 2026-09-29T01:53:32Z. It is stored
+byte-identical in `../approvals/pr-05-custody-ea-4-link-2.json` (2,919 bytes,
+SHA-256 `4e2e350b…`) and names change `92f7ccf` and migration 0037 `f8e2d468…`.
+
+- **Supersedes ea-4-link-1 → `6aca830`,** also stored byte-identical in
+  `../approvals/pr-05-custody-ea-4-link-1.json` (2,501 bytes, SHA-256
+  `20447b37…`).
+- **Semantics only.** The linkage is not a statement of runtime correctness or
+  release readiness. It records a linkage update only, with no new authority or
+  evidence-semantic reconciliation and no replacement freeze.
+- **Its grading note:** a committed result or `settlement_pending` response is
+  not successful receipted disclosure.
+
 The PR-05 part of the rules the custodian named:
 
 - one authorization and representation rule set for every caller;
