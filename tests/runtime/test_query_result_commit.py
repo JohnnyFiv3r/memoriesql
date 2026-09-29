@@ -16,6 +16,7 @@ from uuid import UUID, uuid4
 
 from psycopg import errors
 
+from memoriesql.application.agent_sql_admission import RecursionBound
 from memoriesql.application.agent_sql_catalog import SqlCatalog
 from memoriesql.application.investigation_contracts import (
     QueryRequest,
@@ -65,7 +66,11 @@ class QueryResultCommit(unittest.TestCase):
         )
 
     def request(
-        self, sql: str, *, parameters: list[dict[str, Any]] | None = None
+        self,
+        sql: str,
+        *,
+        parameters: list[dict[str, Any]] | None = None,
+        recursion: dict[str, Any] | None = None,
     ) -> QueryRequest:
         return QueryRequest.model_validate(
             {
@@ -88,6 +93,7 @@ class QueryResultCommit(unittest.TestCase):
                 "intent": "enumerate",
                 "max_result_bytes": 64 * 1024 * 1024,
                 "page_size": 2,
+                "recursion": recursion,
             }
         )
 
@@ -122,8 +128,97 @@ class QueryResultCommit(unittest.TestCase):
             owner,
             request.sql,
             tuple(p.sql_parameter(SqlCatalog.installed()) for p in request.parameters),
+            recursion=(
+                RecursionBound(
+                    request.recursion.cte,
+                    request.recursion.depth_column,
+                    request.recursion.node_column,
+                    request.recursion.max_depth,
+                )
+                if request.recursion
+                else None
+            ),
             collect_bag_witnesses=witnesses,
         )
+
+    def test_multi_anchor_reverse_assessed_paths_commit_complete_native_witness(
+        self,
+    ) -> None:
+        source, target, _ = self.fixture.assertion()
+        second_target = self.fixture.bead("Fictional third observation.", key="third")
+        self.fixture.activate_relations(
+            target, (second_target,), key="orchard.second-assess"
+        )
+        self.fixture.propose(
+            lambda packet: [
+                self.fixture.proposal(
+                    packet,
+                    "supports",
+                    self.fixture.endpoint(packet, target, 0),
+                    self.fixture.endpoint(packet, second_target, 0),
+                    basis="agent_inferred",
+                )
+            ]
+        )
+        self.fixture.run_relations()
+        second_source = target
+        request = self.request(
+            """WITH RECURSIVE walk(node,depth) AS (
+                SELECT r.target_bead_id,0 FROM memory_v1.assessed_relations r
+                WHERE r.target_bead_id=ANY($1::uuid[])
+                UNION ALL
+                SELECT r.source_bead_id,w.depth+1
+                FROM walk w JOIN memory_v1.assessed_relations r ON r.target_bead_id=w.node
+                WHERE w.depth<2
+            ) CYCLE node SET is_cycle USING path
+            SELECT node,depth,is_cycle FROM walk ORDER BY depth,node""",
+            parameters=[
+                {
+                    "position": 1,
+                    "type": "bead_ref[]",
+                    "value": [str(target), str(second_target)],
+                }
+            ],
+            recursion={
+                "cte": "walk",
+                "depth_column": "depth",
+                "node_column": "node",
+                "max_depth": 2,
+            },
+        )
+        owner = self.reserve_request(request)
+        with self.population(request) as population:
+            execution = self.execute_request(request, owner, population)
+            self.assertEqual(execution.outcome, "complete", execution)
+            self.assertEqual(
+                execution.rows,
+                tuple(
+                    sorted(
+                        (
+                            (target, 0, False),
+                            (source, 1, False),
+                            (second_target, 0, False),
+                            (second_source, 1, False),
+                            (source, 2, False),
+                        ),
+                        key=lambda row: (row[1], row[0]),
+                    )
+                ),
+            )
+            graph = json.loads(execution.witnesses.bytes)
+            self.assertEqual(len(graph["row_provenance"]), 5)
+            self.assertIn("memory_v1.assessed_relations", graph["searched_relations"])
+            self.assertEqual(
+                sum(
+                    stage["operation"] == "recursion" and stage.get("phase") == "visit"
+                    for stage in graph["stages"]
+                ),
+                1,
+            )
+            candidate = self.candidate(request, population, execution)
+            with self.fixture.connection() as control:
+                receipt = self.adapter(control).commit(owner, candidate)
+                self.assertEqual(receipt["result_id"], str(candidate.result_id))
 
     def candidate(
         self, request: QueryRequest, population: Any, execution: Any

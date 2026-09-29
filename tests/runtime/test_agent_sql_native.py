@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import unittest
 from collections import Counter
@@ -21,6 +22,11 @@ from memoriesql.application.agent_sql_catalog import (
     SqlParameter,
     SqlRelation,
     SqlType,
+)
+from memoriesql.application.agent_sql_witness import compile_bag_witness
+from memoriesql.infrastructure.postgres.query_witness import NativeWitnessBuilder
+from memoriesql.infrastructure.postgres.relation_sql_population import (
+    PreparedRelationPopulation,
 )
 
 
@@ -409,6 +415,55 @@ class AgentSqlNative(unittest.TestCase):
             visit(1, 0, ())
             self.assertEqual(Counter(rows), Counter(expected))
             self.assertTrue(all(row[1] <= depth for row in rows))
+
+    def test_multi_anchor_reverse_paths_preserve_duplicate_seed_witnesses(self) -> None:
+        query = """WITH RECURSIVE walk(node,depth) AS (
+          SELECT r.target_bead_id,0 FROM memory_v1.assessed_relations r
+          WHERE r.target_bead_id=ANY($1::uuid[])
+          UNION ALL SELECT e.source_bead_id,w.depth+1
+          FROM walk w JOIN memory_v1.assessed_relations e ON e.target_bead_id=w.node
+          WHERE w.depth<3
+        ) CYCLE node SET is_cycle USING path
+        SELECT node,depth,is_cycle FROM walk"""
+        anchors = (identity(2), identity(4))
+        admitted = admit_query(
+            query,
+            (SqlParameter(1, "bead_ref[]", [str(a) for a in anchors]),),
+            admitted_anchors=frozenset(("bead_ref", str(a)) for a in anchors),
+            recursion=RecursionBound("walk", "depth", "node", 3),
+        )
+        plan = compile_bag_witness(admitted, self.catalog.relations)
+        original = self.db.execute(admitted.sql, admitted.parameters).fetchall()
+        relation = "memory_v1.assessed_relations"
+        population = PreparedRelationPopulation(
+            known_at=datetime(2024, 1, 1, tzinfo=UTC),
+            snapshot_at=datetime(2024, 1, 1, tzinfo=UTC),
+            catalog_hash=self.catalog.hash,
+            schemas={relation: self.catalog.relations[relation]},
+            rows={
+                relation: tuple(self.db.execute(f"SELECT * FROM {relation}").fetchall())
+            },
+            evidence_bindings={},
+            dependency_records=b"[]",
+            dependency_manifest=b"[]",
+            dependency_manifest_sha256="a" * 64,
+            preparation_bytes=0,
+        )
+        builder = NativeWitnessBuilder(plan, population, uuid4())
+        traced_rows = []
+        for row in self.db.execute(plan.sql, admitted.parameters).fetchall():
+            trace = row[-1]
+            if trace and trace[0] is None:
+                builder.add(trace[1], published=False)
+            else:
+                builder.add(trace)
+                traced_rows.append(row[:-1])
+        graph = json.loads(builder.seal().bytes)
+        self.assertEqual(Counter(traced_rows), Counter(original))
+        self.assertEqual(len(graph["row_provenance"]), len(original))
+        self.assertGreater(Counter(original)[(identity(4), 0, False)], 1)
+        self.assertTrue(any(row[2] for row in original))
+        self.assertTrue(any(n["operation"] == "recursion" for n in graph["nodes"]))
 
 
 if __name__ == "__main__":
