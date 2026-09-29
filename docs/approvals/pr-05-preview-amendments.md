@@ -55,6 +55,34 @@ finished with its listed qualification:
 - visible failure status and recovery;
 - a stated deadline mechanism.
 
+## Custody determination
+
+The independent custodian's content-free determination is stored verbatim and
+unedited in `pr-05-custody-preview-determination.txt`: 2,950 bytes, SHA-256
+`703e5822d454e902458b0d43352c1166f09b83a6a8ad1bbf9ca1271c19d854a1`. The owner
+relayed it; the owner approved committing it on 2026-09-28. The stored text is
+authoritative. This summary does not replace it and keeps every limitation it
+states:
+
+- ea-3 remains the custody attestation for the unchanged approved interface,
+  alongside this amendment record. No replacement freeze or new attestation is
+  needed for this scoped preview notice.
+- ea-3 is not an attestation that the preview satisfies the full interface or
+  the frozen evaluation acceptance requirements.
+- The measured small-workspace qualification cannot be extrapolated to full
+  W1–W7 capacity.
+- Logical allocation plus before/after database growth is not conservative
+  physical-storage qualification or a 512 MiB disk guarantee.
+- Revocation and regrant are not erasure.
+- Expired-result deletion and its qualification remain item 3, not an
+  exception. The agent-identity regression and the actual credential and
+  trust-boundary gates remain in force.
+- The preview exceptions do not alter frozen gold, required-operation grading,
+  condition budgets, denominators, thresholds or exclusion rules. A required
+  capability that is unavailable in a later authorized evaluation cannot be
+  marked passed or silently excluded, and incomplete evidence cannot select a
+  retrieval architecture.
+
 ## What stays unchanged
 
 Every wire shape, outcome, safe error code and numeric policy of the approved

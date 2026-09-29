@@ -632,6 +632,27 @@ END $$;
 REVOKE ALL ON FUNCTION memoriesql.resolve_query_cursor_v1(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION memoriesql.resolve_query_cursor_v1(uuid) TO memoriesql_application;
 
+-- The caller's own step preparation state, read on redelivery. A discarded
+-- single-use preparation is a known execution failure of that step, never a
+-- missing, denied or dependency-lost ID; lost authority still refuses here.
+CREATE FUNCTION memoriesql.query_step_preparation_v1(run uuid,step uuid) RETURNS text
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,memoriesql
+ SET row_security=off AS $$
+DECLARE c memoriesql.authorization_contexts%ROWTYPE; r memoriesql.query_runs%ROWTYPE;
+ found_state text;
+BEGIN
+ c:=memoriesql.result_preparation_authority_v1();
+ SELECT * INTO r FROM memoriesql.query_runs WHERE tenant_id=c.tenant_id AND run_ref=run;
+ IF NOT FOUND OR NOT memoriesql.query_run_owner_v1(r,c) THEN
+  RAISE EXCEPTION 'query_result_unavailable' USING ERRCODE='42501';
+ END IF;
+ SELECT state INTO found_state FROM memoriesql.result_preparation_operations
+  WHERE tenant_id=c.tenant_id AND run_ref=run AND step_key=step;
+ RETURN found_state;
+END $$;
+REVOKE ALL ON FUNCTION memoriesql.query_step_preparation_v1(uuid,uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION memoriesql.query_step_preparation_v1(uuid,uuid) TO memoriesql_application;
+
 -- Owned expiry cleanup (owner Decision 1, item 3). Disclosure already ends at
 -- expiry through the whole-closure verdict; cleanup then removes the content
 -- and every sensitive copy: result bodies, witnesses and dependency records

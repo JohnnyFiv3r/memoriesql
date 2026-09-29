@@ -77,6 +77,23 @@ authorized agent now receives its normalized projection, within these bounds:
 
 Units that retain their own text (not materialized) return it as before.
 
+**Custody for this extension is pending.** ea-3 is not claimed to cover the
+package-text extension until the independent custodian separately retains a
+content-free reconciliation. The custodian's determination on the source-text
+notice is stored verbatim, with all its limitations, in
+`../approvals/pr-05-custody-source-text-determination.txt`; the owner relayed it
+and approved committing it. That reconciliation binds the authority record
+(`../approvals/pr-05-agent-source-text.md`, SHA-256 `63ecbb4c…`) to ea-3 and to
+the attributable owner approvals. The PR-05 part of the rules it names:
+
+- one authorization and representation rule set for every caller;
+- unchanged raw-source restrictions;
+- existing evidence requirements;
+- source text returned by query labelled as not exact and hydration-required,
+  so its readability earns no hydration or exact-source credit.
+
+Evaluation-condition parity and grading credit are enforced outside this core.
+
 PR-03's nine assessed relations keep their unchanged projection and its
 raw-source-gated provenance records. Only `personal_owner` holds
 `source.raw.read`, so a paired agent's relation tables are empty. Coverage
@@ -148,6 +165,11 @@ These remain qualification targets, not measured capacity.
   - A committed result is then disclosed without rerunning.
   - A single-use preparation that never committed fails as `execution_error`;
     the client uses a new step key.
+  - A commit refused by its own ownership, issuer or invocation checks, for
+    example after the owner's session ended, is also `execution_error`. So is
+    the exact redelivery of a step whose preparation was discarded.
+    `unavailable` stays reserved for missing, denied or dependency-lost IDs,
+    including authority lost at the fence.
 - **Expiry cleanup** (owner Decision 1, item 3). Access ends at expiry through
   the closure verdict. Owned cleanup then removes the content and every
   sensitive copy:
@@ -187,6 +209,66 @@ wire action. It is refused while any of the run's deliveries is unsettled,
 refunds nothing, keeps charges in the rolling window and cannot be reopened.
 "Active" means neither expired nor closed; the two-run cap and 30-minute
 maximum are unchanged.
+
+## Measured preview range (Decision 1, items 1 and 2)
+
+Fictional workspaces were built through the real capture, package, materialize
+and author path, from dev builds of head `dab96f2`. Each has one assessed
+relation; every other observation is a unit carrying about 2 KB of normalized
+conversation-projection text. Environment:
+
+- Apple M3 Max host;
+- Docker VM with 16 CPUs and 7.75 GiB;
+- the pinned PostgreSQL 18.4 image (`a02db8ca…`) with default settings.
+
+Each size ran eight useful query shapes three times: enumeration, aggregation,
+a statement join, a window, a set operation, EXISTS, a finding-to-source
+citation and a relation join. Each run also paged forward and reused every result
+from a second run. The driver, logs and manifest are archived as fictional dev
+evidence under `memoriesql-evidence/pr-05/measure-dab96f2`. They are not W1–W7
+and not a capacity guarantee.
+
+| Observations | Packaged text | Prepared population | Dependency records | Query median (worst) | Next page | Cross-run reuse | Logical allocation per result |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 50 | 0.10 MB | 0.52 MB | 461 (0.18 MB) | 1.9–2.1 s (2.3 s) | ≤1.0 s | ≤1.0 s | 0.59–0.90 MB |
+| 100 | 0.20 MB | 1.03 MB | 911 (0.36 MB) | 2.9–3.3 s (3.3 s) | ≤1.6 s | ≤1.6 s | 1.16–1.76 MB |
+| 200 | 0.41 MB | 2.05 MB | 1,811 (0.71 MB) | 5.4–6.1 s (6.3 s) | ≤3.1 s | ≤3.1 s | 2.29–3.49 MB |
+
+(MB = 10^6 bytes.)
+
+- **Preview range.** The preview is qualified only within this measured range:
+  up to 200 accepted observations with about 2 KB of unit text each, on the
+  declared machine. Every useful query shape completed at every size, well
+  inside the 30 s operation limit. Beyond 200 observations is unmeasured and
+  not claimed.
+- **Cost grows with the whole authorized population.** Each query prepares it,
+  and every page and reuse re-verifies the whole closure.
+- **Allocation binds before time.** Each result seals the population's
+  dependency records, so it retains about 15 KB of logical allocation per
+  observation. At 200 observations, the 128 MiB run allocation holds roughly
+  40–60 results, and the 512 MiB workspace allocation roughly 150–230.
+  Results live 30 days, so sustained querying can exhaust the workspace
+  allocation (`budget_exhausted` / `storage`) until expiry cleanup reclaims it.
+- **Budget exhaustion is clean.** At every size, a result budget smaller than
+  the prepared population failed as `budget_exhausted` / `storage`, with no
+  published result, no unsettled delivery or invocation, and a discarded
+  preparation.
+- **Database growth** is measured separately from logical allocation. The
+  workload was 24 results with their pages and reuses:
+
+  | Observations | Logical allocation | PR-05 tables growth | Database growth | PR-05 tables after cleanup and VACUUM |
+  | --- | --- | --- | --- | --- |
+  | 50 | 17.6 MB | +9.5 MB | +13.2 MB | 1.8 MB |
+  | 100 | 34.4 MB | +18.4 MB | +22.1 MB | 2.3 MB |
+  | 200 | 68.1 MB | +32.6 MB | +36.1 MB | 2.7 MB |
+
+  Physical growth was about half the logical charge, because of TOAST
+  compression. Logical allocation is not a physical disk guarantee, and the
+  512 MiB quota is a logical allocation, never a statement about disk usage.
+  Rows deleted by cleanup keep their space until VACUUM. WAL and backups were
+  not measured.
+- **Not measured here:** owner source inspection through the existing raw-gated
+  readers, which this cut leaves unchanged.
 
 ## Host interface
 
@@ -240,7 +322,7 @@ lists source refs as hydration-required.
 
 ## Acceptance and preserved development failures
 
-Fictional installed tests (`test_agent_sql_results`, 21 cases) use the
+Fictional installed tests (`test_agent_sql_results`, 22 cases) use the
 production reader provisioning path. They cover:
 
 - query, page, cursor and reuse
@@ -276,6 +358,9 @@ production reader provisioning path. They cover:
   reader backend is confirmed gone; recovery then settles the orphaned
   invocation at the full reservation, and a new step is admitted without
   replaying the lost one
+- owner loss after the reader settles and before commit: the delivery settles
+  once as `abandoned` with no receipt, the refused commit discards the
+  preparation, and the exact redelivery is `execution_error` with no rerun
 - group, window, set, EXISTS and relation-join shapes, with frame lifecycle
   fields and coverage gaps
 
@@ -291,6 +376,11 @@ Development failures retained:
     parameters.
   - A lost single-use preparation correctly fails instead of rerunning.
 - Inventory hashes drifted during SQL edits.
+- The trusted-host lane's owner-loss-before-commit case found that the exact
+  redelivery of a step whose preparation had been discarded reported
+  `unavailable`, contrary to this document. Redelivery now probes the caller's
+  own step preparation first, and ownership-refused commits map to
+  `execution_error`. A regression test reproduces the case in-process.
 - The hostile-request test found that refused SQL still reserved, then
   discarded, a preparation. SQL is now screened before any reservation. Only
   the population-dependent reference-anchor check waits for full admission.
@@ -331,7 +421,8 @@ in this cut (see Schema 38) and qualifies with the exact-head run.
 
 Still gating any preview release:
 
-- the measured small-workspace qualification, with database growth;
+- keeping any preview within the measured range above (up to 200
+  observations);
 - exact-head qualification of expiry cleanup, and a host schedule for
   `cleanup_expired()`;
 - integrated adversarial acceptance, including credential isolation against the
