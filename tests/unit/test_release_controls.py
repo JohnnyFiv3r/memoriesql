@@ -212,7 +212,7 @@ class ReleaseControlTests(unittest.TestCase):
         )
         candidate = json.loads(RELEASE_INVENTORY.read_bytes())
         self.assertEqual(candidate["version"], APPROVED_VERSION)
-        self.assertEqual(candidate["records"]["count"], 67)
+        self.assertEqual(candidate["records"]["count"], 69)
         self.assertEqual(
             {r["filename"] for r in candidate["artifacts"]},
             {"memoriesql-0.0.13-py3-none-any.whl", "memoriesql-0.0.13.tar.gz"},
