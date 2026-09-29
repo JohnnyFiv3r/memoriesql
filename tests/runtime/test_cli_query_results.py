@@ -626,14 +626,21 @@ class CliQueryResults(unittest.TestCase):
         self.assertGreaterEqual(int(counts[1][0]), 1)
         agent_relations = relations["result"]
 
-        # The exact relation reader stays owner-only for a paired agent.
+        # The exact relation reader stays owner-only for a paired agent: its
+        # closed refusal names no bead and carries no relation, type or task.
         status, output = self.cli(
             ["relations", str(subject), "--json"], agent_environment
         )
-        self.assertEqual(
-            (status, json.loads(output)),
-            (2, {"outcome": "unavailable", "reason": "resource_unavailable"}),
-        )
+        refusal = json.loads(output)
+        self.assertEqual((status, refusal["outcome"]), (2, "unavailable"), refusal)
+        self.assertIsNone(refusal.get("bead_id"), refusal)
+        disclosed = {
+            key: value
+            for key, value in refusal.items()
+            if key not in ("outcome", "contract_version", "reason")
+            and value not in (None, [])
+        }
+        self.assertEqual(disclosed, {}, refusal)
 
         revoke = self.root / "revoke.json"
         revoke.write_text(
