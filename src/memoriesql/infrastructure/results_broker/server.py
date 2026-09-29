@@ -258,6 +258,8 @@ def prepare_host(config: BrokerConfig) -> TrustedHost:
         ) from None
     except psycopg.Error as error:
         # SQLSTATE only: server messages can echo roles, hosts or settings.
+        if error.sqlstate is None:
+            raise HostRefused("database unreachable during preflight") from None
         raise HostRefused(
             f"database preflight failed (SQLSTATE {error.sqlstate})"
         ) from None

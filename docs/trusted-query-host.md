@@ -144,8 +144,8 @@ The service definition:
   <key>WorkingDirectory</key><string>/usr/local/var/memoriesql-broker/state</string>
   <key>Umask</key><integer>63</integer>
   <key>RunAtLoad</key><true/>
-  <key>KeepAlive</key><dict><key>Crashed</key><true/></dict>
-  <key>ThrottleInterval</key><integer>10</integer>
+  <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
+  <key>ThrottleInterval</key><integer>30</integer>
   <key>ExitTimeOut</key><integer>120</integer>
   <key>StandardOutPath</key><string>/usr/local/var/memoriesql-broker/log/host.log</string>
   <key>StandardErrorPath</key><string>/usr/local/var/memoriesql-broker/log/host.log</string>
@@ -159,8 +159,11 @@ the control login is not a superuser, holds no elevation it never uses and
 inherits `memoriesql_application`; it inherits its reader role; the reviewed
 reader profile qualifies to exactly the pinned `profile_sha256`; the reader login
 is itself; and the socket directory is the service account's, 0750 or stricter.
-`KeepAlive` restarts a crashed host but not a refused one: fix the reported
-condition, then start it again.
+`KeepAlive` restarts the host whenever it exits unsuccessfully, at most every
+30 seconds, so a host started before its database is reachable (for example
+after a reboot) comes up once the database does; a refusal is logged on each
+attempt until the reported condition is fixed. A draining stop exits 0 and is
+not restarted.
 
 ### Day-to-day operations
 
