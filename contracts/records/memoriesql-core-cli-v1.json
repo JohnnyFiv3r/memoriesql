@@ -28,6 +28,7 @@
       "broker provision",
       "broker check",
       "broker runs",
+      "broker cleanup",
       "broker close-run"
     ],
     "doctor": {
@@ -50,7 +51,7 @@
     "query_host": {
       "client": "MEMORIESQL_RESULTS_SOCKET selects the local trusted query host for query, result, inspect, source and relations; the client presents only its own paired credential and workspace over a Unix socket whose serving uid it verifies, and never uses a database URL",
       "direct": "without the socket, query and result compose the trusted executor in-process and need the host's own database logins, which are never given to an agent",
-      "operator": "broker serve|provision|check|runs|close-run run only as the host's service user with its private configuration; each prints one JSON line and exits 0, 2 or 3",
+      "operator": "broker serve|provision|check|runs|cleanup|close-run run only as the host's service user with its private configuration; each prints one JSON line and exits 0, 2 or 3; serve runs the expired-result cleanup at start and hourly, and cleanup runs it once",
       "paired_agent_reads": {
         "inspect": "owner_only: the exact stored-bead readers answer resource_unavailable to paired agents",
         "query": "available",

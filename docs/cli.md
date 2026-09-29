@@ -24,7 +24,7 @@ Desktop and never loads private Python modules or arbitrary plugins. `contracts`
 | `schema` | Describes the installed logical query catalog, which relations are prepared, reserved or not prepared, the grants each prepared table family needs, the admission rules and delivery limits. It contacts no database and starts no run. |
 | `query --file query.sql --intent discover\|enumerate --view resolved\|historical` | Submits one caller-authored admitted SELECT with typed `$n` parameters through the trusted results executor and prints its closed reply. |
 | `result <result-id> --digest <content-digest> [--cursor C]` | Pages one retained immutable result by its exact pin under current authority, without rerunning its query. |
-| `broker serve\|provision\|check\|runs\|close-run --config PATH` | Operator-only commands of the local trusted query host, run as its service user with its private configuration. Each prints one JSON line. |
+| `broker serve\|provision\|check\|runs\|cleanup\|close-run --config PATH` | Operator-only commands of the local trusted query host, run as its service user with its private configuration. Each prints one JSON line. |
 
 Bare `sources` reports `source_inventory_not_released`; there is no public
 source-inventory reader yet. Provider-specific `sources connect` remains a
@@ -266,8 +266,10 @@ administrator URL without echo and has no flag for it; `--control-role` and
 `--reader-role` override the default role names. `broker serve` runs the host
 until SIGTERM or SIGINT, then drains. `broker check` verifies the configuration,
 logins and file permissions; `broker runs` lists the runs the host recorded; and
-`broker close-run RUN_REF` closes one of them. Run these as the service user,
-never from an agent session.
+`broker close-run RUN_REF` closes one of them. `broker serve` also runs the
+expired-result cleanup at start and hourly, `broker cleanup` runs it once on
+demand, and `broker check` fails while cleanup is overdue or its last scheduled
+run is stale. Run these as the service user, never from an agent session.
 
 This slice does not route Desktop's Textual interface or provider adapters. A
 future, reviewed static service/client seam must preserve public core commands,

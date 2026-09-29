@@ -198,6 +198,10 @@ class BrokerCommandTests(unittest.TestCase):
                 "memoriesql.infrastructure.results_broker.admin.close_run",
                 recorder("close-run", 0),
             ),
+            patch(
+                "memoriesql.infrastructure.results_broker.admin.cleanup",
+                recorder("cleanup", 3),
+            ),
         ):
             self.assertEqual(main(["broker", "serve", "--config", str(config)]), 0)
             self.assertEqual(
@@ -222,13 +226,16 @@ class BrokerCommandTests(unittest.TestCase):
             )
             self.assertEqual(main(["broker", "check", "--config", str(config)]), 3)
             self.assertEqual(main(["broker", "runs", "--config", str(config)]), 0)
+            self.assertEqual(main(["broker", "cleanup", "--config", str(config)]), 3)
             run_ref = UUID(int=24)
             self.assertEqual(
                 main(["broker", "close-run", "--config", str(config), str(run_ref)]),
                 0,
             )
         names = [name for name, _, _ in calls]
-        self.assertEqual(names, ["serve", "provision", "check", "runs", "close-run"])
+        self.assertEqual(
+            names, ["serve", "provision", "check", "runs", "cleanup", "close-run"]
+        )
         _, arguments, options = calls[1]
         self.assertEqual(arguments, (config,))
         self.assertEqual(options["workspace_id"], WORKSPACE)
@@ -239,7 +246,8 @@ class BrokerCommandTests(unittest.TestCase):
         self.assertEqual(options["control_role"], "memoriesql_query_host")
         self.assertEqual(options["reader_role"], "fictional_reader")
         self.assertNotIn("admin_url", options)
-        self.assertEqual(calls[4][1], (config, run_ref))
+        self.assertEqual(calls[4][1], (config,))
+        self.assertEqual(calls[5][1], (config, run_ref))
 
 
 if __name__ == "__main__":

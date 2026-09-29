@@ -259,10 +259,13 @@ def _parser() -> argparse.ArgumentParser:
         "check", help="Check the host's configuration, logins and file integrity."
     )
     runs = broker_commands.add_parser("runs", help="List runs the host has recorded.")
+    cleanup = broker_commands.add_parser(
+        "cleanup", help="Run the host's expired-result cleanup once, as its operator."
+    )
     close_run = broker_commands.add_parser(
         "close-run", help="Close one run the host recorded, as its operator."
     )
-    for operation in (serve, provision, check, runs, close_run):
+    for operation in (serve, provision, check, runs, cleanup, close_run):
         operation.add_argument("--config", required=True, type=Path)
     provision.add_argument("--workspace-id", type=UUID)
     provision.add_argument("--client-uid", type=int)
@@ -823,6 +826,8 @@ def _broker(args: argparse.Namespace) -> int:
         return admin.check(args.config)
     if args.broker_command == "runs":
         return admin.list_runs(args.config)
+    if args.broker_command == "cleanup":
+        return admin.cleanup(args.config)
     return admin.close_run(args.config, args.run_ref)
 
 
