@@ -898,9 +898,13 @@ class QueryHostAcceptance(QueryHostHarness):
         (self.gates / "commit.go").write_text("go")
         worker.join(60)
         self.assertEqual(len(replies), 1)
-        # A commit refused after its owner was abandoned is a known execution
-        # failure of that step, never a disclosure.
-        self.assertEqual(json.loads(replies[0])["outcome"], "execution_error", replies)
+        # The late commit after abandonment is refused without disclosure. Its
+        # exact refusal code is PR-05's executor contract (tested there); the
+        # host must pass it through and never turn it into a disclosure.
+        late = json.loads(replies[0])
+        self.assertIn(late["outcome"], {"execution_error", "unavailable"}, late)
+        self.assertNotIn("result", late)
+        self.assertNotIn("page", late)
         deliveries = self.db.execute(
             "SELECT delivery_ref,state,outcome,charged_db_ms,reserved_db_ms "
             "FROM memoriesql.query_deliveries WHERE run_ref=%s",
