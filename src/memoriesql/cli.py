@@ -9,8 +9,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import secrets
+import sys
 from collections.abc import Mapping, Sequence
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -25,6 +27,15 @@ from pydantic import BaseModel
 
 from memoriesql import __version__
 from memoriesql.application.authorization import LocalCredential
+from memoriesql.application.local_client_pairing import (
+    LocalClientPairing,
+    PairLocalClient,
+    RevokeLocalClient,
+)
+from memoriesql.application.personal_local_initialization import (
+    InitializePersonalLocal,
+    PersonalLocalInitialization,
+)
 from memoriesql.application.relation_inspection import InspectBeadRelationsV2
 from memoriesql.application.source_enrollment import (
     EnrollExactSource,
@@ -42,6 +53,17 @@ from memoriesql.contracts import (
     contract_inventory,
     get_contract,
 )
+from memoriesql.infrastructure.postgres.local_client_pairing import (
+    PairingRevisionConflict,
+    PostgresLocalClientPairing,
+    pairing_identities,
+)
+from memoriesql.infrastructure.postgres.personal_local_initialization import (
+    AlreadyInitialized,
+    InitializationReplayUnverifiable,
+    PostgresPersonalLocalInitialization,
+    initialization_identities,
+)
 from memoriesql.infrastructure.postgres.relation_assessment import (
     PostgresRelationAssessments,
 )
@@ -50,6 +72,19 @@ from memoriesql.infrastructure.postgres.source_enrollment import (
 )
 from memoriesql.infrastructure.postgres.stored_bead_inspection import (
     PostgresStoredBeadInspection,
+)
+from memoriesql.query_client import (
+    MAX_PARAMETER_FILE_BYTES,
+    MAX_SQL_BYTES,
+    ResultsTransport,
+    RunStore,
+    TrustedHostTransport,
+    coverage_gaps,
+    default_state_root,
+    query_request,
+    read_bounded,
+    reuse_request,
+    schema_description,
 )
 
 
@@ -105,6 +140,11 @@ def _parser() -> argparse.ArgumentParser:
     doctor = commands.add_parser(
         "doctor", help="Show core and local read configuration without connecting."
     )
+    doctor.add_argument(
+        "--check-database",
+        action="store_true",
+        help="Also run read-only schema and login-role checks against the database.",
+    )
     doctor.add_argument("--json", action="store_true")
 
     capabilities = commands.add_parser(
@@ -141,6 +181,67 @@ def _parser() -> argparse.ArgumentParser:
         )
         operation.add_argument("--request-file", required=True, type=Path)
         operation.add_argument("--json", action="store_true")
+
+    init = commands.add_parser(
+        "init", help="Initialize the single personal-local owner once, as an operator."
+    )
+    init.add_argument("--request-file", required=True, type=Path)
+    init.add_argument(
+        "--secret-file",
+        required=True,
+        type=Path,
+        help="New owner-only file for the owner credential; never overwritten.",
+    )
+    init.add_argument("--json", action="store_true")
+
+    clients = commands.add_parser(
+        "clients", help="Pair or revoke one local agent client with current authority."
+    )
+    client_commands = clients.add_subparsers(dest="client_command", required=True)
+    pair = client_commands.add_parser(
+        "pair", help="Pair one agent client and write its new secret once to a file."
+    )
+    pair.add_argument("--request-file", required=True, type=Path)
+    pair.add_argument(
+        "--secret-file",
+        required=True,
+        type=Path,
+        help="New owner-only file to create; never overwritten or printed.",
+    )
+    pair.add_argument("--json", action="store_true")
+    revoke = client_commands.add_parser(
+        "revoke", help="Terminally revoke one pairing grant at its current revision."
+    )
+    revoke.add_argument("--request-file", required=True, type=Path)
+    revoke.add_argument("--json", action="store_true")
+    schema = commands.add_parser(
+        "schema", help="Describe the installed logical query schema and its rules."
+    )
+    schema.add_argument("--json", action="store_true")
+    query = commands.add_parser(
+        "query", help="Run one caller-authored admitted SELECT in the current run."
+    )
+    query.add_argument("--file", required=True, type=Path)
+    query.add_argument("--parameters-file", type=Path)
+    query.add_argument("--intent", required=True, choices=("discover", "enumerate"))
+    query.add_argument("--view", required=True, choices=("resolved", "historical"))
+    query.add_argument("--known-at", type=_aware_time)
+    query.add_argument("--page-size", type=int, default=20)
+    query.add_argument(
+        "--new-run", action="store_true", help="Start a new run for this query."
+    )
+    query.add_argument("--json", action="store_true")
+    result = commands.add_parser(
+        "result", help="Page one retained immutable result by its exact pin."
+    )
+    result.add_argument("result_id", type=UUID)
+    result.add_argument("--digest", required=True)
+    result.add_argument("--cursor")
+    result.add_argument("--page-size", type=int, default=20)
+    result.add_argument(
+        "--new-run", action="store_true", help="Start a new run for this page."
+    )
+    result.add_argument("--json", action="store_true")
     return parser
 
 
@@ -239,6 +340,401 @@ def _source_authority(
         return {"outcome": "failed", "reason": "source_authority_failed"}
 
 
+def _write_new_secret(path: Path) -> str:
+    """Create one owner-only secret file; refuse existing paths and symlinks."""
+
+    secret = secrets.token_urlsafe(32)
+    flags = (
+        os.O_WRONLY
+        | os.O_CREAT
+        | os.O_EXCL
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_CLOEXEC", 0)
+    )
+    descriptor = os.open(path, flags, 0o600)
+    try:
+        os.fchmod(descriptor, 0o600)
+        payload = secret.encode("ascii")
+        written = 0
+        while written < len(payload):
+            written += os.write(descriptor, payload[written:])
+        os.fsync(descriptor)
+    except BaseException:
+        os.close(descriptor)
+        path.unlink(missing_ok=True)
+        raise
+    os.close(descriptor)
+    return secret
+
+
+def _commit_outcome_unknown(error: BaseException) -> bool:
+    """A lost connection leaves an in-flight commit unknown.
+
+    Every error the server reports carries a SQLSTATE and means nothing
+    committed; only a client-side connection failure has none.
+    """
+
+    return (
+        isinstance(error, psycopg.OperationalError | psycopg.InterfaceError)
+        and error.sqlstate is None
+    )
+
+
+def _pair_client(
+    request: PairLocalClient, secret_file: Path, environment: Mapping[str, str]
+) -> dict[str, object]:
+    configured = _local_read_configuration(environment)
+    if configured is None:
+        return {"outcome": "unavailable", "reason": "local_client_authority_required"}
+    database, credential_sha256, workspace_id = configured
+    try:
+        secret = _write_new_secret(secret_file)
+    except OSError:
+        return {"outcome": "failed", "reason": "secret_file_unavailable"}
+    receipt: LocalClientPairing | None = None
+    refusal: dict[str, object] = {"outcome": "failed", "reason": "client_pairing_failed"}
+    try:
+        connection = psycopg.connect(database, autocommit=True)
+    except Exception:
+        # Nothing can have committed without a connection.
+        secret_file.unlink(missing_ok=True)
+        return refusal
+    try:
+        with connection:
+            receipt = PostgresLocalClientPairing(
+                connection,
+                credential_sha256=credential_sha256,
+                workspace_id=workspace_id,
+            ).pair(request, client_secret_sha256=LocalCredential(secret).sha256())
+    except PermissionError:
+        refusal = {"outcome": "unavailable", "reason": "resource_unavailable"}
+    except Exception as error:
+        # A failure after the committed pairing still reports that receipt.
+        # Never echo the secret, credentials, connection or SQL diagnostics.
+        if receipt is None and _commit_outcome_unknown(error):
+            # The pairing may have committed: its only secret stays in the new
+            # owner-only file, and the derived identifiers let the owner revoke.
+            principal_id, _pairing, grant_id, _credential = pairing_identities(
+                request.request_id
+            )
+            return {
+                "outcome": "failed",
+                "reason": "pairing_outcome_unknown",
+                "secret_file_retained": True,
+                "principal_id": str(principal_id),
+                "pairing_grant_id": str(grant_id),
+            }
+    if receipt is None:
+        # An unpaired secret authorizes nothing; do not leave it behind.
+        secret_file.unlink(missing_ok=True)
+        return refusal
+    return {
+        "outcome": "available",
+        "receipt": receipt.model_dump(mode="json"),
+        "secret_file_written": True,
+    }
+
+
+def _initialize(
+    request: InitializePersonalLocal,
+    secret_file: Path,
+    environment: Mapping[str, str],
+) -> dict[str, object]:
+    database = environment.get("MEMORIESQL_DATABASE_URL")
+    if not database:
+        return {"outcome": "unavailable", "reason": "database_not_configured"}
+    try:
+        secret = _write_new_secret(secret_file)
+    except FileExistsError:
+        # Never read, overwrite or reuse a secret file this command did not create.
+        return {"outcome": "failed", "reason": "stale_secret_file"}
+    except OSError:
+        return {"outcome": "failed", "reason": "secret_file_unavailable"}
+    receipt: PersonalLocalInitialization | None = None
+    refusal: dict[str, object] = {
+        "outcome": "failed",
+        "reason": "initialization_failed",
+    }
+    try:
+        connection = psycopg.connect(database, autocommit=True)
+    except Exception:
+        # Nothing can have committed without a connection.
+        secret_file.unlink(missing_ok=True)
+        return refusal
+    try:
+        with connection:
+            receipt = PostgresPersonalLocalInitialization(connection).initialize(
+                request, session_secret_sha256=LocalCredential(secret).sha256()
+            )
+    except AlreadyInitialized:
+        refusal = {"outcome": "unavailable", "reason": "already_initialized"}
+    except InitializationReplayUnverifiable:
+        refusal = {
+            "outcome": "unavailable",
+            "reason": "initialization_replay_unverifiable",
+        }
+    except PermissionError:
+        refusal = {"outcome": "unavailable", "reason": "resource_unavailable"}
+    except Exception as error:
+        # Never echo the secret, connection string or server diagnostics.
+        if receipt is None and _commit_outcome_unknown(error):
+            # The owner may exist now: keep its only secret. An identical replay
+            # with a new file reports whether this file is the credential.
+            ids = initialization_identities(request.request_id)
+            return {
+                "outcome": "failed",
+                "reason": "initialization_outcome_unknown",
+                "secret_file_retained": True,
+                "workspace_id": str(ids["workspace"]),
+                "principal_id": str(ids["principal"]),
+            }
+    if receipt is None or receipt.replayed:
+        # No credential was issued for this secret: remove it. On a replay the
+        # first run's secret file remains the owner's only credential.
+        secret_file.unlink(missing_ok=True)
+    if receipt is None:
+        return refusal
+    return {
+        "outcome": "available",
+        "receipt": receipt.model_dump(mode="json"),
+        "secret_file_written": not receipt.replayed,
+    }
+
+
+def _revoke_client(
+    request: RevokeLocalClient, environment: Mapping[str, str]
+) -> dict[str, object]:
+    configured = _local_read_configuration(environment)
+    if configured is None:
+        return {"outcome": "unavailable", "reason": "local_client_authority_required"}
+    database, credential_sha256, workspace_id = configured
+    try:
+        connection = psycopg.connect(database, autocommit=True)
+    except Exception:
+        # Nothing can have been revoked without a connection.
+        return {"outcome": "failed", "reason": "client_revocation_failed"}
+    try:
+        with connection:
+            receipt = PostgresLocalClientPairing(
+                connection,
+                credential_sha256=credential_sha256,
+                workspace_id=workspace_id,
+            ).revoke(request)
+        return {"outcome": "available", "receipt": receipt.model_dump(mode="json")}
+    except PairingRevisionConflict:
+        return {"outcome": "failed", "reason": "pairing_revision_conflict"}
+    except PermissionError:
+        return {"outcome": "unavailable", "reason": "resource_unavailable"}
+    except Exception as error:
+        if _commit_outcome_unknown(error):
+            return {"outcome": "failed", "reason": "revocation_outcome_unknown"}
+        return {"outcome": "failed", "reason": "client_revocation_failed"}
+def _results_transport(environment: Mapping[str, str]) -> ResultsTransport | None:
+    """Compose the direct trusted-host executor only when every input is present."""
+
+    configured = _local_read_configuration(environment)
+    reader_url = environment.get("MEMORIESQL_QUERY_READER_URL")
+    reader_role = environment.get("MEMORIESQL_QUERY_READER_ROLE")
+    if configured is None or not reader_url or not reader_role:
+        return None
+    control_url, credential_sha256, workspace_id = configured
+    return TrustedHostTransport(
+        control_url=control_url,
+        reader_url=reader_url,
+        reader_role=reader_role,
+        pinned_profile_sha256=environment.get("MEMORIESQL_QUERY_AUTHORITY_SHA256")
+        or None,
+        credential_sha256=credential_sha256,
+        workspace_id=workspace_id,
+    )
+
+
+def _emit_reply(reply: bytes, *, machine: bool) -> int:
+    """Print the executor's closed reply unchanged; exit by its outcome."""
+
+    payload = json.loads(reply)
+    if machine:
+        sys.stdout.write(reply.decode("utf-8") + "\n")
+    else:
+        _write_json(payload)
+        for gap in coverage_gaps(payload):
+            print(f"coverage gap: {gap}", file=sys.stderr)
+        error = payload.get("error")
+        if (
+            payload.get("outcome") == "budget_exhausted"
+            and isinstance(error, dict)
+            and error.get("code") == "settlement"
+            and "run_ref" not in payload
+        ):
+            # A refused new run: the host's expiry cleanup is overdue or failed.
+            print(
+                "maintenance: the trusted host must run its expired-result "
+                "cleanup before new runs are admitted",
+                file=sys.stderr,
+            )
+    outcome = payload.get("outcome")
+    if outcome == "available":
+        return 0
+    return 2 if outcome == "unavailable" else 3
+
+
+def _investigate(args: argparse.Namespace, environment: Mapping[str, str]) -> int:
+    configured = _local_read_configuration(environment)
+    if configured is None:
+        return _emit_result(
+            {"outcome": "unavailable", "reason": "local_read_identity_required"},
+            machine=args.json,
+        )
+    transport = _results_transport(environment)
+    if transport is None:
+        return _emit_result(
+            {"outcome": "unavailable", "reason": "trusted_query_host_not_configured"},
+            machine=args.json,
+        )
+    _database, credential_sha256, workspace_id = configured
+    try:
+        if args.command == "query":
+            sql = read_bounded(args.file, MAX_SQL_BYTES).decode("utf-8")
+            parameters = (
+                json.loads(read_bounded(args.parameters_file, MAX_PARAMETER_FILE_BYTES))
+                if args.parameters_file is not None
+                else []
+            )
+            if not isinstance(parameters, list):
+                raise ValueError("parameters must be a JSON list")
+    except (OSError, ValueError):
+        return _emit_result(
+            {"outcome": "failed", "reason": "invalid_query_input"}, machine=args.json
+        )
+    store = RunStore(
+        default_state_root(environment),
+        credential_sha256=credential_sha256,
+        workspace_id=workspace_id,
+    )
+    run = store.current(transport, now=datetime.now(UTC), fresh=args.new_run)
+    if isinstance(run, bytes):
+        return _emit_reply(run, machine=args.json)
+    if args.command == "query":
+        request = query_request(
+            run,
+            sql=sql,
+            parameters=parameters,
+            intent=args.intent,
+            view=args.view,
+            known_at=args.known_at,
+            page_size=args.page_size,
+        )
+    else:
+        request = reuse_request(
+            run,
+            result_id=args.result_id,
+            content_digest=args.digest,
+            cursor=args.cursor,
+            page_size=args.page_size,
+        )
+    reply = transport.handle(request)
+    store.forget_ended(reply, now=datetime.now(UTC))
+    return _emit_reply(reply, machine=args.json)
+
+
+_LOGIN_PROBE = """
+SELECT r.rolsuper,
+       pg_catalog.has_function_privilege(
+           'pg_catalog.set_config(text,text,boolean)', 'EXECUTE'),
+       pg_catalog.pg_has_role('memoriesql_application', 'SET'),
+       pg_catalog.pg_has_role('memoriesql_application', 'USAGE'),
+       pg_catalog.pg_has_role('memoriesql_worker', 'SET'),
+       pg_catalog.pg_has_role('memoriesql_worker', 'USAGE'),
+       pg_catalog.current_setting('server_version_num')::int
+FROM pg_catalog.pg_roles AS r
+WHERE r.rolname = current_user
+"""
+
+
+def _installed_schema_version() -> int | None:
+    from memoriesql.infrastructure.postgres.migration_runner import (
+        MigrationError,
+        discover_migrations,
+    )
+
+    try:
+        return discover_migrations()[-1].version
+    except MigrationError:
+        return None
+
+
+def _database_health(environment: Mapping[str, str]) -> dict[str, object]:
+    """Read-only schema and login checks; no migration, grant or repair."""
+
+    database = environment.get("MEMORIESQL_DATABASE_URL")
+    if not database:
+        return {
+            "outcome": "unavailable",
+            "reason": "database_not_configured",
+        }
+    installed = _installed_schema_version()
+    row: tuple[Any, ...] | None = None
+    schema_version: int | None = None
+    try:
+        with psycopg.connect(database, autocommit=True, connect_timeout=5) as db:
+            db.execute("SELECT 1").fetchone()
+            try:
+                row = db.execute(_LOGIN_PROBE).fetchone()
+            except InsufficientPrivilege:
+                # This login cannot even execute ordinary catalog builtins.
+                row = None
+            try:
+                version_row = db.execute(
+                    "SELECT max(version) FROM memoriesql.schema_migrations"
+                ).fetchone()
+                schema_version = version_row[0] if version_row else None
+            except psycopg.Error:
+                schema_version = None
+    except psycopg.Error:
+        # Never echo the connection string, role names or server diagnostics.
+        return {
+            "outcome": "failed",
+            "reason": "database_unreachable",
+            "database_contacted": True,
+        }
+    if row is None:
+        row = (False, False, None, None, None, None, None)
+    superuser, prologue, app_set, app_usage, worker_set, worker_usage, server = row
+    application_ready = bool(superuser or (app_set and app_usage and prologue))
+    login = {
+        "superuser": bool(superuser),
+        "prologue_builtins_executable": bool(prologue),
+        "application_role_settable": app_set,
+        "application_role_inherited": app_usage,
+        "worker_role_settable": worker_set,
+        "worker_role_inherited": worker_usage,
+        "application_ready": application_ready,
+    }
+    compatible = (
+        None
+        if schema_version is None or installed is None
+        else schema_version == installed
+    )
+    result: dict[str, object] = {
+        "database_contacted": True,
+        "database": {
+            "server_version_num": server,
+            "schema_version": schema_version,
+            "installed_schema_version": installed,
+            "schema_compatible": compatible,
+            "login": login,
+        },
+    }
+    if not application_ready:
+        result |= {"outcome": "failed", "reason": "login_role_not_ready"}
+    elif compatible is False:
+        result |= {"outcome": "failed", "reason": "schema_version_mismatch"}
+    elif compatible is None:
+        # No verified schema is never a passing check, e.g. an empty database.
+        result |= {"outcome": "failed", "reason": "schema_version_unknown"}
+    return result
+
+
 def _emit_result(result: BaseModel | dict[str, Any], *, machine: bool) -> int:
     payload = (
         result.model_dump(mode="json") if isinstance(result, BaseModel) else result
@@ -285,18 +781,18 @@ def main(arguments: Sequence[str] | None = None) -> int:
         return 0
 
     if args.command == "doctor":
-        return _emit_result(
-            {
-                "outcome": "available",
-                "core_version": __version__,
-                "configuration_only": True,
-                "local_read_identity_configured": _local_read_configuration(os.environ)
-                is not None,
-                "database_contacted": False,
-                "model_contacted": False,
-            },
-            machine=args.json,
-        )
+        report: dict[str, object] = {
+            "outcome": "available",
+            "core_version": __version__,
+            "configuration_only": not args.check_database,
+            "local_read_identity_configured": _local_read_configuration(os.environ)
+            is not None,
+            "database_contacted": False,
+            "model_contacted": False,
+        }
+        if args.check_database:
+            report |= _database_health(os.environ)
+        return _emit_result(report, machine=args.json)
 
     if args.command == "capabilities":
         reference = get_contract("memoriesql.core-cli.v1")
@@ -317,6 +813,12 @@ def main(arguments: Sequence[str] | None = None) -> int:
             },
             machine=args.json,
         )
+
+    if args.command == "schema":
+        return _emit_result(schema_description(), machine=args.json)
+
+    if args.command in ("query", "result"):
+        return _investigate(args, os.environ)
 
     if args.command == "sources":
         if args.source_command is None:
@@ -344,6 +846,36 @@ def main(arguments: Sequence[str] | None = None) -> int:
                 machine=args.json,
             )
         return _emit_result(receipt, machine=args.json)
+
+    if args.command == "init":
+        try:
+            init_request = _request_file(args.request_file, InitializePersonalLocal)
+        except (OSError, ValueError):
+            return _emit_result(
+                {"outcome": "failed", "reason": "invalid_initialization_request"},
+                machine=args.json,
+            )
+        return _emit_result(
+            _initialize(init_request, args.secret_file, os.environ), machine=args.json
+        )
+
+    if args.command == "clients":
+        client_request: PairLocalClient | RevokeLocalClient
+        try:
+            if args.client_command == "pair":
+                client_request = _request_file(args.request_file, PairLocalClient)
+            else:
+                client_request = _request_file(args.request_file, RevokeLocalClient)
+        except (OSError, ValueError):
+            return _emit_result(
+                {"outcome": "failed", "reason": "invalid_client_request"},
+                machine=args.json,
+            )
+        if isinstance(client_request, PairLocalClient):
+            outcome = _pair_client(client_request, args.secret_file, os.environ)
+        else:
+            outcome = _revoke_client(client_request, os.environ)
+        return _emit_result(outcome, machine=args.json)
 
     request: BaseModel
     if args.command == "source":

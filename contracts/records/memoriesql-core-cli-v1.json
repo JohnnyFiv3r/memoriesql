@@ -1,6 +1,12 @@
 {
   "contract": {
-    "authentication": "existing_local_credential_and_workspace_context_for_reads_and_exact_source_authority",
+    "authentication": "existing_local_credential_and_workspace_context_for_reads_exact_source_authority_and_client_pairing; operator_database_login_for_init",
+    "client_pairing": {
+      "pair": "PairLocalClient / LocalClientPairing v1",
+      "result_envelope": "available receipt, unavailable reason or failed reason",
+      "revoke": "RevokeLocalClient / LocalClientRevocation v1",
+      "secret_delivery": "a new caller-named owner-only file created exclusively before the database call; the secret is never printed, logged or accepted as input; the file is removed when pairing is refused or fails before committing, and kept with the derived principal and pairing grant identifiers reported as pairing_outcome_unknown when a lost connection leaves the commit unknown"
+    },
     "core_commands": [
       "contracts",
       "contract",
@@ -11,31 +17,53 @@
       "relations",
       "sources enroll",
       "sources grant",
-      "sources revoke"
+      "sources revoke",
+      "clients pair",
+      "clients revoke",
+      "init",
+      "schema",
+      "query",
+      "result"
     ],
+    "doctor": {
+      "--check-database": "read-only reachability, schema compatibility and login role readiness; never migrates, grants or repairs",
+      "default": "configuration only; no database or model"
+    },
     "entrypoint": "memoriesql.cli:main",
     "executable": "memoriesql",
     "exit_status": {
       "available": 0,
-      "unavailable": 2,
-      "failed_or_budget_exhausted": 3
+      "failed_or_budget_exhausted": 3,
+      "unavailable": 2
+    },
+    "initialization": {
+      "authority": "operator database login that can assume the application role; once per database",
+      "init": "InitializePersonalLocal / PersonalLocalInitialization v1",
+      "result_envelope": "available receipt, unavailable reason or failed reason",
+      "secret_delivery": "a new caller-named owner-only file created exclusively before the database call; never printed, logged or accepted as input; removed when nothing commits or on replay; kept and reported as initialization_outcome_unknown when a lost connection leaves the commit unknown"
     },
     "read_contracts": {
       "inspect": "InspectStoredBead / StoredBeadInspection v1",
-      "source": "ReadStoredBeadEvidence / StoredBeadEvidence v1",
-      "relations": "InspectBeadRelationsV2 / BeadRelationsInspectionV2"
+      "relations": "InspectBeadRelationsV2 / BeadRelationsInspectionV2",
+      "source": "ReadStoredBeadEvidence / StoredBeadEvidence v1"
+    },
+    "results": {
+      "contract": "memoriesql.agent-sql-results.v1",
+      "query": "QueryRequest (discover|enumerate, resolved|historical view) through a trusted executor; closed reply printed unchanged",
+      "result": "ReuseRequest with the exact result_id and content_digest pin, optional cursor",
+      "run": "one persisted run per principal and workspace in an owner-only state file; rotated before expiry; --new-run; never retried",
+      "schema": "installed logical catalog, prepared/reserved/not-prepared relations, admission rules and delivery limits; no database or run",
+      "trusted_host": "control login, reviewed restricted reader and optional pinned profile hash, configured only in a credential-isolated process; otherwise trusted_query_host_not_configured"
     },
     "source_authority": {
       "enroll": "EnrollExactSource / ExactSourceEnrollment v1",
       "grant": "GrantExactSource / ExactSourceGrant v1",
-      "revoke": "RevokeExactSource / ExactSourceRevocation v1",
-      "result_envelope": "available receipt, unavailable reason or failed reason"
+      "result_envelope": "available receipt, unavailable reason or failed reason",
+      "revoke": "RevokeExactSource / ExactSourceRevocation v1"
     },
     "unavailable": {
       "ask": "qualified_recall_not_released",
       "investigations": "pr05_checkpoint_not_released",
-      "query": "pr05_query_result_not_released",
-      "result": "pr05_query_result_not_released",
       "sources": "source_inventory_not_released",
       "sources connect": "provider_adapter_not_routed",
       "ui": "private_textual_surface_not_routed"
@@ -43,6 +71,6 @@
   },
   "id": "memoriesql.core-cli.v1",
   "status": "available",
-  "summary": "One public executable with contract catalog, configuration health, authorized stored reads and exact provider-neutral source authority; no private routing or PR-05 retrieval claim.",
+  "summary": "One public executable with contract catalog, configuration health, authorized stored reads, exact provider-neutral source authority, one-time personal-local initialization, local agent client pairing and governed query/result reuse through a trusted executor; no private routing claim.",
   "version": "1"
 }
