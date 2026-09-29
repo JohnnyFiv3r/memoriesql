@@ -441,6 +441,13 @@ Development failures retained:
   empty page pointing back at itself: an endless loop on later pages, and an
   `execution_error` on the first. Both are fixed, and their regression tests
   fail on the previous code.
+- An agent reading the installed catalog found its admission stage still said
+  query/result execution was "not yet delivered", so it expected its queries
+  to be refused. The stage and the SQL recall catalog note now say that query
+  and reuse_result execute through the trusted executor. They also say that
+  inspect, hydrate_source and checkpoints are not delivered, with no delivered
+  or released claim. The logical catalog hash changes with the stage text. A
+  unit test fails on the previous text.
 - The trusted-host lane's late-commit case found that a successful commit
   followed by a refused first disclosure deleted the committed result through
   the generic failure path, and replied `unavailable`. That disclosure was

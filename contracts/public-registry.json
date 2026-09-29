@@ -1,6 +1,6 @@
 {
   "agent_sql_logical_catalog": {
-    "admission_stage": "internal_kernel; query/result/helper execution is not yet delivered",
+    "admission_stage": "trusted_executor_preview; query and reuse_result execute through the trusted executor; inspect, hydrate_source and checkpoints are not delivered; unreleased",
     "collation": "C",
     "evaluation_relation": {
       "columns": [
@@ -1477,7 +1477,7 @@
       "expected_record_count": 0,
       "filename": "sql-recall-operations.json",
       "kind": "sql_recall_operations",
-      "note": "No SQL recall records are included in this preview."
+      "note": "No SQL recall contract record is registered in this preview. Query and reuse_result execute through the trusted executor under this catalog's logical_catalog; inspect, hydrate_source and checkpoints are not delivered."
     }
   ],
   "compatibility": "experimental_0_x_no_general_compatibility_guarantee",
