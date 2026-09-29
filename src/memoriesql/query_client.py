@@ -20,12 +20,14 @@ from uuid import UUID, uuid4
 
 from memoriesql.application.agent_sql_catalog import SqlCatalog
 from memoriesql.application.agent_sql_results import (
+    AGENT_RELATION_TABLES,
     BASELINE_POLICY,
     CONTRACT_ID,
     CONTRACT_VERSION,
     OBSERVATION_TABLES,
     PREPARED_RELATIONS,
-    RELATION_TABLES,
+    RELATION_HISTORY_FACET,
+    RELATION_HISTORY_TABLES,
 )
 from memoriesql.application.investigation_contracts import result_json_bytes
 from memoriesql.contracts import load_catalog
@@ -320,10 +322,28 @@ def schema_description() -> dict[str, Any]:
                 "requires": ["memory.query", "source.read"],
                 "gap_reason": "source_read_required",
             },
+            # Owner decision, 2026-09-28: a relation needs both grants over every
+            # member of its disclosed dependency closure. One unreadable member
+            # withholds the whole relation without disclosure, and raw-source
+            # provenance records stay owner-only.
             "relation_tables": {
-                "relations": sorted(RELATION_TABLES),
+                "relations": sorted(AGENT_RELATION_TABLES),
+                "requires": ["memory.query", "source.read"],
+                "requires_over": (
+                    "every member of the relation's disclosed dependency closure"
+                ),
+                "unreadable_dependency": (
+                    "the whole relation is withheld without disclosure"
+                ),
+                "raw_source_provenance": "owner_only",
+                "gap_reason": "source_read_required",
+            },
+            # Lifecycle history and pair coverage stay owner-only: a paired agent
+            # reads them empty, with this gap whenever its query names them.
+            RELATION_HISTORY_FACET: {
+                "relations": sorted(RELATION_HISTORY_TABLES),
                 "requires": ["memory.query", "source.raw.read"],
-                "gap_reason": "source_raw_read_required",
+                "gap_reason": "owner_only",
             },
         },
         "source_text": SOURCE_TEXT,
