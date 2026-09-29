@@ -10,9 +10,11 @@ and agent harness are isolated is a separate, per-installation qualification
 (see [the operator guide](../trusted-query-host.md)); this document does not
 claim one.
 
-Base: PR-05's `claude/pr-05-public-results` at `33e1c42` (schema 38). The host
-relies on its owned expiry cleanup, on committed results being kept when their
-first disclosure fails, and on the refusal of result pages that cannot fit. No
+Base: PR-05's `claude/pr-05-public-results` at `33e1c42`, plus M0039 (agents'
+reads of assessed relations, `claude/pr-05-relation-reads` at `f560fce1`), so
+schema 39. The host relies on its owned expiry cleanup, on committed results
+being kept when their first disclosure fails, and on the refusal of result pages
+that cannot fit. M0039 leaves the reviewed reader profile unchanged. No
 migration, contract payload or dependency is added. The CLI binding
 (`memoriesql broker …` and client mode) is PR-06's, in the unpublished, amended
 `memoriesql.core-cli.v1` record.
@@ -37,6 +39,7 @@ provisioning path and a canonically paired fictional agent:
 | Refusals | Unknown, owner (human), revoked, expired and other-workspace credentials, and too-short secrets, all get identical `unavailable` bytes, and none reaches the executor. |
 | Request content | A sentinel in SQL text, a parameter value or a reader request never appears in any reply or in the host log; neither does the agent's secret or its digest. Each request's log line carries the reply's run and access-receipt identifiers, so it correlates with the executor's receipts; only canonical identifiers are logged, never reply content. |
 | Unfittable page | A result page whose row cannot fit its transport limit is refused (`budget_exhausted`, `transport`) on first and later pages alike, never returned empty. |
+| Relation reads | With every closure member readable, a paired agent's SQL returns an assessed relation in all four agent relation tables, exactly the executor's reply bytes. When one member becomes unreadable, the next step of the same run shows none of it: no row, gap, count or type pin. The query stays available, the host log never names it, a saved result that held it is `unavailable`, and its source endpoint stays readable. Without `source.read`, relation tables are a `source_read_required` gap. Relation history and the `relations` reader stay owner-only. |
 | Other uid | A peer that is not the configured client uid is refused before any database work. |
 | Admission bypass | Owner and helper kinds, DML, `set_config`, file functions and canonical tables are refused. A raw reader login cannot write, `SET ROLE` or create temporary objects; its `USERSET` change remains the packet's stated limitation. The control login cannot create roles or bypass RLS. |
 | Operator close | Refused while unsettled; succeeds after recovery; unknown runs are refused. Listings print no credential digest. |
