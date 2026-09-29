@@ -116,6 +116,7 @@
         "memoriesql/infrastructure/postgres/_migrations/0036_exact_source_enrollment.sql",
         "memoriesql/infrastructure/postgres/_migrations/0037_observation_sql_population.sql",
         "memoriesql/infrastructure/postgres/_migrations/0038_query_result_access.sql",
+        "memoriesql/infrastructure/postgres/_migrations/0039_agent_relation_reads.sql",
         "memoriesql/infrastructure/postgres/agent_sql_authority.py",
         "memoriesql/infrastructure/postgres/agent_sql_results.py",
         "memoriesql/infrastructure/postgres/assessed_relation_lifecycle.py",
@@ -155,8 +156,8 @@
         "memoriesql/infrastructure/results_broker/wire.py",
         "memoriesql/query_client.py"
       ],
-      "sha256": "beaddef45f86b0e09615e55ed90ec188429ef17f5b6204840eb48b0e31769455",
-      "size_bytes": 953119
+      "sha256": "8eb074ec983dfba5bf2d5d6ed2fc177ee0b3bf07fe3f6d13ef9600fb82d6d2ac",
+      "size_bytes": 966919
     },
     {
       "filename": "memoriesql-0.0.13.tar.gz",
@@ -210,6 +211,7 @@
         "memoriesql-0.0.13/migrations/0036_exact_source_enrollment.sql",
         "memoriesql-0.0.13/migrations/0037_observation_sql_population.sql",
         "memoriesql-0.0.13/migrations/0038_query_result_access.sql",
+        "memoriesql-0.0.13/migrations/0039_agent_relation_reads.sql",
         "memoriesql-0.0.13/pyproject.toml",
         "memoriesql-0.0.13/setup.cfg",
         "memoriesql-0.0.13/setup.py",
@@ -338,8 +340,8 @@
         "memoriesql-0.0.13/src/memoriesql/infrastructure/results_broker/wire.py",
         "memoriesql-0.0.13/src/memoriesql/query_client.py"
       ],
-      "sha256": "8a380035118a19f91543c9179acee94cdb79b2c933da1ff61e00420c959259b5",
-      "size_bytes": 845029
+      "sha256": "37358e9b80247568e1598ce5242d7b654d008f901f05db5f18265f051f4029d1",
+      "size_bytes": 857881
     }
   ],
   "distribution": "memoriesql",
