@@ -197,20 +197,27 @@ def provision(
         with psycopg.connect(url, autocommit=True) as admin:
             with admin.transaction():
                 _apply_roles(admin, config, rotate=exists)
-        with psycopg.connect(config.control_conninfo(), autocommit=True) as control:
-            check_control_login(control)
-            profile = reviewed_query_reader_profile(control, config.reader.role)
-            pin = qualify_query_authority(control, profile).profile_sha256
-    except HostRefused as refusal:
-        staged.unlink(missing_ok=True)
-        return _refused(str(refusal))
     except psycopg.Error as error:
+        # The transaction rolled back: the database still matches the old file.
         staged.unlink(missing_ok=True)
         return _refused(f"database provisioning failed (SQLSTATE {error.sqlstate})")
     except ValueError:
         staged.unlink(missing_ok=True)
         return _refused("reviewed reader provisioning refused")
-    staged.unlink(missing_ok=True)
+    # The roles now carry the new secrets and this staged file is their only
+    # copy: make it live before anything else can fail.
+    commit_config(staged, config_path)
+    try:
+        with psycopg.connect(config.control_conninfo(), autocommit=True) as control:
+            check_control_login(control)
+            profile = reviewed_query_reader_profile(control, config.reader.role)
+            pin = qualify_query_authority(control, profile).profile_sha256
+    except (HostRefused, psycopg.Error, ValueError, RuntimeError):
+        # A host with an unconfirmed pin refuses to serve; nothing is weakened.
+        return _refused(
+            "logins provisioned but the reviewed reader profile was not pinned; "
+            "fix the reported cause and run broker provision --rotate"
+        )
     final = stage_config(config_path, config.model_copy(update={"profile_sha256": pin}))
     commit_config(final, config_path)
     _emit(

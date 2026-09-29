@@ -557,6 +557,36 @@ class QueryHostAcceptance(QueryHostHarness):
         with self.assertRaises(psycopg.OperationalError):
             psycopg.connect(before.reader_conninfo()).close()
         prepare_host(after)
+        # Once the roles change, the new secrets are durable even if pinning
+        # then fails: the host is never left holding passwords the database
+        # no longer accepts.
+        with patch(
+            "memoriesql.infrastructure.results_broker.admin.reviewed_query_reader_profile",
+            side_effect=RuntimeError("reviewed profile unavailable"),
+        ):
+            code, output = self.operator(
+                admin.provision,
+                self.config_path,
+                rotate=True,
+                admin_url=lambda: self.admin_url,
+            )
+        self.assertEqual(code, admin.EXIT_REFUSED, output)
+        self.assertIn("not pinned", output)
+        interrupted = load_config(self.config_path)
+        self.assertNotEqual(
+            interrupted.control.password.get_secret_value(),
+            after.control.password.get_secret_value(),
+        )
+        psycopg.connect(interrupted.control_conninfo()).close()
+        psycopg.connect(interrupted.reader_conninfo()).close()
+        code, output = self.operator(
+            admin.provision,
+            self.config_path,
+            rotate=True,
+            admin_url=lambda: self.admin_url,
+        )
+        self.assertEqual(code, 0, output)
+        after = load_config(self.config_path)
         stored = self.scalar(
             "SELECT rolpassword FROM pg_authid WHERE rolname=%s", (after.control.role,)
         )
