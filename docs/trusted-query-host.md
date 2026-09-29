@@ -204,6 +204,18 @@ owner operations (`init`, `clients pair`/`revoke`, source enrollment and grants)
 as the service account with `sudo -H -u _memoriesql`, from the owner's own
 terminal. The agent's environment is never derived from that terminal.
 
+## Operator-mediated use
+
+An agent's commands can also be run by the owner, from the owner's own terminal,
+under the agent's paired identity: the agent writes a SQL file, the owner runs
+`memoriesql query` (or `result`, `schema`) in client mode with only
+`MEMORIESQL_RESULTS_SOCKET`, `MEMORIESQL_WORKSPACE_ID`, `MEMORIESQL_STATE_DIR`
+and the agent's own `MEMORIESQL_LOCAL_CREDENTIAL` set (read from the agent's
+secret file, never typed on a command line), and only the command's output
+returns to the agent. Every request is authorized as exactly that paired agent;
+the owner's own credential is refused on the socket. This needs no agent
+harness qualification, because the agent executes nothing itself.
+
 ## Agent harness
 
 The host is necessary but not sufficient: the agent's own harness must be unable

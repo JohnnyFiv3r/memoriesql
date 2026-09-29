@@ -10,8 +10,9 @@ and agent harness are isolated is a separate, per-installation qualification
 (see [the operator guide](../trusted-query-host.md)); this document does not
 claim one.
 
-Base: PR-05's `claude/pr-05-public-results` (the host proof was last run on its
-head that includes `dab96f2`, schema 38 with owned expiry cleanup). No
+Base: PR-05's `claude/pr-05-public-results` at `6aca830` (schema 38 with owned
+expiry cleanup and the execution-error disposition of commits refused after an
+abandoned owner). No
 migration, contract payload or dependency is added. The CLI binding
 (`memoriesql broker …` and client mode) is PR-06's, in the unpublished, amended
 `memoriesql.core-cli.v1` record.
@@ -34,14 +35,15 @@ provisioning path and a canonically paired fictional agent:
 | --- | --- |
 | Replies | Host replies are exactly the executor's bytes; `inspect`/`relations` are byte-identical to the direct reader path. |
 | Refusals | Unknown, owner (human), revoked, expired and other-workspace credentials, and too-short secrets, all get identical `unavailable` bytes, and none reaches the executor. |
+| Request content | A sentinel in SQL text, a parameter value or a reader request never appears in any reply or in the host log; neither does the agent's secret or its digest. |
 | Other uid | A peer that is not the configured client uid is refused before any database work. |
 | Admission bypass | Owner and helper kinds, DML, `set_config`, file functions and canonical tables are refused. A raw reader login cannot write, `SET ROLE` or create temporary objects; its `USERSET` change remains the packet's stated limitation. The control login cannot create roles or bypass RLS. |
 | Operator close | Refused while unsettled; succeeds after recovery; unknown runs are refused. Listings print no credential digest. |
-| Provisioning | Rotation replaces both passwords, and the old ones stop working. A NOINHERIT membership, superuser, missing reader inheritance, default PUBLIC EXECUTE or drifted pin is refused with an operator message. `broker check` reports each condition. |
+| Provisioning | Rotation replaces both passwords, and the old ones stop working. New secrets stay durable if pinning fails after the roles change. A NOINHERIT membership, superuser, missing reader inheritance, default PUBLIC EXECUTE or drifted pin is refused with an operator message. `broker check` reports each condition. |
 | Restart | After a draining stop and restart, exact redelivery returns the same result pin without a second invocation. |
 | Host death | The host is SIGKILLed while its reader backend is frozen inside the admitted SELECT. Until that backend ends, capacity is held: no recovery, closing refused, new steps refused, exact redelivery pending. Afterwards recovery charges at least the reservation; new work proceeds without replay; the lost step is never rerun. |
 | Owner session loss | Terminating only the owner session while the reader is frozen holds capacity the same way; the delivery later settles exactly once. |
-| Owner loss before commit | After the reader has settled, the late commit is refused. The delivery settles once as abandoned, carries no disclosure receipt, and no second invocation occurs. |
+| Owner loss before commit | After the reader has settled, the late commit is refused without disclosure. The delivery settles once as abandoned, carries no disclosure receipt, and no second invocation occurs; the exact redelivery is `execution_error` and never reruns. |
 | Expiry cleanup | The host runs cleanup at start and on schedule; `broker cleanup` runs it now; `broker check` fails on a stale or failed cleanup. |
 
 ## Findings recorded during development
