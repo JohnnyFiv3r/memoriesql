@@ -264,7 +264,12 @@ class ImmutableObservations(PostgresRuntime):
         )
         with self.db.transaction():
             self.begin()
-            enqueue_at = datetime.now(UTC)
+            # Claims compare availability with the database clock, so take the
+            # enqueue time from it too; a host clock ahead of the database would
+            # leave the task briefly unavailable to the claim that follows.
+            row = self.db.execute("SELECT pg_catalog.statement_timestamp()").fetchone()
+            assert row is not None
+            enqueue_at = row[0]
             registry_hash = registry.registry_hash
             if legacy:
                 historical = self.db.execute(
