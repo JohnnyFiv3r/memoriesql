@@ -483,6 +483,11 @@ class PostgresAgentSqlResults:
                 "unsupported_query", "feature", feature=feature or request.intent
             )
         self._screen(request)
+        if admission["replay"] and self._step_preparation(request) == "discarded":
+            # This step's single-use preparation is gone (for example, its
+            # commit was refused after its owner ended): a known execution
+            # failure, never a rerun. The client uses a new step key.
+            raise _Failure("execution_error", "database")
         with self._control() as store_connection:
             store = PostgresResultPreparation(
                 store_connection,
@@ -602,6 +607,16 @@ class PostgresAgentSqlResults:
                                 raise _Failure(
                                     "settlement_pending", "settlement", pending=True
                                 ) from None
+                            if (
+                                known == "unavailable"
+                                and error.diag.message_primary
+                                == "query_result_unavailable"
+                            ):
+                                # The commit's own ownership, issuer or
+                                # invocation checks refused this single-use
+                                # preparation; lost authority is reported by
+                                # the authority fence instead.
+                                raise _Failure("execution_error", "database") from None
                             raise _Failure(
                                 "unavailable"
                                 if known == "unavailable"
@@ -653,6 +668,23 @@ class PostgresAgentSqlResults:
             request.recursion.node_column,
             request.recursion.max_depth,
         )
+
+    def _step_preparation(self, request: QueryRequest) -> str | None:
+        """The caller's own preparation state for a redelivered step."""
+        try:
+            with self._control() as connection:
+                with relation_projection_frame(
+                    connection,
+                    credential_sha256=self._credential,
+                    workspace_id=self._workspace,
+                ) as frame:
+                    row = frame.execute(
+                        "SELECT memoriesql.query_step_preparation_v1(%s,%s)",
+                        (UUID(request.run_ref), UUID(request.step_key)),
+                    ).fetchone()
+        except (PermissionError, Error):
+            raise _Failure("unavailable", "unavailable") from None
+        return str(row[0]) if row and row[0] is not None else None
 
     def _screen(self, request: QueryRequest) -> None:
         """Refuse SQL the text alone decides, before any reservation or work.

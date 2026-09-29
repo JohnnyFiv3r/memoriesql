@@ -9,6 +9,7 @@ import time
 import unittest
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import replace
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
@@ -27,6 +28,9 @@ from memoriesql.infrastructure.postgres.agent_sql_results import (
 from memoriesql.infrastructure.postgres.authorization import PostgresAuthorizationPort
 from memoriesql.infrastructure.postgres.query_reader_provisioning import (
     provision_query_reader,
+)
+from memoriesql.infrastructure.postgres.query_result_commit import (
+    PostgresQueryResultCommit,
 )
 
 if TYPE_CHECKING:
@@ -1062,6 +1066,64 @@ class AgentSqlResults(unittest.TestCase):
         self.assertEqual(lost["outcome"], "execution_error", lost)
         closed = json.loads(self.service().close_run(run["run_ref"]))
         self.assertEqual(closed["outcome"], "available", closed)
+
+    def test_commit_refused_after_owner_loss_is_an_execution_error(self) -> None:
+        # Trusted-host lane case: the owner session ends after the reader
+        # settles and before commit. Recovery abandons the delivery, the commit
+        # is refused by its own ownership checks and the single-use preparation
+        # is discarded. That is a known execution failure, never unavailable,
+        # and the exact redelivery never reruns the query.
+        self.fixture.assertion()
+        run = self.start()
+        request, _ = self.request_only(
+            run, "SELECT bead_id FROM memory_v1.observations"
+        )
+        original = PostgresQueryResultCommit.commit
+        key = (
+            "hashtextextended(d.tenant_id::text||':query-delivery:'"
+            "||d.delivery_ref::text,0)"
+        )
+
+        def owner_lost(commit: Any, ownership: Any, candidate: Any) -> Any:
+            owner = self.h.scalar(
+                "SELECT l.pid FROM pg_locks l JOIN memoriesql.query_deliveries d "
+                "ON d.state='reserved' WHERE l.locktype='advisory' AND l.granted "
+                f"AND l.objsubid=1 AND l.classid::bigint=({key}>>32)&4294967295 "
+                f"AND l.objid::bigint={key}&4294967295"
+            )
+            self.db.execute("SELECT pg_terminate_backend(%s)", (owner,))
+            self.end_backend(owner)
+            self.assertEqual(self.service().recover_abandoned(), 1)
+            return original(
+                commit, replace(ownership, ownership_ref=uuid4()), candidate
+            )
+
+        with patch.object(PostgresQueryResultCommit, "commit", owner_lost):
+            try:
+                self.service().handle(json.dumps(request).encode())
+            except psycopg.Error:
+                pass  # the host's own settlement ran on the terminated owner
+        facts = self.db.execute(
+            "SELECT (SELECT string_agg(state,',') FROM "
+            "memoriesql.result_preparation_operations WHERE run_ref=%s),"
+            "(SELECT string_agg(state||':'||outcome,',') FROM "
+            "memoriesql.query_deliveries WHERE run_ref=%s),"
+            "(SELECT count(*) FROM memoriesql.query_disclosures),"
+            "(SELECT state FROM memoriesql.query_steps WHERE run_ref=%s)",
+            (run["run_ref"], run["run_ref"], run["run_ref"]),
+        ).fetchone()
+        self.assertEqual(facts, ("discarded", "settled:abandoned", 0, "executing"))
+        invocations = self.invocations()
+        again = self.send(request)
+        self.assertEqual(
+            (again["outcome"], again["error"]),
+            ("execution_error", {"code": "database"}),
+        )
+        self.assertNotIn("result", again)
+        self.assertEqual(self.invocations(), invocations)
+        self.assertEqual(
+            self.h.scalar("SELECT count(*) FROM memoriesql.query_result_creations"), 0
+        )
 
     def test_close_refuses_while_run_work_is_unsettled(self) -> None:
         self.fixture.assertion()
