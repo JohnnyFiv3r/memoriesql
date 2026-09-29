@@ -446,6 +446,44 @@ class QueryHostAcceptance(QueryHostHarness):
         reply = json.loads(self.transport().handle(request))
         self.assertEqual(reply["outcome"], "available", reply)
 
+    def test_request_content_never_reaches_replies_or_the_host_log(self) -> None:
+        sentinel = "fictional_sentinel_" + secrets.token_hex(12)
+        log = io.StringIO()
+        with contextlib.redirect_stderr(log):
+            self.serve_in_process()
+            transport = self.transport()
+            run = self.start(transport)
+            replies = [
+                transport.handle(
+                    self.query_bytes(
+                        run, f"SELECT {sentinel} FROM memory_v1.observations"
+                    )
+                )
+            ]
+            parameterized = json.loads(
+                self.query_bytes(
+                    run,
+                    "SELECT o.bead_id FROM memory_v1.observations o WHERE o.title = $1",
+                )
+            )
+            parameterized["parameters"] = [
+                {"position": 1, "type": "text", "value": sentinel}
+            ]
+            replies.append(transport.handle(json.dumps(parameterized).encode()))
+            replies.append(
+                transport.read(
+                    "inspect",
+                    json.dumps({"bead_id": sentinel}).encode(),
+                )
+            )
+        outcomes = [json.loads(reply).get("outcome") for reply in replies]
+        self.assertEqual(outcomes[1], "available", replies[1])
+        for reply in replies:
+            self.assertNotIn(sentinel.encode(), reply)
+        self.assertNotIn(sentinel, log.getvalue())
+        self.assertNotIn(self.agent_secret, log.getvalue())
+        self.assertNotIn(self.agent_hash, log.getvalue())
+
     def test_other_uid_is_refused_before_database_work(self) -> None:
         other = self.config.model_copy(update={"client_uid": os.geteuid() + 1})
         commit_config(stage_config(self.config_path, other), self.config_path)
