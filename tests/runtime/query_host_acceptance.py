@@ -1093,10 +1093,15 @@ class QueryHostRelationReads(QueryHostHarness):
 
     def setUp(self) -> None:
         super().setUp()
-        # PR-05's shared fixture: a real accepted relation between beads in two
-        # new explicit scopes, which the harness agent's single pairing now reads.
+        # A dedicated agent paired once over a fresh explicit scope. It cannot
+        # read the harness's own assertion relation, so any 'supports' pin it
+        # sees belongs to this relation alone. PR-05's shared fixture then
+        # relates beads in two new explicit scopes, which that single pairing
+        # now reads.
+        home, _source = relation_agents.explicit_scope(self.db, self.fixture)
+        grant, self.relation_secret = self.pair_agent(AGENT_CAPABILITIES, scopes=[home])
         self.relation = relation_agents.assessed_relation_for_agent(
-            self.db, self.fixture, self.principals[self.grant]
+            self.db, self.fixture, self.principals[grant]
         )
         self.serve_in_process()
 
@@ -1135,7 +1140,7 @@ class QueryHostRelationReads(QueryHostHarness):
             captured.append(handle(executor, data))
             return captured[-1]
 
-        transport = self.transport()
+        transport = self.transport(self.relation_secret)
         run = self.start(transport)
         with patch.object(PostgresAgentSqlResults, "handle", spy):
             raw = transport.handle(
@@ -1156,7 +1161,7 @@ class QueryHostRelationReads(QueryHostHarness):
         self.assertEqual(len(seen["relation_types"]), 1)
 
     def test_one_unreadable_member_withholds_the_relation_whole(self) -> None:
-        transport = self.transport()
+        transport = self.transport(self.relation_secret)
         run = self.start(transport)
         saved = self.ask(transport, run, RELATION_READS["assessed_relations"])
         relation = str(self.relation.relation_id)
@@ -1203,7 +1208,7 @@ class QueryHostRelationReads(QueryHostHarness):
         )
 
     def test_relation_history_and_the_inspection_reader_stay_owner_only(self) -> None:
-        transport = self.transport()
+        transport = self.transport(self.relation_secret)
         run = self.start(transport)
         for table in ("relation_events", "relation_event_evidence", "relation_pairs"):
             reply = self.ask(
