@@ -1004,7 +1004,9 @@ class PostgresAgentSqlResults:
                 charge={"db_ms": observed},
                 remaining_before=page["remaining_before"],
             )
-            if transport <= limit:
+            # An empty page is only a real answer when no rows remain; otherwise
+            # its cursor would point back at the same row forever.
+            if transport <= limit and (count > 0 or not rows):
                 return (
                     data,
                     transport,

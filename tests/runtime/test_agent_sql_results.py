@@ -1409,6 +1409,75 @@ class AgentSqlResults(unittest.TestCase):
             "execution_error",
         )
 
+    def test_cleanup_is_not_starved_by_pending_subjects(self) -> None:
+        # Review finding: a pending subject ahead of a purgeable one must not
+        # stop the pass. max_items counts purged subjects only.
+        self.fixture.assertion()
+        first = self.start()
+        _, done = self.query(first, "SELECT bead_id FROM memory_v1.observations")
+        self.assertEqual(done["outcome"], "available", done)
+        stuck = self.start()
+        request, _ = self.request_only(
+            stuck, "SELECT bead_version_id FROM memory_v1.observations"
+        )
+        reader = self.dispatch_then_die(request)
+        try:
+            self.age(first["run_ref"], timedelta(days=31))
+            self.age(stuck["run_ref"], timedelta(minutes=31), results=False)
+            cleaned = json.loads(
+                self.service().cleanup_expired(batch_size=1, max_batches=4)
+            )
+            self.assertEqual(
+                cleaned["cleanup"]["purged"], {"runs": 1, "results": 1, "tombstones": 0}
+            )
+            self.assertEqual(cleaned["cleanup"]["pending"], 1)
+            self.assertEqual(
+                self.h.scalar("SELECT count(*) FROM memoriesql.query_result_creations"),
+                0,
+            )
+        finally:
+            self.end_reader(reader)
+
+    def test_oversized_row_is_refused_never_paged_as_empty(self) -> None:
+        # Review finding: when one row exceeds the page's transport limit but
+        # the metadata alone fits, the reply refuses. It never returns an
+        # empty page whose cursor points back at the same row.
+        self.fixture.assertion()
+        run = self.start()
+        ordered = "SELECT o.bead_id FROM memory_v1.observations o"
+        _, reply = self.query(run, ordered + " ORDER BY o.bead_id", page_size=1)
+        self.assertEqual(reply["outcome"], "available", reply)
+        self.assertTrue(reply["page"]["has_more"])
+        _, empty = self.query(
+            run,
+            ordered + " WHERE o.bead_type_key=$1 ORDER BY o.bead_id",
+            parameters=[{"position": 1, "type": "text", "value": "no-such-type"}],
+            page_size=1,
+        )
+        self.assertEqual(empty["page"]["rows"], [], empty)
+        one_row = int(reply["work"]["transport_bytes"])
+        no_rows = int(empty["work"]["transport_bytes"])
+        self.assertGreater(one_row - no_rows, 128)
+        original = PostgresAgentSqlResults._admit
+
+        def tight(service: Any, request: Any, kind: str, fingerprint: str) -> Any:
+            admission = original(service, request, kind, fingerprint)
+            admission["reserved_transport"] = (one_row + no_rows) // 2
+            return admission
+
+        with patch.object(PostgresAgentSqlResults, "_admit", tight):
+            refused = self.reuse(run, reply["result"], page_size=1)
+            # A later page, where an empty self-pointing page would loop.
+            later = self.reuse(
+                run, reply["result"], cursor=reply["page"]["next_cursor"], page_size=1
+            )
+        for answer in (refused, later):
+            self.assertEqual(
+                (answer["outcome"], answer["error"]),
+                ("budget_exhausted", {"code": "transport"}),
+            )
+            self.assertNotIn("page", answer)
+
     def test_interrupted_cleanup_leaves_nothing_partial_and_restart_completes(
         self,
     ) -> None:

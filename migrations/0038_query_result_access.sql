@@ -876,8 +876,10 @@ REVOKE ALL ON FUNCTION memoriesql.expire_query_tombstone_v1(uuid,uuid) FROM PUBL
 
 -- One bounded cleanup pass over due subjects (optionally one workspace): runs,
 -- then results, then tombstones, oldest first, with previously failing
--- subjects last so they cannot starve healthy ones. Each subject runs in its
--- own subtransaction; a failure records its SQLSTATE and the pass continues.
+-- subjects last. max_items counts purged subjects only: pending, held and
+-- failing subjects are passed over within the time budget, so they cannot
+-- starve purgeable ones behind them. Each subject runs in its own
+-- subtransaction; a failure records its SQLSTATE and the pass continues.
 CREATE FUNCTION memoriesql.purge_expired_query_state_v1(max_items integer,
  only_tenant uuid DEFAULT NULL,only_workspace uuid DEFAULT NULL) RETURNS jsonb
 LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,memoriesql,memoriesql_query
@@ -911,9 +913,9 @@ BEGIN
    AND f.subject_kind=due.kind AND f.subject_ref=due.subject
   WHERE only_tenant IS NULL OR (due.tenant_id=only_tenant AND due.workspace_id=only_workspace)
   ORDER BY f.subject_ref IS NOT NULL,due.phase,due.due_at,due.subject
-  LIMIT max_items
  LOOP
-  EXIT WHEN clock_timestamp()-started>interval '5 seconds';
+  EXIT WHEN runs+results+tombstones>=max_items
+   OR clock_timestamp()-started>interval '5 seconds';
   BEGIN
    outcome:=CASE item.kind
     WHEN 'run' THEN memoriesql.purge_query_run_v1(item.tenant_id,item.subject)
