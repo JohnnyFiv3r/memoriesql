@@ -155,8 +155,8 @@
         "memoriesql/infrastructure/results_broker/wire.py",
         "memoriesql/query_client.py"
       ],
-      "sha256": "b5649034f29ee7cf212a73498b56d8c4a1e42caa9fed87b6f217915e8d710dab",
-      "size_bytes": 952962
+      "sha256": "beaddef45f86b0e09615e55ed90ec188429ef17f5b6204840eb48b0e31769455",
+      "size_bytes": 953119
     },
     {
       "filename": "memoriesql-0.0.13.tar.gz",
@@ -338,8 +338,8 @@
         "memoriesql-0.0.13/src/memoriesql/infrastructure/results_broker/wire.py",
         "memoriesql-0.0.13/src/memoriesql/query_client.py"
       ],
-      "sha256": "59f783e15cd1a47cf87381b2501a35acf0144a1d2eb7074e1f24cf2523495c07",
-      "size_bytes": 844889
+      "sha256": "8a380035118a19f91543c9179acee94cdb79b2c933da1ff61e00420c959259b5",
+      "size_bytes": 845029
     }
   ],
   "distribution": "memoriesql",
