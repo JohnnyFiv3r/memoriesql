@@ -35,7 +35,7 @@ provisioning path and a canonically paired fictional agent:
 | --- | --- |
 | Replies | Host replies are exactly the executor's bytes; `inspect`/`relations` are byte-identical to the direct reader path. |
 | Refusals | Unknown, owner (human), revoked, expired and other-workspace credentials, and too-short secrets, all get identical `unavailable` bytes, and none reaches the executor. |
-| Request content | A sentinel in SQL text, a parameter value or a reader request never appears in any reply or in the host log; neither does the agent's secret or its digest. |
+| Request content | A sentinel in SQL text, a parameter value or a reader request never appears in any reply or in the host log; neither does the agent's secret or its digest. Each request's log line carries the reply's run and access-receipt identifiers, so it correlates with the executor's receipts; only canonical identifiers are logged, never reply content. |
 | Unfittable page | A result page whose row cannot fit its transport limit is refused (`budget_exhausted`, `transport`) on first and later pages alike, never returned empty. |
 | Other uid | A peer that is not the configured client uid is refused before any database work. |
 | Admission bypass | Owner and helper kinds, DML, `set_config`, file functions and canonical tables are refused. A raw reader login cannot write, `SET ROLE` or create temporary objects; its `USERSET` change remains the packet's stated limitation. The control login cannot create roles or bypass RLS. |

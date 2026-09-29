@@ -63,7 +63,7 @@ impostor socket cannot harvest credentials.
 | `…/venv` | `root:wheel` | 0755/0644 | Code: a root-owned venv on a root-owned interpreter |
 | `…/config` | `_memoriesql:_memoriesql` | 0700 | `broker.json` (0600): both logins, workspace, client uid, profile pin |
 | `…/state` | `_memoriesql:_memoriesql` | 0700 | Run registry (for operator close) and last cleanup record |
-| `…/log` | `_memoriesql:_memoriesql` | 0700 | Host log (no credentials, digests or content) |
+| `…/log` | `_memoriesql:_memoriesql` | 0700 | Host log (no credentials, digests or content; each request line carries its operation, outcome, run and access-receipt identifiers) |
 | `…/run` | `_memoriesql:<client group>` | 0750 | `broker.sock` (0660) |
 | `/Library/LaunchDaemons/local.memoriesql.query-host.plist` | `root:wheel` | 0644 | Service definition |
 
