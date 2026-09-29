@@ -484,6 +484,54 @@ class QueryHostAcceptance(QueryHostHarness):
         self.assertNotIn(self.agent_secret, log.getvalue())
         self.assertNotIn(self.agent_hash, log.getvalue())
 
+    def test_a_page_that_cannot_fit_is_refused_never_empty(self) -> None:
+        # PR-05 7aa767b: a row larger than the page's transport limit refuses
+        # instead of paging as empty with a cursor pointing back at itself. The
+        # host passes that refusal through on first and later pages alike.
+        self.serve_in_process()
+        transport = self.transport()
+        run = self.start(transport)
+        ordered = "SELECT o.bead_id FROM memory_v1.observations o"
+        reply = json.loads(
+            transport.handle(self.query_bytes(run, ordered + " ORDER BY o.bead_id"))
+        )
+        self.assertEqual(reply["outcome"], "available", reply)
+        self.assertTrue(reply["page"]["has_more"])
+        request = json.loads(
+            self.query_bytes(
+                run, ordered + " WHERE o.bead_type_key=$1 ORDER BY o.bead_id"
+            )
+        )
+        request["parameters"] = [
+            {"position": 1, "type": "text", "value": "no-such-type"}
+        ]
+        empty = json.loads(transport.handle(json.dumps(request).encode()))
+        self.assertEqual(empty["page"]["rows"], [], empty)
+        one_row = int(reply["work"]["transport_bytes"])
+        no_rows = int(empty["work"]["transport_bytes"])
+        self.assertGreater(one_row - no_rows, 128)
+        admit = PostgresAgentSqlResults._admit
+
+        def tight(
+            executor: PostgresAgentSqlResults, request: Any, kind: str, fingerprint: str
+        ) -> Any:
+            admission = admit(executor, request, kind, fingerprint)
+            admission["reserved_transport"] = (one_row + no_rows) // 2
+            return admission
+
+        with patch.object(PostgresAgentSqlResults, "_admit", tight):
+            first = transport.handle(self.reuse_bytes(run, reply["result"], None))
+            later = transport.handle(
+                self.reuse_bytes(run, reply["result"], reply["page"]["next_cursor"])
+            )
+        for raw in (first, later):
+            answer = json.loads(raw)
+            self.assertEqual(
+                (answer["outcome"], answer["error"]),
+                ("budget_exhausted", {"code": "transport"}),
+            )
+            self.assertNotIn("page", answer)
+
     def test_other_uid_is_refused_before_database_work(self) -> None:
         other = self.config.model_copy(update={"client_uid": os.geteuid() + 1})
         commit_config(stage_config(self.config_path, other), self.config_path)
