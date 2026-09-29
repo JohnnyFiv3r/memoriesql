@@ -6,8 +6,10 @@ receive an immutable result pin, page it with disclosure receipts and
 owner-bound cursors, and re-read it later without repeating discovery; every
 disclosure first re-checks current authority over the whole saved dependency
 closure.** This is the smallest useful public query/result path, not complete
-PR-05 availability. Checkpoints, saved-input refinement, inspection/hydration
-through this contract, erasure/cleanup and measured W1–W7 fit remain pending.
+PR-05 availability. Expiry cleanup is delivered, and governed erasure is
+unavailable in this preview. Checkpoints, saved-input refinement,
+inspection/hydration through this contract and measured W1–W7 fit remain
+pending.
 
 Base: #68's refreshed head `674745e` (public main `5290ad1` plus #68). The
 approved packet `78bbc04e…` and whole lifecycle dependency `69a0d985…` at
@@ -77,14 +79,30 @@ authorized agent now receives its normalized projection, within these bounds:
 
 Units that retain their own text (not materialized) return it as before.
 
-**Custody for this extension is pending.** ea-3 is not claimed to cover the
-package-text extension until the independent custodian separately retains a
-content-free reconciliation. The custodian's determination on the source-text
-notice is stored verbatim, with all its limitations, in
-`../approvals/pr-05-custody-source-text-determination.txt`; the owner relayed it
-and approved committing it. That reconciliation binds the authority record
-(`../approvals/pr-05-agent-source-text.md`, SHA-256 `63ecbb4c…`) to ea-3 and to
-the attributable owner approvals. The PR-05 part of the rules it names:
+**Custody: reconciled by ea-4.** The independent custodian's ea-4
+reconciliation, relayed by the owner, is stored byte-identical in
+`../approvals/pr-05-custody-ea-4.json` (12,447 bytes, SHA-256 `d118ded2…`). It
+reconciles the source-text authority record
+(`../approvals/pr-05-agent-source-text.md`, SHA-256 `63ecbb4c…`) with ea-3 and
+the attributable owner approvals, as the custodian's determination on the
+source-text notice required. That determination is stored verbatim in
+`../approvals/pr-05-custody-source-text-determination.txt`.
+
+**ea-4 covers semantics only.** It is not a statement of runtime correctness,
+security qualification, implementation completion or release readiness.
+
+**Exact-byte link.** ea-4 links to implementation commit `9a396dd`, where
+migration 0038 is `76d94068…`. This PR's final head changes migration 0038 to
+`8835d25e…`, for crash- and settlement-outcome handling only:
+
+- outcome labels and a read-only preparation probe (`88f5f57`);
+- a distinct settled-access refusal, so a committed result survives a failed
+  first disclosure.
+
+None of it touches populations, source authority, search candidates or evidence
+availability. Migration 0037 (`f8e2d468…`) is unchanged.
+
+The PR-05 part of the rules the custodian named:
 
 - one authorization and representation rule set for every caller;
 - unchanged raw-source restrictions;
