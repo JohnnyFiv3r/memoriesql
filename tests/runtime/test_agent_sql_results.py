@@ -329,6 +329,23 @@ class AgentSqlResults(unittest.TestCase):
             time.sleep(0.05)
         self.fail("backend did not end")
 
+    def end_owner(self) -> None:
+        """Terminate the executor session owning the one reserved delivery,
+        then let host recovery settle that delivery as abandoned."""
+        key = (
+            "hashtextextended(d.tenant_id::text||':query-delivery:'"
+            "||d.delivery_ref::text,0)"
+        )
+        owner = self.h.scalar(
+            "SELECT l.pid FROM pg_locks l JOIN memoriesql.query_deliveries d "
+            "ON d.state='reserved' WHERE l.locktype='advisory' AND l.granted "
+            f"AND l.objsubid=1 AND l.classid::bigint=({key}>>32)&4294967295 "
+            f"AND l.objid::bigint={key}&4294967295"
+        )
+        self.db.execute("SELECT pg_terminate_backend(%s)", (owner,))
+        self.end_backend(owner)
+        self.assertEqual(self.service().recover_abandoned(), 1)
+
     def end_reader(self, reader: Any) -> None:
         pid = reader.info.backend_pid
         psycopg.Connection.close(reader)
@@ -1079,21 +1096,9 @@ class AgentSqlResults(unittest.TestCase):
             run, "SELECT bead_id FROM memory_v1.observations"
         )
         original = PostgresQueryResultCommit.commit
-        key = (
-            "hashtextextended(d.tenant_id::text||':query-delivery:'"
-            "||d.delivery_ref::text,0)"
-        )
 
         def owner_lost(commit: Any, ownership: Any, candidate: Any) -> Any:
-            owner = self.h.scalar(
-                "SELECT l.pid FROM pg_locks l JOIN memoriesql.query_deliveries d "
-                "ON d.state='reserved' WHERE l.locktype='advisory' AND l.granted "
-                f"AND l.objsubid=1 AND l.classid::bigint=({key}>>32)&4294967295 "
-                f"AND l.objid::bigint={key}&4294967295"
-            )
-            self.db.execute("SELECT pg_terminate_backend(%s)", (owner,))
-            self.end_backend(owner)
-            self.assertEqual(self.service().recover_abandoned(), 1)
+            self.end_owner()
             return original(
                 commit, replace(ownership, ownership_ref=uuid4()), candidate
             )
@@ -1124,6 +1129,55 @@ class AgentSqlResults(unittest.TestCase):
         self.assertEqual(
             self.h.scalar("SELECT count(*) FROM memoriesql.query_result_creations"), 0
         )
+
+    def test_late_commit_after_owner_loss_keeps_the_result_for_redelivery(
+        self,
+    ) -> None:
+        # Trusted-host lane case: the owner session ends after the reader
+        # settles and recovery abandons the delivery, but the host's issuer is
+        # alive and its commit succeeds. The committed result is immutable: the
+        # host replies settlement_pending and the exact redelivery discloses
+        # that result without rerunning the query.
+        self.fixture.assertion()
+        run = self.start()
+        request, _ = self.request_only(
+            run, "SELECT bead_id FROM memory_v1.observations"
+        )
+        original = PostgresQueryResultCommit.commit
+
+        def owner_lost(commit: Any, ownership: Any, candidate: Any) -> Any:
+            self.end_owner()
+            return original(commit, ownership, candidate)
+
+        with patch.object(PostgresQueryResultCommit, "commit", owner_lost):
+            late = json.loads(self.service().handle(json.dumps(request).encode()))
+        self.assertEqual(
+            (late["outcome"], late["error"]),
+            ("settlement_pending", {"code": "settlement"}),
+        )
+        self.assertNotIn("result", late)
+        self.assertNotIn("page", late)
+        facts = self.db.execute(
+            "SELECT (SELECT string_agg(state,',') FROM "
+            "memoriesql.result_preparation_operations WHERE run_ref=%s),"
+            "(SELECT count(*) FROM memoriesql.query_result_creations),"
+            "(SELECT string_agg(state||':'||outcome,',') FROM "
+            "memoriesql.query_deliveries WHERE run_ref=%s),"
+            "(SELECT count(*) FROM memoriesql.query_disclosures)",
+            (run["run_ref"], run["run_ref"]),
+        ).fetchone()
+        self.assertEqual(facts, ("sealed", 1, "settled:abandoned", 0))
+        committed = self.h.scalar(
+            "SELECT result_id::text FROM memoriesql.query_result_creations"
+        )
+        invocations = self.invocations()
+        again = self.send(request)
+        self.assertEqual(again["outcome"], "available", again)
+        self.assertEqual(again["result"]["result_id"], committed)
+        self.assertNotEqual(again["access_receipt_ref"], late["access_receipt_ref"])
+        self.assertEqual(self.invocations(), invocations)
+        _, fresh = self.query(run, "SELECT bead_version_id FROM memory_v1.observations")
+        self.assertEqual(fresh["outcome"], "available", fresh)
 
     def test_close_refuses_while_run_work_is_unsettled(self) -> None:
         self.fixture.assertion()

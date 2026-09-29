@@ -6,8 +6,10 @@ receive an immutable result pin, page it with disclosure receipts and
 owner-bound cursors, and re-read it later without repeating discovery; every
 disclosure first re-checks current authority over the whole saved dependency
 closure.** This is the smallest useful public query/result path, not complete
-PR-05 availability. Checkpoints, saved-input refinement, inspection/hydration
-through this contract, erasure/cleanup and measured W1–W7 fit remain pending.
+PR-05 availability. Expiry cleanup is delivered, and governed erasure is
+unavailable in this preview. Checkpoints, saved-input refinement,
+inspection/hydration through this contract and measured W1–W7 fit remain
+pending.
 
 Base: #68's refreshed head `674745e` (public main `5290ad1` plus #68). The
 approved packet `78bbc04e…` and whole lifecycle dependency `69a0d985…` at
@@ -77,14 +79,30 @@ authorized agent now receives its normalized projection, within these bounds:
 
 Units that retain their own text (not materialized) return it as before.
 
-**Custody for this extension is pending.** ea-3 is not claimed to cover the
-package-text extension until the independent custodian separately retains a
-content-free reconciliation. The custodian's determination on the source-text
-notice is stored verbatim, with all its limitations, in
-`../approvals/pr-05-custody-source-text-determination.txt`; the owner relayed it
-and approved committing it. That reconciliation binds the authority record
-(`../approvals/pr-05-agent-source-text.md`, SHA-256 `63ecbb4c…`) to ea-3 and to
-the attributable owner approvals. The PR-05 part of the rules it names:
+**Custody: reconciled by ea-4.** The independent custodian's ea-4
+reconciliation, relayed by the owner, is stored byte-identical in
+`../approvals/pr-05-custody-ea-4.json` (12,447 bytes, SHA-256 `d118ded2…`). It
+reconciles the source-text authority record
+(`../approvals/pr-05-agent-source-text.md`, SHA-256 `63ecbb4c…`) with ea-3 and
+the attributable owner approvals, as the custodian's determination on the
+source-text notice required. That determination is stored verbatim in
+`../approvals/pr-05-custody-source-text-determination.txt`.
+
+**ea-4 covers semantics only.** It is not a statement of runtime correctness,
+security qualification, implementation completion or release readiness.
+
+**Exact-byte link.** ea-4 links to implementation commit `9a396dd`, where
+migration 0038 is `76d94068…`. This PR's final head changes migration 0038 to
+`8835d25e…`, for crash- and settlement-outcome handling only:
+
+- outcome labels and a read-only preparation probe (`88f5f57`);
+- a distinct settled-access refusal, so a committed result survives a failed
+  first disclosure.
+
+None of it touches populations, source authority, search candidates or evidence
+availability. Migration 0037 (`f8e2d468…`) is unchanged.
+
+The PR-05 part of the rules the custodian named:
 
 - one authorization and representation rule set for every caller;
 - unchanged raw-source restrictions;
@@ -170,6 +188,10 @@ These remain qualification targets, not measured capacity.
     the exact redelivery of a step whose preparation was discarded.
     `unavailable` stays reserved for missing, denied or dependency-lost IDs,
     including authority lost at the fence.
+  - A committed result is immutable. A failed first disclosure never discards
+    it. If recovery settled the access while the commit was in flight, the
+    host replies `settlement_pending` and the exact redelivery discloses the
+    committed result without rerunning.
 - **Expiry cleanup** (owner Decision 1, item 3). Access ends at expiry through
   the closure verdict. Owned cleanup then removes the content and every
   sensitive copy:
@@ -322,7 +344,7 @@ lists source refs as hydration-required.
 
 ## Acceptance and preserved development failures
 
-Fictional installed tests (`test_agent_sql_results`, 22 cases) use the
+Fictional installed tests (`test_agent_sql_results`, 23 cases) use the
 production reader provisioning path. They cover:
 
 - query, page, cursor and reuse
@@ -361,6 +383,9 @@ production reader provisioning path. They cover:
 - owner loss after the reader settles and before commit: the delivery settles
   once as `abandoned` with no receipt, the refused commit discards the
   preparation, and the exact redelivery is `execution_error` with no rerun
+- a late commit that succeeds after the access was abandoned: the host replies
+  `settlement_pending`, the committed result stays sealed, and the exact
+  redelivery discloses that same result with no rerun
 - group, window, set, EXISTS and relation-join shapes, with frame lifecycle
   fields and coverage gaps
 
@@ -381,6 +406,12 @@ Development failures retained:
   `unavailable`, contrary to this document. Redelivery now probes the caller's
   own step preparation first, and ownership-refused commits map to
   `execution_error`. A regression test reproduces the case in-process.
+- The trusted-host lane's late-commit case found that a successful commit
+  followed by a refused first disclosure deleted the committed result through
+  the generic failure path, and replied `unavailable`. That disclosure was
+  refused because recovery had already settled the access. Committed results
+  now survive failed disclosures. A settled access is reported distinctly
+  (`query_delivery_settled`) and replies `settlement_pending`.
 - The hostile-request test found that refused SQL still reserved, then
   discarded, a preparation. SQL is now screened before any reservation. Only
   the population-dependent reference-anchor check waits for full admission.
