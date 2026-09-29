@@ -92,12 +92,15 @@ source-text notice required. That determination is stored verbatim in
 security qualification, implementation completion or release readiness.
 
 **Exact-byte link.** ea-4 links to implementation commit `9a396dd`, where
-migration 0038 is `76d94068…`. This PR's final head changes migration 0038 to
-`8835d25e…`, for crash- and settlement-outcome handling only:
+migration 0038 is `76d94068…`. This PR's head changes migration 0038 to
+`eabebb7f…`, for crash- and settlement-outcome handling and cleanup scheduling
+only:
 
 - outcome labels and a read-only preparation probe (`88f5f57`);
 - a distinct settled-access refusal, so a committed result survives a failed
-  first disclosure.
+  first disclosure (`92f7ccf`), giving `8835d25e…`;
+- the review fix that keeps pending cleanup subjects from starving purgeable
+  ones, giving `eabebb7f…`.
 
 None of it touches populations, source authority, search candidates or evidence
 availability. Migration 0037 (`f8e2d468…`) is unchanged.
@@ -115,6 +118,10 @@ SHA-256 `4e2e350b…`) and names change `92f7ccf` and migration 0037 `f8e2d468�
   evidence-semantic reconciliation and no replacement freeze.
 - **Its grading note:** a committed result or `settlement_pending` response is
   not successful receipted disclosure.
+- **This head's migration 0038** (`eabebb7f…`) differs from link-2's `8835d25e…`
+  only by the review fix to the cleanup pass. The linkage state is **ea-4-link-2
+  → `f6b1de2`; link-3 for this head has been requested** from the custodian. No
+  coverage is claimed beyond that.
 
 The PR-05 part of the rules the custodian named:
 
@@ -224,8 +231,11 @@ These remain qualification targets, not measured capacity.
     disposition.
 
   Each subject is purged atomically, so an interrupted pass leaves nothing
-  partial and the next pass completes it. Failures are recorded with their
-  SQLSTATE and retried on every pass, after healthy subjects. M0038 grants the
+  partial and the next pass completes it. A pass's item bound counts purged
+  subjects only. Pending, held and failing subjects are passed over within the
+  pass's time budget, so they cannot starve purgeable ones behind them.
+  Failures are recorded with their SQLSTATE and retried on every pass, after
+  healthy subjects. M0038 grants the
   staged-row owner EXECUTE on `uuid_eq`, because the foreign-key check runs as
   that owner when cleanup deletes an invocation.
 - **Cleanup deadline.** The database cannot run without a caller. The host runs
@@ -358,7 +368,7 @@ lists source refs as hydration-required.
 
 ## Acceptance and preserved development failures
 
-Fictional installed tests (`test_agent_sql_results`, 23 cases) use the
+Fictional installed tests (`test_agent_sql_results`, 25 cases) use the
 production reader provisioning path. They cover:
 
 - query, page, cursor and reuse
@@ -397,6 +407,11 @@ production reader provisioning path. They cover:
 - owner loss after the reader settles and before commit: the delivery settles
   once as `abandoned` with no receipt, the refused commit discards the
   preparation, and the exact redelivery is `execution_error` with no rerun
+- a pending run sorted ahead of a purgeable result, with a one-item pass: the
+  result is still purged
+- a row larger than the page's transport limit, on the first and on a later
+  page: `budget_exhausted` / `transport`, never an empty page whose cursor
+  points back at the same row
 - a late commit that succeeds after the access was abandoned: the host replies
   `settlement_pending`, the committed result stays sealed, and the exact
   redelivery discloses that same result with no rerun
@@ -420,6 +435,12 @@ Development failures retained:
   `unavailable`, contrary to this document. Redelivery now probes the caller's
   own step preparation first, and ownership-refused commits map to
   `execution_error`. A regression test reproduces the case in-process.
+- The broad review found that a cleanup pass whose first due subjects were all
+  pending purged nothing and stopped, starving purgeable subjects behind them.
+  It also found that a row larger than the page's transport limit produced an
+  empty page pointing back at itself: an endless loop on later pages, and an
+  `execution_error` on the first. Both are fixed, and their regression tests
+  fail on the previous code.
 - The trusted-host lane's late-commit case found that a successful commit
   followed by a refused first disclosure deleted the committed result through
   the generic failure path, and replied `unavailable`. That disclosure was
