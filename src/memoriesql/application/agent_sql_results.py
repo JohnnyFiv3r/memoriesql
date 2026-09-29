@@ -98,6 +98,16 @@ OBSERVATION_TABLES = frozenset(
 # Only these relations are executable; the rest of the approved catalog stays
 # explicitly unsupported (never an empty substitute) until prepared.
 PREPARED_RELATIONS = RELATION_TABLES | OBSERVATION_TABLES
+# AM-5 (docs/approvals/pr-05-agent-relation-reads.md): an agent holding
+# memory.query and source.read over a relation's whole disclosed dependency
+# closure reads it in these six tables. Lifecycle history and pair coverage stay
+# owner-only and are disclosed as a coverage gap, never as silent absence.
+RELATION_HISTORY_TABLES = frozenset(
+    "memory_v1." + name
+    for name in ("relation_events", "relation_event_evidence", "relation_pairs")
+)
+AGENT_RELATION_TABLES = RELATION_TABLES - RELATION_HISTORY_TABLES
+RELATION_HISTORY_FACET = "relation_history"
 
 # Facets of the source-unit projection that are always null because no
 # canonical fact is represented yet; disclosed as coverage gaps when used.
@@ -148,15 +158,18 @@ def wire_coverage(
     relation_raw_authority: bool = True,
     source_read_authority: bool = True,
     source_text_labels: Sequence[str] = (),
+    relation_read_mode: str | None = None,
 ) -> dict[str, Any]:
     """Complete query execution never proves source coverage or absence.
 
-    Missing caller capabilities are gaps, not absence: without raw source
-    authority PR-03's assessed relations are withheld, and without source.read
-    the observation families are. The flags describe only the caller's own
-    grants, never whether protected data exists. Served package text is
-    labelled with its normalized projection version and the package's own
-    declared coverage limits.
+    Missing caller capabilities are gaps, not absence: without source.read the
+    observation families and (in the AM-5 agent read mode) the assessed
+    relations are withheld, and an agent's relation history and pair coverage
+    stay owner-only. A frame without a read mode comes from a database before
+    migration 0039, where relations still need raw source authority. The flags
+    describe only the caller's own grants, never whether protected data exists.
+    Served package text is labelled with its normalized projection version and
+    the package's own declared coverage limits.
     """
     gaps = (
         [
@@ -164,11 +177,25 @@ def wire_coverage(
             for facet in UNSUPPORTED_SOURCE_FACETS
         ]
         + [{"facet": SEARCH_TEXT_FACET, "reason": "normalized_text_not_exact_source"}]
-        + [{"facet": SEARCH_TEXT_FACET, "reason": label} for label in source_text_labels]
+        + [
+            {"facet": SEARCH_TEXT_FACET, "reason": label}
+            for label in source_text_labels
+        ]
         if "memory_v1.source_units" in relations
         else []
     )
-    if not relation_raw_authority and set(relations) & RELATION_TABLES:
+    used = set(relations)
+    if relation_read_mode == "agent":
+        if not source_read_authority and used & RELATION_TABLES:
+            gaps.append({"facet": "relation_tables", "reason": "source_read_required"})
+        # History stays owner-only whatever else the agent holds.
+        if used & RELATION_HISTORY_TABLES:
+            gaps.append({"facet": RELATION_HISTORY_FACET, "reason": "owner_only"})
+    elif (
+        relation_read_mode is None
+        and not relation_raw_authority
+        and used & RELATION_TABLES
+    ):
         gaps.append({"facet": "relation_tables", "reason": "source_raw_read_required"})
     if not source_read_authority and set(relations) & OBSERVATION_TABLES:
         gaps.append({"facet": "observation_tables", "reason": "source_read_required"})
