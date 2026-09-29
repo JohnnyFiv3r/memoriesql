@@ -1,0 +1,114 @@
+{
+  "contract": {
+    "schemas": {
+      "InitializePersonalLocal": {
+        "additionalProperties": false,
+        "description": "Create the single personal-local owner, workspace and owner credential.\n\nEvery identifier derives from `request_id`, so an identical replay after an\nunknown outcome resolves to the same owner instead of a second one.",
+        "properties": {
+          "contract_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Contract Version",
+            "type": "integer"
+          },
+          "exact_initialization_confirmed": {
+            "const": true,
+            "title": "Exact Initialization Confirmed",
+            "type": "boolean"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "owner_display_name": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Owner Display Name",
+            "type": "string"
+          },
+          "request_id": {
+            "format": "uuid",
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "owner_display_name",
+          "expires_at",
+          "exact_initialization_confirmed"
+        ],
+        "title": "InitializePersonalLocal",
+        "type": "object"
+      },
+      "PersonalLocalInitialization": {
+        "additionalProperties": false,
+        "properties": {
+          "access_scope_id": {
+            "format": "uuid",
+            "title": "Access Scope Id",
+            "type": "string"
+          },
+          "contract_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Contract Version",
+            "type": "integer"
+          },
+          "credential_id": {
+            "format": "uuid",
+            "title": "Credential Id",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "principal_id": {
+            "format": "uuid",
+            "title": "Principal Id",
+            "type": "string"
+          },
+          "replayed": {
+            "title": "Replayed",
+            "type": "boolean"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "user_id",
+          "principal_id",
+          "workspace_id",
+          "access_scope_id",
+          "credential_id",
+          "expires_at",
+          "replayed"
+        ],
+        "title": "PersonalLocalInitialization",
+        "type": "object"
+      }
+    }
+  },
+  "id": "memoriesql.personal-local-initialization.v1",
+  "kind": "json_schema",
+  "status": "available",
+  "summary": "One-time, replayable initialization of the single personal-local owner, workspace and expiring owner credential; the secret never enters a receipt.",
+  "version": "1"
+}

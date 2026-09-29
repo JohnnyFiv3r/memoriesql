@@ -224,6 +224,18 @@
       "path": "src/memoriesql/infrastructure/postgres/query_result_closure.py"
     },
     {
+      "path": "src/memoriesql/application/local_client_pairing.py"
+    },
+    {
+      "path": "src/memoriesql/infrastructure/postgres/local_client_pairing.py"
+    },
+    {
+      "path": "src/memoriesql/application/personal_local_initialization.py"
+    },
+    {
+      "path": "src/memoriesql/infrastructure/postgres/personal_local_initialization.py"
+    },
+    {
       "path": "src/memoriesql/application/agent_sql_results.py"
     },
     {

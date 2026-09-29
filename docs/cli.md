@@ -18,6 +18,9 @@ Desktop and never loads private Python modules or arbitrary plugins. `contracts`
 | `sources enroll --request-file request.json` | Enrolls one exact, explicitly confirmed provider-neutral source through the installed authority adapter. |
 | `sources grant --request-file request.json` | Grants bounded read/write permission for one enrolled source to a specified principal, subject to current authority and the existing membership/pairing checks. |
 | `sources revoke --request-file request.json` | Terminally revokes one exact source with an actor-attributed reason and receipt. |
+| `init --request-file request.json --secret-file PATH` | Operator-only, once per database: creates the single personal-local owner, workspace and an expiring owner credential through the existing bootstrap. Its secret is written once to a newly created owner-only file and never printed. |
+| `clients pair --request-file request.json --secret-file PATH` | Pairs one local agent client with explicit capabilities, owned scopes and expiry. Its new secret is written once to a newly created owner-only file and never printed. |
+| `clients revoke --request-file request.json` | Terminally revokes one pairing grant at its exact current revision. |
 
 Bare `sources` reports `source_inventory_not_released`; there is no public
 source-inventory reader yet. Provider-specific `sources connect` remains a
@@ -89,6 +92,88 @@ syntax/presence only; it is not proof that the database, grant or source is read
 The source authority commands require that credential to represent a human with
 the appropriate current management/share capabilities; they never take a
 caller-supplied actor or workspace override. The CLI makes no model call.
+
+`init` uses the installed `InitializePersonalLocal` shape in
+`memoriesql.personal-local-initialization.v1`:
+
+```json
+{
+  "request_id": "<new request UUID>",
+  "owner_display_name": "<owner name>",
+  "expires_at": "<UTC timestamp with offset>",
+  "exact_initialization_confirmed": true
+}
+```
+
+It needs only `MEMORIESQL_DATABASE_URL`, for an operator login that can assume
+the application role; it creates the first credential rather than using one.
+Every identifier derives from the request UUID. The database allows exactly one
+owner: once initialized, a different request reports `already_initialized`. An
+identical replay of the same request after an unknown outcome returns the same
+receipt with `replayed: true`, issues no new credential and removes the new
+`--secret-file`; the first run's secret file remains the owner's credential. An
+existing secret file is refused as `stale_secret_file` and never read or
+overwritten: after an interrupted run, rerun with a new path, and delete the old
+file only if that replay reports nothing was initialized. If the connection
+fails while the commit's outcome is unknown, `init` keeps the file and reports
+`initialization_outcome_unknown`; recover the same way. A replay reporting
+`replayed: true` means the kept file is the owner credential, and a fresh
+initialization means it is not. If more than one run left a kept file, keep all
+of them: a replay cannot tell which one is the credential. Confirming a replay
+reads the bootstrap records without row security, so any other operator login
+reports `initialization_replay_unverifiable` instead; keep every earlier file
+and rerun the replay as a superuser or BYPASSRLS login, such as the migration
+administrator. The receipt carries
+identifiers and expiry, including the workspace to export as
+`MEMORIESQL_WORKSPACE_ID`.
+
+The owner credential is for the owner only. Give each agent its own credential
+with `clients pair`, adding a `sources grant` for any explicit scope it needs;
+never hand an agent the owner's.
+The owner credential expires at `expires_at`, after which owner commands report
+unavailable; renewal is a separate operation not provided by this command.
+
+`clients pair` uses the installed `PairLocalClient` shape in
+`memoriesql.local-client-pairing.v1`:
+
+```json
+{
+  "request_id": "<new request UUID>",
+  "capabilities": ["memory.inspect", "memory.query", "source.read"],
+  "access_scope_ids": ["<owned access scope UUID>"],
+  "expires_at": "<UTC timestamp with offset>",
+  "exact_pairing_confirmed": true
+}
+```
+
+Only an authenticated human with the current `client.pair` capability can pair
+or revoke a client. Capabilities must belong to the paired-agent role and scopes
+must be active and owned by that human; refusal does not reveal which input
+failed. A paired client reaches only its paired scopes, within its capabilities,
+and each scope's policy decides the rest: an owner-private scope, such as the
+personal-local default, admits it on the pairing human's behalf, while an explicit
+scope, such as an enrolled exact source's, also needs a `sources grant` naming the
+client's principal. Its authority is the intersection of pairing, role and current
+grants. Principal, pairing, grant
+and credential identifiers derive from the request UUID, so replaying a request
+cannot create a second client.
+
+The CLI creates `--secret-file` exclusively (never overwriting, never following a
+symlink) with owner-only permissions before contacting the database, and stores
+only the secret's SHA-256. It removes the file when pairing is refused or fails
+before committing. If the connection fails while the commit's outcome is
+unknown, it keeps the file and reports `pairing_outcome_unknown` with the derived
+`principal_id` and `pairing_grant_id`. To recover, revoke that grant with
+`clients revoke` (expected revision 1 and the requested capabilities and scopes),
+delete the file, and pair again with a new request UUID. The secret is never
+printed, logged or accepted as input. Whoever can read the file,
+or the environment of a process given the secret, holds that client's authority
+until expiry or revocation; supply it only through a channel the client cannot
+use to read broader credentials. `clients revoke` takes the pairing grant,
+expected revision, capabilities and scopes from the pairing receipt and records a
+terminal revision; a changed revision is a conflict, not a success. A
+revocation that reports `revocation_outcome_unknown` may have applied; retrying
+it reports `pairing_revision_conflict` once it has.
 
 This slice does not route Desktop's Textual interface or provider adapters. A
 future, reviewed static service/client seam must preserve public core commands,

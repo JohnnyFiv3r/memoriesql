@@ -1446,7 +1446,7 @@
     },
     {
       "disposition": "include",
-      "expected_record_count": 60,
+      "expected_record_count": 62,
       "filename": "json-schema.json",
       "kind": "json_schema",
       "note": "Provider-neutral capture, host, source-range, transcript-fold, and harness-lifecycle schemas."
@@ -1645,14 +1645,14 @@
       "version": "1"
     },
     {
-      "canonical_payload_sha256": "5f8afdac29e8b83674cf27507a69ed231776c388069e7a3e4be00f29b3a077fa",
+      "canonical_payload_sha256": "14da8a2ea6f8785b8ed14c8f3079101406b998533278b1fe31f0a2067688a367",
       "catalog": "cli",
       "classification": "proposed_open_core",
       "id": "memoriesql.core-cli.v1",
       "package_disposition": "include",
       "path": "contracts/records/memoriesql-core-cli-v1.json",
-      "public_sha256": "56ce80380c07e9e70bef2144747f4d21d635fa55ebdcd0d3fd57278a21ed9fac",
-      "reason": "Owner-approved public CLI ownership with installed core reads, exact source authority and explicit pending capabilities.",
+      "public_sha256": "4446b66a692f6d84bb93679b8cd3a0c8278106da0cd6c5a574d0327d4406f222",
+      "reason": "Owner-approved public CLI ownership with installed core reads, exact source authority, one-time initialization, local client pairing and explicit pending capabilities.",
       "version": "1"
     },
     {
@@ -1885,6 +1885,17 @@
       "version": "1"
     },
     {
+      "canonical_payload_sha256": "247910c2a0cbeba7ecaddf39e07a255fb495c80ae5710086d11a95ab11c0676d",
+      "catalog": "json_schema",
+      "classification": "proposed_open_core",
+      "id": "memoriesql.local-client-pairing.v1",
+      "package_disposition": "include",
+      "path": "contracts/records/memoriesql-local-client-pairing-v1.json",
+      "public_sha256": "44bc1e8733be52feacfc80adb04fa16582a0f1824ea0a12ef4c22aa22aa61cbe",
+      "reason": "Public-authored pairing and revocation of one local agent client under the current authenticated human context.",
+      "version": "1"
+    },
+    {
       "canonical_payload_sha256": "abf1a51752e7e527c0e50416c850fa2f2795eeca774ec5de7f348950673b8c69",
       "catalog": "json_schema",
       "classification": "proposed_open_core",
@@ -1904,6 +1915,17 @@
       "path": "contracts/records/memoriesql-logical-unit-materialization-v1.json",
       "public_sha256": "2d4ac51829c54bd3bc7f4a9294e25c9e089f0f128906181c0d97a17e968a66c8",
       "reason": "Public-authored canonical materialization and unavailable complete-input task binding.",
+      "version": "1"
+    },
+    {
+      "canonical_payload_sha256": "703f16042350f676068b4c9f935bca823d115061e8b41dcbdffa5f8538d95ac3",
+      "catalog": "json_schema",
+      "classification": "proposed_open_core",
+      "id": "memoriesql.personal-local-initialization.v1",
+      "package_disposition": "include",
+      "path": "contracts/records/memoriesql-personal-local-initialization-v1.json",
+      "public_sha256": "74c02ce80de701ac819d7a5b4ddc18050b34787db6ff7812a288077fd63cf237",
+      "reason": "Public-authored one-time personal-local owner initialization over the existing bootstrap under operator database access.",
       "version": "1"
     },
     {
