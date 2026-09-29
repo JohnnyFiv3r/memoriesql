@@ -10,10 +10,10 @@ and agent harness are isolated is a separate, per-installation qualification
 (see [the operator guide](../trusted-query-host.md)); this document does not
 claim one.
 
-Base: PR-05's `claude/pr-05-public-results` at `7aa767b` (schema 38 with owned
-expiry cleanup, committed results kept when their first disclosure fails, and
-refusal of result pages that cannot fit). No migration, contract payload or
-dependency is added. The CLI binding
+Base: PR-05's `claude/pr-05-public-results` at `33e1c42` (schema 38). The host
+relies on its owned expiry cleanup, on committed results being kept when their
+first disclosure fails, and on the refusal of result pages that cannot fit. No
+migration, contract payload or dependency is added. The CLI binding
 (`memoriesql broker …` and client mode) is PR-06's, in the unpublished, amended
 `memoriesql.core-cli.v1` record.
 
