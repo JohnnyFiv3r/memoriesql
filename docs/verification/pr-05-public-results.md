@@ -343,6 +343,20 @@ two invocation predicates. `reviewed_query_reader_profile` rebuilds the profile
 from that specification at host start, and the executor independently
 re-qualifies it before every invocation.
 
+**Identifier parameters.** An identifier column compares only with a value
+bound under its own reference type, for example `statement_ref` or
+`statement_ref[]` with `= ANY($1::uuid[])`, and only identifiers in the caller's
+visible population bind. A plain `uuid` against an identifier column, or another
+identifier kind, replies `invalid_request` / `type` with `feature`
+`reference_type` and the position of the comparison. An identifier that is not
+visible replies the one shared `unavailable` shape, with no position or
+feature; no internal refusal name reaches a reply.
+
+**Positions.** A refused value expression carries the source offset of its first
+token: an operator is located by its first operand, a parameter by its `$`. A
+refused clause, relation or whole statement carries none. A refusal that was
+settled on a step is redelivered with its outcome and code only.
+
 A least-privilege control login (not a superuser; an inheriting member of
 `memoriesql_application`) additionally needs three operator provisioning steps,
 found by the trusted-host lane:
@@ -404,6 +418,10 @@ provisioning path. They cover:
 - exact redelivery with no rerun
 - a zero-row available result versus unavailable, and the distinct
   unsupported, invalid and idempotency outcomes
+- identifier parameters (`test_agent_sql_screening`): a plain `uuid[]` is a
+  positioned `reference_type` error with nothing reserved; the reference-typed
+  array returns exactly the unfiltered rows; an identifier outside the visible
+  population is `unavailable`
 - source revocation refusing a whole aggregate, and regrant restoring it
 - another principal refused
 - resolved versus historical views over a real correction, with correction lineage
@@ -473,6 +491,11 @@ Development failures retained:
 - **Open finding:** `NOT (text = $1)` is rewritten by the planner to `<>`,
   whose `textne` lies outside the reviewed builtin closure. Such queries fail as
   `unavailable` rather than `unsupported_query`.
+- An agent bound a plain `uuid[]` against an identifier column and got
+  `invalid_request` / `type` with no position, which it could not act on. The
+  reply now names the mismatch and its position. An identifier outside the
+  visible population replied `unavailable` with the internal code
+  `parameter_anchor`, which is not a packet safe code.
 - Two parameters with nothing between them but punctuation, as in
   `IN ($1,$2)` or `coalesce($1,$2)`, were refused as a syntax error: the parser
   read `$1,$` as the opening tag of a dollar-quoted string. `$` now starts only

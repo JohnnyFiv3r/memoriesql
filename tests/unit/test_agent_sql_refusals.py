@@ -1,8 +1,10 @@
-"""Database-free checks of how a failed control call is reported; no execution claim.
+"""Database-free checks of how the executor reports a refusal; no execution claim.
 
 The packet reports a timeout or a storage or work limit as `budget_exhausted`.
 A call that wrote nothing and failed for any other reason keeps the one
-`unavailable` shape that missing and denied authority share.
+`unavailable` shape that missing and denied authority share. A statement the
+executor refuses from its SQL and bound values alone says what kind of refusal
+it is and, for a value expression, where.
 """
 
 from __future__ import annotations
@@ -17,7 +19,9 @@ from uuid import UUID, uuid4
 import psycopg
 from psycopg import errors
 
+from memoriesql.application.agent_sql_catalog import SqlCatalog
 from memoriesql.application.investigation_contracts import (
+    QueryRequest,
     ReuseRequest,
     parse_investigation_request,
 )
@@ -26,6 +30,7 @@ from memoriesql.infrastructure.postgres.agent_sql_authority import (
 )
 from memoriesql.infrastructure.postgres.agent_sql_results import (
     PostgresAgentSqlResults,
+    _admission_error,
 )
 
 # A busy database: the caller may simply try again.
@@ -72,6 +77,47 @@ def reuse_request(cursor: str | None = None) -> bytes:
     if cursor is not None:
         request["cursor"] = cursor
     return json.dumps(request).encode()
+
+
+def query_request(sql: str, parameters: list[dict[str, Any]]) -> QueryRequest:
+    parsed = parse_investigation_request(
+        json.dumps(
+            {
+                "contract_version": 1,
+                "run_ref": str(uuid4()),
+                "step_key": str(uuid4()),
+                "kind": "query",
+                "catalog_hash": SqlCatalog.installed().hash,
+                "sql": sql,
+                "parameters": parameters,
+                "inputs": [],
+                "parents": [],
+                "scope": {
+                    "source_refs": [],
+                    "known_at": "2026-01-01T00:00:00Z",
+                    "view": "historical",
+                },
+                "intent": "enumerate",
+                "max_result_bytes": 8192,
+                "page_size": 2,
+            }
+        ).encode()
+    )
+    assert isinstance(parsed, QueryRequest)
+    return parsed
+
+
+def screen(sql: str, parameters: list[dict[str, Any]]) -> tuple[Any, ...] | None:
+    """The executor's refusal of `sql` before any connection or reservation."""
+    unused = MagicMock(side_effect=AssertionError("screening opens no connection"))
+    try:
+        executor(unused)._screen(query_request(sql, parameters))
+    except Exception as refused:
+        return tuple(
+            getattr(refused, name)
+            for name in ("outcome", "code", "feature", "position")
+        )
+    return None
 
 
 class AgentSqlRefusals(unittest.TestCase):
@@ -156,6 +202,53 @@ class AgentSqlRefusals(unittest.TestCase):
         self.assertEqual(
             self.cursor_failure(PermissionError("fictional missing context")),
             ("unavailable", "unavailable"),
+        )
+
+
+class AgentSqlScreenedRefusals(unittest.TestCase):
+    def test_safe_codes_never_carry_an_internal_construct(self) -> None:
+        # An identifier that is not visible, a lost frame and a misprovisioned
+        # reader all share the one unavailable shape.
+        for construct in ("parameter_anchor", "source_frame", "procedure_privileges"):
+            self.assertEqual(
+                _admission_error("unavailable", construct), ("unavailable", None)
+            )
+        self.assertEqual(
+            _admission_error("invalid_request", "reference_type"),
+            ("type", "reference_type"),
+        )
+        self.assertEqual(
+            _admission_error("invalid_request", "incompatible_types"), ("type", None)
+        )
+        # A relation this caller may not name is unavailable, and says no more.
+        self.assertEqual(
+            screen("SELECT c.candidate_ref FROM evaluation_v1.candidates c", []),
+            ("unavailable", "unavailable", None, None),
+        )
+
+    def test_an_identifier_parameter_must_carry_its_reference_type(self) -> None:
+        identifiers = [str(uuid4()), str(uuid4())]
+        sql = (
+            "SELECT ss.statement_id FROM memory_v1.statement_sources ss "
+            "WHERE ss.statement_id = ANY($1::uuid[])"
+        )
+        # A plain uuid never names an identifier: a located type error that
+        # says which kind of mismatch it is.
+        self.assertEqual(
+            screen(sql, [{"position": 1, "type": "uuid[]", "value": identifiers}]),
+            (
+                "invalid_request",
+                "type",
+                "reference_type",
+                sql.index("ss.statement_id = ANY"),
+            ),
+        )
+        # The column's own reference type passes the screen. Whether the
+        # identifiers are visible is decided after preparation.
+        self.assertIsNone(
+            screen(
+                sql, [{"position": 1, "type": "statement_ref[]", "value": identifiers}]
+            )
         )
 
 

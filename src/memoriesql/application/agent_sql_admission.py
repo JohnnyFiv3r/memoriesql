@@ -96,13 +96,13 @@ class _Scope:
         if node.args.get("db"):
             qualified = node.db + "." + node.table
             if self.origins and self.origins.get(node.table) == qualified:
-                return self.sources[node.table].column(node.name).type
+                return self.member(node)
             if self.parent:
                 return self.parent.column(node)
             _refuse(node, "column_qualification")
         if node.table:
             if node.table in self.sources:
-                return self.sources[node.table].column(node.name).type
+                return self.member(node)
             if self.parent:
                 return self.parent.column(node)
             _refuse(node, "unknown_source", "invalid_request")
@@ -120,6 +120,13 @@ class _Scope:
             node, "ambiguous_column" if found else "unknown_column", "invalid_request"
         )
 
+    def member(self, node: exp.Column) -> SqlType:
+        """The type of a column qualified by one of this scope's own sources."""
+        for column in self.sources[node.table].columns:
+            if column.name == node.name:
+                return column.type
+        _refuse(node, "unknown_column", "invalid_request")
+
     def total_key(self, expressions: list[exp.Expr]) -> bool:
         present = {
             (n.table, n.name)
@@ -136,15 +143,35 @@ class _Scope:
         return True
 
 
+def _earliest(*positions: int | None) -> int | None:
+    located = [position for position in positions if position is not None]
+    return min(located) if located else None
+
+
+def _position(node: exp.Expr | None) -> int | None:
+    """Safe source offset of a value expression: its first token, else None.
+
+    SQLGlot records offsets on identifiers, literals and named functions only,
+    so an operator is located by the first token of its operands and a parameter
+    by its `$`. A clause or a whole statement has no single place.
+    """
+    if node is None:
+        return None
+    own = node.meta.get("start")
+    if type(own) is int:
+        return own
+    if isinstance(node, exp.Parameter):
+        number = _position(node.this)
+        return None if number is None else number - 1
+    if not isinstance(node, exp.Condition):
+        return None
+    return _earliest(*(_position(child) for child in node.iter_expressions()))
+
+
 def _refuse(
     node: exp.Expr | None, construct: str, code: str = "unsupported"
 ) -> NoReturn:
-    offset = None
-    if node:
-        value = node.meta.get("start")
-        if type(value) is int:
-            offset = value
-    raise SqlAdmissionError(code, construct, offset)
+    raise SqlAdmissionError(code, construct, _position(node))
 
 
 def _same(left: SqlType, right: SqlType, node: exp.Expr) -> SqlType:
@@ -153,7 +180,14 @@ def _same(left: SqlType, right: SqlType, node: exp.Expr) -> SqlType:
     if right.pg_type == "null":
         return left.optional()
     if not left.same_value_type(right):
-        _refuse(node, "incompatible_types", "invalid_request")
+        # The same physical type under different identifier kinds (or one
+        # plain value): bind the parameter with the column's reference type.
+        same_physical = (left.pg_type, left.array) == (right.pg_type, right.array)
+        _refuse(
+            node,
+            "reference_type" if same_physical else "incompatible_types",
+            "invalid_request",
+        )
     return replace(left, nullable=left.nullable or right.nullable)
 
 

@@ -168,9 +168,17 @@ def _admission_error(outcome: str, construct: str | None) -> tuple[str, str | No
     if outcome == "invalid_request":
         if construct == "syntax":
             return "syntax", None
+        if construct == "reference_type":
+            # The one type error the SQL text cannot show: an identifier column
+            # compares only with a value bound under its own reference type.
+            return "type", construct
         if construct and "type" in construct:
             return "type", None
         return "binding", None
+    if outcome == "unavailable":
+        # Missing, denied and dependency-lost identifiers share one shape; the
+        # internal construct that refused never reaches a reply.
+        return "unavailable", None
     return construct or "database", None
 
 
@@ -766,7 +774,11 @@ class PostgresAgentSqlResults:
             outcome = "unsupported_query" if error.code == "unsupported" else error.code
             code, feature = _admission_error(outcome, error.construct)
             raise _Failure(
-                outcome, code, feature=feature, position=error.position
+                outcome,
+                code,
+                feature=feature,
+                # Every unavailable reply has one shape.
+                position=None if outcome == "unavailable" else error.position,
             ) from None
         if not set(screened.relations) <= PREPARED_RELATIONS:
             raise _Failure(

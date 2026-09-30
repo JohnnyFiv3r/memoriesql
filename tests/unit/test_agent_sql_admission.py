@@ -441,6 +441,90 @@ class AgentSqlAdmissionTests(unittest.TestCase):
             ):
                 admit_query(head + predicate)
 
+    def test_a_refused_value_expression_says_where(self) -> None:
+        head = "SELECT o.bead_id AS id FROM memory_v1.observations o WHERE "
+        text = (SqlParameter(1, "text", "fictional"),)
+        # An operator has no token of its own: it is located by the first token
+        # of its operands, and a parameter by its `$`.
+        for predicate, parameters, construct, token in (
+            ("o.nope = $1", text, "unknown_column", "o.nope"),
+            ("nope = $1", text, "unknown_column", "nope"),
+            ("o.recorded_at = $1", text, "incompatible_types", "o.recorded_at"),
+            ("$1 = o.recorded_at", text, "incompatible_types", "$1"),
+            ("o.summary = $1 AND o.title", text, "predicate_type", "o.title"),
+            ("o.title + $1 = $1", text, "numeric_expression", "o.title"),
+            ("o.bead_id = o.bead_version_id", (), "reference_type", "o.bead_id"),
+            ("o.summary = 'fictional'", (), "unbound_literal", "'fictional'"),
+        ):
+            with (
+                self.subTest(predicate=predicate),
+                self.assertRaises(SqlAdmissionError) as refused,
+            ):
+                admit_query(head + predicate, parameters)
+            self.assertEqual(
+                (refused.exception.construct, refused.exception.position),
+                (construct, len(head) + predicate.index(token)),
+            )
+        # A clause, a relation or a whole statement has no single place.
+        select = "SELECT o.bead_id AS id FROM memory_v1.observations o"
+        for statement, construct in (
+            (select + " FOR UPDATE", "clause"),
+            (
+                select + " UNION SELECT s.kind AS id FROM memory_v1.statements s",
+                "incompatible_types",
+            ),
+            ("SELECT o.bead_id AS id FROM memory_v1.nothing o", "relation"),
+            ("SELECT c.bead_id AS id FROM evaluation_v1.candidates c", "relation"),
+        ):
+            with (
+                self.subTest(statement=statement),
+                self.assertRaises(SqlAdmissionError) as refused,
+            ):
+                admit_query(statement)
+            self.assertEqual(
+                (refused.exception.construct, refused.exception.position),
+                (construct, None),
+            )
+
+    def test_an_identifier_column_needs_a_value_of_its_reference_type(self) -> None:
+        statement = "11111111-1111-4111-8111-111111111112"
+        sql = (
+            "SELECT ss.statement_id FROM memory_v1.statement_sources ss "
+            "WHERE ss.statement_id = ANY($1::uuid[])"
+        )
+        # A plain uuid never names an identifier. The refusal says so: the same
+        # physical type, under the wrong reference type.
+        with self.assertRaises(SqlAdmissionError) as plain:
+            admit_query(sql, (SqlParameter(1, "uuid[]", [statement]),))
+        self.assertEqual(
+            (plain.exception.code, plain.exception.construct, plain.exception.position),
+            ("invalid_request", "reference_type", sql.index("ss.statement_id = ANY")),
+        )
+        # So does another identifier kind over the same physical type.
+        with self.assertRaises(SqlAdmissionError) as other:
+            admit_query(
+                sql,
+                (SqlParameter(1, "bead_ref[]", [ANCHOR]),),
+                admitted_anchors=ANCHORS,
+            )
+        self.assertEqual(other.exception.construct, "reference_type")
+        # The column's own reference type binds, once the identifier is visible.
+        typed = (SqlParameter(1, "statement_ref[]", [statement]),)
+        with self.assertRaises(SqlAdmissionError) as unseen:
+            admit_query(sql, typed)
+        self.assertEqual(
+            (unseen.exception.code, unseen.exception.construct),
+            ("unavailable", "parameter_anchor"),
+        )
+        admitted = admit_query(
+            sql, typed, admitted_anchors=frozenset({("statement_ref", statement)})
+        )
+        self.assertEqual(admitted.parameters, {"p1": [UUID(statement)]})
+        # A different physical type stays the general mismatch.
+        with self.assertRaises(SqlAdmissionError) as physical:
+            admit_query(sql, (SqlParameter(1, "text[]", [statement]),))
+        self.assertEqual(physical.exception.construct, "array_type")
+
 
 if __name__ == "__main__":
     unittest.main()
