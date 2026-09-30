@@ -36,6 +36,16 @@ NUMERIC = {"int8", "numeric"}
 
 
 class _ClosedPostgres(Postgres):
+    class Tokenizer(Postgres.Tokenizer):
+        # `$` only ever starts a positional parameter here. PostgreSQL also
+        # quotes strings with it; admission refuses string literals anyway, and
+        # scanning for one misread adjacent parameters such as `$1,$2`.
+        HEREDOC_STRINGS = []
+        SINGLE_TOKENS = {
+            **Postgres.Tokenizer.SINGLE_TOKENS,
+            "$": tokenizer_core.TokenType.PARAMETER,
+        }
+
     class Generator(PostgresGenerator):
         # psycopg's parameter format applies even inside quoted SQL tokens.
         # Escape only emitted value/identifier tokens, never placeholders.

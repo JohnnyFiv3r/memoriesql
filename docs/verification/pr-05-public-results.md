@@ -473,6 +473,10 @@ Development failures retained:
 - **Open finding:** `NOT (text = $1)` is rewritten by the planner to `<>`,
   whose `textne` lies outside the reviewed builtin closure. Such queries fail as
   `unavailable` rather than `unsupported_query`.
+- Two parameters with nothing between them but punctuation, as in
+  `IN ($1,$2)` or `coalesce($1,$2)`, were refused as a syntax error: the parser
+  read `$1,$` as the opening tag of a dollar-quoted string. `$` now starts only
+  a parameter. Dollar-quoted strings were never admitted and stay refused.
 - Cleanup initially failed with `permission denied for function uuid_eq`: M0033
   had revoked builtins from the staged-row owner. It was fixed with the narrow
   grant above.

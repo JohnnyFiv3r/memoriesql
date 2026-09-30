@@ -411,6 +411,36 @@ class AgentSqlAdmissionTests(unittest.TestCase):
                     "SELECT o.bead_id AS id FROM memory_v1.observations o " + suffix
                 )
 
+    def test_adjacent_parameters_parse_and_dollar_quoting_stays_refused(self) -> None:
+        head = "SELECT o.bead_id AS id FROM memory_v1.observations o WHERE "
+        values = (SqlParameter(1, "text", "one"), SqlParameter(2, "text", "two"))
+        for predicate in (
+            "o.summary IN ($1,$2)",
+            "o.summary = coalesce($1,$2)",
+            "($1=$2)",
+            "$1<>$2",
+            "o.summary=$1 OR o.title=$2",
+        ):
+            with self.subTest(predicate=predicate):
+                result = admit_query(head + predicate, values)
+                self.assertEqual(result.parameters, {"p1": "one", "p2": "two"})
+                self.assertEqual(result.sql.count("%(p"), 2)
+        # `$` starts only a positional parameter, so no dollar-quoted text is
+        # read as a value: not the one literal date_trunc accepts either.
+        for predicate in (
+            "o.summary = $$fictional$$",
+            "o.summary = $tag$fictional$tag$",
+            "o.recorded_at = date_trunc('day', o.recorded_at, $$UTC$$)",
+            "o.summary = $name",
+            "o.summary = $1$",
+        ):
+            with (
+                self.subTest(predicate=predicate),
+                self.assertRaises(SqlAdmissionError),
+                self.assertNoLogs(logging.getLogger("sqlglot")),
+            ):
+                admit_query(head + predicate)
+
 
 if __name__ == "__main__":
     unittest.main()
