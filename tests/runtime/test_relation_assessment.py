@@ -24,9 +24,9 @@ The shapes the first proof's binding cut requires, and the tests that prove them
 
 The remaining tests cover agreement on the exact assertion, disagreement left
 unaccepted, explicit, linked and uncapped reconsideration, one attempt per task
-with no automatic retry, not-assessed pairs, same-write direction correction, one
-cycle check over both relation kinds, later type revisions, bead-level roots,
-supervised dispatch and tenant isolation.
+with no automatic retry, not-assessed pairs, pairs named in either order,
+same-write direction correction, one cycle check over both relation kinds, later
+type revisions, bead-level roots, supervised dispatch and tenant isolation.
 """
 
 from __future__ import annotations
@@ -610,6 +610,47 @@ class RelationAssessment(relation_fixtures.AuthoredRelations):
         dispositions = {(d.first_bead_id, d.second_bead_id): d.disposition
                         for d in self.inspect_v2(deploy).pair_dispositions}
         self.assertEqual(dispositions[cast(Any, tuple(sorted((deploy, outage), key=str)))], "related")
+
+    def test_a_pair_named_in_either_order_is_stored_in_canonical_order(self) -> None:
+        # The author names every pair backwards. A pair is unordered, so that is
+        # the same pair: it is accepted and stored in canonical order, while the
+        # proposal keeps the direction it was written in.
+        deploy = self.bead("Fictional deploy D went out at noon.", key="deploy")
+        outage = self.bead("Fictional outage O began at one.", key="outage")
+        report = self.bead("Fictional Sam suspects deploy D caused outage O.", key="sam")
+        self.activate_relations(report, (deploy, outage))
+
+        def author(packet: Packet) -> dict[str, Any]:
+            proposals = [self.proposal(
+                packet, "caused_by", self.endpoint(packet, outage, 0), self.endpoint(packet, deploy, 0),
+                basis_statements=(self.basis_pin(packet, report, 0),),
+                qualification="Sam's suspicion, not a confirmed cause.",
+            )]
+            rows = self.dispositions(packet, proposals)
+            return {"proposals": proposals, "dispositions": [
+                row | {"first_bead_id": row["second_bead_id"], "second_bead_id": row["first_bead_id"]}
+                for row in rows
+            ]}
+
+        self.author_plan = author
+        self.run_relations()
+        self.assertEqual([p["role"] for p in self.frames], ["author", "specialist"])
+        stored = self.db.execute(
+            "SELECT first_bead_id, second_bead_id, disposition "
+            "FROM memoriesql.relation_pair_dispositions ORDER BY first_bead_id, second_bead_id"
+        ).fetchall()
+        beads = sorted((deploy, outage, report), key=str)
+        self.assertEqual(
+            [(first, second) for first, second, _ in stored],
+            [(a, b) for i, a in enumerate(beads) for b in beads[i:]],
+        )
+        related = cast(Any, tuple(sorted((deploy, outage), key=str)))
+        self.assertEqual({(a, b): d for a, b, d in stored}[related], "related")
+        (relation,) = self.inspect_v2(report).relations
+        self.assertEqual(
+            (relation.direction, relation.source_bead_id, relation.target_bead_id),
+            ("basis", outage, deploy),
+        )
 
     def test_abstentions_record_every_pair_without_a_specialist_call(self) -> None:
         # Nothing states a connection, and similar wording is no fit. Within the
