@@ -321,7 +321,9 @@ class AgentSqlOperators(unittest.TestCase):
 
     def test_the_reviewed_closure_covers_exactly_these_operators(self) -> None:
         # The reader's closure today. Widening it is a reviewed change to the
-        # reader's provisioning, made there and recorded here.
+        # reader's provisioning, made there and recorded here. The owner widened
+        # it by the six hash functions that membership in nine or more values
+        # calls, and by nothing else.
         reviewed = {
             (operator, name)
             for name in TYPES
@@ -342,10 +344,11 @@ class AgentSqlOperators(unittest.TestCase):
             "numeric_uminus(numeric)",
             "min(double precision)",
             "max(double precision)",
-            *(hash_builtin(name) for name in TYPES),
+            hash_builtin("float8"),
         ):
             self.assertNotIn(builtin, REVIEWED_BUILTINS)
         for builtin in (
+            *(hash_builtin(name) for name in TYPES if name != "float8"),
             "min(bigint)",
             "max(numeric)",
             "min(text)",
@@ -355,11 +358,12 @@ class AgentSqlOperators(unittest.TestCase):
         ):
             self.assertIn(builtin, REVIEWED_BUILTINS)
 
-    def test_every_public_column_type_has_reviewed_equality(self) -> None:
+    def test_every_public_column_type_has_reviewed_equality_and_hash(self) -> None:
         # The witness lowering adds grouping, IS NOT DISTINCT FROM and window
         # keys over values a statement already selects, orders or aggregates,
         # which admission does not inventory. They call only equality, so every
         # type a public relation can produce must keep its equality reviewed.
+        # Its hash function lets membership in up to 64 bound values run.
         produced = {
             column.type.pg_type
             for name, relation in SqlCatalog.installed().relations.items()
@@ -371,6 +375,7 @@ class AgentSqlOperators(unittest.TestCase):
         )
         for name in sorted(produced):
             self.assertIn(comparison_builtin("=", name), REVIEWED_BUILTINS, name)
+            self.assertIn(hash_builtin(name), REVIEWED_BUILTINS, name)
 
     def test_an_unreviewed_operator_is_refused_at_its_leftmost_use(self) -> None:
         reviewed = frozenset(REVIEWED_BUILTINS)

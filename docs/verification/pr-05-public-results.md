@@ -349,13 +349,17 @@ up to 64 bound values. The reader is granted:
 
 - all six comparisons over `int8` and `numeric`;
 - equality only over `text`, `uuid`, `bool` and `timestamptz`;
-- no comparison over `float8`, no LIKE or ILIKE, no unary minus and no hash
-  function.
+- the default hash function of each of those six types: `hashtext(text)`,
+  `uuid_hash(uuid)`, `hashbool(boolean)`, `hashint8(bigint)`,
+  `hash_numeric(numeric)` and `timestamptz_hash(timestamptz)`;
+- no comparison or hash function over `float8`, no LIKE or ILIKE and no unary
+  minus.
 
-So a time-range filter, a text inequality or pattern, and membership in nine or
-more bound values are admitted by the grammar and cannot run. Inside the reader
-each failed as a permission error, which replied `unavailable`: the caller could
-not tell it from missing authority.
+So a time-range filter and a text inequality or pattern are admitted by the
+grammar and cannot run. Inside the reader each failed as a permission error,
+which replied `unavailable`: the caller could not tell it from missing
+authority. Membership in nine or more bound values failed the same way until
+the owner reviewed the six hash functions into the closure, and nothing else.
 
 Admission now inventories the builtins a statement's own operators call, as
 PostgreSQL resolves them once it has planned the statement:
@@ -392,11 +396,27 @@ pinned server (see Acceptance). It does not cover two things:
   relation can produce, which a unit test holds, so only a `float8` parameter in
   such a position lacks it and fails inside the reader as before.
 
-Widening the closure is a reviewed change to reader provisioning; existing
-readers must then be granted the added builtins before their profile qualifies
-again. A host that constructs `PostgresRestrictedQuery` itself states the
-closure with `reviewed_builtins`; without it, the reader's own privileges decide
-alone.
+Widening the closure is a reviewed change to reader provisioning.
+`provision_query_reader` grants the whole reviewed closure to a new reader. An
+existing reader must be granted the added builtins in the same step as the
+package upgrade: qualification requires the reader's executable functions to
+equal the reviewed set exactly, so a reader missing any of them answers every
+query `unavailable`, not only lists. The order on every host is upgrade, grant,
+rebuild or re-pin the reader's profile, then the first query.
+`grant_reviewed_closure(admin_connection, reader)` performs the grant; it is
+idempotent. The equivalent statement for the six hash functions, run by the
+database administrator, is:
+
+```sql
+GRANT EXECUTE ON FUNCTION pg_catalog.hashtext(text), pg_catalog.uuid_hash(uuid),
+  pg_catalog.hashint8(bigint), pg_catalog.hash_numeric(numeric),
+  pg_catalog.timestamptz_hash(timestamptz), pg_catalog.hashbool(boolean)
+  TO memoriesql_query_reader;
+```
+
+with the host's own reader role name. A host that constructs
+`PostgresRestrictedQuery` itself states the closure with `reviewed_builtins`;
+without it, the reader's own privileges decide alone.
 
 **Identifier parameters.** An identifier column compares only with a value
 bound under its own reference type, for example `statement_ref` or
@@ -482,15 +502,19 @@ provisioning path. They cover:
     the one the server's own operator and hash catalogs name;
   - a role that may call no function reads a scratch table with a column of each
     catalog type. For every comparison over every type and its negation, the
-    folded forms above, and membership in eight and nine values of every type,
-    granting exactly the inventoried builtins lets the statement plan and run,
-    and revoking any one of them makes PostgreSQL refuse it. Implied equalities
-    are shown sufficient only, since the planner may choose a plan that calls
-    less.
+    folded forms above, and membership in 8, 9, 16 and 64 values of every type,
+    plain and under NOT, granting exactly the inventoried builtins lets the
+    statement plan and run, and revoking any one of them, including each hash
+    function, makes PostgreSQL refuse it. Implied equalities are shown
+    sufficient only, since the planner may choose a plan that calls less.
 - the same operators through the public executor: each statement runs as the
   reader, or is refused as `unreviewed_operator` with its position and with
-  nothing reserved or sent to the reader; none replies `unavailable`. A bound
-  identifier, visible or not, changes neither.
+  nothing reserved or sent to the reader; none replies `unavailable`. Membership
+  in 9, 16 and 64 bound values runs for each of the six types a public relation
+  has. A bound identifier, visible or not, changes neither.
+- the rollout rule: with one of the six hash functions revoked from the
+  provisioned reader, even a plain equality query replies `unavailable`, and
+  `grant_reviewed_closure`, run twice, restores it.
 - source revocation refusing a whole aggregate, and regrant restoring it
 - another principal refused
 - resolved versus historical views over a real correction, with correction lineage
@@ -566,10 +590,12 @@ Development failures retained:
   outside the reviewed builtin closure, so such a query failed inside the reader
   and replied `unavailable`. It was one case of a wider gap: text, identifier
   and timestamp inequalities and orderings, LIKE, ILIKE, unary minus and any
-  membership test over nine or more values are all admitted and none is
-  granted. A time-range filter therefore also replied `unavailable`. The
-  executor now refuses every such operator as `unsupported_query` with its
-  position (see Host interface).
+  membership test over nine or more values were all admitted and none was
+  granted. A time-range filter therefore also replied `unavailable`, and an
+  agent could pass at most eight values to `= ANY` or `IN`. The executor now
+  refuses every such operator as `unsupported_query` with its position (see Host
+  interface). The owner then reviewed the six hash functions into the closure,
+  so membership runs at any admitted size; the other operators stay refused.
 - Review of the first inventory found it wrong in both directions. It missed
   the hash function behind nine or more bound values, and it refused statements
   that ran: `flag <> $1`, which the planner rewrites without calling a builtin,

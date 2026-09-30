@@ -5,13 +5,18 @@ only under its reference type, and only when the caller can see it. Admission's
 inventory of the builtins a statement's operators call is held to the pinned
 server's own catalog and privilege checks; an admitted operator then either runs
 as the restricted reader or is refused as unsupported before any work. It never
-fails inside the reader as a permission error. No workload or quality claim.
+fails inside the reader as a permission error. A reader missing any reviewed
+grant answers every query `unavailable` until the release's grant helper
+restores it. No workload or quality claim.
 """
 
 from __future__ import annotations
 
 import os
 import unittest
+from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
+from itertools import cycle, islice
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
@@ -36,6 +41,7 @@ from memoriesql.application.agent_sql_catalog import (
 )
 from memoriesql.infrastructure.postgres.query_reader_provisioning import (
     REVIEWED_BUILTINS,
+    grant_reviewed_closure,
 )
 
 if TYPE_CHECKING:
@@ -118,7 +124,9 @@ def members(kind: str, count: int) -> list[Any]:
             "int8": str(n),
             "numeric": f"{n}.5",
             "float8": float(n).hex(),
-            "timestamptz": f"2026-01-{n + 1:02d}T00:00:00Z",
+            "timestamptz": (datetime(2026, 1, 1, tzinfo=UTC) + timedelta(hours=n))
+            .isoformat()
+            .replace("+00:00", "Z"),
         }[kind]
         for n in range(count)
     ]
@@ -495,7 +503,9 @@ class AgentSqlScreening(unittest.TestCase):
             ("v.b < $1", yes, {"boollt(boolean,boolean)"}),
         ):
             self.assertEqual(self.holds(TYPED + predicate, parameters), expected)
-        # Membership: equality up to eight bound values, a hash probe from nine.
+        # Membership: equality up to eight bound values, a hash probe from nine
+        # up to the packet's 64. Revoking the type's hash function, or its
+        # equality, then makes PostgreSQL refuse the statement.
         for kind in NAMES:
             array = COLUMNS[kind] + " = ANY($1::" + kind + "[])"
             equal = comparison_builtin("=", kind)
@@ -503,8 +513,11 @@ class AgentSqlScreening(unittest.TestCase):
             for predicate, count, expected in (
                 (array, 8, {equal}),
                 (array, 9, hashed),
+                (array, 16, hashed),
+                (array, 64, hashed),
                 ("NOT (" + array + ")", 8, {comparison_builtin("<>", kind)}),
                 ("NOT (" + array + ")", 9, hashed),
+                ("NOT (" + array + ")", 64, hashed),
             ):
                 parameters = bound(kind + "[]", members(kind, count))
                 self.assertEqual(self.holds(TYPED + predicate, parameters), expected)
@@ -512,8 +525,11 @@ class AgentSqlScreening(unittest.TestCase):
             (2, False, {"int8eq(bigint,bigint)"}),
             (8, False, {"int8eq(bigint,bigint)"}),
             (9, False, {"int8eq(bigint,bigint)", "hashint8(bigint)"}),
+            (16, False, {"int8eq(bigint,bigint)", "hashint8(bigint)"}),
+            (64, False, {"int8eq(bigint,bigint)", "hashint8(bigint)"}),
             (2, True, {"int8ne(bigint,bigint)"}),
             (9, True, {"int8eq(bigint,bigint)", "hashint8(bigint)"}),
+            (64, True, {"int8eq(bigint,bigint)", "hashint8(bigint)"}),
         ):
             parameters = [
                 parameter
@@ -564,6 +580,13 @@ class AgentSqlScreening(unittest.TestCase):
         self,
     ) -> None:
         self.begin()
+        statements = [
+            row["values"][0]
+            for row in self.ask("SELECT s.statement_id FROM memory_v1.statements s")[
+                "page"
+            ]["rows"]
+        ]
+        self.assertTrue(statements)
         moment = bound("timestamptz", self.run_state["default_known_at"])
         text, number = bound("text", "fictional"), bound("int8", "1")
         every = " ".join(OPERATORS)
@@ -597,10 +620,13 @@ class AgentSqlScreening(unittest.TestCase):
         kinds = members("text", 9)
         sequence = [
             parameter
-            for position, member in enumerate(members("int8", 9), 1)
+            for position, member in enumerate(members("int8", 64), 1)
             for parameter in bound("int8", member, position)
         ]
-        listed = ", ".join(f"${p['position']}" for p in sequence)
+
+        def listed(count: int) -> str:
+            return ", ".join(f"${p['position']}" for p in sequence[:count])
+
         shapes += [
             (STATEMENTS + "s.text LIKE $1", pattern, False),
             (STATEMENTS + "s.text ILIKE $1", pattern, False),
@@ -627,24 +653,88 @@ class AgentSqlScreening(unittest.TestCase):
             (STATEMENTS + "$1 IS NULL OR s.kind <> $1", text, False),
             (STATEMENTS + "(s.kind = s.text) = $1", bound("bool", True), True),
             (STATEMENTS + "(s.kind = s.text) = $1", bound("bool", False), False),
-            # Up to eight bound values compare; nine are probed through a hash.
+            # Up to eight bound values compare; from nine they are probed through
+            # a hash table. Under NOT, up to eight need the refused `<>`.
             (STATEMENTS + "s.kind = ANY($1::text[])", bound("text[]", kinds[:8]), True),
-            (STATEMENTS + "s.kind = ANY($1::text[])", bound("text[]", kinds), False),
             (
                 STATEMENTS + "NOT (s.kind = ANY($1::text[]))",
                 bound("text[]", kinds[:8]),
                 False,
             ),
-            (STATEMENTS + f"s.sequence IN ({listed[:30]})", sequence[:8], True),
-            (STATEMENTS + f"s.sequence IN ({listed})", sequence, False),
+            (
+                STATEMENTS + "NOT (s.kind = ANY($1::text[]))",
+                bound("text[]", kinds),
+                True,
+            ),
+            (STATEMENTS + f"s.sequence IN ({listed(8)})", sequence[:8], True),
             (STATEMENTS + "s.sequence NOT IN ($1, $2)", sequence[:2], True),
+        ]
+        # Nine, 16 and 64 bound values of every type a public relation has run.
+        arrays: tuple[tuple[str, str, str, str, Callable[[int], list[Any]]], ...] = (
+            (STATEMENTS, "s.kind", "text", "text", lambda n: members("text", n)),
+            (
+                STATEMENTS,
+                "s.statement_id",
+                "uuid",
+                "statement_ref",
+                lambda n: list(islice(cycle(statements), n)),
+            ),
+            (
+                RELATIONS,
+                "r.support_eligible",
+                "bool",
+                "bool",
+                lambda n: members("bool", n),
+            ),
+            (STATEMENTS, "s.sequence", "bigint", "int8", lambda n: members("int8", n)),
+            (
+                RELATIONS,
+                "r.author_confidence",
+                "numeric",
+                "numeric",
+                lambda n: members("numeric", n),
+            ),
+            (
+                STATEMENTS,
+                "s.recorded_at",
+                "timestamptz",
+                "timestamptz",
+                lambda n: members("timestamptz", n),
+            ),
+        )
+        shapes += [
+            (
+                head + column + " = ANY($1::" + cast_type + "[])",
+                bound(kind + "[]", values(count)),
+                True,
+            )
+            for head, column, cast_type, kind, values in arrays
+            for count in (9, 16, 64)
+        ]
+        shapes += [
+            (STATEMENTS + f"s.sequence IN ({listed(count)})", sequence[:count], True)
+            for count in (9, 16, 64)
         ]
         reviewed = frozenset(REVIEWED_BUILTINS)
         for text_sql, parameters, runs in shapes:
             with self.subTest(sql=text_sql, parameters=parameters):
-                # The closure decides the expectation written above.
+                # The closure decides the expectation written above. Identifiers
+                # are the caller's own, visible ones.
+                anchors = frozenset(
+                    (p["type"].removesuffix("[]"), value)
+                    for p in parameters
+                    for value in (
+                        p["value"] if isinstance(p["value"], list) else [p["value"]]
+                    )
+                    if isinstance(value, str)
+                )
                 try:
-                    require_reviewed(admit_query(text_sql, typed(parameters)), reviewed)
+                    require_reviewed(
+                        admit_query(
+                            text_sql, typed(parameters), admitted_anchors=anchors
+                        ),
+                        reviewed,
+                    )
                     position = None
                 except SqlAdmissionError as refused:
                     self.assertEqual(refused.construct, "unreviewed_operator")
@@ -692,20 +782,52 @@ class AgentSqlScreening(unittest.TestCase):
         array = "s.statement_id = ANY($1::uuid[])"
         unseen = [str(uuid4()) for _ in range(9)]
         before = self.work()
-        nine = self.ask(STATEMENTS + array, bound("statement_ref[]", unseen))
+        eight = self.ask(
+            STATEMENTS + "NOT (" + array + ")", bound("statement_ref[]", unseen[:8])
+        )
         self.assertEqual(
-            (nine["outcome"], nine["error"]),
-            ("unsupported_query", UNREVIEWED | {"position": len(STATEMENTS)}),
+            (eight["outcome"], eight["error"]),
+            (
+                "unsupported_query",
+                UNREVIEWED | {"position": len(STATEMENTS) + len("NOT (")},
+            ),
         )
         self.assertEqual(self.work(), before)
         # A supported statement is still held to what its caller can see.
-        eight = self.ask(STATEMENTS + array, bound("statement_ref[]", unseen[:8]))
+        nine = self.ask(STATEMENTS + array, bound("statement_ref[]", unseen))
         self.assertEqual(
-            (eight["outcome"], eight["error"]),
+            (nine["outcome"], nine["error"]),
             ("unavailable", {"code": "unavailable"}),
         )
-        seen = self.ask(STATEMENTS + array, bound("statement_ref[]", [visible]))
+        seen = self.ask(STATEMENTS + array, bound("statement_ref[]", [visible] * 9))
         self.assertEqual([row["values"] for row in seen["page"]["rows"]], [[visible]])
+
+    def test_a_reader_missing_a_reviewed_grant_answers_nothing_until_granted(
+        self,
+    ) -> None:
+        # The rollout rule: a provisioned reader must hold exactly the reviewed
+        # closure. Without one of the six hash functions every query replies
+        # unavailable, not only lists, until the release's grant helper runs.
+        self.begin()
+        query = STATEMENTS + "s.kind = $1"
+        text = bound("text", "fictional")
+        self.assertEqual(self.ask(query, text)["outcome"], "available")
+        db, reader = self.results.db, self.results.reader
+        for signature in ("uuid_hash(uuid)", "hashbool(boolean)"):
+            db.execute(
+                sql.SQL(
+                    "REVOKE EXECUTE ON FUNCTION pg_catalog." + signature + " FROM {}"
+                ).format(sql.Identifier(reader))
+            )
+            refused = self.ask(query, text)
+            self.assertEqual(
+                (refused["outcome"], refused["error"]),
+                ("unavailable", {"code": "unavailable"}),
+                signature,
+            )
+            grant_reviewed_closure(db, reader)
+            grant_reviewed_closure(db, reader)
+            self.assertEqual(self.ask(query, text)["outcome"], "available", signature)
 
 
 if __name__ == "__main__":

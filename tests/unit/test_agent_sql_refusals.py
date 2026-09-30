@@ -278,7 +278,8 @@ class AgentSqlScreenedRefusals(unittest.TestCase):
             ("lower(s.text) LIKE $1", text, "lower"),
             ("s.recorded_at >= $1", moment, "s.recorded_at"),
             ("s.sequence = $1 AND -s.sequence < s.sequence", number, "s.sequence <"),
-            ("s.kind = ANY($1::text[])", nine, "s.kind"),
+            # Under NOT, up to eight values compare with `<>`, which is refused.
+            ("NOT (s.kind = ANY($1::text[]))", eight, "s.kind"),
         ):
             with self.subTest(predicate=predicate):
                 self.assertEqual(
@@ -291,6 +292,10 @@ class AgentSqlScreenedRefusals(unittest.TestCase):
             ("s.recorded_at = $1", moment),
             ("NOT (s.sequence = $1)", number),
             ("s.kind = ANY($1::text[])", eight),
+            # From nine values the planner probes a hash table: equality and the
+            # type's hash function, both reviewed, under NOT as well.
+            ("s.kind = ANY($1::text[])", nine),
+            ("NOT (s.kind = ANY($1::text[]))", nine),
         ):
             with self.subTest(predicate=predicate):
                 self.assertIsNone(screen(STATEMENTS + predicate, parameters))
@@ -313,12 +318,14 @@ class AgentSqlScreenedRefusals(unittest.TestCase):
         fewer = [{"position": 1, "type": "statement_ref[]", "value": nine[:8]}]
         array = "s.statement_id = ANY($1::uuid[])"
         self.assertEqual(
-            screen(STATEMENTS + array, many), (*UNREVIEWED, len(STATEMENTS))
+            screen(STATEMENTS + "NOT (" + array + ")", fewer),
+            (*UNREVIEWED, len(STATEMENTS) + len("NOT (")),
         )
         # A supported statement passes the screen with its identifiers unchecked:
         # only the full admission after preparation decides their visibility.
         self.assertIsNone(screen(STATEMENTS + "s.statement_id = $1", bound[:1]))
         self.assertIsNone(screen(STATEMENTS + array, fewer))
+        self.assertIsNone(screen(STATEMENTS + array, many))
         with self.assertRaises(SqlAdmissionError) as unseen:
             admit_query(
                 STATEMENTS + "s.statement_id = $1",
