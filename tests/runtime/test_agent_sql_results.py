@@ -954,6 +954,50 @@ class AgentSqlResults(unittest.TestCase):
         self.assertEqual(expired["error"], {"code": "time"})
         self.assertEqual(json.loads(self.service().start_run())["outcome"], "available")
 
+    def test_a_lock_timeout_is_a_budget_refusal_that_starts_and_charges_nothing(
+        self,
+    ) -> None:
+        self.fixture.assertion()
+        run = self.start()
+        request, _ = self.request_only(
+            run, "SELECT bead_id FROM memory_v1.observations"
+        )
+        timed_out = ("budget_exhausted", {"code": "time"})
+        key = "hashtextextended(%s::text||':query-access:'||%s::text,0)"
+        holding = (self.fixture.tenant, self.fixture.workspace)
+        # Another session holds this workspace's admission lock past the 500 ms
+        # lock timeout, as a cleanup pass may.
+        with self.fixture.connection() as holder:
+            holder.execute("SELECT pg_advisory_lock(" + key + ")", holding)
+            try:
+                started = json.loads(self.service().start_run())
+                self.assertEqual((started["outcome"], started["error"]), timed_out)
+                self.assertNotIn("run", started)
+                admitted = self.send(request)
+                self.assertEqual((admitted["outcome"], admitted["error"]), timed_out)
+                for field in ("receipt_ref", "access_receipt_ref", "remaining"):
+                    self.assertIsNone(admitted[field], field)
+                closed = json.loads(self.service().close_run(run["run_ref"]))
+                self.assertEqual((closed["outcome"], closed["error"]), timed_out)
+            finally:
+                holder.execute("SELECT pg_advisory_unlock(" + key + ")", holding)
+        # The refusals started no run, admitted no access and closed nothing.
+        self.assertEqual(self.h.scalar("SELECT count(*) FROM memoriesql.query_runs"), 1)
+        self.assertEqual(
+            self.h.scalar("SELECT count(*) FROM memoriesql.query_deliveries"), 0
+        )
+        self.assertEqual(
+            self.h.scalar("SELECT count(*) FROM memoriesql.query_run_closures"), 0
+        )
+        # The same step is admitted once the lock is free, at the full allowance.
+        first = self.send(request)
+        self.assertEqual(first["outcome"], "available", first)
+        self.assertEqual(first["remaining"]["accesses"], 127)
+        self.assertEqual(
+            json.loads(self.service().close_run(run["run_ref"]))["outcome"],
+            "available",
+        )
+
     def test_crash_after_commit_redelivers_same_result_without_rerun(self) -> None:
         self.fixture.assertion()
         run = self.start()

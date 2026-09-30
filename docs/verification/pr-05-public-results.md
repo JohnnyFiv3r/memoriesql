@@ -184,6 +184,15 @@ These remain qualification targets, not measured capacity.
   - one executing operation per workspace.
 - **Refusals write nothing.** Any unsettled delivery blocks new admission, and a
   dead owner's work is reported as `settlement`.
+- **A busy database is a budget refusal.** At run start, admission, owner close
+  and cleanup status, a lock or statement timeout (SQLSTATE 55P03, 57014) is
+  `budget_exhausted` / `time`, a storage or work limit (53400, 54000) is
+  `budget_exhausted` / `storage`, and a conflict with work still in flight
+  (40001, 55000) is `budget_exhausted` / `settlement`. These calls own nothing
+  yet: a refused run start or admission starts and charges nothing, so the same
+  step key is admitted afterwards. Every other failure there keeps the one
+  `unavailable` shape. Resolving a reuse cursor classifies database errors as
+  disclosure does.
 - **Charges.** Charged time is the observed wall time of the whole operation
   (not CPU or I/O); commit latency is not separately metered. Unknown timing
   keeps the full reservation. Allocation remains M0031's 64/128/512 MiB ledger
@@ -368,8 +377,8 @@ lists source refs as hydration-required.
 
 ## Acceptance and preserved development failures
 
-Fictional installed tests (`test_agent_sql_results`, 25 cases) use the
-production reader provisioning path. They cover:
+Fictional installed tests (`test_agent_sql_results`) use the production reader
+provisioning path. They cover:
 
 - query, page, cursor and reuse
 - a paired agent citing a finding to its supporting units under its own grant:
@@ -399,6 +408,10 @@ production reader provisioning path. They cover:
 - another principal refused
 - resolved versus historical views over a real correction, with correction lineage
 - run admission, expiry and no budget reset
+- another session holding the workspace's admission lock past the lock timeout:
+  run start, admission and owner close each reply `budget_exhausted` / `time`;
+  no run, delivery or closure is written; the same step key is then admitted at
+  the full allowance
 - crash after commit, host recovery and owner close
 - host death mid-query: capacity, close and admission stay blocked until the
   reader backend is confirmed gone; recovery then settles the orphaned
@@ -467,6 +480,22 @@ Development failures retained:
   observation families reused PR-03's provenance records, which require
   `source.raw.read`, a capability the `paired_agent` role can never hold. The
   regression test fails on that code and passes on the query-level records.
+- **Timeouts were reported as missing authority.** `start_run()` replied
+  `unavailable` to every database error, including a 500 ms lock timeout while
+  a cleanup pass held the workspace's admission lock. The packet reports a
+  timeout or a storage or work limit as `budget_exhausted`. Admission, owner
+  close and cleanup status had the same mapping, the operator's cleanup pass
+  reported a lock timeout as `execution_error`, and resolving a reuse cursor
+  reported every database error as `execution_error`. They now share the
+  executor's SQLSTATE table. Database-free tests (`test_agent_sql_refusals`)
+  cover each SQLSTATE at each call and fail on the previous code; the installed
+  test above produces a real lock timeout.
+- **Open finding: a busy database during redelivery still fails the step.** When
+  a redelivered step's preparation probe or its recovery meets a lock timeout,
+  the step is settled as failed (`unavailable` or `execution_error`) although
+  its result may already be committed. The packet's outcome for unknown commit
+  ownership is `settlement_pending`. This is unchanged here, because it changes
+  crash recovery and needs its own recovery tests.
 
 Exact-head installed 3.13/3.14 qualification and CI belong on the PR.
 

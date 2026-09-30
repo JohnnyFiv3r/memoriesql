@@ -90,6 +90,27 @@ _STATE_CODES = {
 _POPULATION_BYTES = 64 * 1024 * 1024
 
 
+def _busy(error: BaseException) -> str | None:
+    """The safe code of a failure the caller may simply try again, else None.
+
+    A lock or statement timeout is `time`, a storage or work limit is `storage`
+    and a conflict with work still in flight is `settlement`. The packet reports
+    these as `budget_exhausted`, never as missing authority.
+    """
+    code = _STATE_CODES.get(getattr(error, "sqlstate", None) or "")
+    return code if code in ("time", "storage", "settlement") else None
+
+
+def _refusal(error: BaseException) -> tuple[str, str]:
+    """Outcome and safe code for a control call that failed and wrote nothing.
+
+    Every failure that is not a busy database keeps the one shape that missing
+    and denied authority share.
+    """
+    busy = _busy(error)
+    return ("budget_exhausted", busy) if busy else ("unavailable", "unavailable")
+
+
 class _Failure(Exception):
     """Terminal non-available outcome for one admitted delivery."""
 
@@ -121,6 +142,21 @@ class _Failure(Exception):
         if self.feature is not None:
             value["feature"] = self.feature
         return value
+
+
+def _disclosure_failure(error: Error) -> _Failure:
+    """What a database error means while resolving or disclosing a result."""
+    code = _STATE_CODES.get(error.sqlstate or "", "database")
+    return _Failure(
+        "unavailable"
+        if code == "unavailable"
+        else "idempotency_conflict"
+        if code == "idempotency"
+        else "budget_exhausted"
+        if code in {"time", "storage"}
+        else "execution_error",
+        code,
+    )
 
 
 def _admission_error(outcome: str, construct: str | None) -> tuple[str, str | None]:
@@ -169,7 +205,10 @@ class PostgresAgentSqlResults:
 
         A bounded expiry-cleanup pass for this workspace runs first, in its own
         transaction. Content cleanup more than 24 hours past due (missed or
-        failed) refuses the run as `budget_exhausted` / `settlement`.
+        failed) refuses the run as `budget_exhausted` / `settlement`. A lock or
+        statement timeout, for example while a cleanup pass holds this
+        workspace's admission lock, is `budget_exhausted` / `time` and starts
+        nothing.
         """
         self._cleanup_workspace()
         try:
@@ -183,12 +222,13 @@ class PostgresAgentSqlResults:
                         "SELECT memoriesql.start_query_run_v1(%s,%s)",
                         (SqlCatalog.installed().hash, POLICY_HASH),
                     ).fetchone()
-        except (PermissionError, Error):
+        except (PermissionError, Error) as error:
+            outcome, code = _refusal(error)
             return result_json_bytes(
                 {
                     "contract_version": CONTRACT_VERSION,
-                    "outcome": "unavailable",
-                    "error": {"code": "unavailable"},
+                    "outcome": outcome,
+                    "error": {"code": code},
                 }
             )
         data: dict[str, Any] = row[0] if row else {"refused": "unavailable"}
@@ -225,8 +265,15 @@ class PostgresAgentSqlResults:
                     row = frame.execute(
                         "SELECT memoriesql.close_query_run_v1(%s)", (UUID(run_ref),)
                     ).fetchone()
-        except (PermissionError, Error, ValueError):
-            row = None
+        except (PermissionError, Error, ValueError) as error:
+            outcome, code = _refusal(error)
+            return result_json_bytes(
+                {
+                    "contract_version": CONTRACT_VERSION,
+                    "outcome": outcome,
+                    "error": {"code": code},
+                }
+            )
         data: dict[str, Any] = row[0] if row and row[0] else {"refused": "unavailable"}
         refused = data.get("refused")
         if refused:
@@ -296,12 +343,13 @@ class PostgresAgentSqlResults:
                     failed = int(data.get("failed", 0))
                     if not any(int(purged.get(key, 0)) for key in totals):
                         break
-        except Error:
+        except Error as error:
+            busy = _busy(error)
             return result_json_bytes(
                 {
                     "contract_version": CONTRACT_VERSION,
-                    "outcome": "execution_error",
-                    "error": {"code": "database"},
+                    "outcome": "budget_exhausted" if busy else "execution_error",
+                    "error": {"code": busy or "database"},
                     "cleanup": {
                         "purged": totals,
                         "pending": pending,
@@ -335,12 +383,13 @@ class PostgresAgentSqlResults:
                     row = frame.execute(
                         "SELECT memoriesql.query_cleanup_status_v1()"
                     ).fetchone()
-        except (PermissionError, Error):
+        except (PermissionError, Error) as error:
+            outcome, code = _refusal(error)
             return result_json_bytes(
                 {
                     "contract_version": CONTRACT_VERSION,
-                    "outcome": "unavailable",
-                    "error": {"code": "unavailable"},
+                    "outcome": outcome,
+                    "error": {"code": code},
                 }
             )
         return result_json_bytes(
@@ -374,12 +423,15 @@ class PostgresAgentSqlResults:
         for attempt in range(2):
             try:
                 admission = self._admit(request, kind, fingerprint)
-            except (PermissionError, Error):
+            except (PermissionError, Error) as error:
+                # Nothing was admitted or charged: a timed-out admission is a
+                # budget refusal, not missing authority.
+                outcome, code = _refusal(error)
                 return self._bare(
                     request.run_ref,
                     request.step_key,
-                    "unavailable",
-                    {"code": "unavailable"},
+                    outcome,
+                    {"code": code},
                     None,
                 )
             refused = admission.get("refused")
@@ -773,15 +825,20 @@ class PostgresAgentSqlResults:
                 cursor = UUID(request.cursor)
             except ValueError:
                 raise _Failure("invalid_request", "cursor") from None
-            with self._control() as connection:
-                with relation_projection_frame(
-                    connection,
-                    credential_sha256=self._credential,
-                    workspace_id=self._workspace,
-                ) as frame:
-                    row = frame.execute(
-                        "SELECT memoriesql.resolve_query_cursor_v1(%s)", (cursor,)
-                    ).fetchone()
+            try:
+                with self._control() as connection:
+                    with relation_projection_frame(
+                        connection,
+                        credential_sha256=self._credential,
+                        workspace_id=self._workspace,
+                    ) as frame:
+                        row = frame.execute(
+                            "SELECT memoriesql.resolve_query_cursor_v1(%s)", (cursor,)
+                        ).fetchone()
+            except PermissionError:
+                raise _Failure("unavailable", "unavailable") from None
+            except Error as error:
+                raise _disclosure_failure(error) from None
             binding = row[0] if row else None
             if (
                 binding is None
@@ -873,17 +930,7 @@ class PostgresAgentSqlResults:
                     raise _Failure(
                         "settlement_pending", "settlement", pending=True
                     ) from None
-                code = _STATE_CODES.get(error.sqlstate or "", "database")
-                raise _Failure(
-                    "unavailable"
-                    if code == "unavailable"
-                    else "idempotency_conflict"
-                    if code == "idempotency"
-                    else "budget_exhausted"
-                    if code in {"time", "storage"}
-                    else "execution_error",
-                    code,
-                ) from None
+                raise _disclosure_failure(error) from None
             except PermissionError:
                 raise _Failure("unavailable", "unavailable") from None
         return data
