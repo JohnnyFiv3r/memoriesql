@@ -46,15 +46,46 @@ MAX_PARAMETER_FILE_BYTES = 65536 + 4096
 EVALUATION_RELATION = "evaluation_v1.candidates"
 ADMISSION_RULES = (
     "Every value is a `$n` typed parameter; SQL literals are refused except "
-    "structural ones such as LIMIT/OFFSET and date_trunc units.",
-    "`IN ($1)` takes one scalar; compare arrays with `= ANY($n::type[])`.",
+    "structural ones such as LIMIT/OFFSET and date_trunc units. Parameters may "
+    "be written without spaces, as in `IN ($1,$2)`.",
+    "Bind an identifier with its column's reference type, never `uuid`: the "
+    "parameter type is the column's reference_kind, with `[]` for an array. "
+    "`WHERE ss.statement_id = ANY($1::uuid[])` takes `statement_ref[]`; the cast "
+    "in the SQL stays the physical type, and a scalar needs none. "
+    "`relation_type_key` is text and `relation_type_revision` is bigint. A plain "
+    "`uuid` or `uuid[]` replies invalid_request with error "
+    '{"code": "type", "feature": "reference_type", "position": N}.',
+    "An identifier the caller cannot see, typically one no earlier result "
+    'returned, replies unavailable with {"code": "unavailable"}, and nothing '
+    "says which one.",
+    "These comparisons work: `=` on every type; all six comparisons on bigint "
+    "and numeric; `<>` against a boolean parameter (`flag <> $1`, and "
+    "`NOT (flag = $1)`); `= ANY` and `IN` with 1 to 64 values on every type; "
+    "negated membership (`NOT IN`, `NOT (x = ANY(...))`) with 9 to 64 values on "
+    "every type, and at any size on bigint and numeric. A comparison with a "
+    "NULL parameter matches no rows and is never refused, so "
+    "`$1 IS NULL OR kind = $1` switches a filter off with a NULL.",
+    "Operators the reader cannot run reply unsupported_query with error "
+    '{"code": "feature", "feature": "unreviewed_operator", "position": N}: '
+    "`<>`, `<`, `<=`, `>` and `>=` on text, identifiers and timestamps (so no "
+    "time ranges) and `NOT (a = b)` on those types; `<>` between two booleans "
+    "and `<`, `<=`, `>` and `>=` on booleans; LIKE, ILIKE, NOT LIKE and NOT "
+    "ILIKE; unary minus; and `NOT IN` or `NOT (x = ANY(...))` with 2 to 8 values "
+    "on text, identifiers, booleans or timestamps.",
+    "Parenthesize a comparison or IS test that is a comparison's operand: "
+    "PostgreSQL reads `x = y IS NULL` as `(x = y) IS NULL` and never chains "
+    "`a = b = $1`, so both reply unsupported_query with error "
+    '{"code": "feature", "feature": "comparison_grouping", "position": N} at the '
+    "comparison's first operand. `(x = y) IS NULL` runs as written.",
+    "`position` is the 0-based character offset, in the SQL as sent, of the "
+    "first operand of the refused operator, or of the `$` of a parameter.",
     "Aggregate window functions need an explicit ROWS frame.",
-    "One bounded recursive CTE requires the declared recursion object.",
-    "Refused constructs reply invalid_request or unsupported_query with a code "
-    "and position; project a column instead of `EXISTS (SELECT 1 ...)`.",
-    "Text inequality (`<>`, or `NOT (a = $n)`, which the planner rewrites to "
-    "it) is outside the reviewed operator closure and replies unavailable; "
-    "filter with equality instead.",
+    "One bounded recursive CTE requires the declared recursion object. It may "
+    "expand over relation endpoints; recursion over correction edges replies "
+    'unsupported_query with error {"code": "feature", "feature": '
+    '"correction_recursion"}, without a position.',
+    "Other refused constructs reply invalid_request or unsupported_query with a "
+    "code and position; project a column instead of `EXISTS (SELECT 1 ...)`.",
 )
 # The unit text agents receive, as the executor labels it in coverage gaps.
 SOURCE_TEXT = (

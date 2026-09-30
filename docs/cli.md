@@ -181,7 +181,10 @@ it reports `pairing_revision_conflict` once it has.
 `query` and `result` speak `memoriesql.agent-sql-results.v1` through a trusted
 executor that alone holds the control login and the restricted reader login.
 `query --file` reads at most 32 KiB of SQL; `--parameters-file` holds the typed
-parameter list (`[{"position": 1, "type": "uuid", "value": "..."}]`). All values
+parameter list (`[{"position": 1, "type": "statement_ref", "value": "..."}]`). An
+identifier is bound with its column's reference type (the catalog's
+`reference_kind`, with `[]` for an array), never `uuid`, and its value must be one
+the caller can see, typically one an earlier result returned. All values
 are parameters; the executor refuses SQL literals except structural ones,
 unprepared relations (`unsupported_query`, feature `unprepared_relation`) and
 not-yet-qualified refinement, expansion, refresh or source scopes. Replies are
@@ -203,10 +206,43 @@ projection when every part is producer-normalized; otherwise `text_state` is
 `unsupported` and only the citation is returned. It is never raw bytes, exact
 source or a clause-level citation. A reply that uses `source_units` always says
 so as a coverage gap (`normalized_text_not_exact_source`), and also names any
-normalized projection, excluded package or unresolved package. Text inequality
-(`<>`, or `NOT (a = $n)`, which the planner rewrites to it) is outside the
-reviewed operator closure and replies `unavailable`; filter with equality
-instead.
+normalized projection, excluded package or unresolved package.
+
+The restricted reader runs only its reviewed operators, and `memoriesql schema`
+lists the admission rules agents follow:
+
+- An identifier bound as plain `uuid` or `uuid[]` replies `invalid_request` with
+  `{"code": "type", "feature": "reference_type", "position": N}`. In
+  `WHERE ss.statement_id = ANY($1::uuid[])` the parameter type is
+  `statement_ref[]` while the cast in the SQL stays `uuid[]`; a scalar needs no
+  cast. `relation_type_key` is text and `relation_type_revision` is bigint.
+- An identifier the caller cannot see replies `unavailable` with
+  `{"code": "unavailable"}`, and nothing says which one.
+- These work: `=` on every type; all six comparisons on bigint and numeric;
+  `<>` against a boolean parameter (`flag <> $1`, and `NOT (flag = $1)`);
+  `= ANY` and `IN` with 1 to 64 values on every type; and negated membership
+  (`NOT IN`, `NOT (x = ANY(...))`) with 9 to 64 values on every type, and at
+  any size on bigint and numeric. A comparison with a NULL parameter matches no
+  rows and is never refused, so `$1 IS NULL OR kind = $1` switches a filter off
+  with a NULL.
+- These reply `unsupported_query` with
+  `{"code": "feature", "feature": "unreviewed_operator", "position": N}`: `<>`,
+  `<`, `<=`, `>` and `>=` on text, identifiers and timestamps (so no time
+  ranges) and `NOT (a = b)` on those types; `<>` between two booleans and `<`,
+  `<=`, `>` and `>=` on booleans; LIKE, ILIKE, NOT LIKE and NOT ILIKE; unary
+  minus; and `NOT IN` or `NOT (x = ANY(...))` with 2 to 8 values on text,
+  identifiers, booleans or timestamps.
+- A comparison or `IS` test that is a comparison's operand must be
+  parenthesized. PostgreSQL reads `x = y IS NULL` as `(x = y) IS NULL` and never
+  chains `a = b = $1`, so both reply `unsupported_query` with
+  `{"code": "feature", "feature": "comparison_grouping", "position": N}` at the
+  comparison's first operand; `(x = y) IS NULL` runs as written.
+- Recursion may expand over relation endpoints. Recursion over correction edges
+  replies `unsupported_query` with
+  `{"code": "feature", "feature": "correction_recursion"}`, without a position.
+- `position` is the 0-based character offset, in the SQL as sent, of the first
+  operand of the refused operator, or of the `$` of a parameter.
+- Parameters may be written without spaces, as in `IN ($1,$2)`.
 
 The trusted host must run its expired-result cleanup on a schedule. While that
 cleanup is more than a day overdue, new runs are refused as

@@ -71,11 +71,29 @@ class QueryCliTests(unittest.TestCase):
         self.assertEqual((status, output.encode()), (3, OVERDUE + b"\n"))
         self.assertEqual(errors, "", "machine output stays the exact reply")
 
-    def test_schema_labels_source_text_and_text_inequality(self) -> None:
+    def test_schema_labels_source_text_and_the_operator_closure(self) -> None:
         schema = schema_description()
         self.assertIn("normalized text of an authorized source unit", schema["source_text"])
         self.assertIn("never raw bytes", schema["source_text"])
-        self.assertTrue(any("Text inequality" in rule for rule in ADMISSION_RULES))
+        rules = " ".join(ADMISSION_RULES)
+        for fact in (
+            '"feature": "reference_type"',
+            '"feature": "unreviewed_operator"',
+            '{"code": "unavailable"}',
+            "1 to 64 values on every type",
+            "9 to 64 values",
+            "2 to 8 values on text, identifiers",
+            "`flag <> $1`",
+            "`<>` between two booleans",
+            "0-based character offset",
+            "`IN ($1,$2)`",
+            "NOT LIKE and NOT ILIKE",
+            '"feature": "comparison_grouping"',
+            '"feature": "correction_recursion"',
+        ):
+            self.assertIn(fact, rules)
+        self.assertNotIn("Text inequality", rules)
+        self.assertNotIn("nine or more values", rules)
 
 
 if __name__ == "__main__":
