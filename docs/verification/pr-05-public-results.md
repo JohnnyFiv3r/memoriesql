@@ -343,6 +343,61 @@ two invocation predicates. `reviewed_query_reader_profile` rebuilds the profile
 from that specification at host start, and the executor independently
 re-qualifies it before every invocation.
 
+**The reviewed closure is narrower than the admitted grammar.** The packet's
+grammar admits typed `= <> < <= > >=`, LIKE/ILIKE, unary minus and membership in
+up to 64 bound values. The reader is granted:
+
+- all six comparisons over `int8` and `numeric`;
+- equality only over `text`, `uuid`, `bool` and `timestamptz`;
+- no comparison over `float8`, no LIKE or ILIKE, no unary minus and no hash
+  function.
+
+So a time-range filter, a text inequality or pattern, and membership in nine or
+more bound values are admitted by the grammar and cannot run. Inside the reader
+each failed as a permission error, which replied `unavailable`: the caller could
+not tell it from missing authority.
+
+Admission now inventories the builtins a statement's own operators call, as
+PostgreSQL resolves them once it has planned the statement:
+
+- under `NOT`, the negator of a comparison, a pattern match or a membership
+  test, through AND, OR and NOT;
+- nothing for a comparison with a NULL bound value, and nothing for `x = $1` or
+  `x <> $1` with a bound boolean, which the planner rewrites to `x` or `NOT x`
+  (the negation then lands on the operators inside `x`);
+- for two bound values, the operator as written, which the planner evaluates
+  itself;
+- from nine bound values in `= ANY(array)` or `IN (list)`, the type's equality
+  and its hash function, under `NOT` as well, because the planner then probes a
+  hash table;
+- the equalities that DISTINCT, GROUP BY, set operations other than UNION ALL,
+  window keys, joins, IN and NULLIF imply, and the aggregate MIN or MAX runs as.
+
+The executor refuses a statement that calls a builtin outside the reviewed
+closure as `unsupported_query` / `feature` `unreviewed_operator`, with the
+source position of the leftmost such operator's first operand. It refuses before
+any reservation or preparation, whether or not an identifier is bound.
+
+The inventory is a model of the planner. An installed test holds it to the
+pinned server (see Acceptance). It does not cover two things:
+
+- a constant the planner computes from bound values. Admission follows bound
+  values, not computed ones, so for a comparison with one, such as
+  `x = ($1 = $2)` or `kind <> lower($1)` with a NULL value, the inventory may
+  miss a negator PostgreSQL calls or name a builtin it does not. The first still
+  fails inside the reader as `unavailable`; the second is refused although it
+  could run;
+- the equality the witness lowering adds over values a statement already
+  orders, aggregates or combines. It is reviewed for every type a public
+  relation can produce, which a unit test holds, so only a `float8` parameter in
+  such a position lacks it and fails inside the reader as before.
+
+Widening the closure is a reviewed change to reader provisioning; existing
+readers must then be granted the added builtins before their profile qualifies
+again. A host that constructs `PostgresRestrictedQuery` itself states the
+closure with `reviewed_builtins`; without it, the reader's own privileges decide
+alone.
+
 **Identifier parameters.** An identifier column compares only with a value
 bound under its own reference type, for example `statement_ref` or
 `statement_ref[]` with `= ANY($1::uuid[])`, and only identifiers in the caller's
@@ -422,6 +477,20 @@ provisioning path. They cover:
   positioned `reference_type` error with nothing reserved; the reference-typed
   array returns exactly the unfiltered rows; an identifier outside the visible
   population is `unavailable`
+- the operator inventory against the pinned server (`test_agent_sql_screening`):
+  - every comparison, pattern, unary minus and hash builtin admission names is
+    the one the server's own operator and hash catalogs name;
+  - a role that may call no function reads a scratch table with a column of each
+    catalog type. For every comparison over every type and its negation, the
+    folded forms above, and membership in eight and nine values of every type,
+    granting exactly the inventoried builtins lets the statement plan and run,
+    and revoking any one of them makes PostgreSQL refuse it. Implied equalities
+    are shown sufficient only, since the planner may choose a plan that calls
+    less.
+- the same operators through the public executor: each statement runs as the
+  reader, or is refused as `unreviewed_operator` with its position and with
+  nothing reserved or sent to the reader; none replies `unavailable`. A bound
+  identifier, visible or not, changes neither.
 - source revocation refusing a whole aggregate, and regrant restoring it
 - another principal refused
 - resolved versus historical views over a real correction, with correction lineage
@@ -488,9 +557,25 @@ Development failures retained:
 - The hostile-request test found that refused SQL still reserved, then
   discarded, a preparation. SQL is now screened before any reservation. Only
   the population-dependent reference-anchor check waits for full admission.
-- **Open finding:** `NOT (text = $1)` is rewritten by the planner to `<>`,
-  whose `textne` lies outside the reviewed builtin closure. Such queries fail as
-  `unavailable` rather than `unsupported_query`.
+- Review found that this did not hold for a statement that binds an identifier.
+  The screen stopped at the first one, so every refusal of such a statement
+  still came after a reservation and a preparation. The screen now runs with the
+  request's own identifiers standing in as anchors, and only their visibility
+  waits for full admission.
+- `NOT (text = $1)` is rewritten by the planner to `<>`, whose `textne` lies
+  outside the reviewed builtin closure, so such a query failed inside the reader
+  and replied `unavailable`. It was one case of a wider gap: text, identifier
+  and timestamp inequalities and orderings, LIKE, ILIKE, unary minus and any
+  membership test over nine or more values are all admitted and none is
+  granted. A time-range filter therefore also replied `unavailable`. The
+  executor now refuses every such operator as `unsupported_query` with its
+  position (see Host interface).
+- Review of the first inventory found it wrong in both directions. It missed
+  the hash function behind nine or more bound values, and it refused statements
+  that ran: `flag <> $1`, which the planner rewrites without calling a builtin,
+  and any comparison with a NULL value. The inventory now follows bound values,
+  and the installed test holds it to PostgreSQL's own privilege checks instead
+  of to itself.
 - An agent bound a plain `uuid[]` against an identifier column and got
   `invalid_request` / `type` with no position, which it could not act on. The
   reply now names the mismatch and its position. An identifier outside the

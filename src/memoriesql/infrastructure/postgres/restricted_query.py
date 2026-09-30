@@ -21,7 +21,11 @@ from psycopg import Connection, Error
 from psycopg.pq import TransactionStatus
 from psycopg.types.json import Jsonb
 
-from memoriesql.application.agent_sql_admission import RecursionBound, admit_query
+from memoriesql.application.agent_sql_admission import (
+    RecursionBound,
+    admit_query,
+    require_reviewed,
+)
 from memoriesql.application.agent_sql_catalog import (
     SqlAdmissionError,
     SqlColumn,
@@ -178,6 +182,7 @@ class PostgresRestrictedQuery:
         credential_sha256: str,
         workspace_id: UUID,
         policy_hash: str,
+        reviewed_builtins: frozenset[str] | None = None,
     ) -> None:
         if len(policy_hash) != 64 or any(
             c not in "0123456789abcdef" for c in policy_hash
@@ -189,6 +194,10 @@ class PostgresRestrictedQuery:
         self._credential = credential_sha256
         self._workspace = workspace_id
         self._policy_hash = policy_hash
+        # The reader's reviewed builtin closure, when the host states it: an
+        # admitted operator outside it is refused as unsupported, never
+        # dispatched. Without one, the reader's own privileges decide alone.
+        self._reviewed = reviewed_builtins
 
     def recover(
         self, ownership: PreparationReceipt, *, cancel: bool = False
@@ -288,6 +297,8 @@ class PostgresRestrictedQuery:
                 raise SqlAdmissionError("unavailable", "catalog")
             if not set(query.relations) <= set(population.rows):
                 raise SqlAdmissionError("unsupported", "unprepared_relation")
+            if self._reviewed is not None:
+                require_reviewed(query, self._reviewed)
             plan = (
                 compile_bag_witness(query, dict(population.schemas))
                 if collect_bag_witnesses

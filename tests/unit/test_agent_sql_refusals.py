@@ -19,7 +19,12 @@ from uuid import UUID, uuid4
 import psycopg
 from psycopg import errors
 
-from memoriesql.application.agent_sql_catalog import SqlCatalog
+from memoriesql.application.agent_sql_admission import admit_query
+from memoriesql.application.agent_sql_catalog import (
+    SqlAdmissionError,
+    SqlCatalog,
+    SqlParameter,
+)
 from memoriesql.application.investigation_contracts import (
     QueryRequest,
     ReuseRequest,
@@ -46,6 +51,8 @@ BUSY = {
 OTHERS = ("42501", "28000", "P0002", "23505", "XX000", None)
 UNAVAILABLE = ("unavailable", {"code": "unavailable"})
 FRAME = "memoriesql.infrastructure.postgres.agent_sql_results.relation_projection_frame"
+STATEMENTS = "SELECT s.statement_id FROM memory_v1.statements s WHERE "
+UNREVIEWED = ("unsupported_query", "feature", "unreviewed_operator")
 
 
 def failure(sqlstate: str | None) -> BaseException:
@@ -249,6 +256,77 @@ class AgentSqlScreenedRefusals(unittest.TestCase):
             screen(
                 sql, [{"position": 1, "type": "statement_ref[]", "value": identifiers}]
             )
+        )
+
+    def test_the_executor_refuses_an_unreviewed_operator_before_any_work(self) -> None:
+        self.assertEqual(
+            _admission_error("unsupported_query", "unreviewed_operator"),
+            ("feature", "unreviewed_operator"),
+        )
+        text = [{"position": 1, "type": "text", "value": "fictional"}]
+        moment = [
+            {"position": 1, "type": "timestamptz", "value": "2026-01-01T00:00:00Z"}
+        ]
+        number = [{"position": 1, "type": "int8", "value": "1"}]
+        values = [str(n) for n in range(9)]
+        nine = [{"position": 1, "type": "text[]", "value": values}]
+        eight = [{"position": 1, "type": "text[]", "value": values[:8]}]
+        # Each refusal points at the first token of the operator's operands.
+        for predicate, parameters, token in (
+            ("NOT (s.kind = $1)", text, "s.kind"),
+            ("s.kind <> $1", text, "s.kind"),
+            ("lower(s.text) LIKE $1", text, "lower"),
+            ("s.recorded_at >= $1", moment, "s.recorded_at"),
+            ("s.sequence = $1 AND -s.sequence < s.sequence", number, "s.sequence <"),
+            ("s.kind = ANY($1::text[])", nine, "s.kind"),
+        ):
+            with self.subTest(predicate=predicate):
+                self.assertEqual(
+                    screen(STATEMENTS + predicate, parameters),
+                    (*UNREVIEWED, len(STATEMENTS) + predicate.index(token)),
+                )
+        for predicate, parameters in (
+            ("s.kind = $1", text),
+            ("NOT (NOT (s.kind = $1))", text),
+            ("s.recorded_at = $1", moment),
+            ("NOT (s.sequence = $1)", number),
+            ("s.kind = ANY($1::text[])", eight),
+        ):
+            with self.subTest(predicate=predicate):
+                self.assertIsNone(screen(STATEMENTS + predicate, parameters))
+
+    def test_a_bound_identifier_does_not_postpone_the_refusal(self) -> None:
+        # Whether an identifier is visible is decided after preparation. What the
+        # SQL and the bound types decide is refused before it, identifier or not.
+        identifier = str(uuid4())
+        bound = [
+            {"position": 1, "type": "statement_ref", "value": identifier},
+            {"position": 2, "type": "text", "value": "fictional"},
+        ]
+        predicate = "s.statement_id = $1 AND s.kind <> $2"
+        self.assertEqual(
+            screen(STATEMENTS + predicate, bound),
+            (*UNREVIEWED, len(STATEMENTS) + predicate.index("s.kind")),
+        )
+        nine = [str(uuid4()) for _ in range(9)]
+        many = [{"position": 1, "type": "statement_ref[]", "value": nine}]
+        fewer = [{"position": 1, "type": "statement_ref[]", "value": nine[:8]}]
+        array = "s.statement_id = ANY($1::uuid[])"
+        self.assertEqual(
+            screen(STATEMENTS + array, many), (*UNREVIEWED, len(STATEMENTS))
+        )
+        # A supported statement passes the screen with its identifiers unchecked:
+        # only the full admission after preparation decides their visibility.
+        self.assertIsNone(screen(STATEMENTS + "s.statement_id = $1", bound[:1]))
+        self.assertIsNone(screen(STATEMENTS + array, fewer))
+        with self.assertRaises(SqlAdmissionError) as unseen:
+            admit_query(
+                STATEMENTS + "s.statement_id = $1",
+                (SqlParameter(1, "statement_ref", identifier),),
+            )
+        self.assertEqual(
+            (unseen.exception.code, unseen.exception.construct),
+            ("unavailable", "parameter_anchor"),
         )
 
 

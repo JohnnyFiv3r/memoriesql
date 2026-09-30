@@ -22,7 +22,11 @@ from uuid import UUID, uuid4
 
 from psycopg import Connection, Error
 
-from memoriesql.application.agent_sql_admission import RecursionBound, admit_query
+from memoriesql.application.agent_sql_admission import (
+    RecursionBound,
+    admit_query,
+    require_reviewed,
+)
 from memoriesql.application.agent_sql_catalog import SqlAdmissionError, SqlCatalog
 from memoriesql.application.agent_sql_results import (
     ALLOCATION_PROFILE_HASH,
@@ -47,6 +51,9 @@ from memoriesql.application.investigation_contracts import (
 )
 from memoriesql.infrastructure.postgres.agent_sql_authority import QueryAuthorityProfile
 from memoriesql.infrastructure.postgres.authorization import PostgresAuthorizationPort
+from memoriesql.infrastructure.postgres.query_reader_provisioning import (
+    REVIEWED_BUILTINS,
+)
 from memoriesql.infrastructure.postgres.query_result_commit import (
     InternalResultCandidate,
     PostgresQueryResultCommit,
@@ -88,6 +95,7 @@ _STATE_CODES = {
     "40001": "settlement",
 }
 _POPULATION_BYTES = 64 * 1024 * 1024
+_REVIEWED = frozenset(REVIEWED_BUILTINS)
 
 
 def _busy(error: BaseException) -> str | None:
@@ -204,6 +212,7 @@ class PostgresAgentSqlResults:
             credential_sha256=credential_sha256,
             workspace_id=workspace_id,
             policy_hash=POLICY_HASH,
+            reviewed_builtins=_REVIEWED,
         )
 
     # -- public operations -------------------------------------------------
@@ -756,18 +765,37 @@ class PostgresAgentSqlResults:
         return str(row[0]) if row and row[0] is not None else None
 
     def _screen(self, request: QueryRequest) -> None:
-        """Refuse SQL the text alone decides, before any reservation or work.
+        """Refuse what the SQL and its bound values alone decide, before any
+        reservation or preparation.
 
-        Only reference anchors depend on the prepared population, so a
-        `parameter_anchor` refusal is left to the full admission after
-        preparation; every other admission outcome is final here.
+        Whether a bound identifier is visible depends on the prepared population.
+        The request's own identifiers therefore stand in as anchors here, which
+        admits nothing: the full admission after preparation still requires each
+        one to be visible, and only that admission is executed.
         """
+        parameters = self._parameters(request)
+        references = SqlCatalog.installed().reference_types
+        own = frozenset(
+            (kind, value)
+            for parameter in parameters
+            if (kind := parameter.type.removesuffix("[]")) in references
+            for value in (
+                parameter.value
+                if isinstance(parameter.value, tuple)
+                else (parameter.value,)
+            )
+            if isinstance(value, str)
+        )
         try:
             screened = admit_query(
                 request.sql,
-                self._parameters(request),
+                parameters,
+                admitted_anchors=own,
                 recursion=self._recursion(request),
             )
+            if not set(screened.relations) <= PREPARED_RELATIONS:
+                raise SqlAdmissionError("unsupported", "unprepared_relation")
+            require_reviewed(screened, _REVIEWED)
         except SqlAdmissionError as error:
             if error.construct == "parameter_anchor":
                 return
@@ -780,10 +808,6 @@ class PostgresAgentSqlResults:
                 # Every unavailable reply has one shape.
                 position=None if outcome == "unavailable" else error.position,
             ) from None
-        if not set(screened.relations) <= PREPARED_RELATIONS:
-            raise _Failure(
-                "unsupported_query", "feature", feature="unprepared_relation"
-            )
 
     def _recover_query(
         self,
