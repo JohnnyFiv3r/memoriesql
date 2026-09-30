@@ -6,7 +6,7 @@ import io
 import json
 import os
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -97,7 +97,8 @@ class DoctorDatabaseTests(unittest.TestCase):
         status, member = invoke(
             DATABASE, connection(ready, InsufficientPrivilege("owner only"))
         )
-        self.assertEqual(status, 0, member)
+        self.assertEqual((status, member["outcome"]), (3, "unverified"), member)
+        self.assertNotIn("reason", member)
         self.assertFalse(member["database"]["schema_version_readable"])
         self.assertEqual(member["database"]["schema_compatibility"], "unverified")
         self.assertEqual(member["database_check"], "login_ready_schema_unverified")
@@ -115,6 +116,39 @@ class DoctorDatabaseTests(unittest.TestCase):
         status, verified = invoke(DATABASE, connection(ready, INSTALLED))
         self.assertEqual(verified["database"]["schema_compatibility"], "compatible")
         self.assertEqual(verified["database_check"], "passed")
+
+    def test_only_a_verified_match_exits_zero(self) -> None:
+        ready = (False, True, True, True, True, True, 180004)
+        status, verified = invoke(DATABASE, connection(ready, INSTALLED))
+        self.assertEqual((status, verified["outcome"]), (0, "available"), verified)
+        self.assertEqual(verified["database_check"], "passed")
+        for error in (InsufficientPrivilege("owner only"), OperationalError("gone")):
+            with self.subTest(error=type(error).__name__):
+                # A caller that reads only the exit status never takes an
+                # unverified schema for a pass.
+                status, report = invoke(DATABASE, connection(ready, error))
+                self.assertEqual(
+                    (status, report["outcome"]), (3, "unverified"), report
+                )
+                self.assertEqual(
+                    report["database_check"], "login_ready_schema_unverified"
+                )
+        # The human view exits the same way and names the notice on stderr.
+        output, errors = io.StringIO(), io.StringIO()
+        with (
+            patch.dict(os.environ, DATABASE, clear=True),
+            patch(
+                "memoriesql.cli.psycopg.connect",
+                return_value=connection(ready, InsufficientPrivilege("owner only")),
+            ),
+            patch("memoriesql.cli._installed_schema_version", return_value=INSTALLED),
+            redirect_stdout(output),
+            redirect_stderr(errors),
+        ):
+            status = main(["doctor", "--check-database"])
+        self.assertEqual(status, 3)
+        self.assertEqual(json.loads(output.getvalue())["outcome"], "unverified")
+        self.assertIn("notice: schema compatibility is unverified", errors.getvalue())
 
     def test_builtin_denied_or_noinherit_login_is_not_ready(self) -> None:
         status, denied = invoke(

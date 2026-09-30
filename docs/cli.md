@@ -10,7 +10,7 @@ Desktop and never loads private Python modules or arbitrary plugins. `contracts`
 
 | Command | Behavior |
 | --- | --- |
-| `doctor [--check-database]` | Reports installed version and whether local read inputs are configured; it contacts no database or model by default. `--check-database` adds read-only checks of reachability, schema compatibility with the installed migrations and whether the login can run the adapters' prologue and assume the application role. An empty database fails as `schema_not_installed`. The migration history is owner-only, so a login that cannot read it reports `schema_version_readable: false`, `schema_compatibility: "unverified"` and `database_check: "login_ready_schema_unverified"` with a notice to verify compatibility with the owner or migration administrator login. That is never a full pass (`database_check: "passed"`). It never migrates, grants or repairs. |
+| `doctor [--check-database]` | Reports installed version and whether local read inputs are configured; it contacts no database or model by default. `--check-database` adds read-only checks of reachability, schema compatibility with the installed migrations and whether the login can run the adapters' prologue and assume the application role. An empty database fails as `schema_not_installed`. The migration history is owner-only, so a login that cannot read it reports `outcome: "unverified"` and exits 3, with `schema_version_readable: false`, `schema_compatibility: "unverified"`, `database_check: "login_ready_schema_unverified"` and a notice to verify compatibility with the owner or migration administrator login. Only a verified match reports `outcome: "available"` and `database_check: "passed"` and exits 0. It never migrates, grants or repairs. |
 | `capabilities` | Lists the static core command set and names unavailable product capabilities. |
 | `inspect <bead-id>` | Uses the installed authorized stored-bead inspection; pending/thin/failed authorship remains distinct from accepted meaning. |
 | `source <bead-id> --selection-file selection.json` | Reads one exact selection through the installed source-evidence reader. The file contains a `StoredEvidenceSelection`, including package and inventory pins. No source is inferred from a bead ID alone. |
@@ -79,7 +79,8 @@ Each command accepts `--json`. Read commands serialize the same typed core
 result for human and JSON use. Source authority commands return an `available`
 envelope with their typed receipt, or an `unavailable`/`failed` reason. JSON is
 compact and contains no branding. Exit status is 0 for `available`, 2 for
-`unavailable` and 3 for failure or exhausted work. An unavailable operation
+`unavailable` and 3 for failure, exhausted work or an unverified database
+check. An unavailable operation
 does not disclose partial content or reveal whether an ID was missing, revoked
 or outside the caller's scope. Source content is printed only after a successful
 exact authorized read; terminal output and shell history are therefore part of

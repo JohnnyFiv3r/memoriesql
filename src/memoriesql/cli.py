@@ -763,8 +763,11 @@ def _database_health(environment: Mapping[str, str]) -> dict[str, object]:
         # A readable history with no version is never a passing check.
         result |= {"outcome": "failed", "reason": "schema_version_unknown"}
     elif not schema_readable:
-        # Never a full pass: the login is ready but compatibility is unverified.
+        # Never a pass: the login is ready but compatibility is unverified. Its
+        # own outcome keeps the exit status non-zero for callers that read only
+        # that, without calling a usable login a failure.
         result |= {
+            "outcome": "unverified",
             "database_check": "login_ready_schema_unverified",
             "notice": (
                 "schema compatibility is unverified for this login; verify it with "

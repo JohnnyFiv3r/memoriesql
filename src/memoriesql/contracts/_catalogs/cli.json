@@ -32,7 +32,7 @@
           "result"
         ],
         "doctor": {
-          "--check-database": "read-only reachability, schema compatibility and login role readiness; never migrates, grants or repairs; schema_compatibility is compatible, mismatch, unknown, not_installed or unverified; an application login cannot read the owner-only migration history, so it reports unverified with database_check login_ready_schema_unverified, never a full pass",
+          "--check-database": "read-only reachability, schema compatibility and login role readiness; never migrates, grants or repairs; schema_compatibility is compatible, mismatch, unknown, not_installed or unverified; an application login cannot read the owner-only migration history, so it reports outcome unverified with database_check login_ready_schema_unverified and exit status 3; only a verified match is available with database_check passed",
           "default": "configuration only; no database or model"
         },
         "entrypoint": "memoriesql.cli:main",
@@ -40,7 +40,8 @@
         "exit_status": {
           "available": 0,
           "failed_or_budget_exhausted": 3,
-          "unavailable": 2
+          "unavailable": 2,
+          "unverified": 3
         },
         "initialization": {
           "authority": "operator database login that can assume the application role; once per database",
