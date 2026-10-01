@@ -10,7 +10,7 @@ Desktop and never loads private Python modules or arbitrary plugins. `contracts`
 
 | Command | Behavior |
 | --- | --- |
-| `doctor [--check-database]` | Reports installed version and whether local read inputs are configured; it contacts no database or model by default. `--check-database` adds read-only checks of reachability, schema compatibility with the installed migrations and whether the login can run the adapters' prologue and assume the application role. An empty database fails as `schema_not_installed`. The migration history is owner-only, so a login that cannot read it reports `outcome: "unverified"` and exits 3, with `schema_version_readable: false`, `schema_compatibility: "unverified"`, `database_check: "login_ready_schema_unverified"` and a notice to verify compatibility with the owner or migration administrator login. Only a verified match reports `outcome: "available"` and `database_check: "passed"` and exits 0. It never migrates, grants or repairs. |
+| `doctor [--check-database]` | Reports installed version and whether local read inputs are configured; it contacts no database or model by default. `--check-database` adds read-only checks of reachability, schema compatibility with the installed migrations and whether the login may assume the application role; inheriting it is reported, and only the trusted query host's control login requires it. An empty database fails as `schema_not_installed`. The migration history is owner-only, so a login that cannot read it reports `outcome: "unverified"` and exits 3, with `schema_version_readable: false`, `schema_compatibility: "unverified"`, `database_check: "login_ready_schema_unverified"` and a notice to verify compatibility with the owner or migration administrator login. Only a verified match reports `outcome: "available"` and `database_check: "passed"` and exits 0. It never migrates, grants or repairs. |
 | `capabilities` | Lists the static core command set and names unavailable product capabilities. |
 | `inspect <bead-id>` | Uses the installed authorized stored-bead inspection; pending/thin/failed authorship remains distinct from accepted meaning. |
 | `source <bead-id> --selection-file selection.json` | Reads one exact selection through the installed source-evidence reader. The file contains a `StoredEvidenceSelection`, including package and inventory pins. No source is inferred from a bead ID alone. |
@@ -229,11 +229,16 @@ The trusted host is configured only in the process that may hold database
 credentials: `MEMORIESQL_DATABASE_URL` (a login that can assume the application
 role), `MEMORIESQL_QUERY_READER_URL` and `MEMORIESQL_QUERY_READER_ROLE` for the
 reviewed restricted reader, the local credential and workspace, and optionally
-`MEMORIESQL_QUERY_AUTHORITY_SHA256` to refuse a drifted reader profile. The database login
-must be a superuser or an inheriting member of `memoriesql_application` (and of
-`memoriesql_worker` for workers); since migration 0033 a non-inheriting member
-cannot run the released adapters' prologue, and `doctor --check-database` reports
-it as `login_role_not_ready`. Never
+`MEMORIESQL_QUERY_AUTHORITY_SHA256` to refuse a drifted reader profile. The host's
+control login must be a superuser or an inheriting member of
+`memoriesql_application`: it qualifies the reader and observes the reader's session
+as itself, before any role switch (the least-privilege steps are in
+`docs/verification/pr-05-public-results.md`). Other commands and workers need only
+a member that may switch to `memoriesql_application` (and to `memoriesql_worker`
+for workers) with `SET ROLE`; they need not inherit it, because they run nothing
+but `SET` before switching. `doctor --check-database` reports a login that cannot
+switch as `login_role_not_ready`; it does not check the host's further
+requirements. Never
 give those values to an agent's shell, files or processes: an agent that can
 read them could bypass admitted SQL. Without them `query` and `result` report
 `trusted_query_host_not_configured`.
