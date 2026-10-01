@@ -83,12 +83,23 @@ class AgentRelationReadsMigration(unittest.TestCase):
             population,
         )
         self.assertIn("WHERE read_mode='owner' AND a.tenant_id=c.tenant_id", population)
+        # A family is disclosed to an agent only with every assessed relation
+        # its records name (review P1).
+        self.assertIn("IF read_mode='agent' THEN", population)
+        self.assertIn("WHERE NOT n.id::uuid=ANY(COALESCE(disclosed,'{}'))", population)
+        # Owner mode for raw-read holders, the agent mode for paired agents
+        # only (AM-5), and the earlier gate with no mode for anyone else.
         entry = body("prepare_query_sql_population_v2", replaced=True)
         self.assertIn(
-            "relation_mode := CASE WHEN memoriesql.current_context_has_capability('source.raw.read')\n"
-            "        THEN 'owner' ELSE 'agent' END;",
+            "relation_mode := CASE\n"
+            "        WHEN memoriesql.current_context_has_capability('source.raw.read')"
+            " THEN 'owner'\n"
+            "        WHEN c.principal_kind='agent' AND c.pairing_grant_id IS NOT NULL"
+            " THEN 'agent'\n"
+            "    END;",
             entry,
         )
+        self.assertIn("COALESCE(relation_mode,'owner')", entry)
         self.assertIn("'relation_read_mode',relation_mode,", entry)
 
 
