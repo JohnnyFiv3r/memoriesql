@@ -53,6 +53,11 @@ class CliDoctorDatabase(unittest.TestCase):
                     ).format(role)
                 )
                 db.execute(sql.SQL("GRANT memoriesql_application TO {}").format(role))
+            db.execute(
+                sql.SQL(
+                    "CREATE ROLE {} LOGIN PASSWORD 'fictional-doctor-pass'"
+                ).format(sql.Identifier(f"pr06_outsider_{self.suffix}"))
+            )
 
     def cleanup(self) -> None:
         with psycopg.connect(self.admin, autocommit=True) as admin:
@@ -61,7 +66,7 @@ class CliDoctorDatabase(unittest.TestCase):
                     sql.Identifier(self.database)
                 )
             )
-            for name in ("member", "noinherit"):
+            for name in ("member", "noinherit", "outsider"):
                 admin.execute(
                     sql.SQL("DROP ROLE IF EXISTS {}").format(
                         sql.Identifier(f"pr06_{name}_{self.suffix}")
@@ -84,7 +89,7 @@ class CliDoctorDatabase(unittest.TestCase):
             password="fictional-doctor-pass",
         )
 
-    def test_member_is_ready_and_noinherit_member_is_named_not_ready(self) -> None:
+    def test_members_are_ready_whether_or_not_they_inherit(self) -> None:
         status, superuser = self.doctor(self.url)
         self.assertEqual((status, superuser["outcome"]), (0, "available"), superuser)
         self.assertTrue(superuser["database"]["schema_compatible"])
@@ -100,10 +105,23 @@ class CliDoctorDatabase(unittest.TestCase):
         self.assertEqual(member["database"]["schema_compatibility"], "unverified")
         self.assertEqual(member["database_check"], "login_ready_schema_unverified")
         self.assertEqual(superuser["database_check"], "passed")
+        # A non-inheriting member executes nothing until it switches role, as
+        # every adapter does first: it is as ready as an inheriting one.
         status, noinherit = self.doctor(self.login("noinherit"))
-        self.assertEqual((status, noinherit["reason"]), (3, "login_role_not_ready"))
-        self.assertFalse(noinherit["database"]["login"]["prologue_builtins_executable"])
+        self.assertEqual((status, noinherit["outcome"]), (3, "unverified"), noinherit)
+        login = noinherit["database"]["login"]
+        self.assertTrue(login["application_ready"])
+        self.assertTrue(login["application_role_settable"])
+        self.assertFalse(login["application_role_inherited"])
+        self.assertTrue(noinherit["database"]["schema_present"])
+        self.assertEqual(
+            noinherit["database"]["server_version_num"],
+            member["database"]["server_version_num"],
+        )
         self.assertNotIn("fictional-doctor-pass", json.dumps(noinherit))
+        status, outsider = self.doctor(self.login("outsider"))
+        self.assertEqual((status, outsider["reason"]), (3, "login_role_not_ready"))
+        self.assertFalse(outsider["database"]["login"]["application_ready"])
 
     def test_empty_database_is_not_installed(self) -> None:
         empty = self.database + "_empty"

@@ -21,6 +21,7 @@ import psycopg
 from psycopg.errors import (
     InsufficientPrivilege,
     InvalidAuthorizationSpecification,
+    InvalidParameterValue,
     NoDataFound,
 )
 from pydantic import BaseModel
@@ -637,18 +638,47 @@ def _investigate(args: argparse.Namespace, environment: Mapping[str, str]) -> in
     return _emit_reply(reply, machine=args.json)
 
 
+# Always about the session's own login, also after SET LOCAL ROLE.
 _LOGIN_PROBE = """
 SELECT r.rolsuper,
-       pg_catalog.has_function_privilege(
-           'pg_catalog.set_config(text,text,boolean)', 'EXECUTE'),
-       pg_catalog.pg_has_role('memoriesql_application', 'SET'),
-       pg_catalog.pg_has_role('memoriesql_application', 'USAGE'),
-       pg_catalog.pg_has_role('memoriesql_worker', 'SET'),
-       pg_catalog.pg_has_role('memoriesql_worker', 'USAGE'),
+       pg_catalog.pg_has_role(session_user, 'memoriesql_application', 'SET'),
+       pg_catalog.pg_has_role(session_user, 'memoriesql_application', 'USAGE'),
+       pg_catalog.pg_has_role(session_user, 'memoriesql_worker', 'SET'),
+       pg_catalog.pg_has_role(session_user, 'memoriesql_worker', 'USAGE'),
        pg_catalog.current_setting('server_version_num')::int
 FROM pg_catalog.pg_roles AS r
-WHERE r.rolname = current_user
+WHERE r.rolname = session_user
 """
+_SCHEMA_PRESENT = (
+    "SELECT pg_catalog.to_regclass('memoriesql.schema_migrations') IS NOT NULL"
+)
+
+
+def _schema_present(db: psycopg.Connection[Any]) -> bool | None:
+    try:
+        present = db.execute(_SCHEMA_PRESENT).fetchone()
+    except psycopg.Error:
+        return None
+    return bool(present[0]) if present else None
+
+
+def _probe_after_role_switch(
+    db: psycopg.Connection[Any],
+) -> tuple[tuple[Any, ...] | None, bool | None]:
+    """The login probe and schema presence, from inside a switched transaction.
+
+    A member that does not inherit the application role can execute no catalog
+    function until its transaction switches role, which is what every adapter
+    does first. A login that cannot switch is not ready.
+    """
+    try:
+        with db.transaction(force_rollback=True):
+            db.execute("SET LOCAL ROLE memoriesql_application")
+            row = db.execute(_LOGIN_PROBE).fetchone()
+            present = db.execute(_SCHEMA_PRESENT).fetchone()
+    except (InsufficientPrivilege, InvalidParameterValue):
+        return None, None
+    return row, bool(present[0]) if present else None
 
 
 def _installed_schema_version() -> int | None:
@@ -682,17 +712,10 @@ def _database_health(environment: Mapping[str, str]) -> dict[str, object]:
             db.execute("SELECT 1").fetchone()
             try:
                 row = db.execute(_LOGIN_PROBE).fetchone()
+                schema_present = _schema_present(db)
             except InsufficientPrivilege:
-                # This login cannot even execute ordinary catalog builtins.
-                row = None
-            try:
-                present = db.execute(
-                    "SELECT pg_catalog.to_regclass('memoriesql.schema_migrations')"
-                    " IS NOT NULL"
-                ).fetchone()
-                schema_present = bool(present[0]) if present else None
-            except psycopg.Error:
-                schema_present = None
+                # No catalog function is executable before a role switch.
+                row, schema_present = _probe_after_role_switch(db)
             if schema_present:
                 try:
                     version_row = db.execute(
@@ -712,12 +735,14 @@ def _database_health(environment: Mapping[str, str]) -> dict[str, object]:
             "database_contacted": True,
         }
     if row is None:
-        row = (False, False, None, None, None, None, None)
-    superuser, prologue, app_set, app_usage, worker_set, worker_usage, server = row
-    application_ready = bool(superuser or (app_set and app_usage and prologue))
+        row = (False, None, None, None, None, None)
+    superuser, app_set, app_usage, worker_set, worker_usage, server = row
+    # Adapters switch role before anything else, so a member needs the SET
+    # option. Inheritance is reported: only the trusted query host's control
+    # login needs it, and the host answers unavailable without it.
+    application_ready = bool(superuser or app_set)
     login = {
         "superuser": bool(superuser),
-        "prologue_builtins_executable": bool(prologue),
         "application_role_settable": app_set,
         "application_role_inherited": app_usage,
         "worker_role_settable": worker_set,
