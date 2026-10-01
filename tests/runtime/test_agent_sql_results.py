@@ -59,7 +59,7 @@ class AgentSqlResults(unittest.TestCase):
         self.addCleanup(self.h.doCleanups)
         self.fixture = self.h.fixture
         self.db = self.h.db
-        migrate(self.db, expected_current_version=34, target_version=39)
+        migrate(self.db, expected_current_version=34, target_version=40)
         # The production reviewed provisioning path, on fictional data.
         self.reader = "pr05_results_" + uuid4().hex
         self.profile = provision_query_reader(self.db, self.reader, READER_PASSWORD)

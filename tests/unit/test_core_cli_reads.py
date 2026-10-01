@@ -9,11 +9,13 @@ import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 from uuid import UUID
 
 from memoriesql.application.source_enrollment import ExactSourceEnrollment
 from memoriesql.cli import main
+from memoriesql.infrastructure.postgres.source_enrollment import SourceAuthorityBusy
 
 BEAD = UUID(int=11)
 WORKSPACE = UUID(int=12)
@@ -242,6 +244,49 @@ class CoreCLIReadTests(unittest.TestCase):
             self.assertEqual(status, 2)
             self.assertEqual(result, {"outcome": "unavailable", "reason": "resource_unavailable"})
             self.assertNotIn(SOURCE_REQUEST["external_object_id"], str(result))
+
+    def test_source_authority_time_limit_is_a_distinct_retryable_failure(self) -> None:
+        source = {"request_id": str(UUID(int=13)), "source_object_id": str(UUID(int=14))}
+        requests: dict[str, dict[str, Any]] = {
+            "enroll": SOURCE_REQUEST,
+            "grant": source
+            | {
+                "target_principal_id": str(UUID(int=15)),
+                "permission_keys": ["read"],
+                "valid_from": "2026-01-01T00:00:00Z",
+                "expires_at": "2026-01-02T00:00:00Z",
+            },
+            "revoke": source | {"reason": "fictional orchard closed"},
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "request.json"
+            connection = MagicMock()
+            connection.__enter__.return_value = connection
+            for action, request in requests.items():
+                path.write_text(json.dumps(request), encoding="utf-8")
+                authority = MagicMock()
+                getattr(authority, action).side_effect = SourceAuthorityBusy(
+                    request["request_id"]
+                )
+                with (
+                    self.subTest(action=action),
+                    patch.dict(os.environ, LOCAL_ENV),
+                    patch("memoriesql.cli.psycopg.connect", return_value=connection),
+                    patch(
+                        "memoriesql.cli.PostgresSourceEnrollment",
+                        return_value=authority,
+                    ),
+                ):
+                    status, result = invoke(
+                        ["sources", action, "--request-file", str(path), "--json"]
+                    )
+                    # Exhausted work, not a denial: exit 3. Nothing was written,
+                    # so the identical request may be retried.
+                    self.assertEqual(status, 3)
+                    self.assertEqual(
+                        result,
+                        {"outcome": "failed", "reason": "source_authority_busy"},
+                    )
 
 
 if __name__ == "__main__":
