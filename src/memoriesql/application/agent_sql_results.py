@@ -166,7 +166,8 @@ def wire_coverage(
     observation families and (in the AM-5 agent read mode) the assessed
     relations are withheld, and an agent's relation history and pair coverage
     stay owner-only. A frame without a read mode comes from a database before
-    migration 0039, where relations still need raw source authority. The flags
+    migration 0039, or from a caller that is neither a raw-read holder nor a
+    paired agent; relations then still need raw source authority. The flags
     describe only the caller's own grants, never whether protected data exists.
     Served package text is labelled with its normalized projection version and
     the package's own declared coverage limits.

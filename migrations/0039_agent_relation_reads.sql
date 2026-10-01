@@ -378,6 +378,7 @@ DECLARE
     assertion jsonb; family jsonb; family_deps jsonb; task_pairs jsonb;
     assertions jsonb := '[]'; corrections jsonb := '[]'; types jsonb := '[]';
     pairs jsonb := '[]'; deps jsonb := '[]'; manifest jsonb; result jsonb;
+    families jsonb := '[]'; needs jsonb; kept jsonb; disclosed uuid[];
 BEGIN
     IF byte_budget IS NULL OR byte_budget NOT BETWEEN 8192 AND 67108864 THEN
         RAISE EXCEPTION 'invalid_request' USING ERRCODE='22023';
@@ -416,16 +417,42 @@ BEGIN
                 'kind','assertion_projection','id',r.relation_id::text,'row',assertion));
         EXCEPTION WHEN insufficient_privilege THEN CONTINUE;
         END;
-        assertions := assertions || jsonb_build_array(assertion);
-        corrections := corrections || jsonb_build_array(jsonb_build_object(
-            'relation_id',r.relation_id,'pins',item->'corrections'));
-        types := types || jsonb_build_array(memoriesql.relation_type_definition_v1(r.relation_type_revision_id));
-        deps := deps || family_deps;
-        IF octet_length(memoriesql.lifecycle_canonical_json_v1(
-            jsonb_build_array(assertions,corrections,types,pairs,deps))) + 8192 > byte_budget THEN
+        -- The other assessed relations this family's records name: its
+        -- replacement chain, and derived_from relations on its root lineage.
+        SELECT COALESCE(jsonb_agg(DISTINCT dep#>'{row,relation_id}'),'[]') INTO needs
+            FROM jsonb_array_elements(family_deps) x(dep)
+            WHERE dep->>'kind'='assertion_acceptance' AND dep#>>'{row,kind}'='assessed'
+              AND (dep#>>'{row,relation_id}')::uuid<>r.relation_id;
+        families := families || jsonb_build_array(jsonb_build_object(
+            'relation_id',r.relation_id,'needs',needs,'assertion',assertion,
+            'correction',jsonb_build_object('relation_id',r.relation_id,'pins',item->'corrections'),
+            'type',memoriesql.relation_type_definition_v1(r.relation_type_revision_id),
+            'deps',family_deps));
+        IF octet_length(memoriesql.lifecycle_canonical_json_v1(families)) + 8192 > byte_budget THEN
             RAISE EXCEPTION 'population_budget_exhausted' USING ERRCODE='54000';
         END IF;
     END LOOP;
+    -- AM-5: a family is disclosed only with every assessed relation its records
+    -- name, so no visible row shows a withheld relation's identity, state or
+    -- history (as a replacement or through root status). Repeat until stable.
+    IF read_mode='agent' THEN
+        LOOP
+            SELECT array_agg((f->>'relation_id')::uuid) INTO disclosed
+                FROM jsonb_array_elements(families) f;
+            SELECT COALESCE(jsonb_agg(f ORDER BY f->>'relation_id'),'[]') INTO kept
+                FROM jsonb_array_elements(families) f
+                WHERE NOT EXISTS(SELECT 1 FROM jsonb_array_elements_text(f->'needs') n(id)
+                    WHERE NOT n.id::uuid=ANY(COALESCE(disclosed,'{}')));
+            EXIT WHEN jsonb_array_length(kept)=jsonb_array_length(families);
+            families := kept;
+        END LOOP;
+    END IF;
+    SELECT COALESCE(jsonb_agg(f->'assertion' ORDER BY f->>'relation_id'),'[]'),
+           COALESCE(jsonb_agg(f->'correction' ORDER BY f->>'relation_id'),'[]'),
+           COALESCE(jsonb_agg(f->'type' ORDER BY f->>'relation_id'),'[]')
+        INTO assertions, corrections, types FROM jsonb_array_elements(families) f;
+    SELECT COALESCE(jsonb_agg(dep),'[]') INTO deps
+        FROM jsonb_array_elements(families) f CROSS JOIN LATERAL jsonb_array_elements(f->'deps') x(dep);
     -- Pair coverage belongs to a captured task, including tasks with no accepted
     -- assertion. Authorize its entire captured bead population and all recorded
     -- proposals before exposing even a not_assessed pair. No task-status claim.
@@ -603,13 +630,18 @@ BEGIN
     END IF;
     -- PR-03's single projection supplies the assessed relations at the same
     -- explicit cutoff in this statement; its dependencies join one manifest.
-    -- A caller with source.raw.read reads them as before (owner). Any other
-    -- caller reads them under AM-5 (agent): memory.query and source.read over
+    -- A caller with source.raw.read reads them as before (owner). A paired
+    -- agent reads them under AM-5 (agent): memory.query and source.read over
     -- each relation's whole disclosed dependency closure, with lifecycle
-    -- history and pair coverage withheld as owner-only.
-    relation_mode := CASE WHEN memoriesql.current_context_has_capability('source.raw.read')
-        THEN 'owner' ELSE 'agent' END;
-    relation_part := memoriesql.prepare_relation_sql_population_v2(known, byte_budget, relation_mode);
+    -- history and pair coverage withheld as owner-only. AM-5 names paired
+    -- agents only: any other caller keeps the earlier gate, which withholds
+    -- every relation without raw source authority, and the frame names no mode.
+    relation_mode := CASE
+        WHEN memoriesql.current_context_has_capability('source.raw.read') THEN 'owner'
+        WHEN c.principal_kind='agent' AND c.pairing_grant_id IS NOT NULL THEN 'agent'
+    END;
+    relation_part := memoriesql.prepare_relation_sql_population_v2(
+        known, byte_budget, COALESCE(relation_mode,'owner'));
     deps := (relation_part->>'dependency_records_json')::jsonb;
     -- Native jsonb text length is an admission estimate while accumulating. The
     -- exact canonical bytes are counted once below and again by the trusted

@@ -178,7 +178,7 @@ through the eleven read-path functions of M0030 and M0032 that reach a raw gate.
 The owner's mode keeps every existing check. The agent's mode changes exactly one
 thing: where the owner's read requires raw revisiting authority over a source
 object, it requires `source.read` on the same event.
-- The nine gate sites are M0030 lines 142, 150, 153, 160, 255, 317, 329, 360, 382
+- The ten gate sites are M0030 lines 142, 150, 153, 160, 255, 317, 329, 360, 382
   and 1493 at `33e1c42`; line 317 authorizes each derivation root through its
   primary event.
 - Memory.query closure checks, whole-family withholding, the lifecycle projection
@@ -188,8 +188,13 @@ object, it requires `source.read` on the same event.
 - Governed writes refuse the agent mode.
 - The population entry `prepare_query_sql_population_v2` is redefined in
   M0039. The M0037 file is not edited. It selects the owner mode for a caller
-  holding `source.raw.read` and the agent mode otherwise. The mode is recorded in
-  the internal frame field `relation_read_mode`, which never appears in a reply.
+  holding `source.raw.read`, and the agent mode only for a paired agent (an
+  `agent` principal with a pairing grant): AM-5 names paired agents. Any other
+  caller, such as a paired background service or device, keeps the earlier
+  gate, which withholds every relation without raw source authority, and gets
+  `relation_tables`/`source_raw_read_required` as before. The mode is recorded
+  in the internal frame field `relation_read_mode`, which never appears in a
+  reply; it is empty for those other callers.
 - M0039 grants nothing and adds no object the query reader can see, so the
   reviewed reader profile is unchanged.
 
@@ -204,12 +209,21 @@ the same frame.
 - A relation with any unreadable closure member is absent from every table. No
   gap, count, type pin or history is disclosed for it, and the query stays
   available.
+- A relation is also absent when its records name another assessed relation
+  that is withheld: a replacement in its chain, or a `derived_from` relation on
+  its root lineage. Otherwise its state, `relation_replacements` row or root
+  status would show that the withheld relation exists. The population drops
+  such families until nothing more is withheld.
 - `relation_events`, `relation_event_evidence` and `relation_pairs` stay
   owner-only. A query that references them gets
-  `relation_history`/`owner_only`.
+  `relation_history`/`owner_only`. "Owner" here means PR-03's own gate for
+  every relation read, `source.raw.read`: in the shipped role model only
+  `personal_owner` holds it, and a deployment that grants it to a service gives
+  that service PR-03's raw-holder reads, as before migration 0039.
 - A caller without `source.read` that references a relation table gets
   `relation_tables`/`source_read_required`.
-- `source_raw_read_required` remains only for frames from a schema-38 database.
+- `source_raw_read_required` remains for frames from a schema-38 database and
+  for callers that are neither raw-read holders nor paired agents.
 - Root identities are source-object UUIDs; no relation column carries one.
   Raw bytes, lineage, source revisiting, the `relations` inspection reader,
   activation and governed writes stay owner-only.
