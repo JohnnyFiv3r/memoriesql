@@ -15,6 +15,7 @@ import os
 import pwd
 import shutil
 import socket
+import stat
 import struct
 import tempfile
 import threading
@@ -26,8 +27,10 @@ from typing import Any, cast
 from unittest.mock import patch
 from uuid import UUID, uuid4
 
+import psycopg
 from pydantic import SecretStr
 
+from memoriesql.application.agent_sql_catalog import SqlAdmissionError
 from memoriesql.infrastructure.results_broker import PROTOCOL_VERSION, registry
 from memoriesql.infrastructure.results_broker import admin as broker_admin
 from memoriesql.infrastructure.results_broker.client import BrokerTransport
@@ -40,7 +43,11 @@ from memoriesql.infrastructure.results_broker.config import (
     load_config,
     stage_config,
 )
-from memoriesql.infrastructure.results_broker.server import Server, TrustedHost
+from memoriesql.infrastructure.results_broker.server import (
+    HostRefused,
+    Server,
+    TrustedHost,
+)
 from memoriesql.infrastructure.results_broker.wire import (
     MAX_FRAME_BYTES,
     READ_UNAVAILABLE_REPLY,
@@ -564,3 +571,168 @@ def _uid_exists(uid: int) -> bool:
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LostCommit:
+    """An administrator connection whose COMMIT acknowledgement never arrives."""
+
+    def __init__(self, error: psycopg.Error | None = None) -> None:
+        self.error = error or psycopg.OperationalError("connection lost")
+
+    def __enter__(self) -> LostCommit:
+        return self
+
+    def __exit__(self, *_exc: object) -> None:
+        return None
+
+    @contextlib.contextmanager
+    def transaction(self) -> Any:
+        yield
+        raise self.error
+
+
+class ProvisioningOutcome(unittest.TestCase):
+    """A lost connection never discards secrets the database may already require."""
+
+    def setUp(self) -> None:
+        self.root = short_directory(self)
+        (self.root / "config").mkdir(mode=0o700)
+        self.path = self.root / "config" / "broker.json"
+        self.pinned: list[tuple[bool, bool]] = []
+
+    def pin(
+        self, path: Path, config: BrokerConfig, *, rotated: bool, recovered: bool
+    ) -> int:
+        self.assertEqual(load_config(path), config)
+        self.pinned.append((rotated, recovered))
+        return broker_admin.EXIT_OK
+
+    def provision(
+        self, connection: object, committed: bool | None
+    ) -> tuple[int, dict[str, Any]]:
+        stream = io.StringIO()
+        with (
+            patch.object(psycopg, "connect", return_value=connection),
+            patch.object(broker_admin, "_apply_roles"),
+            patch.object(broker_admin, "_secrets_committed", return_value=committed),
+            patch.object(broker_admin, "_pin", side_effect=self.pin),
+            contextlib.redirect_stdout(stream),
+        ):
+            code = broker_admin.provision(
+                self.path,
+                workspace_id=WORKSPACE,
+                client_uid=os.geteuid(),
+                database_host="127.0.0.1",
+                database_port=5432,
+                database_name="fictional",
+                admin_url=lambda: "postgresql://fictional",
+            )
+        lines = stream.getvalue().strip().splitlines()
+        return code, json.loads(lines[-1]) if lines else {}
+
+    def kept(self) -> list[Path]:
+        return list((self.root / "config").glob(".broker.json.*.new"))
+
+    def test_an_unknown_commit_keeps_the_file_and_a_later_run_settles_it(self) -> None:
+        code, result = self.provision(LostCommit(), None)
+        self.assertEqual(code, broker_admin.EXIT_FAILED, result)
+        self.assertEqual(result["reason"], "provisioning_outcome_unknown")
+        (kept,) = self.kept()
+        self.assertEqual(str(kept), result["kept_configuration"])
+        self.assertEqual(stat.S_IMODE(kept.stat().st_mode), 0o600)
+        self.assertFalse(self.path.exists())
+        staged = load_config(kept)
+        # The database accepted it after all: the rerun adopts it and pins,
+        # changing no role again.
+        code, _ = self.provision(object(), True)
+        self.assertEqual(code, broker_admin.EXIT_OK)
+        self.assertEqual(self.kept(), [])
+        self.assertEqual(load_config(self.path), staged)
+        self.assertEqual(self.pinned, [(False, True)])
+
+    def test_a_lost_commit_that_took_effect_goes_live(self) -> None:
+        code, _ = self.provision(LostCommit(), True)
+        self.assertEqual(code, broker_admin.EXIT_OK)
+        self.assertTrue(self.path.exists())
+        self.assertEqual(self.kept(), [])
+        self.assertEqual(self.pinned, [(False, True)])
+
+    def test_a_lost_connection_before_commit_changes_nothing(self) -> None:
+        code, result = self.provision(LostCommit(), False)
+        self.assertEqual(code, broker_admin.EXIT_REFUSED, result)
+        self.assertIn("nothing changed", result["reason"])
+        self.assertEqual(self.kept(), [])
+        self.assertFalse(self.path.exists())
+        self.assertEqual(self.pinned, [])
+
+    def test_server_errors_and_failed_connects_discard_the_staged_secrets(self) -> None:
+        duplicate = psycopg.errors.DuplicateObject("role exists")
+        code, result = self.provision(LostCommit(duplicate), None)
+        self.assertEqual(code, broker_admin.EXIT_REFUSED, result)
+        self.assertIn("SQLSTATE 42710", result["reason"])
+        self.assertEqual(self.kept(), [])
+        with patch.object(
+            psycopg,
+            "connect",
+            side_effect=psycopg.OperationalError("unreachable"),
+        ):
+            stream = io.StringIO()
+            with contextlib.redirect_stdout(stream):
+                code = broker_admin.provision(
+                    self.path,
+                    workspace_id=WORKSPACE,
+                    client_uid=os.geteuid(),
+                    database_host="127.0.0.1",
+                    database_port=5432,
+                    database_name="fictional",
+                    admin_url=lambda: "postgresql://fictional",
+                )
+        self.assertEqual(code, broker_admin.EXIT_REFUSED)
+        self.assertIn("could not connect", stream.getvalue())
+        self.assertEqual(self.kept(), [])
+
+    def test_only_a_lost_connection_leaves_a_commit_unknown(self) -> None:
+        self.assertTrue(
+            broker_admin._commit_outcome_unknown(psycopg.OperationalError("lost"))
+        )
+        self.assertFalse(
+            broker_admin._commit_outcome_unknown(psycopg.errors.DuplicateObject("x"))
+        )
+        self.assertFalse(
+            broker_admin._commit_outcome_unknown(
+                psycopg.errors.SerializationFailure("x")
+            )
+        )
+
+    def test_scram_verifier_matches_only_its_own_password(self) -> None:
+        verifier = broker_admin.scram_sha256_verifier("fictional-secret", iterations=64)
+        self.assertTrue(broker_admin.scram_sha256_matches("fictional-secret", verifier))
+        self.assertFalse(broker_admin.scram_sha256_matches("fictional-other", verifier))
+        for broken in (
+            None,
+            "",
+            "md5abc",
+            verifier.replace("SCRAM-SHA-256", "X"),
+            "SCRAM-SHA-256$x",
+        ):
+            self.assertFalse(
+                broker_admin.scram_sha256_matches("fictional-secret", broken)
+            )
+
+    def test_a_pinning_refusal_names_its_cause_without_secrets(self) -> None:
+        causes = {
+            HostRefused("control login must be an INHERIT member"): "INHERIT member",
+            SqlAdmissionError("unavailable", "default_procedure_privileges"): (
+                "reviewed reader authority refused: default_procedure_privileges"
+            ),
+            psycopg.OperationalError("password authentication failed"): (
+                "control login could not connect (unreachable or authentication refused)"
+            ),
+            psycopg.errors.InsufficientPrivilege("denied"): "SQLSTATE 42501",
+            RuntimeError("missing"): "reviewed reader specification unavailable",
+        }
+        for error, expected in causes.items():
+            with self.subTest(error=type(error).__name__):
+                cause = broker_admin._pinning_cause(error)
+                self.assertIn(expected, cause)
+                self.assertNotIn("password authentication failed", cause)

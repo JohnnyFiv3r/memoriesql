@@ -234,7 +234,7 @@ def prepare_host(config: BrokerConfig) -> TrustedHost:
     if config.control.role == config.reader.role:
         raise HostRefused("control and reader logins must be different roles")
     try:
-        with psycopg.connect(config.control_conninfo(), autocommit=True) as control:
+        with _preflight_login(config.control_conninfo(), "control") as control:
             check_control_login(control)
             check_host_grants(control, config.reader.role)
             profile = reviewed_query_reader_profile(control, config.reader.role)
@@ -243,7 +243,7 @@ def prepare_host(config: BrokerConfig) -> TrustedHost:
             raise HostRefused(
                 "reviewed reader profile does not match the pinned profile"
             )
-        with psycopg.connect(config.reader_conninfo(), autocommit=True) as reader:
+        with _preflight_login(config.reader_conninfo(), "reader") as reader:
             verify_query_login(reader, authority)
     except HostRefused:
         raise
@@ -260,13 +260,30 @@ def prepare_host(config: BrokerConfig) -> TrustedHost:
     except psycopg.Error as error:
         # SQLSTATE only: server messages can echo roles, hosts or settings.
         if error.sqlstate is None:
-            raise HostRefused("database unreachable during preflight") from None
+            raise HostRefused("database connection lost during preflight") from None
         raise HostRefused(
             f"database preflight failed (SQLSTATE {error.sqlstate})"
         ) from None
     except (RuntimeError, ValueError):
         raise HostRefused("reviewed reader specification unavailable") from None
     return TrustedHost(config, profile)
+
+
+def _preflight_login(conninfo: str, login: str) -> Connection[Any]:
+    """Connect one host login, naming it (never server text) if it cannot."""
+    try:
+        return psycopg.connect(conninfo, autocommit=True)
+    except psycopg.Error as error:
+        # Connection-time failures carry no SQLSTATE: an unreachable server, a
+        # stale password, a missing role and a pg_hba rejection look alike.
+        if error.sqlstate is None:
+            raise HostRefused(
+                f"{login} login could not connect "
+                "(unreachable or authentication refused)"
+            ) from None
+        raise HostRefused(
+            f"{login} login refused (SQLSTATE {error.sqlstate})"
+        ) from None
 
 
 def bind_listener(config: BrokerConfig) -> socket.socket:

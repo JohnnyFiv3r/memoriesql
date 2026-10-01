@@ -175,6 +175,7 @@ not restarted.
 | List host-started runs | `sudo -H -u _memoriesql <cli> broker runs --config <config>` (no credential digests are printed) |
 | Close a run early | `sudo -H -u _memoriesql <cli> broker close-run --config <config> --run-ref <uuid>`: PR-05's owner close for the run's own principal. Refused while any of its work is unsettled; refunds nothing; the run never reopens. |
 | Rotate both logins | `sudo -H -u _memoriesql <cli> broker provision --config <config> --rotate`, then restart. The new secrets are durable in the configuration before the roles change. |
+| Provisioning reported `provisioning_outcome_unknown` | The database connection was lost while the role changes committed. The new secrets are kept in the file the report names. When the database is reachable, run the same `broker provision` command again (with `--rotate` if it was a rotation): it settles the kept file before changing anything. |
 | Revoke an agent | Revoke its pairing grant (`memoriesql clients revoke`, an owner operation). The next request is refused. |
 | Run expiry cleanup now | `sudo -H -u _memoriesql <cli> broker cleanup --config <config>` |
 | Logs | `sudo cat /usr/local/var/memoriesql-broker/log/host.log` |

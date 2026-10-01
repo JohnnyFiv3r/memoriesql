@@ -78,6 +78,123 @@ def _short_root() -> Path:
     )
 
 
+class CommitCutRelay:
+    """A TCP relay to PostgreSQL that loses one statement's round trip.
+
+    The first connection through it is cut as soon as the client sends a
+    message whose query starts with `cut`. With `forward` the message reaches
+    the server and only its reply is lost, as with a COMMIT whose acknowledgement
+    never arrives; without it the connection drops before the server sees it.
+    Later connections pass through unless `refuse_after_cut` closes the relay.
+    Clients connect with sslmode and gssencmode disabled, so the stream is the
+    plain frontend protocol.
+    """
+
+    def __init__(
+        self,
+        target: tuple[str, int],
+        *,
+        cut: bytes,
+        forward: bool,
+        refuse_after_cut: bool = False,
+    ) -> None:
+        self.target, self.cut = target, cut
+        self.forward, self.refuse_after_cut = forward, refuse_after_cut
+        self.listener = socket.create_server(("127.0.0.1", 0))
+        self.port = self.listener.getsockname()[1]
+        self.cut_done = threading.Event()
+        self._armed = True
+        threading.Thread(target=self._accept, daemon=True).start()
+
+    def close(self) -> None:
+        with contextlib.suppress(OSError):
+            self.listener.close()
+
+    def _accept(self) -> None:
+        while True:
+            try:
+                client, _ = self.listener.accept()
+            except OSError:
+                return
+            server = socket.create_connection(self.target)
+            armed, self._armed = self._armed, False
+            dropping = threading.Event()
+            threading.Thread(
+                target=self._upstream,
+                args=(client, server, armed, dropping),
+                daemon=True,
+            ).start()
+            threading.Thread(
+                target=self._downstream, args=(server, client, dropping), daemon=True
+            ).start()
+
+    def _upstream(
+        self,
+        client: socket.socket,
+        server: socket.socket,
+        armed: bool,
+        dropping: threading.Event,
+    ) -> None:
+        pending, started = b"", False
+        try:
+            while chunk := client.recv(65536):
+                pending += chunk
+                hit, pending, started = self._scan(pending, started)
+                if armed and hit:
+                    dropping.set()
+                    if self.forward:
+                        server.sendall(chunk)
+                        time.sleep(0.5)
+                    self.cut_done.set()
+                    if self.refuse_after_cut:
+                        self.close()
+                    return
+                server.sendall(chunk)
+        except OSError:
+            return
+        finally:
+            for end in (client, server):
+                with contextlib.suppress(OSError):
+                    end.shutdown(socket.SHUT_RDWR)
+                end.close()
+
+    @staticmethod
+    def _downstream(
+        server: socket.socket, client: socket.socket, dropping: threading.Event
+    ) -> None:
+        with contextlib.suppress(OSError):
+            while data := server.recv(65536):
+                if dropping.is_set():
+                    continue
+                client.sendall(data)
+
+    def _scan(self, pending: bytes, started: bool) -> tuple[bool, bytes, bool]:
+        """Consume complete frontend messages; report one carrying `cut`."""
+        hit = False
+        while True:
+            if not started:
+                if len(pending) < 4:
+                    break
+                size = int.from_bytes(pending[:4], "big")
+                if len(pending) < size:
+                    break
+                pending, started = pending[size:], True
+                continue
+            if len(pending) < 5:
+                break
+            kind, size = pending[:1], int.from_bytes(pending[1:5], "big")
+            if len(pending) < 1 + size:
+                break
+            body, pending = pending[5 : 1 + size], pending[1 + size :]
+            query = b""
+            if kind == b"Q":
+                query = body
+            elif kind == b"P" and body.count(b"\0") >= 2:
+                query = body.split(b"\0")[1]
+            hit = hit or query.lstrip().upper().startswith(self.cut)
+        return hit, pending, started
+
+
 @unittest.skipUnless(
     os.environ.get("N1_TEST_DATABASE_URL"), "disposable PostgreSQL required"
 )
@@ -135,9 +252,9 @@ class QueryHostHarness(unittest.TestCase):
             code = command(*args, **kwargs)
         return int(code), stream.getvalue()
 
-    def drop_roles(self) -> None:
+    def drop_roles(self, roles: tuple[str, ...] | None = None) -> None:
         with psycopg.connect(self.admin_url, autocommit=True) as db:
-            for role in self.roles:
+            for role in roles or self.roles:
                 db.execute(
                     "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
                     "WHERE usename=%s",
@@ -673,6 +790,8 @@ class QueryHostAcceptance(QueryHostHarness):
             )
         self.assertEqual(code, admin.EXIT_REFUSED, output)
         self.assertIn("not pinned", output)
+        # The refusal names its cause, never a secret.
+        self.assertIn("reviewed reader specification unavailable", output)
         interrupted = load_config(self.config_path)
         self.assertNotEqual(
             interrupted.control.password.get_secret_value(),
@@ -692,6 +811,17 @@ class QueryHostAcceptance(QueryHostHarness):
             "SELECT rolpassword FROM pg_authid WHERE rolname=%s", (after.control.role,)
         )
         self.assertTrue(str(stored).startswith("SCRAM-SHA-256$4096:"))
+        # The verifier check that settles a lost commit reads PostgreSQL's form.
+        self.assertTrue(
+            admin.scram_sha256_matches(
+                after.control.password.get_secret_value(), str(stored)
+            )
+        )
+        self.assertFalse(
+            admin.scram_sha256_matches(
+                before.control.password.get_secret_value(), str(stored)
+            )
+        )
         # Least privilege: NOINHERIT membership, superuser and a drifted pin refuse.
         control = sql.Identifier(after.control.role)
         self.db.execute(
@@ -749,6 +879,138 @@ class QueryHostAcceptance(QueryHostHarness):
         # Here the service and client are one uid, which check must report.
         self.assertFalse(checks["client_cannot_modify_host"]["ok"], report)
         self.assertEqual(code, admin.EXIT_REFUSED)
+
+    def provision_new(self, url: str) -> tuple[int, dict[str, Any], Path]:
+        """First provisioning of a separate host root through `url`."""
+        root = _short_root()
+        self.addCleanup(shutil.rmtree, root, True)
+        (root / "config").mkdir(mode=0o700)
+        (root / "state").mkdir(mode=0o700)
+        (root / "run").mkdir(mode=0o750)
+        suffix = uuid4().hex[:12]
+        roles = (f"mqh_control_{suffix}", f"mqh_reader_{suffix}")
+        self.addCleanup(self.drop_roles, roles)
+        self.last_roles: tuple[str, str] = roles
+        path = root / "config" / "broker.json"
+        code, output = self.provision_again(path, url, roles)
+        return code, json.loads(output.strip().splitlines()[-1]), path
+
+    def provision_again(
+        self, path: Path, url: str, roles: tuple[str, str] | None = None
+    ) -> tuple[int, str]:
+        target = conninfo_to_dict(self.admin_url)
+        names = roles or (load_config(path).control.role, load_config(path).reader.role)
+        return self.operator(
+            admin.provision,
+            path,
+            workspace_id=self.fixture.workspace,
+            client_uid=os.geteuid(),
+            database_host=str(target.get("host") or "127.0.0.1"),
+            database_port=int(target.get("port") or 5432),
+            database_name=self.db.info.dbname,
+            control_role=names[0],
+            reader_role=names[1],
+            admin_url=lambda: url,
+        )
+
+    def relay(self, **kwargs: Any) -> tuple[CommitCutRelay, str]:
+        target = conninfo_to_dict(self.admin_url)
+        relay = CommitCutRelay(
+            (str(target.get("host") or "127.0.0.1"), int(target.get("port") or 5432)),
+            **kwargs,
+        )
+        self.addCleanup(relay.close)
+        url = make_conninfo(
+            self.admin_url,
+            host="127.0.0.1",
+            port=str(relay.port),
+            sslmode="disable",
+            gssencmode="disable",
+        )
+        return relay, url
+
+    def role_exists(self, role: str) -> bool:
+        return bool(
+            self.scalar("SELECT count(*) FROM pg_roles WHERE rolname=%s", (role,))
+        )
+
+    def kept(self, path: Path) -> list[Path]:
+        return list(path.parent.glob(f".{path.name}.*.new"))
+
+    def test_provisioning_never_discards_secrets_a_lost_commit_may_have_kept(
+        self,
+    ) -> None:
+        # COMMIT reaches the server but its acknowledgement is lost; the
+        # database stays reachable, so the run settles the outcome itself.
+        relay, url = self.relay(cut=b"COMMIT", forward=True)
+        code, result, path = self.provision_new(url)
+        self.assertTrue(relay.cut_done.is_set())
+        self.assertEqual(code, 0, result)
+        self.assertTrue(result["recovered"], result)
+        live = load_config(path)
+        self.assertIsNotNone(live.profile_sha256)
+        self.assertEqual(self.kept(path), [])
+        psycopg.connect(live.control_conninfo()).close()
+        psycopg.connect(live.reader_conninfo()).close()
+        # The same loss, but the database is unreachable afterwards: the only
+        # copy of the committed secrets is kept, and a later run settles it.
+        relay, url = self.relay(cut=b"COMMIT", forward=True, refuse_after_cut=True)
+        code, result, path = self.provision_new(url)
+        self.assertTrue(relay.cut_done.is_set())
+        self.assertEqual(code, admin.EXIT_FAILED, result)
+        self.assertEqual(result["reason"], "provisioning_outcome_unknown")
+        kept = Path(result["kept_configuration"])
+        self.assertEqual(self.kept(path), [kept])
+        self.assertFalse(path.exists())
+        staged = load_config(kept)
+        self.assertTrue(self.role_exists(staged.control.role))
+        code, output = self.provision_again(
+            path, self.admin_url, (staged.control.role, staged.reader.role)
+        )
+        settled = json.loads(output.strip().splitlines()[-1])
+        self.assertEqual(code, 0, settled)
+        self.assertTrue(settled["recovered"], settled)
+        self.assertEqual(self.kept(path), [])
+        live = load_config(path)
+        self.assertEqual(
+            live.control.password.get_secret_value(),
+            staged.control.password.get_secret_value(),
+        )
+        psycopg.connect(live.control_conninfo()).close()
+        psycopg.connect(live.reader_conninfo()).close()
+        # The connection drops before the role statements reach the server:
+        # nothing changed, nothing is kept, and a plain rerun succeeds.
+        relay, url = self.relay(cut=b"CREATE ROLE", forward=False)
+        code, result, path = self.provision_new(url)
+        self.assertTrue(relay.cut_done.is_set())
+        self.assertEqual(code, admin.EXIT_REFUSED, result)
+        self.assertIn("nothing changed", result["reason"])
+        self.assertEqual(self.kept(path), [])
+        self.assertFalse(path.exists())
+        roles = self.last_roles
+        self.assertFalse(self.role_exists(roles[0]))
+        code, output = self.provision_again(path, self.admin_url, roles)
+        clean = json.loads(output.strip().splitlines()[-1])
+        self.assertEqual(code, 0, clean)
+        self.assertNotIn("recovered", clean)
+
+    def test_preflight_names_the_login_that_cannot_connect(self) -> None:
+        prepare_host(self.config)
+        stale = sql.Literal(admin.scram_sha256_verifier(secrets.token_urlsafe(32)))
+        self.db.execute(
+            sql.SQL("ALTER ROLE {} PASSWORD {}").format(
+                sql.Identifier(self.config.reader.role), stale
+            )
+        )
+        with self.assertRaisesRegex(HostRefused, "^reader login could not connect"):
+            prepare_host(self.config)
+        self.db.execute(
+            sql.SQL("ALTER ROLE {} PASSWORD {}").format(
+                sql.Identifier(self.config.control.role), stale
+            )
+        )
+        with self.assertRaisesRegex(HostRefused, "^control login could not connect"):
+            prepare_host(self.config)
 
     def test_restart_redelivers_the_same_result_without_rerun(self) -> None:
         host = self.spawn()

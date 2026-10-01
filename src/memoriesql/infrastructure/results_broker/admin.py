@@ -28,6 +28,7 @@ from uuid import UUID
 import psycopg
 from psycopg import Connection, sql
 
+from memoriesql.application.agent_sql_catalog import SqlAdmissionError
 from memoriesql.infrastructure.postgres.agent_sql_authority import (
     qualify_query_authority,
 )
@@ -95,6 +96,28 @@ def scram_sha256_verifier(password: str, *, iterations: int = SCRAM_ITERATIONS) 
     )
 
 
+def scram_sha256_matches(password: str, verifier: str | None) -> bool:
+    """Whether a stored SCRAM-SHA-256 verifier was derived from `password`."""
+    if not verifier or not password.isascii():
+        return False
+    try:
+        method, parameters, keys = verifier.split("$")
+        iterations, salt = parameters.split(":")
+        stored_key = base64.b64decode(keys.split(":")[0], validate=True)
+        salted = hashlib.pbkdf2_hmac(
+            "sha256",
+            password.encode("ascii"),
+            base64.b64decode(salt, validate=True),
+            int(iterations),
+        )
+    except ValueError:
+        return False
+    if method != "SCRAM-SHA-256":
+        return False
+    client_key = hmac.new(salted, b"Client Key", hashlib.sha256).digest()
+    return hmac.compare_digest(hashlib.sha256(client_key).digest(), stored_key)
+
+
 def _emit(value: dict[str, Any], *, machine: bool = True) -> None:
     print(
         json.dumps(
@@ -142,6 +165,11 @@ def provision(
     if exists and not rotate:
         return _refused("already provisioned; use --rotate to replace the secrets")
     if not exists and rotate:
+        if _kept_configurations(config_path):
+            return _refused(
+                "nothing to rotate yet: an interrupted first provisioning kept its "
+                "configuration; run broker provision without --rotate to settle it"
+            )
         return _refused("nothing to rotate; provision first")
     control_password, reader_password = generate_password(), generate_password()
     if exists:
@@ -190,48 +218,188 @@ def provision(
         url = admin_url()
     except (EOFError, KeyboardInterrupt, OSError):
         return _refused("administrator connection URL not provided")
+    # An interrupted earlier run may have kept the only copy of secrets the
+    # database already requires: settle it before any role changes again.
+    settled = _settle_kept(config_path, url)
+    if settled is not None:
+        return settled
     # Stage first: once the roles change, the only copy of the new secrets is
     # this file, so it must already be durable.
     staged = stage_config(config_path, config)
     try:
-        with psycopg.connect(url, autocommit=True) as admin:
+        admin = psycopg.connect(url, autocommit=True)
+    except psycopg.Error as error:
+        # Nothing reached the database: the staged secrets were never sent.
+        staged.unlink(missing_ok=True)
+        return _refused(f"database provisioning failed ({_connect_cause(error)})")
+    recovered = False
+    try:
+        with admin:
             with admin.transaction():
                 _apply_roles(admin, config, rotate=exists)
     except psycopg.Error as error:
-        # The transaction rolled back: the database still matches the old file.
-        staged.unlink(missing_ok=True)
-        return _refused(f"database provisioning failed (SQLSTATE {error.sqlstate})")
+        if not _commit_outcome_unknown(error):
+            # The server refused a statement, so the transaction rolled back:
+            # the database still matches the old file.
+            staged.unlink(missing_ok=True)
+            return _refused(f"database provisioning failed (SQLSTATE {error.sqlstate})")
+        # The connection was lost after it opened, possibly while COMMIT was in
+        # flight: the database may already require the staged secrets.
+        committed = _secrets_committed(url, config)
+        if committed is None:
+            return _outcome_unknown(staged)
+        if not committed:
+            staged.unlink(missing_ok=True)
+            return _refused(
+                "database provisioning did not complete (connection lost before "
+                "commit); nothing changed"
+            )
+        recovered = True
     except ValueError:
         staged.unlink(missing_ok=True)
         return _refused("reviewed reader provisioning refused")
     # The roles now carry the new secrets and this staged file is their only
     # copy: make it live before anything else can fail.
     commit_config(staged, config_path)
+    return _pin(config_path, config, rotated=exists, recovered=recovered)
+
+
+def _kept_configurations(config_path: Path) -> list[Path]:
+    """Staged files an interrupted run left beside the live configuration."""
+    return sorted(
+        config_path.parent.glob(f".{config_path.name}.*.new"),
+        key=lambda path: path.stat().st_mtime,
+    )
+
+
+def _settle_kept(config_path: Path, url: str) -> int | None:
+    """Settle kept configurations before anything else changes the roles.
+
+    A kept file may hold the only copy of secrets the database already
+    requires. One the database accepts becomes the live configuration and is
+    pinned; one it never received is removed. None: nothing was kept, or every
+    kept file was safely removed, so provisioning proceeds.
+    """
+    for kept in _kept_configurations(config_path):
+        try:
+            candidate = load_config(kept)
+        except ConfigurationRefused as refusal:
+            return _refused(str(refusal))
+        committed = _secrets_committed(url, candidate)
+        if committed is None:
+            return _outcome_unknown(kept)
+        if not committed:
+            kept.unlink(missing_ok=True)
+            continue
+        rotated = os.path.lexists(config_path)
+        commit_config(kept, config_path)
+        return _pin(config_path, candidate, rotated=rotated, recovered=True)
+    return None
+
+
+def _secrets_committed(url: str, config: BrokerConfig) -> bool | None:
+    """Whether both roles now require `config`'s secrets; None if unreadable.
+
+    The stored SCRAM verifiers are compared with the staged passwords, so
+    neither a pg_hba rule nor a refused login can be mistaken for an
+    uncommitted change.
+    """
+    try:
+        with psycopg.connect(url, autocommit=True, connect_timeout=10) as admin:
+            stored: dict[str, str | None] = dict(
+                admin.execute(
+                    "SELECT rolname, rolpassword FROM pg_catalog.pg_authid "
+                    "WHERE rolname = ANY(%s)",
+                    ([config.control.role, config.reader.role],),
+                ).fetchall()
+            )
+    except psycopg.Error:
+        return None
+    return all(
+        scram_sha256_matches(login.password.get_secret_value(), stored.get(login.role))
+        for login in (config.control, config.reader)
+    )
+
+
+def _commit_outcome_unknown(error: psycopg.Error) -> bool:
+    """A lost connection leaves an in-flight commit unknown.
+
+    Every error the server reports carries a SQLSTATE and means nothing
+    committed; only a client-side connection failure has none.
+    """
+    return (
+        isinstance(error, psycopg.OperationalError | psycopg.InterfaceError)
+        and error.sqlstate is None
+    )
+
+
+def _connect_cause(error: psycopg.Error) -> str:
+    if error.sqlstate is None:
+        return "administrator login could not connect"
+    return f"SQLSTATE {error.sqlstate}"
+
+
+def _outcome_unknown(kept: Path) -> int:
+    _emit(
+        {
+            "outcome": "failed",
+            "reason": "provisioning_outcome_unknown",
+            "kept_configuration": str(kept),
+            "next": (
+                "once the database is reachable, run broker provision again "
+                "(with --rotate if this was a rotation) to settle it"
+            ),
+        }
+    )
+    return EXIT_FAILED
+
+
+def _pin(
+    config_path: Path, config: BrokerConfig, *, rotated: bool, recovered: bool
+) -> int:
+    """Pin the reviewed reader profile into the live configuration."""
     try:
         with psycopg.connect(config.control_conninfo(), autocommit=True) as control:
             check_control_login(control)
             profile = reviewed_query_reader_profile(control, config.reader.role)
             pin = qualify_query_authority(control, profile).profile_sha256
-    except (HostRefused, psycopg.Error, ValueError, RuntimeError):
+    except (HostRefused, psycopg.Error, ValueError, RuntimeError) as error:
         # A host with an unconfirmed pin refuses to serve; nothing is weakened.
         return _refused(
-            "logins provisioned but the reviewed reader profile was not pinned; "
-            "fix the reported cause and run broker provision --rotate"
+            "logins provisioned but the reviewed reader profile was not pinned "
+            f"({_pinning_cause(error)}); fix it and run broker provision --rotate"
         )
     final = stage_config(config_path, config.model_copy(update={"profile_sha256": pin}))
     commit_config(final, config_path)
-    _emit(
-        {
-            "outcome": "available",
-            "config": str(config_path),
-            "control_role": config.control.role,
-            "reader_role": config.reader.role,
-            "profile_sha256": pin,
-            "rotated": exists,
-            "restart_required": exists,
-        }
-    )
+    result: dict[str, Any] = {
+        "outcome": "available",
+        "config": str(config_path),
+        "control_role": config.control.role,
+        "reader_role": config.reader.role,
+        "profile_sha256": pin,
+        "rotated": rotated,
+        "restart_required": rotated,
+    }
+    if recovered:
+        result["recovered"] = True
+    _emit(result)
     return EXIT_OK
+
+
+def _pinning_cause(error: BaseException) -> str:
+    """The pinning failure's cause without secrets, as the host preflight words it."""
+    if isinstance(error, HostRefused):
+        return str(error)
+    if isinstance(error, SqlAdmissionError):
+        return f"reviewed reader authority refused: {error.construct}"
+    if isinstance(error, psycopg.Error):
+        if error.sqlstate is None:
+            return (
+                "control login could not connect "
+                "(unreachable or authentication refused)"
+            )
+        return f"SQLSTATE {error.sqlstate}"
+    return "reviewed reader specification unavailable"
 
 
 def _apply_roles(admin: Connection[Any], config: BrokerConfig, *, rotate: bool) -> None:
