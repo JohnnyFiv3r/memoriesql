@@ -133,15 +133,12 @@ The PR-05 part of the rules the custodian named:
 
 Evaluation-condition parity and grading credit are enforced outside this core.
 
-PR-03's nine assessed relations keep their unchanged projection and its
-raw-source-gated provenance records. Only `personal_owner` holds
-`source.raw.read`, so a paired agent's relation tables are empty. Coverage
-discloses that as a gap, `relation_tables`/`source_raw_read_required`, never as
-absence. A caller without `source.read` likewise gets
-`observation_tables`/`source_read_required`. Both gaps describe only the caller's
-own capabilities, never whether protected data exists. Whether paired agents may
-read assessed relations is a PR-03/owner policy question; this cut changes no
-PR-03 authority.
+PR-03's nine assessed relations keep their unchanged projection. How a paired
+agent reads them is decided by the owner's AM-5 record
+(`../approvals/pr-05-agent-relation-reads.md`) and implemented by migration 0039
+(see "Schema 39: agent relation reads" below). A caller without `source.read`
+gets `observation_tables`/`source_read_required`. All gaps describe only the
+caller's own capabilities, never whether protected data exists.
 
 Column mapping decisions (implementation readings of the approved enums; review
 welcome):
@@ -166,6 +163,76 @@ the admitted operation deadline (at most 30 s) instead of the canonical 2.5 s.
 reprojecting the saved cutoff and view under current authority. Entity, alias,
 mention and topic relations remain unprepared: queries naming them reply
 `unsupported_query` with feature `unprepared_relation`, never an empty table.
+
+## Schema 39: agent relation reads (AM-5)
+
+**Authority.** The owner decision AM-5 is committed byte-identical as
+`../approvals/pr-05-agent-relation-reads.md` (SHA-256 `4491ca29…`). It clarifies
+the lifecycle dependency's rule that reads use current `memory.query` and
+source-read authority over their entire disclosed dependency closure. PR-03's
+read kernel required raw revisiting authority there instead, so paired agents
+saw `relation_tables`/`source_raw_read_required`.
+
+**One read mode in PR-03's single kernel.** Migration 0039 threads a read mode
+through the eleven read-path functions of M0030 and M0032 that reach a raw gate.
+The owner's mode keeps every existing check. The agent's mode changes exactly one
+thing: where the owner's read requires raw revisiting authority over a source
+object, it requires `source.read` on the same event.
+- The ten gate sites are M0030 lines 142, 150, 153, 160, 255, 317, 329, 360, 382
+  and 1493 at `33e1c42`; line 317 authorizes each derivation root through its
+  primary event.
+- Memory.query closure checks, whole-family withholding, the lifecycle projection
+  and root computation are shared and unchanged.
+- Every earlier function name becomes a one-line wrapper over its mode-threaded
+  body in owner mode, so no second lifecycle interpreter exists.
+- Governed writes refuse the agent mode.
+- The population entry `prepare_query_sql_population_v2` is redefined in
+  M0039. The M0037 file is not edited. It selects the owner mode for a caller
+  holding `source.raw.read`, and the agent mode only for a paired agent (an
+  `agent` principal with a pairing grant): AM-5 names paired agents. Any other
+  caller, such as a paired background service or device, keeps the earlier
+  gate, which withholds every relation without raw source authority, and gets
+  `relation_tables`/`source_raw_read_required` as before. The mode is recorded
+  in the internal frame field `relation_read_mode`, which never appears in a
+  reply; it is empty for those other callers.
+- M0039 grants nothing and adds no object the query reader can see, so the
+  reviewed reader profile is unchanged.
+
+**What an agent reads.** With `memory.query` and `source.read` over a relation's
+whole closure, an agent reads whole rows of `assessed_relations`,
+`relation_statements`, `relation_evidence`, `relation_types`,
+`relation_corrections` and `relation_replacements`, with the owner's values at
+the same frame.
+- The closure is the endpoint and basis beads, versions and statements, every
+  evidence event, lifecycle evidence, corrections and replacements, and the root
+  units and events.
+- A relation with any unreadable closure member is absent from every table. No
+  gap, count, type pin or history is disclosed for it, and the query stays
+  available.
+- A relation is also absent when its records name another assessed relation
+  that is withheld: a replacement in its chain, or a `derived_from` relation on
+  its root lineage. Otherwise its state, `relation_replacements` row or root
+  status would show that the withheld relation exists. The population drops
+  such families until nothing more is withheld.
+- `relation_events`, `relation_event_evidence` and `relation_pairs` stay
+  owner-only. A query that references them gets
+  `relation_history`/`owner_only`. "Owner" here means PR-03's own gate for
+  every relation read, `source.raw.read`: in the shipped role model only
+  `personal_owner` holds it, and a deployment that grants it to a service gives
+  that service PR-03's raw-holder reads, as before migration 0039.
+- A caller without `source.read` that references a relation table gets
+  `relation_tables`/`source_read_required`.
+- `source_raw_read_required` remains for frames from a schema-38 database and
+  for callers that are neither raw-read holders nor paired agents.
+- Root identities are source-object UUIDs; no relation column carries one.
+  Raw bytes, lineage, source revisiting, the `relations` inspection reader,
+  activation and governed writes stay owner-only.
+- Returned relation rows earn no hydration or exact-source credit.
+
+**Lifecycle.** State, support eligibility, head and roots come from the one
+`relation_projection_v1`, so an agent sees exactly the owner's state at each
+frame. Withdrawn and disputed assertions are not support-eligible, and recursive
+path support additionally requires qualified roots.
 
 ## Schema 38: runs, accesses and disclosure
 
@@ -417,9 +484,36 @@ production reader provisioning path. They cover:
   redelivery discloses that same result with no rerun
 - group, window, set, EXISTS and relation-join shapes, with frame lifecycle
   fields and coverage gaps
+- AM-5 (schema 39), a fresh paired agent holding `memory.query` and
+  `source.read` but no raw authority. It reads a real assessed relation, created
+  through activation, author, specialist, attestor and apply.
+  - Its rows in the six readable tables equal the owner's.
+  - Pair coverage and history give `relation_history`/`owner_only`.
+  - No source-object identity appears in any column of the six tables.
+  - The inspection reader stays owner-only.
+  - After one member's grant is revoked, the relation is absent from a fresh
+    step of the same run, with no gap or type pin. Re-disclosing the saved
+    result is `unavailable`.
+- AM-5 withholding: the whole relation is withheld from each of these callers,
+  and the source endpoint stays readable where its scope is.
+  - An agent that reads only the source endpoint's scope.
+  - An agent with `memory.query` over the whole closure but no `source.read`,
+    which gets `relation_tables`/`source_read_required`.
+  - An agent whose remote grant has expired.
+- AM-5 lifecycle: after a dispute and then a retraction, agent and owner see the
+  same state, support eligibility and reason at each frame. That includes the
+  disputed frame, read again after the retraction. The history counts stay
+  owner-only.
+- AM-5 tenancy: a paired agent of a second tenant reads no relation of the
+  first, and the first tenant's credential opens nothing in the second.
 
 Database-free contract tests pin the policy hash, the prepared set, the order
-basis, evidence refs and reply sizing.
+basis, evidence refs and reply sizing. A structural test holds migration 0039
+to these properties:
+- it grants nothing;
+- it adds nothing to the query reader's schema;
+- it keeps raw revisiting only on the owner branches;
+- every earlier kernel name delegates in owner mode.
 
 Development failures retained:
 
@@ -448,6 +542,18 @@ Development failures retained:
   inspect, hydrate_source and checkpoints are not delivered, with no delivered
   or released claim. The logical catalog hash changes with the stage text. A
   unit test fails on the previous text.
+- A mutation that disabled the agent-mode `source.read` gate of migration 0039
+  changed no test outcome.
+  - M0011's bead-version authorization already requires `source.read` on each
+    closure bead's event, and scope grants cover both capabilities. The gate is
+    therefore implied by existing checks in every configuration today's
+    authority model can express.
+  - It remains the explicit AM-5 substitution point. It also checks that the
+    event and the source object belong to the caller's tenant and workspace, so a
+    mis-threaded gate withholds rather than authorizes.
+- The first draft of the shared relation fixture paired agents over the
+  owner-private default scope. That scope admits no grants to other principals,
+  so the fixture now creates explicit scopes.
 - The trusted-host lane's late-commit case found that a successful commit
   followed by a refused first disclosure deleted the committed result through
   the generic failure path, and replied `unavailable`. That disclosure was

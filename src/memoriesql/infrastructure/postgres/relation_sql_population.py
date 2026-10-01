@@ -82,7 +82,9 @@ _ENUMS: dict[tuple[str, str], frozenset[str]] = {
         }
     ),
 }
-_HASHES = frozenset({("statement_sources", "content_sha256"), ("source_units", "content_sha256")})
+_HASHES = frozenset(
+    {("statement_sources", "content_sha256"), ("source_units", "content_sha256")}
+)
 
 
 class RelationPopulationError(ValueError):
@@ -94,6 +96,7 @@ class RelationPopulationError(ValueError):
 _TEXT_LABEL = re.compile(
     r"(normalized_projection|package_exclusion|package_unresolved):[^\x00-\x1f]{1,256}"
 )
+
 
 @dataclass(frozen=True, slots=True)
 class EvidenceBinding:
@@ -126,6 +129,10 @@ class PreparedRelationPopulation:
     # Labels of served package text: normalized projection versions and the
     # packages' declared coverage limits, disclosed wherever units are used.
     source_text_labels: tuple[str, ...] = ()
+    # The relation read mode the caller's authority selected (M0039): "owner"
+    # with raw source authority, "agent" under AM-5. None means a database
+    # before migration 0039, where relations still need raw source authority.
+    relation_read_mode: str | None = None
 
 
 def _time(value: str) -> datetime:
@@ -165,11 +172,13 @@ def _prepare(
     relation_manifest: str | None = None
     raw_authority = source_authority = True
     labels: tuple[str, ...] = ()
+    read_mode: str | None = None
     if revision == 2:
         view = raw["frame"].get("view")
         relation_manifest = raw["frame"].get("relation_manifest_sha256")
         raw_authority = raw["frame"].get("relation_raw_authority")
         source_authority = raw["frame"].get("source_read_authority")
+        read_mode = raw["frame"].get("relation_read_mode")
         served = raw["frame"].get("source_text_labels")
         if (
             raw.get("population_revision") != 2
@@ -178,6 +187,9 @@ def _prepare(
             or len(relation_manifest) != 64
             or type(raw_authority) is not bool
             or type(source_authority) is not bool
+            # The mode is selected by raw source authority, never independently.
+            or read_mode not in {None, "owner", "agent"}
+            or (read_mode is not None and (read_mode == "owner") != raw_authority)
             or type(served) is not list
             or not all(
                 type(label) is str and _TEXT_LABEL.fullmatch(label) for label in served
@@ -352,6 +364,7 @@ def _prepare(
         relation_raw_authority=raw_authority,
         source_read_authority=source_authority,
         source_text_labels=labels,
+        relation_read_mode=read_mode,
     )
 
 
