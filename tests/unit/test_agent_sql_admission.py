@@ -525,6 +525,95 @@ class AgentSqlAdmissionTests(unittest.TestCase):
             admit_query(sql, (SqlParameter(1, "text[]", [statement]),))
         self.assertEqual(physical.exception.construct, "array_type")
 
+    def test_an_admitted_comparison_never_changes_meaning(self) -> None:
+        # The parser reads `x = y IS NULL` as `x = (y IS NULL)` and emits it
+        # unparenthesized; PostgreSQL reads `(x = y) IS NULL`. It never chains
+        # comparisons. Such an operand is refused where its comparison starts.
+        head = "SELECT r.relation_id FROM memory_v1.assessed_relations r WHERE "
+        flag = (SqlParameter(1, "bool", True),)
+        for predicate, parameters in (
+            ("r.support_eligible = r.correction_pending IS NULL", ()),
+            ("r.support_eligible = r.correction_pending IS NOT NULL", ()),
+            ("r.support_eligible <> r.correction_pending IS NULL", ()),
+            ("r.support_eligible IS NULL = $1", flag),
+            ("r.support_eligible = r.correction_pending = $1", flag),
+            ("r.revision < r.revision = $1", flag),
+            ("$1 = r.support_eligible = r.correction_pending", flag),
+        ):
+            with (
+                self.subTest(predicate=predicate),
+                self.assertRaises(SqlAdmissionError) as refused,
+            ):
+                admit_query(head + predicate, parameters)
+            self.assertEqual(
+                (
+                    refused.exception.code,
+                    refused.exception.construct,
+                    refused.exception.position,
+                ),
+                ("unsupported", "comparison_grouping", len(head)),
+            )
+        # Parentheses say which is meant, and the emitted SQL keeps them.
+        for predicate, parameters in (
+            ("r.support_eligible = (r.correction_pending IS NULL)", ()),
+            ("(r.support_eligible = r.correction_pending) IS NULL", ()),
+            ("(r.support_eligible = r.correction_pending) = $1", flag),
+        ):
+            with self.subTest(predicate=predicate):
+                emitted = admit_query(head + predicate, parameters).sql
+                self.assertIn(predicate.split(" = $1")[0], emitted)
+
+    def test_not_like_is_its_own_operator(self) -> None:
+        head = "SELECT s.statement_id FROM memory_v1.statements s WHERE "
+        text = (SqlParameter(1, "text", "fictional%"),)
+        both = (*text, SqlParameter(2, "text", "fictional"))
+        # `x NOT LIKE y` calls the negated matcher, and the planner turns NOT
+        # over it back into LIKE. Two bound values are matched as written.
+        for predicate, parameters, builtin, token in (
+            ("s.kind NOT LIKE $1", text, "textnlike(text,text)", "s.kind"),
+            ("s.kind NOT ILIKE $1", text, "texticnlike(text,text)", "s.kind"),
+            ("NOT (s.kind NOT LIKE $1)", text, "textlike(text,text)", "s.kind"),
+            ("NOT (s.kind NOT ILIKE $1)", text, "texticlike(text,text)", "s.kind"),
+            ("$2 NOT LIKE $1", both, "textnlike(text,text)", "$2"),
+            ("NOT ($2 NOT LIKE $1)", both, "textnlike(text,text)", "$2"),
+        ):
+            with self.subTest(predicate=predicate):
+                admitted = admit_query(head + predicate, parameters)
+                self.assertEqual(
+                    dict(admitted.operators),
+                    {builtin: len(head) + predicate.index(token)},
+                )
+                self.assertIn(" NOT ", admitted.sql)
+
+    def test_recursion_over_correction_edges_is_refused_explicitly(self) -> None:
+        # Expanding correction edges needs a database predicate for a qualified
+        # correction path, which no migration defines. Admission refuses it
+        # instead of emitting a call to a function that does not exist.
+        corrections = (
+            recursive_sql(3)
+            .replace("r.target_bead_id, w.depth", "k.successor_bead_id, w.depth")
+            .replace(
+                "memory_v1.assessed_relations r ON r.source_bead_id",
+                "memory_v1.corrections k ON k.predecessor_bead_id",
+            )
+        )
+        self.assertIn("memory_v1.corrections k", corrections)
+        with self.assertRaises(SqlAdmissionError) as refused:
+            admit_query(
+                corrections,
+                (SqlParameter(1, "bead_ref", ANCHOR),),
+                admitted_anchors=ANCHORS,
+                recursion=RecursionBound("walk", "depth", "node", 3),
+            )
+        self.assertEqual(
+            (
+                refused.exception.code,
+                refused.exception.construct,
+                refused.exception.position,
+            ),
+            ("unsupported", "correction_recursion", None),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

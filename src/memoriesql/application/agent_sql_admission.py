@@ -208,6 +208,10 @@ _COMPARISONS: dict[type[exp.Expr], str] = {
 }
 # What the planner turns `NOT (a op b)` into, through AND, OR and NOT.
 _NEGATORS = {"=": "<>", "<>": "=", "<": ">=", "<=": ">", ">": "<=", ">=": "<"}
+# Operands a comparison only takes in parentheses. PostgreSQL never chains
+# comparisons and binds IS looser than them, so `x = y IS NULL` is
+# `(x = y) IS NULL` to the server but `x = (y IS NULL)` to the parser.
+_GROUPED = (exp.EQ, exp.NEQ, exp.LT, exp.LTE, exp.GT, exp.GTE, exp.Is)
 _OPERATOR_ORDER = ("=", "<>", "<", "<=", ">", ">=")
 _COMPARISON_BUILTINS = {
     "text": ("texteq", "textne", "text_lt", "text_le", "text_gt", "text_ge"),
@@ -396,8 +400,8 @@ _ARGS: dict[str, set[str]] = {
     "In": {"this", "expressions", "query"},
     "Any": {"this"},
     "Exists": {"this"},
-    "Like": {"this", "expression"},
-    "ILike": {"this", "expression"},
+    "Like": {"this", "expression", "negate"},
+    "ILike": {"this", "expression", "negate"},
     "Add": {"this", "expression"},
     "Sub": {"this", "expression"},
     "Mul": {"this", "expression"},
@@ -940,6 +944,9 @@ class _Binder:
             self.expression(node.this, scope, ctes)
             return BOOL
         if isinstance(node, exp.EQ | exp.NEQ | exp.LT | exp.LTE | exp.GT | exp.GTE):
+            if isinstance(node.this, _GROUPED) or isinstance(node.expression, _GROUPED):
+                # Admitted, it would run with another meaning or not at all.
+                _refuse(node, "comparison_grouping")
             if not isinstance(node.expression, exp.Any):
                 self.comparison(
                     _COMPARISONS[type(node)],
@@ -984,10 +991,11 @@ class _Binder:
             ):
                 _refuse(node, "text_predicate", "invalid_request")
             # As for a comparison: a NULL operand calls nothing, and two bound
-            # values are matched while planning, as written.
+            # values are matched while planning, as written. `NOT LIKE` is its
+            # own operator, which the planner negates back into LIKE.
             if _Folded.NULL not in folds:
                 matcher = "textic" if isinstance(node, exp.ILike) else "text"
-                opposite = negated and None in folds
+                opposite = bool(node.args.get("negate")) ^ (negated and None in folds)
                 self.requires(
                     matcher + ("nlike" if opposite else "like") + "(text,text)", node
                 )
@@ -1360,24 +1368,19 @@ class _Binder:
         }:
             _refuse(arm, "recursive_edge")
         edge = edges[0]
+        if edge.name == "corrections":
+            # The packet's correction-edge expansion needs a database predicate
+            # for a qualified correction path, which no migration defines yet.
+            _refuse(arm, "correction_recursion")
         node_output = arm.expressions[node_index]
         if isinstance(node_output, exp.Alias):
             node_output = node_output.this
-        pairs = (
-            {
-                "source_bead_id": "target_bead_id",
-                "target_bead_id": "source_bead_id",
-                "source_bead_version_id": "target_bead_version_id",
-                "target_bead_version_id": "source_bead_version_id",
-            }
-            if edge.name == "assessed_relations"
-            else {
-                "predecessor_bead_id": "successor_bead_id",
-                "successor_bead_id": "predecessor_bead_id",
-                "predecessor_version_id": "successor_version_id",
-                "successor_version_id": "predecessor_version_id",
-            }
-        )
+        pairs = {
+            "source_bead_id": "target_bead_id",
+            "target_bead_id": "source_bead_id",
+            "source_bead_version_id": "target_bead_version_id",
+            "target_bead_version_id": "source_bead_version_id",
+        }
         if (
             not isinstance(node_output, exp.Column)
             or node_output.table != edge.alias_or_name
@@ -1433,31 +1436,18 @@ class _Binder:
                 ),
             )
         ]
-        for edge in edges:
-            edge_alias = edge.alias_or_name
-            if edge.name == "assessed_relations":
-                predicates.extend(
-                    [
-                        exp.EQ(
-                            this=exp.column("support_eligible", table=edge_alias),
-                            expression=exp.Boolean(this=True),
-                        ),
-                        exp.EQ(
-                            this=exp.column("roots_status", table=edge_alias),
-                            expression=exp.Literal.string("qualified"),
-                        ),
-                    ]
-                )
-            else:
-                predicates.append(
-                    exp.Anonymous(
-                        this="memoriesql_query_private.correction_path_qualified",
-                        expressions=[
-                            exp.column("predecessor_version_id", table=edge_alias),
-                            exp.column("successor_version_id", table=edge_alias),
-                        ],
-                    )
-                )
+        predicates.extend(
+            [
+                exp.EQ(
+                    this=exp.column("support_eligible", table=edge.alias_or_name),
+                    expression=exp.Boolean(this=True),
+                ),
+                exp.EQ(
+                    this=exp.column("roots_status", table=edge.alias_or_name),
+                    expression=exp.Literal.string("qualified"),
+                ),
+            ]
+        )
         for predicate in predicates:
             arm.where(predicate, append=True, copy=False)
         # Seed is bigint so native recursive output matches the declared wire type.
