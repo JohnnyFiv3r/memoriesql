@@ -186,13 +186,15 @@ These remain qualification targets, not measured capacity.
   dead owner's work is reported as `settlement`.
 - **A busy database is a budget refusal.** At run start, admission, owner close
   and cleanup status, a lock or statement timeout (SQLSTATE 55P03, 57014) is
-  `budget_exhausted` / `time`, a storage or work limit (53400, 54000) is
+  `budget_exhausted` / `time`, a storage or byte limit (53400, 54000) is
   `budget_exhausted` / `storage`, and a conflict with work still in flight
-  (40001, 55000) is `budget_exhausted` / `settlement`. These calls own nothing
-  yet: a refused run start or admission starts and charges nothing, so the same
-  step key is admitted afterwards. Every other failure there keeps the one
-  `unavailable` shape. Resolving a reuse cursor classifies database errors as
-  disclosure does.
+  (40001, 55000) is `budget_exhausted` / `settlement`. A passed deadline is also
+  54000, which the database names `..._work_exhausted`; it is `time`. These calls
+  own nothing yet: a refused run start or admission starts and charges nothing,
+  so the same step key is admitted afterwards. Every other failure there keeps
+  the one `unavailable` shape. Resolving a reuse cursor classifies database
+  errors as disclosure does. A prepared population over its byte budget is
+  `storage`; one that met a timeout is `time`.
 - **Charges.** Charged time is the observed wall time of the whole operation
   (not CPU or I/O); commit latency is not separately metered. Unknown timing
   keeps the full reservation. Allocation remains M0031's 64/128/512 MiB ledger
@@ -222,6 +224,27 @@ These remain qualification targets, not measured capacity.
     it. If recovery settled the access while the commit was in flight, the
     host replies `settlement_pending` and the exact redelivery discloses the
     committed result without rerunning.
+  - **Only proof settles a step.** A redelivery first probes the step's own
+    preparation, then recovers it. If either meets a lock or statement timeout,
+    a lost connection or any other failure, whether the step's result committed
+    is unknown. The reply is `settlement_pending`, the step stays open, and the
+    next exact redelivery finds out. A redelivered step that holds a preparation
+    is only ever recovered, never screened or run again. As the packet requires
+    for uncertain work, a pending access blocks new admission in its workspace
+    until it is settled. If the caller's own authority ends during that
+    redelivery, its own recovery cannot run, so run-expiry cleanup settles it.
+  - A committed result's first disclosure that fails on a busy database or a
+    lost connection leaves its step open in the same way. Only a definitive
+    refusal fixes the step as failed: authority lost at the fence, a row larger
+    than the page's transport limit, or a duplicate.
+  - A failure of the host's own code before any commit was sent is an
+    `execution_error`, and the step's single-use preparation is discarded at
+    once instead of being held until the run expires. From the commit on, the
+    same failure is `settlement_pending`.
+  - `handle()` answers every request. When it cannot take the owner lock, confirm
+    an abandonment, or record a settlement, it replies `settlement_pending`,
+    charged the full reservation as recovery will charge it, and recovery or
+    the exact redelivery settles the access.
 - **Expiry cleanup** (owner Decision 1, item 3). Access ends at expiry through
   the closure verdict. Owned cleanup then removes the content and every
   sensitive copy:
@@ -366,6 +389,8 @@ PostgreSQL resolves them once it has planned the statement:
 
 - under `NOT`, the negator of a comparison, a pattern match or a membership
   test, through AND, OR and NOT;
+- `NOT LIKE` and `NOT ILIKE` as the operators they are (`textnlike`,
+  `texticnlike`), which the planner negates back into LIKE under `NOT`;
 - nothing for a comparison with a NULL bound value, and nothing for `x = $1` or
   `x <> $1` with a bound boolean, which the planner rewrites to `x` or `NOT x`
   (the negation then lands on the operators inside `x`);
@@ -431,6 +456,26 @@ feature; no internal refusal name reaches a reply.
 token: an operator is located by its first operand, a parameter by its `$`. A
 refused clause, relation or whole statement carries none. A refusal that was
 settled on a step is redelivered with its outcome and code only.
+
+**An admitted statement means what PostgreSQL will run.** The parser and
+PostgreSQL group two forms differently. PostgreSQL binds `IS` looser than a
+comparison, so it reads `x = y IS NULL` as `(x = y) IS NULL`, where the parser
+reads `x = (y IS NULL)` and would emit it unparenthesized. PostgreSQL never
+chains comparisons, so `a = b = $1` cannot run at all. A comparison whose
+operand is another comparison or an `IS` test is therefore refused unless that
+operand is parenthesized: `unsupported_query` / `feature` `comparison_grouping`,
+at the comparison's first operand. Parenthesized, it is admitted and emitted as
+written.
+
+**Recursion over correction edges is refused.** The packet admits key-equality
+expansion over correction edges as well as relation endpoints. Admission
+emitted a call to `memoriesql_query_private.correction_path_qualified` as the
+support predicate for a correction edge, and no migration defines it, so such a
+query was admitted, reserved and prepared, then failed in the reader. It is now
+refused before any work as `unsupported_query` / `feature`
+`correction_recursion`, without a position (a clause). Delivering it needs a
+reviewed database predicate for a qualified correction path, which is outside
+this change.
 
 A least-privilege control login (not a superuser; an inheriting member of
 `memoriesql_application`) additionally needs three operator provisioning steps,
@@ -524,6 +569,19 @@ provisioning path. They cover:
   no run, delivery or closure is written; the same step key is then admitted at
   the full allowance
 - crash after commit, host recovery and owner close
+- a redelivery that cannot find out (`test_agent_sql_results`): the host died
+  after its step's result committed, or before any work; the exact redelivery
+  then meets a real lock timeout, statement timeout or terminated backend while
+  it probes the step, or while it recovers the committed result or the
+  uncommitted invocation. All twelve reply `settlement_pending` with the step
+  still open; the next exact redelivery discloses the committed result or
+  replies `execution_error`, and nothing reruns
+- the same three faults at a committed result's first disclosure:
+  `settlement_pending`, then the exact redelivery discloses that result
+- a failure of the host's own code before commit: `execution_error` with the
+  preparation discarded at once
+- a population over its byte budget is `budget_exhausted` / `storage`, and a
+  disclosure whose database deadline passed is `budget_exhausted` / `time`
 - host death mid-query: capacity, close and admission stay blocked until the
   reader backend is confirmed gone; recovery then settles the orphaned
   invocation at the full reservation, and a new step is admitted without
@@ -628,12 +686,33 @@ Development failures retained:
   executor's SQLSTATE table. Database-free tests (`test_agent_sql_refusals`)
   cover each SQLSTATE at each call and fail on the previous code; the installed
   test above produces a real lock timeout.
-- **Open finding: a busy database during redelivery still fails the step.** When
-  a redelivered step's preparation probe or its recovery meets a lock timeout,
-  the step is settled as failed (`unavailable` or `execution_error`) although
-  its result may already be committed. The packet's outcome for unknown commit
-  ownership is `settlement_pending`. This is unchanged here, because it changes
-  crash recovery and needs its own recovery tests.
+- **A busy database during redelivery failed the step.** When a redelivered
+  step's preparation probe or its recovery met a lock timeout, the step was
+  settled as failed (`unavailable` or `execution_error`) although its result
+  might already be committed. A busy first disclosure of a committed result
+  failed its step too, so the result could never be disclosed. The packet's
+  outcome for unknown commit ownership is `settlement_pending`. Only proof now
+  settles a step (see Crash recovery); the installed fault tests fail on the
+  previous code.
+- An independent review found six more defects; each was reproduced first:
+  - SQLSTATE 54000 is both a deadline and a byte limit. A passed delivery
+    deadline replied `storage`, and a population over its byte budget replied
+    `time`.
+  - `handle()` raised when the owner lock, an abandonment or a settlement call
+    failed.
+  - A failure of the host's own code before commit was settled as an
+    `execution_error` but held the step's reservation until the run expired.
+  - `x = y IS NULL` was admitted and emitted unparenthesized, so PostgreSQL ran
+    `(x = y) IS NULL` instead; `a = b = $1` was admitted although PostgreSQL
+    cannot run it.
+  - `a NOT LIKE b` was refused as an unknown clause; it is now inventoried and
+    refused as `unreviewed_operator`, like LIKE.
+  - Recursion over correction edges emitted an undefined function (see Host
+    interface).
+  Database-free tests reproduce each in `test_agent_sql_refusals` and
+  `test_agent_sql_admission` and fail on the previous code; the installed tests
+  above produce the reservation, deadline and byte-budget cases on a real
+  database.
 
 Exact-head installed 3.13/3.14 qualification and CI belong on the PR.
 

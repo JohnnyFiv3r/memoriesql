@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import time
 import unittest
+from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import MagicMock, patch
 from uuid import UUID, uuid4
@@ -36,6 +37,11 @@ from memoriesql.infrastructure.postgres.agent_sql_authority import (
 from memoriesql.infrastructure.postgres.agent_sql_results import (
     PostgresAgentSqlResults,
     _admission_error,
+    _Failure,
+    _state_code,
+)
+from memoriesql.infrastructure.postgres.relation_sql_population import (
+    RelationPopulationError,
 )
 
 # A busy database: the caller may simply try again.
@@ -51,14 +57,74 @@ BUSY = {
 OTHERS = ("42501", "28000", "P0002", "23505", "XX000", None)
 UNAVAILABLE = ("unavailable", {"code": "unavailable"})
 FRAME = "memoriesql.infrastructure.postgres.agent_sql_results.relation_projection_frame"
+POPULATION = (
+    "memoriesql.infrastructure.postgres.agent_sql_results.prepare_query_population"
+)
 STATEMENTS = "SELECT s.statement_id FROM memory_v1.statements s WHERE "
 UNREVIEWED = ("unsupported_query", "feature", "unreviewed_operator")
+PENDING = ("settlement_pending", {"code": "settlement"})
+REMAINING = {
+    "accesses": 128,
+    "db_ms": 300000,
+    "transport_bytes": 16777216,
+    "allocation_bytes": 134217728,
+    "run_expires_at": "2026-01-01T00:30:00.000000Z",
+}
 
 
 def failure(sqlstate: str | None) -> BaseException:
     if sqlstate is None:
         return psycopg.OperationalError("fictional lost connection")
     return errors.lookup(sqlstate)("fictional refusal")
+
+
+class Named(errors.ProgramLimitExceeded):
+    """SQLSTATE 54000 under the name the database raises it with."""
+
+    def __init__(self, name: str) -> None:
+        super().__init__(name)
+        self.name = name
+
+    @property
+    def diag(self) -> Any:
+        return SimpleNamespace(message_primary=self.name)
+
+
+def admitted(*, replay: bool = False) -> dict[str, Any]:
+    """An admission as M0038 returns it: one reserved, owned delivery."""
+    delivery = str(uuid4())
+    return {
+        "delivery_ref": delivery,
+        "delivery_number": 1,
+        "receipt_ref": delivery,
+        "replay": replay,
+        "step": {"state": "executing"},
+        "reserved_db_ms": 30000,
+        "reserved_transport": 262144,
+        "deadline": "2026-01-01T00:00:30.000000Z",
+        "remaining": REMAINING,
+        "owner_lock_key": 1,
+    }
+
+
+def failing_at(*statements: str) -> MagicMock:
+    """Control connections whose named statements fail as a lost connection."""
+
+    def execute(query: Any, *args: Any, **kwargs: Any) -> Any:
+        text = str(query)
+        if any(statement in text for statement in statements):
+            raise failure(None)
+        cursor = MagicMock()
+        cursor.fetchone.return_value = (REMAINING if "remaining" in text else None,)
+        return cursor
+
+    def connect() -> MagicMock:
+        connection = MagicMock()
+        connection.__enter__.return_value = connection
+        connection.execute.side_effect = execute
+        return connection
+
+    return MagicMock(side_effect=connect)
 
 
 def executor(control: Any) -> PostgresAgentSqlResults:
@@ -211,6 +277,123 @@ class AgentSqlRefusals(unittest.TestCase):
             ("unavailable", "unavailable"),
         )
 
+    def test_sqlstate_54000_says_which_limit_ran_out(self) -> None:
+        # The database raises 54000 for a passed deadline and for byte limits;
+        # only the deadline is `time`.
+        for name, code in (
+            ("query_delivery_work_exhausted", "time"),
+            ("query_result_work_exhausted", "time"),
+            ("preparation_storage_exhausted", "storage"),
+            ("population_budget_exhausted", "storage"),
+            ("query_stage_budget_exhausted", "storage"),
+        ):
+            with self.subTest(name=name):
+                self.assertEqual(_state_code(Named(name)), code)
+                self.assertEqual(
+                    self.cursor_failure(Named(name)), ("budget_exhausted", code)
+                )
+                reply = self.replies(Named(name))["start_run"]
+                self.assertEqual(
+                    (reply["outcome"], reply["error"]),
+                    ("budget_exhausted", {"code": code}),
+                )
+
+    def test_a_population_says_which_budget_ran_out(self) -> None:
+        request = query_request(STATEMENTS + "s.kind = $1", [])
+        for limit in ("time", "storage"):
+            start = time.monotonic()
+            refusal = RelationPopulationError("budget_exhausted", limit=limit)
+            with self.subTest(limit=limit), patch(POPULATION, side_effect=refusal):
+                with self.assertRaises(_Failure) as refused:
+                    executor(MagicMock())._execute(
+                        request, MagicMock(), MagicMock(), {}, start, start + 30
+                    )
+                self.assertEqual(
+                    (refused.exception.outcome, refused.exception.code),
+                    ("budget_exhausted", limit),
+                )
+
+    def test_a_failure_before_any_commit_is_known_and_owns_nothing(self) -> None:
+        # Nothing of the step can commit, so the caller discards its
+        # reservation instead of holding it until the run expires. A busy
+        # database stays a budget refusal.
+        request = query_request(STATEMENTS + "s.kind = $1", [])
+        for error, outcome, code in (
+            (RuntimeError("fictional fault"), "execution_error", "database"),
+            (failure(None), "execution_error", "database"),
+            (failure("XX000"), "execution_error", "database"),
+            (failure("40001"), "budget_exhausted", "settlement"),
+            (failure("55000"), "budget_exhausted", "settlement"),
+            (failure("53400"), "budget_exhausted", "storage"),
+        ):
+            start = time.monotonic()
+            with (
+                self.subTest(error=repr(error)),
+                patch(POPULATION, side_effect=error),
+                self.assertRaises(_Failure) as refused,
+            ):
+                executor(MagicMock())._execute(
+                    request, MagicMock(), MagicMock(), {}, start, start + 30
+                )
+            failed = refused.exception
+            self.assertEqual(
+                (failed.outcome, failed.code, failed.pending, failed.committed),
+                (outcome, code, False, False),
+            )
+
+
+class AgentSqlUnknownSettlement(unittest.TestCase):
+    """`handle()` answers every admitted request; it never raises."""
+
+    def handle(self, control: Any, admission: dict[str, Any]) -> dict[str, Any]:
+        with patch.object(PostgresAgentSqlResults, "_admit", return_value=admission):
+            reply: dict[str, Any] = json.loads(
+                executor(control).handle(reuse_request())
+            )
+        return reply
+
+    def test_an_unconfirmed_abandonment_stays_pending(self) -> None:
+        open_step = {
+            "refused": "pending_self",
+            "blocking_delivery": str(uuid4()),
+            "remaining": REMAINING,
+        }
+        for error in (failure("55P03"), failure(None)):
+            with self.subTest(error=type(error).__name__):
+                reply = self.handle(MagicMock(side_effect=error), open_step)
+                self.assertEqual((reply["outcome"], reply["error"]), PENDING)
+                self.assertEqual(reply["remaining"], REMAINING)
+
+    def test_an_access_that_cannot_take_ownership_stays_pending(self) -> None:
+        for control in (
+            MagicMock(side_effect=failure(None)),
+            failing_at("pg_advisory_lock"),
+        ):
+            admission = admitted()
+            reply = self.handle(control, admission)
+            self.assertEqual((reply["outcome"], reply["error"]), PENDING)
+            self.assertEqual(reply["access_receipt_ref"], admission["delivery_ref"])
+            # Recovery charges the full reservation; the reply says so.
+            self.assertEqual(reply["remaining"]["db_ms"], 300000 - 30000)
+
+    def test_an_unrecorded_outcome_is_pending_never_a_raise(self) -> None:
+        for refusal in (
+            _Failure("execution_error", "database"),
+            _Failure("settlement_pending", "settlement", pending=True),
+        ):
+            for statement in (
+                "query_delivery_remaining_v1",
+                "settle_query_delivery_v1",
+            ):
+                with (
+                    self.subTest(outcome=refusal.outcome, statement=statement),
+                    patch.object(
+                        PostgresAgentSqlResults, "_reuse", side_effect=refusal
+                    ),
+                ):
+                    reply = self.handle(failing_at(statement), admitted())
+                    self.assertEqual((reply["outcome"], reply["error"]), PENDING)
+
 
 class AgentSqlScreenedRefusals(unittest.TestCase):
     def test_safe_codes_never_carry_an_internal_construct(self) -> None:
@@ -276,6 +459,8 @@ class AgentSqlScreenedRefusals(unittest.TestCase):
             ("NOT (s.kind = $1)", text, "s.kind"),
             ("s.kind <> $1", text, "s.kind"),
             ("lower(s.text) LIKE $1", text, "lower"),
+            ("s.text NOT LIKE $1", text, "s.text"),
+            ("NOT (s.text NOT ILIKE $1)", text, "s.text"),
             ("s.recorded_at >= $1", moment, "s.recorded_at"),
             ("s.sequence = $1 AND -s.sequence < s.sequence", number, "s.sequence <"),
             # Under NOT, up to eight values compare with `<>`, which is refused.
@@ -285,6 +470,23 @@ class AgentSqlScreenedRefusals(unittest.TestCase):
                 self.assertEqual(
                     screen(STATEMENTS + predicate, parameters),
                     (*UNREVIEWED, len(STATEMENTS) + predicate.index(token)),
+                )
+        # A comparison PostgreSQL would group differently is refused where it
+        # starts, before any work, and says why.
+        flag = [{"position": 1, "type": "bool", "value": True}]
+        for predicate, parameters in (
+            ("s.kind = s.text IS NULL", []),
+            ("s.kind = s.text = $1", flag),
+        ):
+            with self.subTest(predicate=predicate):
+                self.assertEqual(
+                    screen(STATEMENTS + predicate, parameters),
+                    (
+                        "unsupported_query",
+                        "feature",
+                        "comparison_grouping",
+                        len(STATEMENTS),
+                    ),
                 )
         for predicate, parameters in (
             ("s.kind = $1", text),

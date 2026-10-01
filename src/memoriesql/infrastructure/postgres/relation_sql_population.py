@@ -86,8 +86,11 @@ _HASHES = frozenset({("statement_sources", "content_sha256"), ("source_units", "
 
 
 class RelationPopulationError(ValueError):
-    def __init__(self, code: str) -> None:
+    def __init__(self, code: str, *, limit: str | None = None) -> None:
         self.code = code
+        # Which budget a `budget_exhausted` population ran out of: `time` or
+        # `storage`.
+        self.limit = limit
         super().__init__(code)
 
 
@@ -333,7 +336,7 @@ def _prepare(
     # or Python RSS. Includes bindings and typed-row transport before handoff.
     size = len(data.encode("utf-8")) + len(manifest) + 8192 + len(references) * 512
     if size > byte_budget:
-        raise RelationPopulationError("budget_exhausted")
+        raise RelationPopulationError("budget_exhausted", limit="storage")
     frame = raw["frame"]
     return PreparedRelationPopulation(
         _time(frame["known_at"]),
@@ -465,7 +468,9 @@ def _population_frame(
             yield population
     except (InsufficientPrivilege, InvalidAuthorizationSpecification, NoDataFound):
         raise RelationPopulationError("unavailable") from None
-    except (QueryCanceled, LockNotAvailable, ProgramLimitExceeded):
-        raise RelationPopulationError("budget_exhausted") from None
+    except (QueryCanceled, LockNotAvailable):
+        raise RelationPopulationError("budget_exhausted", limit="time") from None
+    except ProgramLimitExceeded:
+        raise RelationPopulationError("budget_exhausted", limit="storage") from None
     except InvalidParameterValue:
         raise RelationPopulationError("invalid_request") from None
