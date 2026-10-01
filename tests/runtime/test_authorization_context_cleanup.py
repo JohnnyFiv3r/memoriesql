@@ -259,6 +259,25 @@ class AuthorizationContextCleanup(unittest.TestCase):
         self.committed(reader, RR)
         self.assertEqual((self.contexts(ended), self.contexts(earlier)), (0, 1))
 
+    def test_a_serializable_start_is_undone_and_starts_like_repeatable_read(
+        self,
+    ) -> None:
+        # SERIALIZABLE takes the same snapshot branch: the collection attempt
+        # meets a row removed after the snapshot, is undone, and the context
+        # starts and commits.
+        self.upgrade()
+        reader, other = self.connect(), self.connect()
+        earlier = self.committed(reader)
+        ended = self.ended_backend_context()
+        self.begin(reader, "SERIALIZABLE")
+        reader.execute("SELECT 1")
+        self.committed(other)
+        self.assertEqual(self.contexts(ended), 0)
+        reader.execute(START, (self.secret, self.workspace))
+        self.assertEqual(reader.execute(CURRENT).fetchone(), (1,))
+        reader.execute("COMMIT")
+        self.assertEqual(self.contexts(earlier), 2)
+
     def test_a_second_context_in_one_transaction_revokes_the_first(self) -> None:
         self.upgrade()
         named = "SELECT current_setting('memoriesql.authorization_context_id')"

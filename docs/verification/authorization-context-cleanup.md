@@ -54,8 +54,10 @@ both require the caller's backend and transaction identifiers. So:
   the context anyway; a later start collects what is left. Read-committed
   callers need no subtransaction, because they simply skip such a row.
 
-So every caller collects, whatever isolation level its session uses, and no
-caller waits or fails because of it.
+So every caller attempts collection, whatever isolation level its session uses,
+and no caller waits or fails because of it. Under snapshot isolation an attempt
+that meets a row removed after its snapshot is undone and collects nothing; a
+later start collects what is left.
 
 The kernel function is migration 0006's text with that one statement replaced,
 generated and diffed. `CREATE OR REPLACE` keeps its owner, grants and comment,
@@ -109,6 +111,8 @@ On schema 40 they also show:
 
 - a snapshot-isolation start with nothing removed behind its snapshot collects
   like any other;
+- a SERIALIZABLE start takes the same branch as REPEATABLE READ: its attempt is
+  undone, and the context starts and commits;
 - a second context in one transaction revokes the first, under READ COMMITTED
   and REPEATABLE READ, and naming the first again resumes nothing;
 - a start collects an ended backend's row, its own backend's earlier rows and an
@@ -125,7 +129,11 @@ On schema 40 they also show:
 A database-free test holds migration 0040 to migration 0006's kernel text with
 only the stale-row DELETE replaced, and to adding one ungranted helper and
 nothing else: no grant, alter, comment or drop. CLI tests cover the
-`source_authority_busy` reason for all three commands.
+`source_authority_busy` reason for all three commands. A held read fence trips
+the lock timeout long before the statement timeout, so the installed test
+produces only 55P03; a database-free test (`test_source_enrollment_busy`) raises
+both 55P03 and 57014 in each of the three commands and checks that each becomes
+`SourceAuthorityBusy` with that error as its cause.
 
 Migrations 0001–0039 keep their bytes. The executor's installed tests now run on
 schema 40.
