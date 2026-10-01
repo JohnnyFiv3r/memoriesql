@@ -22,7 +22,11 @@ from uuid import UUID, uuid4
 
 from psycopg import Connection, Error
 
-from memoriesql.application.agent_sql_admission import RecursionBound, admit_query
+from memoriesql.application.agent_sql_admission import (
+    RecursionBound,
+    admit_query,
+    require_reviewed,
+)
 from memoriesql.application.agent_sql_catalog import SqlAdmissionError, SqlCatalog
 from memoriesql.application.agent_sql_results import (
     ALLOCATION_PROFILE_HASH,
@@ -47,6 +51,9 @@ from memoriesql.application.investigation_contracts import (
 )
 from memoriesql.infrastructure.postgres.agent_sql_authority import QueryAuthorityProfile
 from memoriesql.infrastructure.postgres.authorization import PostgresAuthorizationPort
+from memoriesql.infrastructure.postgres.query_reader_provisioning import (
+    REVIEWED_BUILTINS,
+)
 from memoriesql.infrastructure.postgres.query_result_commit import (
     InternalResultCandidate,
     PostgresQueryResultCommit,
@@ -88,6 +95,45 @@ _STATE_CODES = {
     "40001": "settlement",
 }
 _POPULATION_BYTES = 64 * 1024 * 1024
+_REVIEWED = frozenset(REVIEWED_BUILTINS)
+# A committed result's disclosure that failed for one of these reasons fixes
+# its step as failed. Any other failure leaves the step open for redelivery.
+_DEFINITIVE = frozenset({"unavailable", "idempotency", "transport"})
+
+
+def _state_code(error: BaseException) -> str | None:
+    """The safe code of a database error, or None when its SQLSTATE has none.
+
+    SQLSTATE 54000 is both a deadline and a byte limit. The database names a
+    passed deadline `..._work_exhausted`; every other 54000 is `storage`.
+    """
+    sqlstate = getattr(error, "sqlstate", None) or ""
+    if sqlstate == "54000":
+        message = getattr(getattr(error, "diag", None), "message_primary", None)
+        if (message or "").endswith("_work_exhausted"):
+            return "time"
+    return _STATE_CODES.get(sqlstate)
+
+
+def _busy(error: BaseException) -> str | None:
+    """The safe code of a failure the caller may simply try again, else None.
+
+    A lock or statement timeout is `time`, a storage or work limit is `storage`
+    and a conflict with work still in flight is `settlement`. The packet reports
+    these as `budget_exhausted`, never as missing authority.
+    """
+    code = _state_code(error)
+    return code if code in ("time", "storage", "settlement") else None
+
+
+def _refusal(error: BaseException) -> tuple[str, str]:
+    """Outcome and safe code for a control call that failed and wrote nothing.
+
+    Every failure that is not a busy database keeps the one shape that missing
+    and denied authority share.
+    """
+    busy = _busy(error)
+    return ("budget_exhausted", busy) if busy else ("unavailable", "unavailable")
 
 
 class _Failure(Exception):
@@ -123,6 +169,36 @@ class _Failure(Exception):
         return value
 
 
+def _pending() -> _Failure:
+    """Commit or settlement is unknown: the exact redelivery resolves it."""
+    return _Failure("settlement_pending", "settlement", pending=True)
+
+
+def _committed(failure: _Failure) -> _Failure:
+    """A committed result's failed disclosure: the result is immutable and is
+    never discarded. Only a definitive refusal fixes its step as failed; a
+    busy database or a lost connection leaves it for the exact redelivery."""
+    failure.committed = True
+    if failure.pending or failure.code in _DEFINITIVE:
+        return failure
+    return _pending()
+
+
+def _disclosure_failure(error: Error) -> _Failure:
+    """What a database error means while resolving or disclosing a result."""
+    code = _state_code(error) or "database"
+    return _Failure(
+        "unavailable"
+        if code == "unavailable"
+        else "idempotency_conflict"
+        if code == "idempotency"
+        else "budget_exhausted"
+        if code in {"time", "storage"}
+        else "execution_error",
+        code,
+    )
+
+
 def _admission_error(outcome: str, construct: str | None) -> tuple[str, str | None]:
     """Map a content-free admission construct to an approved safe error code."""
     if outcome == "unsupported_query":
@@ -132,9 +208,17 @@ def _admission_error(outcome: str, construct: str | None) -> tuple[str, str | No
     if outcome == "invalid_request":
         if construct == "syntax":
             return "syntax", None
+        if construct == "reference_type":
+            # The one type error the SQL text cannot show: an identifier column
+            # compares only with a value bound under its own reference type.
+            return "type", construct
         if construct and "type" in construct:
             return "type", None
         return "binding", None
+    if outcome == "unavailable":
+        # Missing, denied and dependency-lost identifiers share one shape; the
+        # internal construct that refused never reaches a reply.
+        return "unavailable", None
     return construct or "database", None
 
 
@@ -160,6 +244,7 @@ class PostgresAgentSqlResults:
             credential_sha256=credential_sha256,
             workspace_id=workspace_id,
             policy_hash=POLICY_HASH,
+            reviewed_builtins=_REVIEWED,
         )
 
     # -- public operations -------------------------------------------------
@@ -169,7 +254,10 @@ class PostgresAgentSqlResults:
 
         A bounded expiry-cleanup pass for this workspace runs first, in its own
         transaction. Content cleanup more than 24 hours past due (missed or
-        failed) refuses the run as `budget_exhausted` / `settlement`.
+        failed) refuses the run as `budget_exhausted` / `settlement`. A lock or
+        statement timeout, for example while a cleanup pass holds this
+        workspace's admission lock, is `budget_exhausted` / `time` and starts
+        nothing.
         """
         self._cleanup_workspace()
         try:
@@ -183,12 +271,13 @@ class PostgresAgentSqlResults:
                         "SELECT memoriesql.start_query_run_v1(%s,%s)",
                         (SqlCatalog.installed().hash, POLICY_HASH),
                     ).fetchone()
-        except (PermissionError, Error):
+        except (PermissionError, Error) as error:
+            outcome, code = _refusal(error)
             return result_json_bytes(
                 {
                     "contract_version": CONTRACT_VERSION,
-                    "outcome": "unavailable",
-                    "error": {"code": "unavailable"},
+                    "outcome": outcome,
+                    "error": {"code": code},
                 }
             )
         data: dict[str, Any] = row[0] if row else {"refused": "unavailable"}
@@ -225,8 +314,15 @@ class PostgresAgentSqlResults:
                     row = frame.execute(
                         "SELECT memoriesql.close_query_run_v1(%s)", (UUID(run_ref),)
                     ).fetchone()
-        except (PermissionError, Error, ValueError):
-            row = None
+        except (PermissionError, Error, ValueError) as error:
+            outcome, code = _refusal(error)
+            return result_json_bytes(
+                {
+                    "contract_version": CONTRACT_VERSION,
+                    "outcome": outcome,
+                    "error": {"code": code},
+                }
+            )
         data: dict[str, Any] = row[0] if row and row[0] else {"refused": "unavailable"}
         refused = data.get("refused")
         if refused:
@@ -296,12 +392,13 @@ class PostgresAgentSqlResults:
                     failed = int(data.get("failed", 0))
                     if not any(int(purged.get(key, 0)) for key in totals):
                         break
-        except Error:
+        except Error as error:
+            busy = _busy(error)
             return result_json_bytes(
                 {
                     "contract_version": CONTRACT_VERSION,
-                    "outcome": "execution_error",
-                    "error": {"code": "database"},
+                    "outcome": "budget_exhausted" if busy else "execution_error",
+                    "error": {"code": busy or "database"},
                     "cleanup": {
                         "purged": totals,
                         "pending": pending,
@@ -335,12 +432,13 @@ class PostgresAgentSqlResults:
                     row = frame.execute(
                         "SELECT memoriesql.query_cleanup_status_v1()"
                     ).fetchone()
-        except (PermissionError, Error):
+        except (PermissionError, Error) as error:
+            outcome, code = _refusal(error)
             return result_json_bytes(
                 {
                     "contract_version": CONTRACT_VERSION,
-                    "outcome": "unavailable",
-                    "error": {"code": "unavailable"},
+                    "outcome": outcome,
+                    "error": {"code": code},
                 }
             )
         return result_json_bytes(
@@ -374,22 +472,30 @@ class PostgresAgentSqlResults:
         for attempt in range(2):
             try:
                 admission = self._admit(request, kind, fingerprint)
-            except (PermissionError, Error):
+            except (PermissionError, Error) as error:
+                # Nothing was admitted or charged: a timed-out admission is a
+                # budget refusal, not missing authority.
+                outcome, code = _refusal(error)
                 return self._bare(
                     request.run_ref,
                     request.step_key,
-                    "unavailable",
-                    {"code": "unavailable"},
+                    outcome,
+                    {"code": code},
                     None,
                 )
             refused = admission.get("refused")
             if refused == "pending_self" and attempt == 0:
                 # The same step is open. Only a confirmed-dead owner may be
-                # abandoned (full reservation charged); a live one stays pending.
-                if self._owned(
-                    "SELECT memoriesql.abandon_query_delivery_v1(%s)",
-                    (UUID(admission["blocking_delivery"]),),
-                ):
+                # abandoned (full reservation charged); a live one stays pending,
+                # and so does one whose abandonment could not be confirmed.
+                try:
+                    abandoned = self._owned(
+                        "SELECT memoriesql.abandon_query_delivery_v1(%s)",
+                        (UUID(admission["blocking_delivery"]),),
+                    )
+                except Error:
+                    abandoned = False
+                if abandoned:
                     continue
             if refused == "pending_self":
                 return self._bare(
@@ -423,11 +529,19 @@ class PostgresAgentSqlResults:
     ) -> bytes:
         deadline = start + int(admission["reserved_db_ms"]) / 1000
         key = int(admission["owner_lock_key"])
-        owner = self._control()
+        try:
+            owner = self._control()
+        except Error:
+            # Admitted but never owned: recovery or the exact redelivery
+            # abandons it at its full reservation.
+            return self._pending_reply(request, admission, None)
         try:
             # Session-scoped liveness: recovery may abandon this delivery only
             # after this owning session has ended.
-            owner.execute("SELECT pg_advisory_lock(%s)", (key,))
+            try:
+                owner.execute("SELECT pg_advisory_lock(%s)", (key,))
+            except Error:
+                return self._pending_reply(request, admission, None)
             step = admission["step"]
             try:
                 if admission["replay"] and step["state"] == "failed":
@@ -470,28 +584,23 @@ class PostgresAgentSqlResults:
         start: float,
         deadline: float,
     ) -> bytes:
-        feature = (
-            "saved_input_refinement"
-            if request.inputs
-            else "live_expansion"
-            if request.parents
-            else "candidate_profile"
-            if request.candidate_profile_ref
-            else "source_scope"
-            if request.scope.source_refs
-            else None
-        )
-        if feature is not None or request.intent not in {"discover", "enumerate"}:
-            raise _Failure(
-                "unsupported_query", "feature", feature=feature or request.intent
-            )
-        self._screen(request)
-        if admission["replay"] and self._step_preparation(request) == "discarded":
+        # A redelivered step that already holds a preparation is only ever
+        # recovered, never screened or run again.
+        prepared = self._step_preparation(request) if admission["replay"] else None
+        if prepared == "discarded":
             # This step's single-use preparation is gone (for example, its
             # commit was refused after its owner ended): a known execution
             # failure, never a rerun. The client uses a new step key.
             raise _Failure("execution_error", "database")
-        with self._control() as store_connection:
+        if prepared is None:
+            self._refuse_unsupported(request)
+        try:
+            store_connection = self._control()
+        except Error:
+            if prepared is not None:
+                raise _pending() from None
+            raise
+        with store_connection:
             store = PostgresResultPreparation(
                 store_connection,
                 credential_sha256=self._credential,
@@ -504,8 +613,13 @@ class PostgresAgentSqlResults:
                     request_fingerprint=fingerprint,
                     reservation_bytes=max(8192, request.max_result_bytes),
                 )
-            except Error as error:
-                code = _STATE_CODES.get(error.sqlstate or "", "database")
+            except Exception as error:
+                if prepared is not None:
+                    # The step's earlier work was not found out.
+                    raise _pending() from None
+                if not isinstance(error, Error):
+                    raise
+                code = _state_code(error) or "database"
                 raise _Failure(
                     "idempotency_conflict"
                     if code == "idempotency"
@@ -539,6 +653,9 @@ class PostgresAgentSqlResults:
         known_at = datetime.fromisoformat(request.scope.known_at.replace("Z", "+00:00"))
         parameters = self._parameters(request)
         recursion = self._recursion(request)
+        # Once the commit is sent its outcome may be unknown: from then on a
+        # failure neither discards the preparation nor fails the step.
+        committing = False
         committed = False
         try:
             with self._control() as source:
@@ -596,6 +713,7 @@ class PostgresAgentSqlResults:
                             "storage" if "storage" in text else "time",
                         ) from None
                     with self._control() as commit_connection:
+                        committing = True
                         try:
                             receipt = PostgresQueryResultCommit(
                                 commit_connection,
@@ -603,7 +721,7 @@ class PostgresAgentSqlResults:
                                 workspace_id=self._workspace,
                             ).commit(ownership, candidate)
                         except Error as error:
-                            known = _STATE_CODES.get(error.sqlstate or "")
+                            known = _state_code(error)
                             if known is None:
                                 # Commit acknowledgement is uncertain; never
                                 # refund or retry, recover the owned receipt.
@@ -627,7 +745,11 @@ class PostgresAgentSqlResults:
                                 known,
                             ) from None
                         committed = receipt.get("state") == "committed"
+        except _Failure:
+            raise
         except RelationPopulationError as error:
+            if committing:
+                raise _pending() from None
             raise _Failure(
                 {
                     "unavailable": "unavailable",
@@ -636,12 +758,22 @@ class PostgresAgentSqlResults:
                 }.get(error.code, "execution_error"),
                 {
                     "unavailable": "unavailable",
-                    "budget_exhausted": "time",
+                    "budget_exhausted": error.limit or "time",
                     "invalid_request": "time",
                 }.get(error.code, "database"),
             ) from None
+        except Exception as error:
+            if committing:
+                raise _pending() from None
+            # Before any commit was sent nothing of this step can commit, so
+            # its reservation is discarded, never held. A busy database is a
+            # budget refusal; any other failure is the host's own.
+            busy = _busy(error)
+            if busy:
+                raise _Failure("budget_exhausted", busy) from None
+            raise _Failure("execution_error", "database") from None
         if not committed:
-            raise _Failure("settlement_pending", "settlement", pending=True)
+            raise _pending()
         try:
             return self._disclose(
                 request,
@@ -654,10 +786,11 @@ class PostgresAgentSqlResults:
                 request.page_size,
             )
         except _Failure as failure:
-            # Committed results are immutable: exact redelivery or reuse
-            # discloses them later under current authority, never a rerun.
-            failure.committed = True
-            raise
+            # Committed results are immutable: the exact redelivery discloses
+            # them later under current authority, never a rerun.
+            raise _committed(failure) from None
+        except Exception:
+            raise _pending() from None
 
     @staticmethod
     def _parameters(request: QueryRequest) -> tuple[Any, ...]:
@@ -692,34 +825,74 @@ class PostgresAgentSqlResults:
                         (UUID(request.run_ref), UUID(request.step_key)),
                     ).fetchone()
         except (PermissionError, Error):
-            raise _Failure("unavailable", "unavailable") from None
+            # Whether the step's earlier work committed is unknown: never a
+            # failure without proof.
+            raise _pending() from None
         return str(row[0]) if row and row[0] is not None else None
 
-    def _screen(self, request: QueryRequest) -> None:
-        """Refuse SQL the text alone decides, before any reservation or work.
+    def _refuse_unsupported(self, request: QueryRequest) -> None:
+        """Refuse what this cut does not run, before any reservation."""
+        feature = (
+            "saved_input_refinement"
+            if request.inputs
+            else "live_expansion"
+            if request.parents
+            else "candidate_profile"
+            if request.candidate_profile_ref
+            else "source_scope"
+            if request.scope.source_refs
+            else None
+        )
+        if feature is not None or request.intent not in {"discover", "enumerate"}:
+            raise _Failure(
+                "unsupported_query", "feature", feature=feature or request.intent
+            )
+        self._screen(request)
 
-        Only reference anchors depend on the prepared population, so a
-        `parameter_anchor` refusal is left to the full admission after
-        preparation; every other admission outcome is final here.
+    def _screen(self, request: QueryRequest) -> None:
+        """Refuse what the SQL and its bound values alone decide, before any
+        reservation or preparation.
+
+        Whether a bound identifier is visible depends on the prepared population.
+        The request's own identifiers therefore stand in as anchors here, which
+        admits nothing: the full admission after preparation still requires each
+        one to be visible, and only that admission is executed.
         """
+        parameters = self._parameters(request)
+        references = SqlCatalog.installed().reference_types
+        own = frozenset(
+            (kind, value)
+            for parameter in parameters
+            if (kind := parameter.type.removesuffix("[]")) in references
+            for value in (
+                parameter.value
+                if isinstance(parameter.value, tuple)
+                else (parameter.value,)
+            )
+            if isinstance(value, str)
+        )
         try:
             screened = admit_query(
                 request.sql,
-                self._parameters(request),
+                parameters,
+                admitted_anchors=own,
                 recursion=self._recursion(request),
             )
+            if not set(screened.relations) <= PREPARED_RELATIONS:
+                raise SqlAdmissionError("unsupported", "unprepared_relation")
+            require_reviewed(screened, _REVIEWED)
         except SqlAdmissionError as error:
             if error.construct == "parameter_anchor":
                 return
             outcome = "unsupported_query" if error.code == "unsupported" else error.code
             code, feature = _admission_error(outcome, error.construct)
             raise _Failure(
-                outcome, code, feature=feature, position=error.position
+                outcome,
+                code,
+                feature=feature,
+                # Every unavailable reply has one shape.
+                position=None if outcome == "unavailable" else error.position,
             ) from None
-        if not set(screened.relations) <= PREPARED_RELATIONS:
-            raise _Failure(
-                "unsupported_query", "feature", feature="unprepared_relation"
-            )
 
     def _recover_query(
         self,
@@ -730,32 +903,48 @@ class PostgresAgentSqlResults:
         start: float,
         deadline: float,
     ) -> bytes:
-        """A redelivered step whose earlier owner ended: never rerun the query."""
-        if ownership.state == "sealed":
+        """A redelivered step whose earlier owner ended: never rerun the query.
+
+        Only proof settles the step: a committed result is disclosed, and a
+        preparation that can no longer commit is an execution error. A failure
+        while finding out which leaves it `settlement_pending`.
+        """
+        if ownership.state not in ("sealed", "reserved"):
+            raise _Failure("execution_error", "database")
+        try:
+            if ownership.state == "reserved":
+                settlement = self._executor.recover(ownership, cancel=True)
+                if settlement is not None and settlement.state != "settled":
+                    raise _pending()
+                self._discard(store, ownership)
+                raise _Failure("execution_error", "database")
             with self._control() as connection:
                 receipt = PostgresQueryResultCommit(
                     connection,
                     credential_sha256=self._credential,
                     workspace_id=self._workspace,
                 ).recover(ownership)
-            if receipt.get("state") == "committed":
-                return self._disclose(
-                    request,
-                    admission,
-                    start,
-                    deadline,
-                    UUID(receipt["result_id"]),
-                    receipt["content_digest"],
-                    1,
-                    request.page_size,
-                )
-            raise _Failure("settlement_pending", "settlement", pending=True)
-        if ownership.state == "reserved":
-            settlement = self._executor.recover(ownership, cancel=True)
-            if settlement is not None and settlement.state != "settled":
-                raise _Failure("settlement_pending", "settlement", pending=True)
-            self._discard(store, ownership)
-        raise _Failure("execution_error", "database")
+        except _Failure:
+            raise
+        except Exception:
+            raise _pending() from None
+        if receipt.get("state") != "committed":
+            raise _pending()
+        try:
+            return self._disclose(
+                request,
+                admission,
+                start,
+                deadline,
+                UUID(receipt["result_id"]),
+                receipt["content_digest"],
+                1,
+                request.page_size,
+            )
+        except _Failure as failure:
+            raise _committed(failure) from None
+        except Exception:
+            raise _pending() from None
 
     def _reuse(
         self,
@@ -773,15 +962,20 @@ class PostgresAgentSqlResults:
                 cursor = UUID(request.cursor)
             except ValueError:
                 raise _Failure("invalid_request", "cursor") from None
-            with self._control() as connection:
-                with relation_projection_frame(
-                    connection,
-                    credential_sha256=self._credential,
-                    workspace_id=self._workspace,
-                ) as frame:
-                    row = frame.execute(
-                        "SELECT memoriesql.resolve_query_cursor_v1(%s)", (cursor,)
-                    ).fetchone()
+            try:
+                with self._control() as connection:
+                    with relation_projection_frame(
+                        connection,
+                        credential_sha256=self._credential,
+                        workspace_id=self._workspace,
+                    ) as frame:
+                        row = frame.execute(
+                            "SELECT memoriesql.resolve_query_cursor_v1(%s)", (cursor,)
+                        ).fetchone()
+            except PermissionError:
+                raise _Failure("unavailable", "unavailable") from None
+            except Error as error:
+                raise _disclosure_failure(error) from None
             binding = row[0] if row else None
             if (
                 binding is None
@@ -873,17 +1067,7 @@ class PostgresAgentSqlResults:
                     raise _Failure(
                         "settlement_pending", "settlement", pending=True
                     ) from None
-                code = _STATE_CODES.get(error.sqlstate or "", "database")
-                raise _Failure(
-                    "unavailable"
-                    if code == "unavailable"
-                    else "idempotency_conflict"
-                    if code == "idempotency"
-                    else "budget_exhausted"
-                    if code in {"time", "storage"}
-                    else "execution_error",
-                    code,
-                ) from None
+                raise _disclosure_failure(error) from None
             except PermissionError:
                 raise _Failure("unavailable", "unavailable") from None
         return data
@@ -1035,29 +1219,22 @@ class PostgresAgentSqlResults:
         failure: _Failure,
     ) -> bytes:
         delivery = UUID(admission["delivery_ref"])
-        before = self._owned(
-            "SELECT memoriesql.query_delivery_remaining_v1(%s)", (delivery,)
-        )
+        try:
+            before = self._owned(
+                "SELECT memoriesql.query_delivery_remaining_v1(%s)", (delivery,)
+            )
+        except Error:
+            # Nothing is recorded: recovery or the exact redelivery settles it.
+            return self._pending_reply(request, admission, None)
         if failure.pending:
-            data = result_json_bytes(
-                reply(
-                    run_ref=request.run_ref,
-                    step_key=request.step_key,
-                    outcome="settlement_pending",
-                    receipt_ref=admission["receipt_ref"],
-                    access_receipt_ref=admission["delivery_ref"],
-                    remaining=remaining_after(
-                        before,
-                        db_ms=int(admission["reserved_db_ms"]),
-                        transport_bytes=int(admission["reserved_transport"]),
-                    ),
-                    error={"code": "settlement"},
+            data = self._pending_reply(request, admission, before)
+            try:
+                self._owned(
+                    "SELECT memoriesql.settle_query_delivery_v1(%s,%s,%s,%s,%s,%s,%s)",
+                    (delivery, None, None, None, None, None, True),
                 )
-            )
-            self._owned(
-                "SELECT memoriesql.settle_query_delivery_v1(%s,%s,%s,%s,%s,%s,%s)",
-                (delivery, None, None, None, None, None, True),
-            )
+            except Error:
+                pass  # still unsettled, so it blocks until recovery settles it
             return data
         observed = math.ceil((time.monotonic() - start) * 1000)
         data, transport = stable_reply_bytes(
@@ -1073,19 +1250,50 @@ class PostgresAgentSqlResults:
             charge={"db_ms": observed},
             remaining_before=before,
         )
-        self._owned(
-            "SELECT memoriesql.settle_query_delivery_v1(%s,%s,%s,%s,%s,%s,%s)",
-            (
-                delivery,
-                failure.outcome,
-                failure.code,
-                observed,
-                transport,
-                hashlib.sha256(data).hexdigest(),
-                False,
-            ),
-        )
+        try:
+            self._owned(
+                "SELECT memoriesql.settle_query_delivery_v1(%s,%s,%s,%s,%s,%s,%s)",
+                (
+                    delivery,
+                    failure.outcome,
+                    failure.code,
+                    observed,
+                    transport,
+                    hashlib.sha256(data).hexdigest(),
+                    False,
+                ),
+            )
+        except Error:
+            # The outcome may be unrecorded: the exact redelivery replays it if
+            # it was recorded and recovers the step if it was not.
+            return self._pending_reply(request, admission, before)
         return data
+
+    @staticmethod
+    def _pending_reply(
+        request: QueryRequest | ReuseRequest,
+        admission: dict[str, Any],
+        before: dict[str, Any] | None,
+    ) -> bytes:
+        """`settlement_pending`, charged the full reservation, as recovery will.
+
+        Without the delivery's own remaining allowance, the admission's stands.
+        """
+        return result_json_bytes(
+            reply(
+                run_ref=request.run_ref,
+                step_key=request.step_key,
+                outcome="settlement_pending",
+                receipt_ref=admission["receipt_ref"],
+                access_receipt_ref=admission["delivery_ref"],
+                remaining=remaining_after(
+                    admission["remaining"] if before is None else before,
+                    db_ms=int(admission["reserved_db_ms"]),
+                    transport_bytes=int(admission["reserved_transport"]),
+                ),
+                error={"code": "settlement"},
+            )
+        )
 
     def _admit(
         self, request: QueryRequest | ReuseRequest, kind: str, fingerprint: str

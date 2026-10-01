@@ -92,6 +92,15 @@ REVIEWED_BUILTINS = (
     "numeric(bigint)",
     "int8(numeric)",
     "text(boolean)",
+    # From nine bound values PostgreSQL probes `= ANY` and `IN` through a hash
+    # table, which calls the type's default hash function. These are the six
+    # types a public relation produces; float8's stays out with its comparisons.
+    "hashtext(text)",
+    "uuid_hash(uuid)",
+    "hashint8(bigint)",
+    "hash_numeric(numeric)",
+    "timestamptz_hash(timestamptz)",
+    "hashbool(boolean)",
 )
 
 
@@ -134,6 +143,21 @@ def provision_query_reader(
                 sql.Identifier(schema, relation), role
             )
         )
+    grant_reviewed_closure(admin, reader)
+    return reviewed_query_reader_profile(admin, reader)
+
+
+def grant_reviewed_closure(admin: Connection[Any], reader: str) -> None:
+    """Grant a provisioned reader the reviewed function closure; idempotent.
+
+    A release that widens the closure is paired with this step on every host
+    whose reader already exists. Qualification requires the reader's executable
+    functions to equal the reviewed set exactly, so run it with the upgrade,
+    before the reader's profile is rebuilt and before the first query.
+    """
+    if not reader.isidentifier() or not reader.islower():
+        raise ValueError("invalid reader grant request")
+    role = sql.Identifier(reader)
     for signature in INVOCATION_PREDICATES:
         admin.execute(
             sql.SQL("GRANT EXECUTE ON FUNCTION " + signature + " TO {}").format(role)
@@ -144,7 +168,6 @@ def provision_query_reader(
                 "GRANT EXECUTE ON FUNCTION pg_catalog." + signature + " TO {}"
             ).format(role)
         )
-    return reviewed_query_reader_profile(admin, reader)
 
 
 def reviewed_query_reader_profile(
