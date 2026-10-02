@@ -23,7 +23,7 @@ import time
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 import psycopg
@@ -75,6 +75,9 @@ SCRAM_ITERATIONS = 4096
 
 # How long settling a lost commit waits for its transaction to end.
 TRANSACTION_END_SECONDS = 30.0
+
+# Where staged secrets stand in the database; see `_settlement`.
+Settlement = Literal["committed", "absent", "pending", "unreadable"]
 
 
 def scram_sha256_verifier(password: str, *, iterations: int = SCRAM_ITERATIONS) -> str:
@@ -261,15 +264,15 @@ def provision(
             )
         # COMMIT was sent but its reply was lost or refused: the database may
         # already require the staged secrets, so it settles the outcome.
-        committed = _secrets_committed(url, config, transaction)
-        if committed is None:
-            return _outcome_unknown(staged, recorded=True)
-        if not committed:
+        settlement = _settlement(url, config, transaction)
+        if settlement == "absent":
             _discard(staged)
             return _refused(
                 f"database provisioning did not complete ({cause} during commit); "
                 "nothing changed"
             )
+        if settlement != "committed":
+            return _outcome_unknown(staged, settlement, recorded=True)
         recovered = True
     except ValueError:
         _discard(staged)
@@ -281,9 +284,10 @@ def provision(
             _discard(staged)
         raise
     # The roles now carry the new secrets and this staged file is their only
-    # copy: make it live before anything else can fail.
-    _transaction_record(staged).unlink(missing_ok=True)
+    # copy: make it live before anything else can fail. Its record goes only
+    # once it is live, so a kept file never outlives its record.
     commit_config(staged, config_path)
+    _transaction_record(staged).unlink(missing_ok=True)
     return _pin(config_path, config, rotated=exists, recovered=recovered)
 
 
@@ -299,9 +303,11 @@ def _settle_kept(config_path: Path, url: str) -> int | None:
     """Settle kept configurations before anything else changes the roles.
 
     A kept file may hold the only copy of secrets the database already
-    requires. One the database accepts becomes the live configuration and is
-    pinned; one it can no longer accept is removed. None: nothing was kept, or
-    every kept file was safely removed, so provisioning proceeds.
+    requires. One whose secrets the database requires becomes the live
+    configuration and is pinned, whether or not a record names its
+    transaction: the stored verifiers prove that commit. One is removed only
+    once its recorded transaction has ended without them. None: nothing was
+    kept, or every kept file was safely removed, so provisioning proceeds.
     """
     for kept in _kept_configurations(config_path):
         try:
@@ -309,29 +315,32 @@ def _settle_kept(config_path: Path, url: str) -> int | None:
         except ConfigurationRefused as refusal:
             return _refused(str(refusal))
         transaction = _recorded_transaction(kept)
-        committed = _secrets_committed(url, candidate, transaction)
-        if committed is None:
-            return _outcome_unknown(kept, recorded=transaction is not None)
-        if not committed:
+        settlement = _settlement(url, candidate, transaction)
+        if settlement == "absent":
             _discard(kept)
             continue
-        _transaction_record(kept).unlink(missing_ok=True)
+        if settlement != "committed":
+            return _outcome_unknown(kept, settlement, recorded=transaction is not None)
         rotated = os.path.lexists(config_path)
         commit_config(kept, config_path)
+        _transaction_record(kept).unlink(missing_ok=True)
         return _pin(config_path, candidate, rotated=rotated, recovered=True)
     return None
 
 
-def _secrets_committed(
-    url: str, config: BrokerConfig, transaction: str | None
-) -> bool | None:
-    """Whether both roles now require `config`'s secrets; None if not yet known.
+def _settlement(url: str, config: BrokerConfig, transaction: str | None) -> Settlement:
+    """Where `config`'s staged secrets stand in the database.
 
     The stored SCRAM verifiers are compared with the staged passwords, so
     neither a pg_hba rule nor a refused login can be mistaken for an
-    uncommitted change. A match is final: a commit never reverts. A mismatch is
-    final only once `transaction`, which sent the role changes, has ended;
-    until then its commit may still become visible.
+    uncommitted change.
+
+    - committed: both roles require them. Final, since a commit never reverts.
+    - absent: they do not, and `transaction`, which sent the role changes, has
+      ended, so they never will.
+    - pending: they do not yet, and no ended transaction is known: it is still
+      in progress, or no record names it.
+    - unreadable: the database could not be read.
     """
     try:
         with psycopg.connect(url, autocommit=True, connect_timeout=10) as admin:
@@ -345,13 +354,13 @@ def _secrets_committed(
                 ).fetchall()
             )
     except psycopg.Error:
-        return None
+        return "unreadable"
     if all(
         scram_sha256_matches(login.password.get_secret_value(), stored.get(login.role))
         for login in (config.control, config.reader)
     ):
-        return True
-    return False if ended else None
+        return "committed"
+    return "absent" if ended else "pending"
 
 
 def _current_transaction(admin: Connection[Any]) -> str:
@@ -429,21 +438,29 @@ def _connect_cause(error: psycopg.Error) -> str:
     return f"SQLSTATE {error.sqlstate}"
 
 
-def _outcome_unknown(kept: Path, *, recorded: bool) -> int:
+def _outcome_unknown(kept: Path, settlement: Settlement, *, recorded: bool) -> int:
+    rerun = "run broker provision again (with --rotate if this was a rotation)"
+    if settlement == "unreadable":
+        step = f"once the database is reachable, {rerun} to settle it"
+    elif recorded:
+        step = (
+            "the transaction that sent its role changes has not ended; once it "
+            f"has, {rerun} to settle it"
+        )
+    else:
+        # A mismatch was read: the database does not require these secrets,
+        # and none can commit them once no provisioning run is in progress.
+        step = (
+            "the database does not require this file's secrets, but no record "
+            "names the transaction that wrote it: once no provisioning run is in "
+            "progress, remove the file and provision again"
+        )
     _emit(
         {
             "outcome": "failed",
             "reason": "provisioning_outcome_unknown",
             "kept_configuration": str(kept),
-            "next": (
-                "once the database is reachable and the transaction that wrote "
-                "this file has ended, run broker provision again (with --rotate "
-                "if this was a rotation) to settle it"
-                if recorded
-                else "no record names the transaction that wrote this file, so a "
-                "rerun cannot settle it: once no provisioning run is in progress, "
-                "remove the file and provision again"
-            ),
+            "next": step,
         }
     )
     return EXIT_FAILED
