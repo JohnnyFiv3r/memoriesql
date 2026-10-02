@@ -19,6 +19,7 @@ import secrets
 import stat
 import sys
 import sysconfig
+import time
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -70,6 +71,10 @@ CLEANUP_RECENT = timedelta(hours=2)
 DEFAULT_CONTROL_ROLE = "memoriesql_query_host"
 DEFAULT_READER_ROLE = "memoriesql_query_reader"
 SCRAM_ITERATIONS = 4096
+
+
+# How long settling a lost commit waits for its transaction to end.
+TRANSACTION_END_SECONDS = 30.0
 
 
 def scram_sha256_verifier(password: str, *, iterations: int = SCRAM_ITERATIONS) -> str:
@@ -233,33 +238,51 @@ def provision(
         staged.unlink(missing_ok=True)
         return _refused(f"database provisioning failed ({_connect_cause(error)})")
     recovered = False
+    transaction: str | None = None
+    sent = False  # whether COMMIT may have reached the server
     try:
         with admin:
             with admin.transaction():
+                # Recorded beside the staged file before any role change: if the
+                # reply to COMMIT is lost, a negative read is final only once
+                # this transaction has ended.
+                transaction = _current_transaction(admin)
+                _record_transaction(staged, transaction)
                 _apply_roles(admin, config, rotate=exists)
+                sent = True  # leaving this block sends COMMIT
     except psycopg.Error as error:
-        if not _commit_outcome_unknown(error):
-            # The server refused a statement, so the transaction rolled back:
-            # the database still matches the old file.
-            staged.unlink(missing_ok=True)
-            return _refused(f"database provisioning failed (SQLSTATE {error.sqlstate})")
-        # The connection was lost after it opened, possibly while COMMIT was in
-        # flight: the database may already require the staged secrets.
-        committed = _secrets_committed(url, config)
-        if committed is None:
-            return _outcome_unknown(staged)
-        if not committed:
-            staged.unlink(missing_ok=True)
+        cause = f"SQLSTATE {error.sqlstate}" if error.sqlstate else "connection lost"
+        if not sent:
+            # COMMIT was never sent, so no role change can commit.
+            _discard(staged)
             return _refused(
-                "database provisioning did not complete (connection lost before "
-                "commit); nothing changed"
+                f"database provisioning did not complete ({cause} before commit); "
+                "nothing changed"
+            )
+        # COMMIT was sent but its reply was lost or refused: the database may
+        # already require the staged secrets, so it settles the outcome.
+        committed = _secrets_committed(url, config, transaction)
+        if committed is None:
+            return _outcome_unknown(staged, recorded=True)
+        if not committed:
+            _discard(staged)
+            return _refused(
+                f"database provisioning did not complete ({cause} during commit); "
+                "nothing changed"
             )
         recovered = True
     except ValueError:
-        staged.unlink(missing_ok=True)
+        _discard(staged)
         return _refused("reviewed reader provisioning refused")
+    except BaseException:
+        # Interrupted, for example by Ctrl-C. Before COMMIT nothing can commit;
+        # after it, the recorded transaction lets a later run settle the file.
+        if not sent:
+            _discard(staged)
+        raise
     # The roles now carry the new secrets and this staged file is their only
     # copy: make it live before anything else can fail.
+    _transaction_record(staged).unlink(missing_ok=True)
     commit_config(staged, config_path)
     return _pin(config_path, config, rotated=exists, recovered=recovered)
 
@@ -277,35 +300,43 @@ def _settle_kept(config_path: Path, url: str) -> int | None:
 
     A kept file may hold the only copy of secrets the database already
     requires. One the database accepts becomes the live configuration and is
-    pinned; one it never received is removed. None: nothing was kept, or every
-    kept file was safely removed, so provisioning proceeds.
+    pinned; one it can no longer accept is removed. None: nothing was kept, or
+    every kept file was safely removed, so provisioning proceeds.
     """
     for kept in _kept_configurations(config_path):
         try:
             candidate = load_config(kept)
         except ConfigurationRefused as refusal:
             return _refused(str(refusal))
-        committed = _secrets_committed(url, candidate)
+        transaction = _recorded_transaction(kept)
+        committed = _secrets_committed(url, candidate, transaction)
         if committed is None:
-            return _outcome_unknown(kept)
+            return _outcome_unknown(kept, recorded=transaction is not None)
         if not committed:
-            kept.unlink(missing_ok=True)
+            _discard(kept)
             continue
+        _transaction_record(kept).unlink(missing_ok=True)
         rotated = os.path.lexists(config_path)
         commit_config(kept, config_path)
         return _pin(config_path, candidate, rotated=rotated, recovered=True)
     return None
 
 
-def _secrets_committed(url: str, config: BrokerConfig) -> bool | None:
-    """Whether both roles now require `config`'s secrets; None if unreadable.
+def _secrets_committed(
+    url: str, config: BrokerConfig, transaction: str | None
+) -> bool | None:
+    """Whether both roles now require `config`'s secrets; None if not yet known.
 
     The stored SCRAM verifiers are compared with the staged passwords, so
     neither a pg_hba rule nor a refused login can be mistaken for an
-    uncommitted change.
+    uncommitted change. A match is final: a commit never reverts. A mismatch is
+    final only once `transaction`, which sent the role changes, has ended;
+    until then its commit may still become visible.
     """
     try:
         with psycopg.connect(url, autocommit=True, connect_timeout=10) as admin:
+            # The verifiers are read after the end is observed, never before.
+            ended = transaction is not None and _transaction_ended(admin, transaction)
             stored: dict[str, str | None] = dict(
                 admin.execute(
                     "SELECT rolname, rolpassword FROM pg_catalog.pg_authid "
@@ -315,22 +346,81 @@ def _secrets_committed(url: str, config: BrokerConfig) -> bool | None:
             )
     except psycopg.Error:
         return None
-    return all(
+    if all(
         scram_sha256_matches(login.password.get_secret_value(), stored.get(login.role))
         for login in (config.control, config.reader)
-    )
+    ):
+        return True
+    return False if ended else None
 
 
-def _commit_outcome_unknown(error: psycopg.Error) -> bool:
-    """A lost connection leaves an in-flight commit unknown.
+def _current_transaction(admin: Connection[Any]) -> str:
+    """This transaction's 64-bit ID, which PostgreSQL never reuses."""
+    (transaction,) = admin.execute(
+        "SELECT pg_catalog.pg_current_xact_id()::text"
+    ).fetchall()[0]
+    return str(transaction)
 
-    Every error the server reports carries a SQLSTATE and means nothing
-    committed; only a client-side connection failure has none.
+
+def _transaction_ended(admin: Connection[Any], transaction: str) -> bool:
+    """Wait, within a bound, until `transaction` has committed or aborted.
+
+    pg_xact_status reports a committing transaction as in progress until its
+    commit is visible to new snapshots, so once it reports anything else, a
+    later read sees the transaction's final effect. A status too old to be kept
+    (NULL) belongs to a transaction that ended long ago.
     """
-    return (
-        isinstance(error, psycopg.OperationalError | psycopg.InterfaceError)
-        and error.sqlstate is None
+    deadline = time.monotonic() + TRANSACTION_END_SECONDS
+    while True:
+        status = admin.execute(
+            "SELECT pg_catalog.pg_xact_status(%s::xid8)", (transaction,)
+        ).fetchall()[0][0]
+        if status != "in progress":
+            return True
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.2)
+
+
+def _transaction_record(kept: Path) -> Path:
+    return kept.with_name(kept.name + ".transaction")
+
+
+def _record_transaction(staged: Path, transaction: str) -> None:
+    """Durably name, beside `staged`, the transaction that may commit it."""
+    descriptor = os.open(
+        _transaction_record(staged),
+        os.O_WRONLY
+        | os.O_CREAT
+        | os.O_EXCL
+        | os.O_NOFOLLOW
+        | getattr(os, "O_CLOEXEC", 0),
+        0o600,
     )
+    try:
+        os.write(descriptor, transaction.encode("ascii"))
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+    directory = os.open(staged.parent, os.O_RDONLY | getattr(os, "O_CLOEXEC", 0))
+    try:
+        os.fsync(directory)
+    finally:
+        os.close(directory)
+
+
+def _recorded_transaction(kept: Path) -> str | None:
+    try:
+        recorded = _transaction_record(kept).read_text(encoding="ascii")
+    except (OSError, ValueError):
+        return None
+    return recorded if recorded.isdigit() else None
+
+
+def _discard(staged: Path) -> None:
+    """Remove a staged file the database never accepted, then its record."""
+    staged.unlink(missing_ok=True)
+    _transaction_record(staged).unlink(missing_ok=True)
 
 
 def _connect_cause(error: psycopg.Error) -> str:
@@ -339,15 +429,20 @@ def _connect_cause(error: psycopg.Error) -> str:
     return f"SQLSTATE {error.sqlstate}"
 
 
-def _outcome_unknown(kept: Path) -> int:
+def _outcome_unknown(kept: Path, *, recorded: bool) -> int:
     _emit(
         {
             "outcome": "failed",
             "reason": "provisioning_outcome_unknown",
             "kept_configuration": str(kept),
             "next": (
-                "once the database is reachable, run broker provision again "
-                "(with --rotate if this was a rotation) to settle it"
+                "once the database is reachable and the transaction that wrote "
+                "this file has ended, run broker provision again (with --rotate "
+                "if this was a rotation) to settle it"
+                if recorded
+                else "no record names the transaction that wrote this file, so a "
+                "rerun cannot settle it: once no provisioning run is in progress, "
+                "remove the file and provision again"
             ),
         }
     )

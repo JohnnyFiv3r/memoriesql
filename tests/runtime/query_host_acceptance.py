@@ -85,9 +85,13 @@ class CommitCutRelay:
     message whose query starts with `cut`. With `forward` the message reaches
     the server and only its reply is lost, as with a COMMIT whose acknowledgement
     never arrives; without it the connection drops before the server sees it.
-    Later connections pass through unless `refuse_after_cut` closes the relay.
-    Clients connect with sslmode and gssencmode disabled, so the stream is the
-    plain frontend protocol.
+    With `hold` the client's connection drops at once while the server's stays
+    open for `hold` seconds: the server receives the message only then (with
+    `forward`), or loses the connection without it. That is a COMMIT still in
+    flight after the client has begun settling it. Later connections pass
+    through unless `refuse_after_cut` closes the relay. Clients connect with
+    sslmode and gssencmode disabled, so the stream is the plain frontend
+    protocol.
     """
 
     def __init__(
@@ -97,9 +101,12 @@ class CommitCutRelay:
         cut: bytes,
         forward: bool,
         refuse_after_cut: bool = False,
+        hold: float | None = None,
     ) -> None:
         self.target, self.cut = target, cut
         self.forward, self.refuse_after_cut = forward, refuse_after_cut
+        self.hold = hold
+        self.released = threading.Event()
         self.listener = socket.create_server(("127.0.0.1", 0))
         self.port = self.listener.getsockname()[1]
         self.cut_done = threading.Event()
@@ -142,6 +149,17 @@ class CommitCutRelay:
                 hit, pending, started = self._scan(pending, started)
                 if armed and hit:
                     dropping.set()
+                    if self.hold is not None:
+                        with contextlib.suppress(OSError):
+                            client.shutdown(socket.SHUT_RDWR)
+                        self.cut_done.set()
+                        time.sleep(self.hold)
+                        # Set first, so it happens before anything COMMIT causes.
+                        self.released.set()
+                        if self.forward:
+                            server.sendall(chunk)
+                        time.sleep(0.5)
+                        return
                     if self.forward:
                         server.sendall(chunk)
                         time.sleep(0.5)
@@ -937,6 +955,10 @@ class QueryHostAcceptance(QueryHostHarness):
     def kept(self, path: Path) -> list[Path]:
         return list(path.parent.glob(f".{path.name}.*.new"))
 
+    @staticmethod
+    def record(kept: Path) -> Path:
+        return kept.with_name(kept.name + ".transaction")
+
     def test_provisioning_never_discards_secrets_a_lost_commit_may_have_kept(
         self,
     ) -> None:
@@ -961,6 +983,7 @@ class QueryHostAcceptance(QueryHostHarness):
         self.assertEqual(result["reason"], "provisioning_outcome_unknown")
         kept = Path(result["kept_configuration"])
         self.assertEqual(self.kept(path), [kept])
+        self.assertTrue(self.record(kept).read_text().isdigit())
         self.assertFalse(path.exists())
         staged = load_config(kept)
         self.assertTrue(self.role_exists(staged.control.role))
@@ -971,6 +994,7 @@ class QueryHostAcceptance(QueryHostHarness):
         self.assertEqual(code, 0, settled)
         self.assertTrue(settled["recovered"], settled)
         self.assertEqual(self.kept(path), [])
+        self.assertFalse(self.record(kept).exists())
         live = load_config(path)
         self.assertEqual(
             live.control.password.get_secret_value(),
@@ -993,6 +1017,52 @@ class QueryHostAcceptance(QueryHostHarness):
         clean = json.loads(output.strip().splitlines()[-1])
         self.assertEqual(code, 0, clean)
         self.assertNotIn("recovered", clean)
+
+    def test_a_commit_still_in_flight_is_never_read_as_a_rollback(self) -> None:
+        # The client loses its connection while the server has not yet received
+        # COMMIT, so the change is invisible to a fresh read; it commits once
+        # the relay delivers it. Settlement waits for that transaction's end.
+        relay, url = self.relay(cut=b"COMMIT", forward=True, hold=2.0)
+        code, result, path = self.provision_new(url)
+        self.assertTrue(relay.released.is_set())
+        self.assertEqual(code, 0, result)
+        self.assertTrue(result["recovered"], result)
+        live = load_config(path)
+        psycopg.connect(live.control_conninfo()).close()
+        psycopg.connect(live.reader_conninfo()).close()
+        # It is still in flight when the wait ends: the file and its record are
+        # kept, and a later run settles them once the commit has landed.
+        relay, url = self.relay(cut=b"COMMIT", forward=True, hold=4.0)
+        with patch.object(admin, "TRANSACTION_END_SECONDS", 1.0):
+            code, result, path = self.provision_new(url)
+        self.assertEqual(code, admin.EXIT_FAILED, result)
+        self.assertEqual(result["reason"], "provisioning_outcome_unknown")
+        self.assertFalse(relay.released.is_set())
+        kept = Path(result["kept_configuration"])
+        self.assertTrue(self.record(kept).exists())
+        staged = load_config(kept)
+        self.assertTrue(relay.released.wait(30))
+        code, output = self.provision_again(path, self.admin_url, self.last_roles)
+        settled = json.loads(output.strip().splitlines()[-1])
+        self.assertEqual(code, 0, settled)
+        self.assertTrue(settled["recovered"], settled)
+        live = load_config(path)
+        self.assertEqual(
+            live.control.password.get_secret_value(),
+            staged.control.password.get_secret_value(),
+        )
+        psycopg.connect(live.control_conninfo()).close()
+        psycopg.connect(live.reader_conninfo()).close()
+        # The server loses the connection before COMMIT arrives: the
+        # transaction aborts, and only then does the run report no change.
+        relay, url = self.relay(cut=b"COMMIT", forward=False, hold=2.0)
+        code, result, path = self.provision_new(url)
+        self.assertTrue(relay.released.is_set())
+        self.assertEqual(code, admin.EXIT_REFUSED, result)
+        self.assertIn("connection lost during commit", result["reason"])
+        self.assertIn("nothing changed", result["reason"])
+        self.assertEqual(self.kept(path), [])
+        self.assertFalse(self.role_exists(self.last_roles[0]))
 
     def test_preflight_names_the_login_that_cannot_connect(self) -> None:
         prepare_host(self.config)
