@@ -267,6 +267,9 @@
     },
     {
       "path": "src/memoriesql/infrastructure/results_broker/admin.py"
+    },
+    {
+      "path": "src/memoriesql/query_client.py"
     }
   ]
 }

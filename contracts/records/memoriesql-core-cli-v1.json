@@ -1,6 +1,6 @@
 {
   "contract": {
-    "authentication": "existing_local_credential_and_workspace_context_for_reads_exact_source_authority_and_client_pairing; operator_database_login_for_init",
+    "authentication": "existing_local_credential_and_workspace_context_for_reads_exact_source_authority_and_client_pairing; operator_database_login_for_init; the query host's service-user configuration for broker commands",
     "client_pairing": {
       "pair": "PairLocalClient / LocalClientPairing v1",
       "result_envelope": "available receipt, unavailable reason or failed reason",
@@ -20,8 +20,21 @@
       "sources revoke",
       "clients pair",
       "clients revoke",
-      "init"
+      "init",
+      "schema",
+      "query",
+      "result",
+      "broker serve",
+      "broker provision",
+      "broker check",
+      "broker runs",
+      "broker cleanup",
+      "broker close-run"
     ],
+    "doctor": {
+      "--check-database": "read-only reachability, schema compatibility and login role readiness; never migrates, grants or repairs; schema_compatibility is compatible, mismatch, unknown, not_installed or unverified; an application login cannot read the owner-only migration history, so it reports unverified with database_check login_ready_schema_unverified, never a full pass",
+      "default": "configuration only; no database or model"
+    },
     "entrypoint": "memoriesql.cli:main",
     "executable": "memoriesql",
     "exit_status": {
@@ -35,10 +48,33 @@
       "result_envelope": "available receipt, unavailable reason or failed reason",
       "secret_delivery": "a new caller-named owner-only file created exclusively before the database call; never printed, logged or accepted as input; removed when nothing commits or on replay; kept and reported as initialization_outcome_unknown when a lost connection leaves the commit unknown"
     },
+    "query_host": {
+      "client": "MEMORIESQL_RESULTS_SOCKET selects the local trusted query host for query, result, inspect, source and relations; the client presents only its own paired credential and workspace over a Unix socket whose serving uid it verifies, and never uses a database URL",
+      "direct": "without the socket, query and result compose the trusted executor in-process and need the host's own database logins, which are never given to an agent",
+      "operator": "broker serve|provision|check|runs|cleanup|close-run run only as the host's service user with its private configuration; each prints one JSON line and exits 0, 2 or 3; serve runs the expired-result cleanup at start and hourly, and cleanup runs it once",
+      "paired_agent_reads": {
+        "inspect": "owner_only: the exact stored-bead readers answer resource_unavailable to paired agents",
+        "query": "available",
+        "relations": "owner_only: the exact stored-bead readers answer resource_unavailable to paired agents",
+        "result": "available",
+        "schema": "available",
+        "source": "owner_only: the exact stored-bead readers answer resource_unavailable to paired agents",
+        "source_citation": "through query results: the normalized text of authorized source units in memory_v1.source_units under memory.query and source.read; never raw bytes or clause-level citations"
+      },
+      "protocol_version": 1
+    },
     "read_contracts": {
       "inspect": "InspectStoredBead / StoredBeadInspection v1",
       "relations": "InspectBeadRelationsV2 / BeadRelationsInspectionV2",
       "source": "ReadStoredBeadEvidence / StoredBeadEvidence v1"
+    },
+    "results": {
+      "contract": "memoriesql.agent-sql-results.v1",
+      "query": "QueryRequest (discover|enumerate, resolved|historical view) through a trusted executor; closed reply printed unchanged",
+      "result": "ReuseRequest with the exact result_id and content_digest pin, optional cursor",
+      "run": "one persisted run per principal and workspace in an owner-only state file; rotated before expiry; --new-run; never retried",
+      "schema": "installed logical catalog, prepared/reserved/not-prepared relations, admission rules and delivery limits; no database or run",
+      "trusted_host": "control login, reviewed restricted reader and optional pinned profile hash, configured only in a credential-isolated process; otherwise trusted_query_host_not_configured"
     },
     "source_authority": {
       "enroll": "EnrollExactSource / ExactSourceEnrollment v1",
@@ -49,8 +85,6 @@
     "unavailable": {
       "ask": "qualified_recall_not_released",
       "investigations": "pr05_checkpoint_not_released",
-      "query": "pr05_query_result_not_released",
-      "result": "pr05_query_result_not_released",
       "sources": "source_inventory_not_released",
       "sources connect": "provider_adapter_not_routed",
       "ui": "private_textual_surface_not_routed"
@@ -58,6 +92,6 @@
   },
   "id": "memoriesql.core-cli.v1",
   "status": "available",
-  "summary": "One public executable with contract catalog, configuration health, authorized stored reads, exact provider-neutral source authority, one-time personal-local initialization and local agent client pairing; no private routing or PR-05 retrieval claim.",
+  "summary": "One public executable with contract catalog, configuration health, authorized stored reads, exact provider-neutral source authority, one-time personal-local initialization, local agent client pairing and governed query/result reuse through a trusted executor; no private routing claim.",
   "version": "1"
 }
