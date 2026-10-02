@@ -184,6 +184,17 @@ These remain qualification targets, not measured capacity.
   - one executing operation per workspace.
 - **Refusals write nothing.** Any unsettled delivery blocks new admission, and a
   dead owner's work is reported as `settlement`.
+- **A busy database is a budget refusal.** At run start, admission, owner close
+  and cleanup status, a lock or statement timeout (SQLSTATE 55P03, 57014) is
+  `budget_exhausted` / `time`, a storage or byte limit (53400, 54000) is
+  `budget_exhausted` / `storage`, and a conflict with work still in flight
+  (40001, 55000) is `budget_exhausted` / `settlement`. A passed deadline is also
+  54000, which the database names `..._work_exhausted`; it is `time`. These calls
+  own nothing yet: a refused run start or admission starts and charges nothing,
+  so the same step key is admitted afterwards. Every other failure there keeps
+  the one `unavailable` shape. Resolving a reuse cursor classifies database
+  errors as disclosure does. A prepared population over its byte budget is
+  `storage`; one that met a timeout is `time`.
 - **Charges.** Charged time is the observed wall time of the whole operation
   (not CPU or I/O); commit latency is not separately metered. Unknown timing
   keeps the full reservation. Allocation remains M0031's 64/128/512 MiB ledger
@@ -213,6 +224,27 @@ These remain qualification targets, not measured capacity.
     it. If recovery settled the access while the commit was in flight, the
     host replies `settlement_pending` and the exact redelivery discloses the
     committed result without rerunning.
+  - **Only proof settles a step.** A redelivery first probes the step's own
+    preparation, then recovers it. If either meets a lock or statement timeout,
+    a lost connection or any other failure, whether the step's result committed
+    is unknown. The reply is `settlement_pending`, the step stays open, and the
+    next exact redelivery finds out. A redelivered step that holds a preparation
+    is only ever recovered, never screened or run again. As the packet requires
+    for uncertain work, a pending access blocks new admission in its workspace
+    until it is settled. If the caller's own authority ends during that
+    redelivery, its own recovery cannot run, so run-expiry cleanup settles it.
+  - A committed result's first disclosure that fails on a busy database or a
+    lost connection leaves its step open in the same way. Only a definitive
+    refusal fixes the step as failed: authority lost at the fence, a row larger
+    than the page's transport limit, or a duplicate.
+  - A failure of the host's own code before any commit was sent is an
+    `execution_error`, and the step's single-use preparation is discarded at
+    once instead of being held until the run expires. From the commit on, the
+    same failure is `settlement_pending`.
+  - `handle()` answers every request. When it cannot take the owner lock, confirm
+    an abandonment, or record a settlement, it replies `settlement_pending`,
+    charged the full reservation as recovery will charge it, and recovery or
+    the exact redelivery settles the access.
 - **Expiry cleanup** (owner Decision 1, item 3). Access ends at expiry through
   the closure verdict. Owned cleanup then removes the content and every
   sensitive copy:
@@ -334,6 +366,117 @@ two invocation predicates. `reviewed_query_reader_profile` rebuilds the profile
 from that specification at host start, and the executor independently
 re-qualifies it before every invocation.
 
+**The reviewed closure is narrower than the admitted grammar.** The packet's
+grammar admits typed `= <> < <= > >=`, LIKE/ILIKE, unary minus and membership in
+up to 64 bound values. The reader is granted:
+
+- all six comparisons over `int8` and `numeric`;
+- equality only over `text`, `uuid`, `bool` and `timestamptz`;
+- the default hash function of each of those six types: `hashtext(text)`,
+  `uuid_hash(uuid)`, `hashbool(boolean)`, `hashint8(bigint)`,
+  `hash_numeric(numeric)` and `timestamptz_hash(timestamptz)`;
+- no comparison or hash function over `float8`, no LIKE or ILIKE and no unary
+  minus.
+
+So a time-range filter and a text inequality or pattern are admitted by the
+grammar and cannot run. Inside the reader each failed as a permission error,
+which replied `unavailable`: the caller could not tell it from missing
+authority. Membership in nine or more bound values failed the same way until
+the owner reviewed the six hash functions into the closure, and nothing else.
+
+Admission now inventories the builtins a statement's own operators call, as
+PostgreSQL resolves them once it has planned the statement:
+
+- under `NOT`, the negator of a comparison, a pattern match or a membership
+  test, through AND, OR and NOT;
+- `NOT LIKE` and `NOT ILIKE` as the operators they are (`textnlike`,
+  `texticnlike`), which the planner negates back into LIKE under `NOT`;
+- nothing for a comparison with a NULL bound value, and nothing for `x = $1` or
+  `x <> $1` with a bound boolean, which the planner rewrites to `x` or `NOT x`
+  (the negation then lands on the operators inside `x`);
+- for two bound values, the operator as written, which the planner evaluates
+  itself;
+- from nine bound values in `= ANY(array)` or `IN (list)`, the type's equality
+  and its hash function, under `NOT` as well, because the planner then probes a
+  hash table;
+- the equalities that DISTINCT, GROUP BY, set operations other than UNION ALL,
+  window keys, joins, IN and NULLIF imply, and the aggregate MIN or MAX runs as.
+
+The executor refuses a statement that calls a builtin outside the reviewed
+closure as `unsupported_query` / `feature` `unreviewed_operator`, with the
+source position of the leftmost such operator's first operand. It refuses before
+any reservation or preparation, whether or not an identifier is bound.
+
+The inventory is a model of the planner. An installed test holds it to the
+pinned server (see Acceptance). It does not cover two things:
+
+- a constant the planner computes from bound values. Admission follows bound
+  values, not computed ones, so for a comparison with one, such as
+  `x = ($1 = $2)` or `kind <> lower($1)` with a NULL value, the inventory may
+  miss a negator PostgreSQL calls or name a builtin it does not. The first still
+  fails inside the reader as `unavailable`; the second is refused although it
+  could run;
+- the equality the witness lowering adds over values a statement already
+  orders, aggregates or combines. It is reviewed for every type a public
+  relation can produce, which a unit test holds, so only a `float8` parameter in
+  such a position lacks it and fails inside the reader as before.
+
+Widening the closure is a reviewed change to reader provisioning.
+`provision_query_reader` grants the whole reviewed closure to a new reader. An
+existing reader must be granted the added builtins in the same step as the
+package upgrade: qualification requires the reader's executable functions to
+equal the reviewed set exactly, so a reader missing any of them answers every
+query `unavailable`, not only lists. The order on every host is upgrade, grant,
+rebuild or re-pin the reader's profile, then the first query.
+`grant_reviewed_closure(admin_connection, reader)` performs the grant; it is
+idempotent. The equivalent statement for the six hash functions, run by the
+database administrator, is:
+
+```sql
+GRANT EXECUTE ON FUNCTION pg_catalog.hashtext(text), pg_catalog.uuid_hash(uuid),
+  pg_catalog.hashint8(bigint), pg_catalog.hash_numeric(numeric),
+  pg_catalog.timestamptz_hash(timestamptz), pg_catalog.hashbool(boolean)
+  TO memoriesql_query_reader;
+```
+
+with the host's own reader role name. A host that constructs
+`PostgresRestrictedQuery` itself states the closure with `reviewed_builtins`;
+without it, the reader's own privileges decide alone.
+
+**Identifier parameters.** An identifier column compares only with a value
+bound under its own reference type, for example `statement_ref` or
+`statement_ref[]` with `= ANY($1::uuid[])`, and only identifiers in the caller's
+visible population bind. A plain `uuid` against an identifier column, or another
+identifier kind, replies `invalid_request` / `type` with `feature`
+`reference_type` and the position of the comparison. An identifier that is not
+visible replies the one shared `unavailable` shape, with no position or
+feature; no internal refusal name reaches a reply.
+
+**Positions.** A refused value expression carries the source offset of its first
+token: an operator is located by its first operand, a parameter by its `$`. A
+refused clause, relation or whole statement carries none. A refusal that was
+settled on a step is redelivered with its outcome and code only.
+
+**An admitted statement means what PostgreSQL will run.** The parser and
+PostgreSQL group two forms differently. PostgreSQL binds `IS` looser than a
+comparison, so it reads `x = y IS NULL` as `(x = y) IS NULL`, where the parser
+reads `x = (y IS NULL)` and would emit it unparenthesized. PostgreSQL never
+chains comparisons, so `a = b = $1` cannot run at all. A comparison whose
+operand is another comparison or an `IS` test is therefore refused unless that
+operand is parenthesized: `unsupported_query` / `feature` `comparison_grouping`,
+at the comparison's first operand. Parenthesized, it is admitted and emitted as
+written.
+
+**Recursion over correction edges is refused.** The packet admits key-equality
+expansion over correction edges as well as relation endpoints. Admission
+emitted a call to `memoriesql_query_private.correction_path_qualified` as the
+support predicate for a correction edge, and no migration defines it, so such a
+query was admitted, reserved and prepared, then failed in the reader. It is now
+refused before any work as `unsupported_query` / `feature`
+`correction_recursion`, without a position (a clause). Delivering it needs a
+reviewed database predicate for a qualified correction path, which is outside
+this change.
+
 A least-privilege control login (not a superuser; an inheriting member of
 `memoriesql_application`) additionally needs three operator provisioning steps,
 found by the trusted-host lane:
@@ -368,8 +511,8 @@ lists source refs as hydration-required.
 
 ## Acceptance and preserved development failures
 
-Fictional installed tests (`test_agent_sql_results`, 25 cases) use the
-production reader provisioning path. They cover:
+Fictional installed tests (`test_agent_sql_results`) use the production reader
+provisioning path. They cover:
 
 - query, page, cursor and reuse
 - a paired agent citing a finding to its supporting units under its own grant:
@@ -395,11 +538,50 @@ production reader provisioning path. They cover:
 - exact redelivery with no rerun
 - a zero-row available result versus unavailable, and the distinct
   unsupported, invalid and idempotency outcomes
+- identifier parameters (`test_agent_sql_screening`): a plain `uuid[]` is a
+  positioned `reference_type` error with nothing reserved; the reference-typed
+  array returns exactly the unfiltered rows; an identifier outside the visible
+  population is `unavailable`
+- the operator inventory against the pinned server (`test_agent_sql_screening`):
+  - every comparison, pattern, unary minus and hash builtin admission names is
+    the one the server's own operator and hash catalogs name;
+  - a role that may call no function reads a scratch table with a column of each
+    catalog type. For every comparison over every type and its negation, the
+    folded forms above, and membership in 8, 9, 16 and 64 values of every type,
+    plain and under NOT, granting exactly the inventoried builtins lets the
+    statement plan and run, and revoking any one of them, including each hash
+    function, makes PostgreSQL refuse it. Implied equalities are shown
+    sufficient only, since the planner may choose a plan that calls less.
+- the same operators through the public executor: each statement runs as the
+  reader, or is refused as `unreviewed_operator` with its position and with
+  nothing reserved or sent to the reader; none replies `unavailable`. Membership
+  in 9, 16 and 64 bound values runs for each of the six types a public relation
+  has. A bound identifier, visible or not, changes neither.
+- the rollout rule: with one of the six hash functions revoked from the
+  provisioned reader, even a plain equality query replies `unavailable`, and
+  `grant_reviewed_closure`, run twice, restores it.
 - source revocation refusing a whole aggregate, and regrant restoring it
 - another principal refused
 - resolved versus historical views over a real correction, with correction lineage
 - run admission, expiry and no budget reset
+- another session holding the workspace's admission lock past the lock timeout:
+  run start, admission and owner close each reply `budget_exhausted` / `time`;
+  no run, delivery or closure is written; the same step key is then admitted at
+  the full allowance
 - crash after commit, host recovery and owner close
+- a redelivery that cannot find out (`test_agent_sql_results`): the host died
+  after its step's result committed, or before any work; the exact redelivery
+  then meets a real lock timeout, statement timeout or terminated backend while
+  it probes the step, or while it recovers the committed result or the
+  uncommitted invocation. All twelve reply `settlement_pending` with the step
+  still open; the next exact redelivery discloses the committed result or
+  replies `execution_error`, and nothing reruns
+- the same three faults at a committed result's first disclosure:
+  `settlement_pending`, then the exact redelivery discloses that result
+- a failure of the host's own code before commit: `execution_error` with the
+  preparation discarded at once
+- a population over its byte budget is `budget_exhausted` / `storage`, and a
+  disclosure whose database deadline passed is `budget_exhausted` / `time`
 - host death mid-query: capacity, close and admission stay blocked until the
   reader backend is confirmed gone; recovery then settles the orphaned
   invocation at the full reservation, and a new step is admitted without
@@ -457,9 +639,36 @@ Development failures retained:
 - The hostile-request test found that refused SQL still reserved, then
   discarded, a preparation. SQL is now screened before any reservation. Only
   the population-dependent reference-anchor check waits for full admission.
-- **Open finding:** `NOT (text = $1)` is rewritten by the planner to `<>`,
-  whose `textne` lies outside the reviewed builtin closure. Such queries fail as
-  `unavailable` rather than `unsupported_query`.
+- Review found that this did not hold for a statement that binds an identifier.
+  The screen stopped at the first one, so every refusal of such a statement
+  still came after a reservation and a preparation. The screen now runs with the
+  request's own identifiers standing in as anchors, and only their visibility
+  waits for full admission.
+- `NOT (text = $1)` is rewritten by the planner to `<>`, whose `textne` lies
+  outside the reviewed builtin closure, so such a query failed inside the reader
+  and replied `unavailable`. It was one case of a wider gap: text, identifier
+  and timestamp inequalities and orderings, LIKE, ILIKE, unary minus and any
+  membership test over nine or more values were all admitted and none was
+  granted. A time-range filter therefore also replied `unavailable`, and an
+  agent could pass at most eight values to `= ANY` or `IN`. The executor now
+  refuses every such operator as `unsupported_query` with its position (see Host
+  interface). The owner then reviewed the six hash functions into the closure,
+  so membership runs at any admitted size; the other operators stay refused.
+- Review of the first inventory found it wrong in both directions. It missed
+  the hash function behind nine or more bound values, and it refused statements
+  that ran: `flag <> $1`, which the planner rewrites without calling a builtin,
+  and any comparison with a NULL value. The inventory now follows bound values,
+  and the installed test holds it to PostgreSQL's own privilege checks instead
+  of to itself.
+- An agent bound a plain `uuid[]` against an identifier column and got
+  `invalid_request` / `type` with no position, which it could not act on. The
+  reply now names the mismatch and its position. An identifier outside the
+  visible population replied `unavailable` with the internal code
+  `parameter_anchor`, which is not a packet safe code.
+- Two parameters with nothing between them but punctuation, as in
+  `IN ($1,$2)` or `coalesce($1,$2)`, were refused as a syntax error: the parser
+  read `$1,$` as the opening tag of a dollar-quoted string. `$` now starts only
+  a parameter. Dollar-quoted strings were never admitted and stay refused.
 - Cleanup initially failed with `permission denied for function uuid_eq`: M0033
   had revoked builtins from the staged-row owner. It was fixed with the narrow
   grant above.
@@ -467,6 +676,43 @@ Development failures retained:
   observation families reused PR-03's provenance records, which require
   `source.raw.read`, a capability the `paired_agent` role can never hold. The
   regression test fails on that code and passes on the query-level records.
+- **Timeouts were reported as missing authority.** `start_run()` replied
+  `unavailable` to every database error, including a 500 ms lock timeout while
+  a cleanup pass held the workspace's admission lock. The packet reports a
+  timeout or a storage or work limit as `budget_exhausted`. Admission, owner
+  close and cleanup status had the same mapping, the operator's cleanup pass
+  reported a lock timeout as `execution_error`, and resolving a reuse cursor
+  reported every database error as `execution_error`. They now share the
+  executor's SQLSTATE table. Database-free tests (`test_agent_sql_refusals`)
+  cover each SQLSTATE at each call and fail on the previous code; the installed
+  test above produces a real lock timeout.
+- **A busy database during redelivery failed the step.** When a redelivered
+  step's preparation probe or its recovery met a lock timeout, the step was
+  settled as failed (`unavailable` or `execution_error`) although its result
+  might already be committed. A busy first disclosure of a committed result
+  failed its step too, so the result could never be disclosed. The packet's
+  outcome for unknown commit ownership is `settlement_pending`. Only proof now
+  settles a step (see Crash recovery); the installed fault tests fail on the
+  previous code.
+- An independent review found six more defects; each was reproduced first:
+  - SQLSTATE 54000 is both a deadline and a byte limit. A passed delivery
+    deadline replied `storage`, and a population over its byte budget replied
+    `time`.
+  - `handle()` raised when the owner lock, an abandonment or a settlement call
+    failed.
+  - A failure of the host's own code before commit was settled as an
+    `execution_error` but held the step's reservation until the run expired.
+  - `x = y IS NULL` was admitted and emitted unparenthesized, so PostgreSQL ran
+    `(x = y) IS NULL` instead; `a = b = $1` was admitted although PostgreSQL
+    cannot run it.
+  - `a NOT LIKE b` was refused as an unknown clause; it is now inventoried and
+    refused as `unreviewed_operator`, like LIKE.
+  - Recursion over correction edges emitted an undefined function (see Host
+    interface).
+  Database-free tests reproduce each in `test_agent_sql_refusals` and
+  `test_agent_sql_admission` and fail on the previous code; the installed tests
+  above produce the reservation, deadline and byte-budget cases on a real
+  database.
 
 Exact-head installed 3.13/3.14 qualification and CI belong on the PR.
 

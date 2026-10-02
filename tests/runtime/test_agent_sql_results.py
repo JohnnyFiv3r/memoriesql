@@ -7,7 +7,7 @@ import json
 import os
 import time
 import unittest
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import replace
 from datetime import timedelta
@@ -30,6 +30,7 @@ from memoriesql.infrastructure.postgres.query_reader_provisioning import (
     provision_query_reader,
 )
 from memoriesql.infrastructure.postgres.query_result_commit import (
+    InternalResultCandidate,
     PostgresQueryResultCommit,
 )
 
@@ -75,10 +76,10 @@ class AgentSqlResults(unittest.TestCase):
         )
 
     def service(
-        self, secret: str | None = None, reader: Any = None
+        self, secret: str | None = None, reader: Any = None, control: Any = None
     ) -> PostgresAgentSqlResults:
         return PostgresAgentSqlResults(
-            control_factory=self.fixture.connection,
+            control_factory=control or self.fixture.connection,
             reader_factory=reader or self.reader_connection,
             authority_profile=self.profile,
             credential_sha256=secret or self.fixture.secret_hash,
@@ -319,6 +320,83 @@ class AgentSqlResults(unittest.TestCase):
         with self.assertRaises(HostDied):
             self.service(reader=leaky).handle(json.dumps(request).encode())
         return leaked[0]
+
+    def faulty_control(
+        self, marker: str, table: str, fault: str
+    ) -> tuple[Callable[[], psycopg.Connection[Any]], list[str]]:
+        """Control connections that meet one real fault at the first statement
+        naming `marker`: a lock or statement timeout raised by the server while
+        another session holds `table`, or a terminated backend."""
+        test = self
+        fired: list[str] = []
+
+        class Faulty(psycopg.Connection[Any]):
+            def execute(self, *args: Any, **kwargs: Any) -> Any:
+                if fired or marker not in str(args[0]):
+                    return super().execute(*args, **kwargs)
+                fired.append(fault)
+                if fault == "connection":
+                    pid = self.info.backend_pid
+                    test.db.execute("SELECT pg_terminate_backend(%s)", (pid,))
+                    test.end_backend(pid)
+                    return super().execute(*args, **kwargs)
+                with test.fixture.connection() as holder, holder.transaction():
+                    holder.execute("SET LOCAL lock_timeout='5s'")
+                    holder.execute("LOCK TABLE " + table + " IN ACCESS EXCLUSIVE MODE")
+                    super().execute(
+                        "SET lock_timeout='100ms'"
+                        if fault == "lock"
+                        else "SET statement_timeout='100ms'"
+                    )
+                    return super().execute(*args, **kwargs)
+
+        def factory() -> psycopg.Connection[Any]:
+            return Faulty.connect(
+                make_conninfo(test.fixture.admin, dbname=test.fixture.database),
+                autocommit=True,
+            )
+
+        return factory, fired
+
+    def crashed_step(self, run: dict[str, Any], *, committed: bool) -> dict[str, Any]:
+        """A step whose host died after its result committed, or before any work."""
+        request, _ = self.request_only(
+            run, "SELECT bead_id FROM memory_v1.observations"
+        )
+
+        class Crash(BaseException):
+            pass
+
+        def crash(*args: Any, **kwargs: Any) -> bytes:
+            raise Crash()
+
+        died = "_disclose" if committed else "_execute"
+        with patch.object(PostgresAgentSqlResults, died, crash):
+            with self.assertRaises(Crash):
+                self.send(request)
+        return request
+
+    def step_state(self, request: dict[str, Any]) -> tuple[Any, ...]:
+        """The step's state and its deliveries' states, in order."""
+        row = self.db.execute(
+            "SELECT s.state,(SELECT string_agg(d.state,',' ORDER BY d.delivery_number)"
+            " FROM memoriesql.query_deliveries d WHERE d.run_ref=s.run_ref"
+            " AND d.step_key=s.step_key) FROM memoriesql.query_steps s"
+            " WHERE s.run_ref=%s AND s.step_key=%s",
+            (request["run_ref"], request["step_key"]),
+        ).fetchone()
+        assert row is not None
+        return tuple(row)
+
+    def committed_result(self, request: dict[str, Any]) -> str | None:
+        result: str | None = self.h.scalar(
+            "SELECT (SELECT c.result_id::text FROM memoriesql.query_result_creations c"
+            " JOIN memoriesql.result_preparation_operations o"
+            " ON o.tenant_id=c.tenant_id AND o.operation_ref=c.operation_ref"
+            " WHERE o.run_ref=%s AND o.step_key=%s)",
+            (request["run_ref"], request["step_key"]),
+        )
+        return result
 
     def end_backend(self, pid: int) -> None:
         for _ in range(100):
@@ -954,6 +1032,50 @@ class AgentSqlResults(unittest.TestCase):
         self.assertEqual(expired["error"], {"code": "time"})
         self.assertEqual(json.loads(self.service().start_run())["outcome"], "available")
 
+    def test_a_lock_timeout_is_a_budget_refusal_that_starts_and_charges_nothing(
+        self,
+    ) -> None:
+        self.fixture.assertion()
+        run = self.start()
+        request, _ = self.request_only(
+            run, "SELECT bead_id FROM memory_v1.observations"
+        )
+        timed_out = ("budget_exhausted", {"code": "time"})
+        key = "hashtextextended(%s::text||':query-access:'||%s::text,0)"
+        holding = (self.fixture.tenant, self.fixture.workspace)
+        # Another session holds this workspace's admission lock past the 500 ms
+        # lock timeout, as a cleanup pass may.
+        with self.fixture.connection() as holder:
+            holder.execute("SELECT pg_advisory_lock(" + key + ")", holding)
+            try:
+                started = json.loads(self.service().start_run())
+                self.assertEqual((started["outcome"], started["error"]), timed_out)
+                self.assertNotIn("run", started)
+                admitted = self.send(request)
+                self.assertEqual((admitted["outcome"], admitted["error"]), timed_out)
+                for field in ("receipt_ref", "access_receipt_ref", "remaining"):
+                    self.assertIsNone(admitted[field], field)
+                closed = json.loads(self.service().close_run(run["run_ref"]))
+                self.assertEqual((closed["outcome"], closed["error"]), timed_out)
+            finally:
+                holder.execute("SELECT pg_advisory_unlock(" + key + ")", holding)
+        # The refusals started no run, admitted no access and closed nothing.
+        self.assertEqual(self.h.scalar("SELECT count(*) FROM memoriesql.query_runs"), 1)
+        self.assertEqual(
+            self.h.scalar("SELECT count(*) FROM memoriesql.query_deliveries"), 0
+        )
+        self.assertEqual(
+            self.h.scalar("SELECT count(*) FROM memoriesql.query_run_closures"), 0
+        )
+        # The same step is admitted once the lock is free, at the full allowance.
+        first = self.send(request)
+        self.assertEqual(first["outcome"], "available", first)
+        self.assertEqual(first["remaining"]["accesses"], 127)
+        self.assertEqual(
+            json.loads(self.service().close_run(run["run_ref"]))["outcome"],
+            "available",
+        )
+
     def test_crash_after_commit_redelivers_same_result_without_rerun(self) -> None:
         self.fixture.assertion()
         run = self.start()
@@ -1178,6 +1300,176 @@ class AgentSqlResults(unittest.TestCase):
         self.assertEqual(self.invocations(), invocations)
         _, fresh = self.query(run, "SELECT bead_version_id FROM memory_v1.observations")
         self.assertEqual(fresh["outcome"], "available", fresh)
+
+    def test_a_redelivery_that_cannot_find_out_stays_settlement_pending(self) -> None:
+        # Owner rule: when commit status is unknown, the outcome is
+        # settlement_pending, never failed or settled without proof. The host
+        # died after its step's result committed, or before any work. The
+        # exact redelivery then meets a real lock timeout, statement timeout or
+        # lost connection while it probes the step or recovers it.
+        self.fixture.assertion()
+        operations = "memoriesql.result_preparation_operations"
+        stages = {
+            (True, "probe"): ("query_step_preparation_v1", operations),
+            (False, "probe"): ("query_step_preparation_v1", operations),
+            (True, "recovery"): ("recover_query_result_v1", operations),
+            (False, "recovery"): (
+                "recover_relation_query_v1",
+                "memoriesql_query.invocations",
+            ),
+        }
+        for (committed, stage), (marker, table) in stages.items():
+            for fault in ("lock", "statement", "connection"):
+                with self.subTest(committed=committed, stage=stage, fault=fault):
+                    run = self.start()
+                    request = self.crashed_step(run, committed=committed)
+                    result = self.committed_result(request)
+                    self.assertEqual(result is not None, committed)
+                    invocations = self.invocations()
+                    control, fired = self.faulty_control(marker, table, fault)
+                    pending = json.loads(
+                        self.service(control=control).handle(
+                            json.dumps(request).encode()
+                        )
+                    )
+                    self.assertEqual(fired, [fault])
+                    self.assertEqual(
+                        (pending["outcome"], pending["error"]),
+                        ("settlement_pending", {"code": "settlement"}),
+                    )
+                    self.assertNotIn("result", pending)
+                    # The step stays open and its access waits for recovery.
+                    self.assertEqual(
+                        self.step_state(request),
+                        ("executing", "settled,settlement_pending"),
+                    )
+                    # The next exact redelivery finds out, and nothing reruns.
+                    again = self.send(request)
+                    if committed:
+                        self.assertEqual(again["outcome"], "available", again)
+                        self.assertEqual(again["result"]["result_id"], result)
+                    else:
+                        self.assertEqual(
+                            (again["outcome"], again["error"]),
+                            ("execution_error", {"code": "database"}),
+                        )
+                    self.assertEqual(self.invocations(), invocations)
+                    closed = json.loads(self.service().close_run(run["run_ref"]))
+                    self.assertEqual(closed["outcome"], "available", closed)
+
+    def test_a_busy_first_disclosure_keeps_the_committed_result_for_redelivery(
+        self,
+    ) -> None:
+        # A committed result is never discarded, and a busy database or a lost
+        # connection at its first disclosure does not fix its step as failed:
+        # the exact redelivery discloses that result without rerunning.
+        self.fixture.assertion()
+        run = self.start()
+        for fault in ("lock", "statement", "connection"):
+            with self.subTest(fault=fault):
+                request, _ = self.request_only(
+                    run, "SELECT bead_id FROM memory_v1.observations"
+                )
+                control, fired = self.faulty_control(
+                    "read_query_result_page_v1", "memoriesql.query_deliveries", fault
+                )
+                busy = json.loads(
+                    self.service(control=control).handle(json.dumps(request).encode())
+                )
+                self.assertEqual(fired, [fault])
+                self.assertEqual(
+                    (busy["outcome"], busy["error"]),
+                    ("settlement_pending", {"code": "settlement"}),
+                )
+                self.assertEqual(
+                    self.step_state(request), ("executing", "settlement_pending")
+                )
+                result = self.committed_result(request)
+                self.assertIsNotNone(result)
+                invocations = self.invocations()
+                again = self.send(request)
+                self.assertEqual(again["outcome"], "available", again)
+                self.assertEqual(again["result"]["result_id"], result)
+                self.assertEqual(self.invocations(), invocations)
+
+    def test_a_failure_before_commit_discards_its_reservation(self) -> None:
+        # Review finding: a failure of the host's own code before any commit
+        # was settled as an execution error but kept the step's reservation
+        # until the run expired.
+        self.fixture.assertion()
+        run = self.start()
+        request, _ = self.request_only(
+            run, "SELECT bead_id FROM memory_v1.observations"
+        )
+        fault = RuntimeError("fictional host fault")
+        with patch.object(InternalResultCandidate, "construct", side_effect=fault):
+            failed = self.send(request)
+        self.assertEqual(
+            (failed["outcome"], failed["error"]),
+            ("execution_error", {"code": "database"}),
+        )
+        held = self.db.execute(
+            "SELECT state,CASE WHEN state='reserved' THEN reservation_bytes"
+            " ELSE allocation_bytes END FROM memoriesql.result_preparation_operations"
+            " WHERE run_ref=%s",
+            (run["run_ref"],),
+        ).fetchone()
+        assert held is not None
+        self.assertEqual(held[0], "discarded")
+        self.assertLess(held[1], 64 * 1024 * 1024)
+        # The failure is the step's outcome, and nothing runs again.
+        invocations = self.invocations()
+        self.assertEqual(self.send(request)["outcome"], "execution_error")
+        self.assertEqual(self.invocations(), invocations)
+
+    def test_a_population_over_its_byte_budget_is_a_storage_limit(self) -> None:
+        # Review finding: the population's byte budget replied code `time`.
+        self.fixture.assertion()
+        run = self.start()
+        with patch(
+            "memoriesql.infrastructure.postgres.agent_sql_results._POPULATION_BYTES",
+            8192,
+        ):
+            _, refused = self.query(run, "SELECT bead_id FROM memory_v1.observations")
+        self.assertEqual(
+            (refused["outcome"], refused["error"]),
+            ("budget_exhausted", {"code": "storage"}),
+        )
+
+    def test_a_passed_delivery_deadline_is_a_time_limit(self) -> None:
+        # Review finding: SQLSTATE 54000 for a passed deadline replied
+        # `storage`. The database's deadline for this access passes after its
+        # page is read and before its disclosure is recorded.
+        self.fixture.assertion()
+        run = self.start()
+        _, first = self.query(run, "SELECT bead_id FROM memory_v1.observations")
+        self.assertEqual(first["outcome"], "available", first)
+        admit = PostgresAgentSqlResults._admit
+        page = PostgresAgentSqlResults._page_reply
+
+        def short(service: Any, *args: Any) -> Any:
+            admission = admit(service, *args)
+            self.db.execute(
+                "UPDATE memoriesql.query_deliveries"
+                " SET deadline=clock_timestamp()+interval '1 second'"
+                " WHERE delivery_ref=%s",
+                (admission["delivery_ref"],),
+            )
+            return admission
+
+        def slow(service: Any, *args: Any) -> Any:
+            built = page(service, *args)
+            time.sleep(1.5)
+            return built
+
+        with (
+            patch.object(PostgresAgentSqlResults, "_admit", short),
+            patch.object(PostgresAgentSqlResults, "_page_reply", slow),
+        ):
+            late = self.reuse(run, first["result"])
+        self.assertEqual(
+            (late["outcome"], late["error"]), ("budget_exhausted", {"code": "time"})
+        )
 
     def test_close_refuses_while_run_work_is_unsettled(self) -> None:
         self.fixture.assertion()

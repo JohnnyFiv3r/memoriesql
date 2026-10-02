@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, replace
+from enum import Enum, auto
 from importlib.metadata import PackageNotFoundError, distribution, version
 from importlib.util import find_spec
 from typing import Any, NoReturn
@@ -36,6 +37,16 @@ NUMERIC = {"int8", "numeric"}
 
 
 class _ClosedPostgres(Postgres):
+    class Tokenizer(Postgres.Tokenizer):
+        # `$` only ever starts a positional parameter here. PostgreSQL also
+        # quotes strings with it; admission refuses string literals anyway, and
+        # scanning for one misread adjacent parameters such as `$1,$2`.
+        HEREDOC_STRINGS = []
+        SINGLE_TOKENS = {
+            **Postgres.Tokenizer.SINGLE_TOKENS,
+            "$": tokenizer_core.TokenType.PARAMETER,
+        }
+
     class Generator(PostgresGenerator):
         # psycopg's parameter format applies even inside quoted SQL tokens.
         # Escape only emitted value/identifier tokens, never placeholders.
@@ -72,6 +83,10 @@ class AdmittedQuery:
     derivation_program: dict[str, Any]
     recursion: RecursionBound | None
     execution_tree: list[dict[str, Any]]
+    # Builtins this statement's own operators call, each with the safe source
+    # offset of its leftmost use. The trusted executor runs only those inside
+    # its reviewed reader closure; admission itself grants nothing.
+    operators: tuple[tuple[str, int | None], ...] = ()
 
 
 @dataclass
@@ -86,13 +101,13 @@ class _Scope:
         if node.args.get("db"):
             qualified = node.db + "." + node.table
             if self.origins and self.origins.get(node.table) == qualified:
-                return self.sources[node.table].column(node.name).type
+                return self.member(node)
             if self.parent:
                 return self.parent.column(node)
             _refuse(node, "column_qualification")
         if node.table:
             if node.table in self.sources:
-                return self.sources[node.table].column(node.name).type
+                return self.member(node)
             if self.parent:
                 return self.parent.column(node)
             _refuse(node, "unknown_source", "invalid_request")
@@ -110,6 +125,13 @@ class _Scope:
             node, "ambiguous_column" if found else "unknown_column", "invalid_request"
         )
 
+    def member(self, node: exp.Column) -> SqlType:
+        """The type of a column qualified by one of this scope's own sources."""
+        for column in self.sources[node.table].columns:
+            if column.name == node.name:
+                return column.type
+        _refuse(node, "unknown_column", "invalid_request")
+
     def total_key(self, expressions: list[exp.Expr]) -> bool:
         present = {
             (n.table, n.name)
@@ -126,15 +148,35 @@ class _Scope:
         return True
 
 
+def _earliest(*positions: int | None) -> int | None:
+    located = [position for position in positions if position is not None]
+    return min(located) if located else None
+
+
+def _position(node: exp.Expr | None) -> int | None:
+    """Safe source offset of a value expression: its first token, else None.
+
+    SQLGlot records offsets on identifiers, literals and named functions only,
+    so an operator is located by the first token of its operands and a parameter
+    by its `$`. A clause or a whole statement has no single place.
+    """
+    if node is None:
+        return None
+    own = node.meta.get("start")
+    if type(own) is int:
+        return own
+    if isinstance(node, exp.Parameter):
+        number = _position(node.this)
+        return None if number is None else number - 1
+    if not isinstance(node, exp.Condition):
+        return None
+    return _earliest(*(_position(child) for child in node.iter_expressions()))
+
+
 def _refuse(
     node: exp.Expr | None, construct: str, code: str = "unsupported"
 ) -> NoReturn:
-    offset = None
-    if node:
-        value = node.meta.get("start")
-        if type(value) is int:
-            offset = value
-    raise SqlAdmissionError(code, construct, offset)
+    raise SqlAdmissionError(code, construct, _position(node))
 
 
 def _same(left: SqlType, right: SqlType, node: exp.Expr) -> SqlType:
@@ -143,8 +185,141 @@ def _same(left: SqlType, right: SqlType, node: exp.Expr) -> SqlType:
     if right.pg_type == "null":
         return left.optional()
     if not left.same_value_type(right):
-        _refuse(node, "incompatible_types", "invalid_request")
+        # The same physical type under different identifier kinds (or one
+        # plain value): bind the parameter with the column's reference type.
+        same_physical = (left.pg_type, left.array) == (right.pg_type, right.array)
+        _refuse(
+            node,
+            "reference_type" if same_physical else "incompatible_types",
+            "invalid_request",
+        )
     return replace(left, nullable=left.nullable or right.nullable)
+
+
+# The PostgreSQL builtin behind each typed operator, as provisioning names it.
+# A runtime test holds these to the pinned server's own operator catalog.
+_COMPARISONS: dict[type[exp.Expr], str] = {
+    exp.EQ: "=",
+    exp.NEQ: "<>",
+    exp.LT: "<",
+    exp.LTE: "<=",
+    exp.GT: ">",
+    exp.GTE: ">=",
+}
+# What the planner turns `NOT (a op b)` into, through AND, OR and NOT.
+_NEGATORS = {"=": "<>", "<>": "=", "<": ">=", "<=": ">", ">": "<=", ">=": "<"}
+# Operands a comparison only takes in parentheses. PostgreSQL never chains
+# comparisons and binds IS looser than them, so `x = y IS NULL` is
+# `(x = y) IS NULL` to the server but `x = (y IS NULL)` to the parser.
+_GROUPED = (exp.EQ, exp.NEQ, exp.LT, exp.LTE, exp.GT, exp.GTE, exp.Is)
+_OPERATOR_ORDER = ("=", "<>", "<", "<=", ">", ">=")
+_COMPARISON_BUILTINS = {
+    "text": ("texteq", "textne", "text_lt", "text_le", "text_gt", "text_ge"),
+    "uuid": ("uuid_eq", "uuid_ne", "uuid_lt", "uuid_le", "uuid_gt", "uuid_ge"),
+    "bool": ("booleq", "boolne", "boollt", "boolle", "boolgt", "boolge"),
+    "int8": ("int8eq", "int8ne", "int8lt", "int8le", "int8gt", "int8ge"),
+    "numeric": (
+        "numeric_eq",
+        "numeric_ne",
+        "numeric_lt",
+        "numeric_le",
+        "numeric_gt",
+        "numeric_ge",
+    ),
+    "float8": (
+        "float8eq",
+        "float8ne",
+        "float8lt",
+        "float8le",
+        "float8gt",
+        "float8ge",
+    ),
+    "timestamptz": (
+        "timestamptz_eq",
+        "timestamptz_ne",
+        "timestamptz_lt",
+        "timestamptz_le",
+        "timestamptz_gt",
+        "timestamptz_ge",
+    ),
+}
+_ARGUMENT_TYPES = {
+    "text": "text",
+    "uuid": "uuid",
+    "bool": "boolean",
+    "int8": "bigint",
+    "numeric": "numeric",
+    "float8": "double precision",
+    "timestamptz": "timestamptz",
+}
+# From this many bound values the planner probes `= ANY` and `IN` through a hash
+# table (PostgreSQL's MIN_ARRAY_SIZE_FOR_HASHED_SAOP). The probe calls the
+# type's default hash function as well as its equality.
+_HASHED_MEMBERS = 9
+_HASH_BUILTINS = {
+    "text": "hashtext(text)",
+    "uuid": "uuid_hash(uuid)",
+    "bool": "hashbool(boolean)",
+    "int8": "hashint8(bigint)",
+    "numeric": "hash_numeric(numeric)",
+    "float8": "hashfloat8(double precision)",
+    "timestamptz": "timestamptz_hash(timestamptz)",
+}
+
+
+class _Folded(Enum):
+    """What the planner has made of a bound value before it resolves operators."""
+
+    NULL = auto()
+    TRUE = auto()
+    FALSE = auto()
+    VALUE = auto()
+
+
+def _extreme_builtin(minimum: bool, type_: SqlType) -> str:
+    """The aggregate MIN or MAX runs as, after this module's own lowering."""
+    if type_.pg_type == "bool":
+        return "bool_and(boolean)" if minimum else "bool_or(boolean)"
+    # Identifiers and untyped nulls are compared as text.
+    name = "text" if type_.pg_type in {"uuid", "null"} else type_.pg_type
+    if name not in _ARGUMENT_TYPES:
+        raise SqlAdmissionError("unsupported", "operator_type")
+    return ("min" if minimum else "max") + "(" + _ARGUMENT_TYPES[name] + ")"
+
+
+def comparison_builtin(operator: str, pg_type: str) -> str:
+    """The builtin `operator` resolves to over two values of one catalog type."""
+    # Two untyped nulls compare as text.
+    name = "text" if pg_type == "null" else pg_type
+    if name not in _COMPARISON_BUILTINS:
+        raise SqlAdmissionError("unsupported", "operator_type")
+    function = _COMPARISON_BUILTINS[name][_OPERATOR_ORDER.index(operator)]
+    argument = _ARGUMENT_TYPES[name]
+    return f"{function}({argument},{argument})"
+
+
+def hash_builtin(pg_type: str) -> str:
+    """The builtin a hashed membership probe calls over one catalog type."""
+    if pg_type not in _HASH_BUILTINS:
+        raise SqlAdmissionError("unsupported", "operator_type")
+    return _HASH_BUILTINS[pg_type]
+
+
+def require_reviewed(query: AdmittedQuery, reviewed: frozenset[str]) -> None:
+    """Refuse an admitted query that calls a builtin outside `reviewed`.
+
+    The restricted reader executes only its reviewed closure. Any other builtin
+    fails inside it as a permission error, which a caller cannot tell from
+    missing authority, so the trusted host refuses the operator first and says
+    where its leftmost use is.
+    """
+    outside = [
+        position for builtin, position in query.operators if builtin not in reviewed
+    ]
+    if outside:
+        raise SqlAdmissionError(
+            "unsupported", "unreviewed_operator", _earliest(*outside)
+        )
 
 
 def _integer(node: exp.Expr | None, maximum: int) -> int:
@@ -225,8 +400,8 @@ _ARGS: dict[str, set[str]] = {
     "In": {"this", "expressions", "query"},
     "Any": {"this"},
     "Exists": {"this"},
-    "Like": {"this", "expression"},
-    "ILike": {"this", "expression"},
+    "Like": {"this", "expression", "negate"},
+    "ILike": {"this", "expression", "negate"},
     "Add": {"this", "expression"},
     "Sub": {"this", "expression"},
     "Mul": {"this", "expression"},
@@ -313,6 +488,84 @@ class _Binder:
         self.used_relations: set[str] = set()
         self.structural: set[int] = set()
         self.recursion_seen = False
+        self.operators: dict[str, int | None] = {}
+
+    def requires(self, builtin: str, node: exp.Expr | None) -> None:
+        """Record a builtin an operator calls, at its leftmost use."""
+        self.operators[builtin] = _earliest(
+            self.operators.get(builtin), _position(node)
+        )
+
+    def compares(self, operator: str, type_: SqlType, node: exp.Expr | None) -> None:
+        self.requires(comparison_builtin(operator, type_.pg_type), node)
+
+    def folded(self, node: exp.Expr) -> _Folded | None:
+        """A bound parameter or NULL is a constant to the planner; else None."""
+        while isinstance(node, exp.Paren):
+            node = node.this
+        if isinstance(node, exp.Null):
+            return _Folded.NULL
+        if not isinstance(node, exp.Parameter):
+            return None
+        bound = self.parameter(node)
+        if bound.value is None:
+            return _Folded.NULL
+        if bound.type.pg_type == "bool" and not bound.type.array:
+            return _Folded.TRUE if bound.value else _Folded.FALSE
+        return _Folded.VALUE
+
+    def comparison(
+        self,
+        operator: str,
+        left: exp.Expr,
+        right: exp.Expr,
+        node: exp.Expr,
+        scope: _Scope,
+        ctes: dict[str, SqlRelation],
+        negated: bool,
+    ) -> None:
+        """Bind `left operator right` and record the builtin the planner leaves.
+
+        The planner folds bound values before it resolves operators. A comparison
+        with NULL calls nothing. Two bound values are compared as written, while
+        planning. `x = true` and `x = false` become `x` and `NOT x`, so the
+        negation lands on the operators inside `x` instead.
+        """
+        folds = (self.folded(left), self.folded(right))
+        flag = next((f for f in folds if f in (_Folded.TRUE, _Folded.FALSE)), None)
+        simplified = operator in ("=", "<>") and flag is not None and None in folds
+        inner = simplified and (negated ^ (operator == "<>") ^ (flag is _Folded.FALSE))
+        compared = _same(
+            self.expression(left, scope, ctes, negated=inner),
+            self.expression(right, scope, ctes, negated=inner),
+            node,
+        )
+        if _Folded.NULL in folds or simplified:
+            return
+        if None not in folds:
+            negated = False
+        self.compares(_NEGATORS[operator] if negated else operator, compared, node)
+
+    def membership(
+        self,
+        type_: SqlType,
+        members: int,
+        node: exp.Expr,
+        *,
+        negated: bool,
+        bound: bool,
+    ) -> None:
+        """Record what `x = ANY(array)` or `x IN (list)` calls for bound values.
+
+        Under NOT the planner compares with the negator. From nine values it
+        probes a hash table instead, which calls the type's equality and hash
+        functions either way. A bound `x` is compared while planning, as written.
+        """
+        hashed = not bound and members >= _HASHED_MEMBERS
+        negator = negated and not bound and not hashed
+        self.compares("<>" if negator else "=", type_, node)
+        if hashed:
+            self.requires(hash_builtin(type_.pg_type), node)
 
     def query(
         self,
@@ -355,6 +608,12 @@ class _Binder:
                 SqlColumn(a.name, _same(a.type, b.type, node))
                 for a, b in zip(left.columns, right.columns, strict=True)
             )
+            if (
+                not isinstance(node, exp.Union)
+                or node.args.get("distinct") is not False
+            ):
+                for column in columns:
+                    self.compares("=", column.type, node)
             keys = (
                 (tuple(c.name for c in columns),)
                 if node.args.get("distinct") is not False
@@ -471,7 +730,7 @@ class _Binder:
                     _refuse(predicate, "equality_join")
                 a, b = predicate.this, predicate.expression
                 at, bt = scope.column(a), scope.column(b)
-                _same(at, bt, predicate)
+                self.compares("=", _same(at, bt, predicate), predicate)
                 if (
                     {a.table, b.table} & {alias}
                     and {a.table, b.table} & prior
@@ -527,12 +786,15 @@ class _Binder:
                 _refuse(projected, "projected_type", "invalid_request")
             expressions[name] = value
             columns.append(SqlColumn(name, type_))
+            if node.args.get("distinct"):
+                self.compares("=", type_, projected)
         if not columns:
             _refuse(node, "projection", "invalid_request")
         group = node.args.get("group")
         group_expressions: list[exp.Expr] = []
         if group:
             for expression in group.expressions:
+                written = expression
                 if (
                     isinstance(expression, exp.Column)
                     and not expression.table
@@ -546,7 +808,8 @@ class _Binder:
                         expression = replacement
                 group_expressions.append(expression)
                 _phase(expression, aggregates=False, windows=False)
-                self.expression(expression, scope, ctes)
+                # An output alias is located where the GROUP BY names it.
+                self.compares("=", self.expression(expression, scope, ctes), written)
         having = node.args.get("having")
         if having:
             _phase(having.this, aggregates=True, windows=False)
@@ -616,9 +879,14 @@ class _Binder:
         return self.parameters[position]
 
     def boolean(
-        self, node: exp.Expr, scope: _Scope, ctes: dict[str, SqlRelation]
+        self,
+        node: exp.Expr,
+        scope: _Scope,
+        ctes: dict[str, SqlRelation],
+        *,
+        negated: bool = False,
     ) -> None:
-        if self.expression(node, scope, ctes).pg_type != "bool":
+        if self.expression(node, scope, ctes, negated=negated).pg_type != "bool":
             _refuse(node, "predicate_type", "invalid_request")
 
     def order(
@@ -642,7 +910,10 @@ class _Binder:
         ctes: dict[str, SqlRelation],
         *,
         in_window: bool = False,
+        negated: bool = False,
     ) -> SqlType:
+        """`negated` is whether the planner will negate this boolean: it rewrites
+        NOT over a comparison into the comparison's negator, through AND and OR."""
         if isinstance(node, exp.Column):
             return scope.column(node)
         if isinstance(node, exp.Parameter):
@@ -657,13 +928,15 @@ class _Binder:
                 _refuse(node, "unbound_literal", "invalid_request")
             return INT8
         if isinstance(node, exp.Paren):
-            return self.expression(node.this, scope, ctes, in_window=in_window)
+            return self.expression(
+                node.this, scope, ctes, in_window=in_window, negated=negated
+            )
         if isinstance(node, exp.And | exp.Or):
-            self.boolean(node.this, scope, ctes)
-            self.boolean(node.expression, scope, ctes)
+            self.boolean(node.this, scope, ctes, negated=negated)
+            self.boolean(node.expression, scope, ctes, negated=negated)
             return BOOL.optional()
         if isinstance(node, exp.Not):
-            self.boolean(node.this, scope, ctes)
+            self.boolean(node.this, scope, ctes, negated=not negated)
             return BOOL.optional()
         if isinstance(node, exp.Is):
             if not isinstance(node.expression, exp.Null):
@@ -671,52 +944,92 @@ class _Binder:
             self.expression(node.this, scope, ctes)
             return BOOL
         if isinstance(node, exp.EQ | exp.NEQ | exp.LT | exp.LTE | exp.GT | exp.GTE):
+            if isinstance(node.this, _GROUPED) or isinstance(node.expression, _GROUPED):
+                # Admitted, it would run with another meaning or not at all.
+                _refuse(node, "comparison_grouping")
+            if not isinstance(node.expression, exp.Any):
+                self.comparison(
+                    _COMPARISONS[type(node)],
+                    node.this,
+                    node.expression,
+                    node,
+                    scope,
+                    ctes,
+                    negated,
+                )
+                return BOOL.optional()
             left = self.expression(node.this, scope, ctes)
-            if isinstance(node.expression, exp.Any):
-                if not isinstance(node, exp.EQ):
-                    _refuse(node, "array_membership")
-                value = node.expression.this
-                if isinstance(value, exp.Paren):
-                    value = value.this
-                if not isinstance(value, exp.Cast) or not isinstance(
-                    value.this, exp.Parameter
-                ):
-                    _refuse(node, "array_membership")
-                parameter = self.parameter(value.this)
-                target = value.args["to"]
-                if (
-                    target.this != exp.DataType.Type.ARRAY
-                    or len(target.expressions) != 1
-                ):
-                    _refuse(value, "array_type", "invalid_request")
-                physical = self.data_type(target.expressions[0])
-                if not parameter.type.array or physical != parameter.type.pg_type:
-                    _refuse(value, "array_type", "invalid_request")
-                _same(left, replace(parameter.type, array=False), node)
-            else:
-                _same(left, self.expression(node.expression, scope, ctes), node)
+            if not isinstance(node, exp.EQ):
+                _refuse(node, "array_membership")
+            value = node.expression.this
+            if isinstance(value, exp.Paren):
+                value = value.this
+            if not isinstance(value, exp.Cast) or not isinstance(
+                value.this, exp.Parameter
+            ):
+                _refuse(node, "array_membership")
+            parameter = self.parameter(value.this)
+            target = value.args["to"]
+            if target.this != exp.DataType.Type.ARRAY or len(target.expressions) != 1:
+                _refuse(value, "array_type", "invalid_request")
+            physical = self.data_type(target.expressions[0])
+            if not parameter.type.array or physical != parameter.type.pg_type:
+                _refuse(value, "array_type", "invalid_request")
+            self.membership(
+                _same(left, replace(parameter.type, array=False), node),
+                len(parameter.value),
+                node,
+                negated=negated,
+                bound=self.folded(node.this) is not None,
+            )
             return BOOL.optional()
         if isinstance(node, exp.Like | exp.ILike):
+            folds = (self.folded(node.this), self.folded(node.expression))
             if (
                 self.expression(node.this, scope, ctes).pg_type != "text"
                 or self.expression(node.expression, scope, ctes).pg_type != "text"
             ):
                 _refuse(node, "text_predicate", "invalid_request")
+            # As for a comparison: a NULL operand calls nothing, and two bound
+            # values are matched while planning, as written. `NOT LIKE` is its
+            # own operator, which the planner negates back into LIKE.
+            if _Folded.NULL not in folds:
+                matcher = "textic" if isinstance(node, exp.ILike) else "text"
+                opposite = bool(node.args.get("negate")) ^ (negated and None in folds)
+                self.requires(
+                    matcher + ("nlike" if opposite else "like") + "(text,text)", node
+                )
             return BOOL.optional()
         if isinstance(node, exp.In):
-            type_ = self.expression(node.this, scope, ctes)
             if node.args.get("query"):
+                type_ = self.expression(node.this, scope, ctes)
                 query = self.query(node.args["query"], scope, ctes)
                 if len(query.columns) != 1:
                     _refuse(node, "subquery_columns", "invalid_request")
-                _same(type_, query.columns[0].type, node)
-            else:
-                if not node.expressions:
-                    _refuse(node, "in_values", "invalid_request")
-                for value in node.expressions:
-                    if not isinstance(value, exp.Parameter):
-                        _refuse(value, "in_values", "invalid_request")
-                    _same(type_, self.expression(value, scope, ctes), node)
+                # NOT IN (subquery) keeps the equality under its NOT.
+                self.compares("=", _same(type_, query.columns[0].type, node), node)
+                return BOOL.optional()
+            if not node.expressions:
+                _refuse(node, "in_values", "invalid_request")
+            for value in node.expressions:
+                if not isinstance(value, exp.Parameter):
+                    _refuse(value, "in_values", "invalid_request")
+            if len(node.expressions) == 1:
+                # PostgreSQL reads a one-value list as a plain comparison.
+                self.comparison(
+                    "=", node.this, node.expressions[0], node, scope, ctes, negated
+                )
+                return BOOL.optional()
+            type_ = self.expression(node.this, scope, ctes)
+            for value in node.expressions:
+                type_ = _same(type_, self.expression(value, scope, ctes), node)
+            self.membership(
+                type_,
+                len(node.expressions),
+                node,
+                negated=negated,
+                bound=self.folded(node.this) is not None,
+            )
             return BOOL.optional()
         if isinstance(node, exp.Exists):
             self.query(node.this, scope, ctes)
@@ -746,6 +1059,13 @@ class _Binder:
             value = self.expression(node.this, scope, ctes)
             if value.pg_type not in NUMERIC or value.reference_kind:
                 _refuse(node, "numeric_expression", "invalid_request")
+            if self.folded(node.this) is not _Folded.NULL:
+                self.requires(
+                    "int8um(bigint)"
+                    if value.pg_type == "int8"
+                    else "numeric_uminus(numeric)",
+                    node,
+                )
             return value
         if isinstance(node, exp.Cast):
             value = self.expression(node.this, scope, ctes)
@@ -784,11 +1104,18 @@ class _Binder:
                 nullable = nullable and type_.nullable
             return replace(result, nullable=nullable)
         if isinstance(node, exp.Nullif):
-            return _same(
+            compared = _same(
                 self.expression(node.this, scope, ctes),
                 self.expression(node.expression, scope, ctes),
                 node,
-            ).optional()
+            )
+            # A NULL operand can equal nothing: the planner keeps the first.
+            if _Folded.NULL not in (
+                self.folded(node.this),
+                self.folded(node.expression),
+            ):
+                self.compares("=", compared, node)
+            return compared.optional()
         if isinstance(node, exp.TimestampTrunc):
             unit, zone = node.args.get("unit"), node.args.get("zone")
             if (
@@ -814,11 +1141,14 @@ class _Binder:
             value = node.this
             if isinstance(node, exp.Count) and isinstance(value, exp.Star):
                 return INT8
+            distinct = isinstance(value, exp.Distinct)
             if isinstance(value, exp.Distinct):
                 if not isinstance(node, exp.Count) or len(value.expressions) != 1:
                     _refuse(node, "aggregate_distinct")
                 value = value.expressions[0]
             type_ = self.expression(value, scope, ctes)
+            if distinct:
+                self.compares("=", type_, node)
             if isinstance(node, exp.Count):
                 if node.expressions:
                     _refuse(node, "count_arity")
@@ -828,6 +1158,7 @@ class _Binder:
                     _refuse(node, "aggregate_type", "invalid_request")
                 return SqlType("numeric", nullable=True)
             node.meta["input_pg_type"] = type_.pg_type
+            self.requires(_extreme_builtin(isinstance(node, exp.Min), type_), node)
             return type_.optional()
         if isinstance(node, exp.Window):
             function = (
@@ -848,14 +1179,16 @@ class _Binder:
             ):
                 _refuse(node, "window_function")
             partitions = node.args.get("partition_by") or []
-            for value in partitions:
-                self.expression(value, scope, ctes)
-            self.order(node.args.get("order"), scope, {})
             ordered = (
                 [e.this for e in node.args["order"].expressions]
                 if node.args.get("order")
                 else []
             )
+            # Partition and peer boundaries compare these keys for equality.
+            for value in partitions:
+                self.compares("=", self.expression(value, scope, ctes), value)
+            for value in ordered:
+                self.compares("=", self.expression(value, scope, {}), value)
             if isinstance(
                 function, exp.RowNumber | exp.Lag | exp.Lead
             ) and not scope.total_key([*partitions, *ordered]):
@@ -1035,24 +1368,19 @@ class _Binder:
         }:
             _refuse(arm, "recursive_edge")
         edge = edges[0]
+        if edge.name == "corrections":
+            # The packet's correction-edge expansion needs a database predicate
+            # for a qualified correction path, which no migration defines yet.
+            _refuse(arm, "correction_recursion")
         node_output = arm.expressions[node_index]
         if isinstance(node_output, exp.Alias):
             node_output = node_output.this
-        pairs = (
-            {
-                "source_bead_id": "target_bead_id",
-                "target_bead_id": "source_bead_id",
-                "source_bead_version_id": "target_bead_version_id",
-                "target_bead_version_id": "source_bead_version_id",
-            }
-            if edge.name == "assessed_relations"
-            else {
-                "predecessor_bead_id": "successor_bead_id",
-                "successor_bead_id": "predecessor_bead_id",
-                "predecessor_version_id": "successor_version_id",
-                "successor_version_id": "predecessor_version_id",
-            }
-        )
+        pairs = {
+            "source_bead_id": "target_bead_id",
+            "target_bead_id": "source_bead_id",
+            "source_bead_version_id": "target_bead_version_id",
+            "target_bead_version_id": "source_bead_version_id",
+        }
         if (
             not isinstance(node_output, exp.Column)
             or node_output.table != edge.alias_or_name
@@ -1108,31 +1436,18 @@ class _Binder:
                 ),
             )
         ]
-        for edge in edges:
-            edge_alias = edge.alias_or_name
-            if edge.name == "assessed_relations":
-                predicates.extend(
-                    [
-                        exp.EQ(
-                            this=exp.column("support_eligible", table=edge_alias),
-                            expression=exp.Boolean(this=True),
-                        ),
-                        exp.EQ(
-                            this=exp.column("roots_status", table=edge_alias),
-                            expression=exp.Literal.string("qualified"),
-                        ),
-                    ]
-                )
-            else:
-                predicates.append(
-                    exp.Anonymous(
-                        this="memoriesql_query_private.correction_path_qualified",
-                        expressions=[
-                            exp.column("predecessor_version_id", table=edge_alias),
-                            exp.column("successor_version_id", table=edge_alias),
-                        ],
-                    )
-                )
+        predicates.extend(
+            [
+                exp.EQ(
+                    this=exp.column("support_eligible", table=edge.alias_or_name),
+                    expression=exp.Boolean(this=True),
+                ),
+                exp.EQ(
+                    this=exp.column("roots_status", table=edge.alias_or_name),
+                    expression=exp.Literal.string("qualified"),
+                ),
+            ]
+        )
         for predicate in predicates:
             arm.where(predicate, append=True, copy=False)
         # Seed is bigint so native recursive output matches the declared wire type.
@@ -1323,4 +1638,5 @@ def admit_query(
         derivation,
         recursion,
         tree.dump(),
+        tuple(binder.operators.items()),
     )
