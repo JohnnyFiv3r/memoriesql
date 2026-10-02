@@ -174,7 +174,11 @@ class WireFormatTests(unittest.TestCase):
         relation = authority["relation_tables"]
         self.assertEqual(relation["requires"], ["memory.query", "source.read"])
         self.assertIn("every member", relation["requires_over"])
+        self.assertIn("the relations its records name", relation["requires_over"])
         self.assertIn("withheld", relation["unreadable_dependency"])
+        self.assertIn("every relation that names it", relation["unreadable_dependency"])
+        self.assertIn("paired agents", relation["applies_to"])
+        self.assertIn("source_raw_read_required", relation["applies_to"])
         self.assertEqual(relation["raw_source_provenance"], "owner_only")
         self.assertEqual(relation["gap_reason"], "source_read_required")
         self.assertIn("memory_v1.assessed_relations", relation["relations"])

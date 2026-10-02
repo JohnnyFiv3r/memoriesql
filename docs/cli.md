@@ -192,10 +192,14 @@ including `unsupported_query`, `invalid_request`, `budget_exhausted` and
 absence. The caller's own grants decide what is returned, and a missing
 capability is named in `result.coverage.gaps`, which the human view also prints
 on stderr. Observation tables need `memory.query` and `source.read` over the
-scope. An assessed relation is returned only when the caller holds
-`memory.query` and `source.read` over every member of its disclosed dependency
-closure; one unreadable member withholds the whole relation without disclosure,
-and raw-source provenance records stay owner-only. Relation history
+scope. An assessed relation is returned to a paired agent only when it holds
+`memory.query` and `source.read` over every member of the relation's disclosed
+dependency closure, which includes the relations its records name (its
+replacement chain and the `derived_from` relations on its root lineage). One unreadable member
+withholds the whole relation, and every relation that names it, without
+disclosure, and raw-source provenance records stay owner-only. Any other caller
+needs `source.raw.read`; without it the relation tables read empty with the gap
+`relation_tables` (`source_raw_read_required`). Relation history
 (`relation_events`, `relation_event_evidence` and `relation_pairs`) is also
 owner-only: a paired agent reads those tables empty, with the gap
 `relation_history` (`owner_only`) whenever its query names them. `--known-at`

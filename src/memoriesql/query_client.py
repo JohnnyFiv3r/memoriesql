@@ -322,18 +322,30 @@ def schema_description() -> dict[str, Any]:
                 "requires": ["memory.query", "source.read"],
                 "gap_reason": "source_read_required",
             },
-            # Owner decision, 2026-09-28: a relation needs both grants over every
-            # member of its disclosed dependency closure. One unreadable member
-            # withholds the whole relation without disclosure, and raw-source
-            # provenance records stay owner-only.
+            # Owner decision AM-5, 2026-09-28: a paired agent reads a relation with
+            # both grants over every member of its disclosed dependency closure,
+            # including the relations its records name. One unreadable member
+            # withholds the whole relation, and every relation naming it, without
+            # disclosure; raw-source provenance records stay owner-only.
+            # Owner-approved scope clarification 12(a), 2026-10-01, bound by the
+            # custodian's ea-5 reconciliation with the exact implementation:
+            # without raw read, these reads stay limited to the paired agents
+            # AM-5 authorizes, and every other caller keeps the source.raw.read
+            # gate and its gap.
             "relation_tables": {
                 "relations": sorted(AGENT_RELATION_TABLES),
+                "applies_to": (
+                    "paired agents; any other caller needs source.raw.read, "
+                    "otherwise the gap reason is source_raw_read_required"
+                ),
                 "requires": ["memory.query", "source.read"],
                 "requires_over": (
-                    "every member of the relation's disclosed dependency closure"
+                    "every member of the relation's disclosed dependency "
+                    "closure, including the relations its records name"
                 ),
                 "unreadable_dependency": (
-                    "the whole relation is withheld without disclosure"
+                    "the whole relation, and every relation that names it, is "
+                    "withheld without disclosure"
                 ),
                 "raw_source_provenance": "owner_only",
                 "gap_reason": "source_read_required",
