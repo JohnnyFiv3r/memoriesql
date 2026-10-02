@@ -10,7 +10,7 @@ import unittest
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import replace
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 from uuid import UUID, uuid4
@@ -20,8 +20,9 @@ from psycopg import sql
 from psycopg.conninfo import make_conninfo
 
 from memoriesql.application.agent_sql_catalog import SqlCatalog
-from memoriesql.application.agent_sql_results import POLICY_HASH
+from memoriesql.application.agent_sql_results import AGENT_RELATION_TABLES, POLICY_HASH
 from memoriesql.application.evidence_packages import NativeFacts
+from memoriesql.application.relation_inspection import InspectBeadRelationsV2
 from memoriesql.infrastructure.postgres.agent_sql_results import (
     PostgresAgentSqlResults,
 )
@@ -32,11 +33,16 @@ from memoriesql.infrastructure.postgres.query_reader_provisioning import (
 from memoriesql.infrastructure.postgres.query_result_commit import (
     PostgresQueryResultCommit,
 )
+from memoriesql.infrastructure.postgres.relation_assessment import (
+    PostgresRelationAssessments,
+)
 
 if TYPE_CHECKING:
+    from tests.runtime import agent_relation_fixtures as relation_agents
     from tests.runtime import test_query_result_commit as commit_tests
     from tests.runtime.test_postgres_runtime import migrate
 else:
+    import agent_relation_fixtures as relation_agents
     import test_query_result_commit as commit_tests
     from test_postgres_runtime import migrate
 
@@ -53,7 +59,7 @@ class AgentSqlResults(unittest.TestCase):
         self.addCleanup(self.h.doCleanups)
         self.fixture = self.h.fixture
         self.db = self.h.db
-        migrate(self.db, expected_current_version=34, target_version=38)
+        migrate(self.db, expected_current_version=34, target_version=39)
         # The production reviewed provisioning path, on fictional data.
         self.reader = "pr05_results_" + uuid4().hex
         self.profile = provision_query_reader(self.db, self.reader, READER_PASSWORD)
@@ -102,6 +108,7 @@ class AgentSqlResults(unittest.TestCase):
         view: str = "historical",
         page_size: int = 2,
         secret: str | None = None,
+        known_at: str | None = None,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         request = {
             "contract_version": 1,
@@ -115,7 +122,7 @@ class AgentSqlResults(unittest.TestCase):
             "parents": [],
             "scope": {
                 "source_refs": [],
-                "known_at": run["default_known_at"],
+                "known_at": known_at or run["default_known_at"],
                 "view": view,
             },
             "intent": "enumerate",
@@ -158,11 +165,19 @@ class AgentSqlResults(unittest.TestCase):
         )
         return data
 
-    def pair_agent(self, scope: UUID, capabilities: list[str]) -> tuple[UUID, str]:
+    def pair_agent(
+        self, scope: UUID, capabilities: list[str], label: str = ""
+    ) -> tuple[UUID, str]:
         """A paired agent through the canonical pairing path, never the owner."""
+        return self.pair_agent_over([scope], capabilities, label)
+
+    def pair_agent_over(
+        self, scopes: list[UUID], capabilities: list[str], label: str = ""
+    ) -> tuple[UUID, str]:
+        """One pairing over several scopes, with a read grant on each."""
         grant = uuid4()
         secret = hashlib.sha256(
-            ("fictional paired agent " + ",".join(capabilities)).encode()
+            ("fictional paired agent " + label + ",".join(capabilities)).encode()
         ).hexdigest()
         with self.db.transaction():
             self.fixture.begin()
@@ -176,23 +191,24 @@ class AgentSqlResults(unittest.TestCase):
                     grant,
                     uuid4(),
                     capabilities,
-                    [scope],
+                    scopes,
                     secret,
                     self.fixture.now,
                     self.fixture.now + timedelta(hours=1),
                 ),
             )
-            self.db.execute(
-                "SELECT memoriesql.create_access_grant(%s,%s,%s,%s,%s,%s)",
-                (
-                    uuid4(),
-                    principal,
-                    scope,
-                    ["read"],
-                    self.fixture.now,
-                    self.fixture.now + timedelta(hours=1),
-                ),
-            )
+            for scope in scopes:
+                self.db.execute(
+                    "SELECT memoriesql.create_access_grant(%s,%s,%s,%s,%s,%s)",
+                    (
+                        uuid4(),
+                        principal,
+                        scope,
+                        ["read"],
+                        self.fixture.now,
+                        self.fixture.now + timedelta(hours=1),
+                    ),
+                )
         return grant, secret
 
     @contextmanager
@@ -627,15 +643,15 @@ class AgentSqlResults(unittest.TestCase):
         )
         self.assertEqual(statements["outcome"], "available", statements)
         self.assertGreater(int(statements["result"]["total_rows"]), 0)
-        # Assessed relations keep PR-03's raw-source-gated provenance. Zero rows
-        # are never presented as absence: the missing capability is a gap.
+        # AM-5: the fixture relation's whole closure lies in the agent's scope, so
+        # the agent reads it as the owner does, with no relation gap.
         _, relations = self.query(run, count, secret=agent)
         self.assertEqual(relations["outcome"], "available", relations)
-        self.assertEqual(relations["page"]["rows"][0]["values"], ["0"])
-        self.assertIn(
-            {"facet": "relation_tables", "reason": "source_raw_read_required"},
-            relations["result"]["coverage"]["gaps"],
+        self.assertEqual(
+            relations["page"]["rows"][0]["values"],
+            owner_relations["page"]["rows"][0]["values"],
         )
+        self.assertEqual(relations["result"]["coverage"]["gaps"], [])
         # The agent's own result stays reusable under its grants and ends with them.
         again = self.reuse(run, reply["result"], page_size=50, secret=agent)
         self.assertEqual(again["outcome"], "available", again)
@@ -655,6 +671,769 @@ class AgentSqlResults(unittest.TestCase):
         revoked = self.reuse(run, reply["result"], page_size=50, secret=agent)
         self.assertEqual(revoked["outcome"], "unavailable", revoked)
         self.assertNotIn("result", revoked)
+
+    # AM-5 relation reads: the six readable tables, compared on stable columns
+    # (evidence_ref is a per-result private ref and differs between results).
+    RELATION_READS = {
+        "assessed_relations": (
+            "SELECT r.relation_id,r.type_key,r.type_revision,r.source_bead_id,"
+            "r.source_bead_version_id,r.target_bead_id,r.target_bead_version_id,"
+            "r.basis,r.rationale,r.author_confidence,r.state,r.support_eligible,"
+            "r.support_reason,r.correction_pending,r.roots_status,"
+            "r.independent_root_count FROM memory_v1.assessed_relations r "
+            "ORDER BY r.relation_id"
+        ),
+        "relation_statements": (
+            "SELECT s.relation_id,s.role,s.statement_id,s.bead_id,s.text "
+            "FROM memory_v1.relation_statements s "
+            "ORDER BY s.relation_id,s.role,s.statement_id"
+        ),
+        "relation_evidence": (
+            "SELECT e.relation_id,e.statement_id,e.source_unit_id,e.content_sha256,"
+            "e.roots_status FROM memory_v1.relation_evidence e "
+            "ORDER BY e.relation_id,e.statement_id,e.source_unit_id"
+        ),
+        "relation_types": (
+            "SELECT t.type_key,t.type_revision,t.label,t.definition "
+            "FROM memory_v1.relation_types t ORDER BY t.type_key,t.type_revision"
+        ),
+    }
+    TYPES = "SELECT t.type_key,t.type_revision FROM memory_v1.relation_types t"
+
+    def close(self, run: dict[str, Any], secret: str | None = None) -> None:
+        closed = json.loads(self.service(secret).close_run(run["run_ref"]))
+        self.assertEqual(closed["outcome"], "available", closed)
+
+    def supports_types(self, run: dict[str, Any], secret: str) -> int:
+        """How many 'supports' type pins the caller receives (type_key is a typed
+        reference, so it is not filtered with a text parameter)."""
+        _, reply = self.query(run, self.TYPES, page_size=50, secret=secret)
+        self.assertEqual(reply["outcome"], "available", reply)
+        self.assertEqual(reply["result"]["coverage"]["gaps"], [])
+        return sum(1 for row in reply["page"]["rows"] if row["values"][0] == "supports")
+
+    def home_agent(self, capabilities: list[str]) -> tuple[UUID, str]:
+        """A paired agent over its own explicit scope; the owner-private default
+        scope admits no grants to other principals."""
+        home, _, _ = self.fixture.remote_scope()
+        return self.pair_agent(home, capabilities, label="home")
+
+    def paired_principal(self, grant: UUID) -> UUID:
+        principal: UUID = self.h.scalar(
+            "SELECT paired_principal_id FROM memoriesql.pairing_grants "
+            "WHERE pairing_grant_id=%s",
+            (grant,),
+        )
+        return principal
+
+    def relation_rows(
+        self,
+        run: dict[str, Any],
+        relation: UUID,
+        *,
+        secret: str | None = None,
+        known_at: str | None = None,
+    ) -> dict[str, list[list[Any]]]:
+        """Each readable relation table's rows for one relation, as a caller sees them."""
+        seen: dict[str, list[list[Any]]] = {}
+        for table, text in self.RELATION_READS.items():
+            _, reply = self.query(
+                run, text, page_size=50, secret=secret, known_at=known_at
+            )
+            self.assertEqual(reply["outcome"], "available", reply)
+            self.assertEqual(reply["result"]["coverage"]["gaps"], [], table)
+            rows = [row["values"] for row in reply["page"]["rows"]]
+            # Type pins are keyed by type; the fixture relation is 'supports'.
+            key = "supports" if table == "relation_types" else str(relation)
+            seen[table] = [r for r in rows if r[0] == key]
+        return seen
+
+    def test_paired_agent_reads_a_real_assessed_relation_under_am5(self) -> None:
+        # AM-5: memory.query and source.read over the relation's whole disclosed
+        # closure read its six tables with the owner's values. Lifecycle history
+        # and pair coverage stay owner-only; raw provenance never appears.
+        grant, agent = self.home_agent(
+            ["memory.inspect", "memory.query", "source.read"]
+        )
+        relation = relation_agents.assessed_relation_for_agent(
+            self.db, self.fixture, self.paired_principal(grant)
+        )
+        owner_run, run = self.start(), self.start(agent)
+        owner = self.relation_rows(owner_run, relation.relation_id)
+        mine = self.relation_rows(run, relation.relation_id, secret=agent)
+        self.assertEqual(len(owner["assessed_relations"]), 1)
+        self.assertEqual(mine, owner)
+        state = mine["assessed_relations"][0]
+        self.assertEqual(state[1], "supports")
+        self.assertEqual(state[7], "agent_inferred")
+        self.assertEqual(state[10], "active")
+        self.assertEqual(
+            {row[1] for row in mine["relation_statements"]}, {"source", "target"}
+        )
+        self.assertTrue(mine["relation_evidence"])
+        # Pair coverage (and lifecycle history) stays with the owner.
+        pairs = "SELECT count(*) AS n FROM memory_v1.relation_pairs p"
+        _, owner_pairs = self.query(owner_run, pairs)
+        self.assertNotEqual(owner_pairs["page"]["rows"][0]["values"], ["0"])
+        _, my_pairs = self.query(run, pairs, secret=agent)
+        self.assertEqual(my_pairs["outcome"], "available", my_pairs)
+        self.assertEqual(my_pairs["page"]["rows"][0]["values"], ["0"])
+        self.assertEqual(
+            my_pairs["result"]["coverage"]["gaps"],
+            [{"facet": "relation_history", "reason": "owner_only"}],
+        )
+        # No source-object identity (a root identity) appears anywhere.
+        objects = {
+            str(row[0])
+            for row in self.db.execute(
+                "SELECT source_object_id FROM memoriesql.source_objects"
+            ).fetchall()
+        }
+        self.assertTrue(objects)
+        _, whole = self.query(
+            run, self.RELATION_READS["assessed_relations"], page_size=50, secret=agent
+        )
+        # Every column of every readable relation table, as the agent receives it.
+        catalog = SqlCatalog.installed()
+        for table in sorted(AGENT_RELATION_TABLES):
+            columns = ",".join("t." + c.name for c in catalog.relations[table].columns)
+            _, reply = self.query(
+                run, f"SELECT {columns} FROM {table} t", page_size=50, secret=agent
+            )
+            self.assertEqual(reply["outcome"], "available", reply)
+            disclosed = json.dumps(reply)
+            self.assertFalse([o for o in objects if o in disclosed], table)
+        # The inspection reader stays owner-only.
+        with self.fixture.connection() as connection:
+            port = PostgresRelationAssessments(
+                connection, credential_sha256=agent, workspace_id=self.fixture.workspace
+            )
+            inspected = port.inspect_relations(
+                InspectBeadRelationsV2(bead_id=relation.source_bead_id)
+            )
+        self.assertEqual(inspected.outcome, "unavailable")
+        # One closure member lapses: the relation is absent from a fresh step of
+        # the same run, with nothing disclosed about it; the saved result ends.
+        self.assertEqual(self.supports_types(run, agent), 1)
+        relation_agents.revoke_member(self.db, self.fixture, relation)
+        after = self.relation_rows(run, relation.relation_id, secret=agent)
+        self.assertEqual(
+            after,
+            {
+                "assessed_relations": [],
+                "relation_statements": [],
+                "relation_evidence": [],
+                "relation_types": [],
+            },
+        )
+        self.assertEqual(self.supports_types(run, agent), 0)
+        again = self.reuse(run, whole["result"], page_size=50, secret=agent)
+        self.assertEqual(again["outcome"], "unavailable", again)
+        self.assertNotIn("result", again)
+        # The source endpoint stays readable on its own.
+        _, observations = self.query(
+            run,
+            "SELECT o.bead_id FROM memory_v1.observations o ORDER BY o.bead_id",
+            page_size=50,
+            secret=agent,
+        )
+        self.assertIn(
+            str(relation.source_bead_id),
+            {row["values"][0] for row in observations["page"]["rows"]},
+        )
+
+    def test_agent_relation_needs_its_whole_closure_and_current_grants(self) -> None:
+        # A workspace admits two active runs, so each caller's run is closed after use.
+        caps = ["memory.inspect", "memory.query", "source.read"]
+        grant, agent = self.home_agent(caps)
+        relation = relation_agents.assessed_relation_for_agent(
+            self.db, self.fixture, self.paired_principal(grant)
+        )
+        # Another agent with the same capabilities but only the source's scope:
+        # the relation is withheld whole, with no gap, count or type pin, while
+        # the source endpoint itself stays readable.
+        _, partial = self.pair_agent(relation.source_scope, caps, label="partial")
+        run = self.start(partial)
+        self.assertEqual(
+            self.relation_rows(run, relation.relation_id, secret=partial),
+            {
+                "assessed_relations": [],
+                "relation_statements": [],
+                "relation_evidence": [],
+                "relation_types": [],
+            },
+        )
+        self.assertEqual(self.supports_types(run, partial), 0)
+        _, seen = self.query(
+            run,
+            "SELECT o.bead_id FROM memory_v1.observations o ORDER BY o.bead_id",
+            page_size=50,
+            secret=partial,
+        )
+        self.assertIn(
+            str(relation.source_bead_id),
+            {row["values"][0] for row in seen["page"]["rows"]},
+        )
+        self.close(run, partial)
+        # Without source.read, every relation table is withheld and says so.
+        # memory.query over every closure member, but no source.read. This is
+        # withheld by bead-version authorization too (M0011 already requires
+        # source.read on each version's event), so it does not isolate the AM-5
+        # gate; the closure-member cases below exercise that gate per member.
+        _, blind = self.pair_agent_over(
+            [relation.source_scope, relation.remote_scope],
+            ["memory.inspect", "memory.query"],
+            label="blind",
+        )
+        run = self.start(blind)
+        _, reply = self.query(
+            run, self.RELATION_READS["assessed_relations"], secret=blind
+        )
+        self.assertEqual(reply["outcome"], "available", reply)
+        self.assertEqual(reply["page"]["rows"], [])
+        self.assertEqual(
+            reply["result"]["coverage"]["gaps"],
+            [{"facet": "relation_tables", "reason": "source_read_required"}],
+        )
+        self.close(run, blind)
+        # The full-closure agent reads it until its remote grant expires.
+        run = self.start(agent)
+        self.assertEqual(
+            len(
+                self.relation_rows(run, relation.relation_id, secret=agent)[
+                    "assessed_relations"
+                ]
+            ),
+            1,
+        )
+        ends = datetime.now(UTC) + timedelta(seconds=2)
+        with self.db.transaction():
+            self.fixture.begin()
+            self.db.execute(
+                "SELECT memoriesql.revise_access_grant(%s,1,%s,'active',%s,%s,%s)",
+                (
+                    relation.grants["remote_target"],
+                    ["read"],
+                    self.fixture.now,
+                    ends,
+                    self.fixture.now,
+                ),
+            )
+        time.sleep(max(0.0, (ends - datetime.now(UTC)).total_seconds()) + 0.5)
+        self.assertEqual(
+            self.relation_rows(run, relation.relation_id, secret=agent)[
+                "assessed_relations"
+            ],
+            [],
+        )
+
+    def test_agent_relation_lifecycle_matches_the_owner_frame_by_frame(self) -> None:
+        grant, agent = self.home_agent(
+            ["memory.inspect", "memory.query", "source.read"]
+        )
+        relation = relation_agents.assessed_relation_for_agent(
+            self.db, self.fixture, self.paired_principal(grant)
+        )
+        source, rid = relation.source_bead_id, relation.relation_id
+
+        def states(
+            owner_run: dict[str, Any], run: dict[str, Any], known_at: str | None = None
+        ) -> list[Any]:
+            owner = self.relation_rows(owner_run, rid, known_at=known_at)
+            mine = self.relation_rows(run, rid, secret=agent, known_at=known_at)
+            # One projection: the agent sees exactly the owner's state at the frame.
+            self.assertEqual(mine["assessed_relations"], owner["assessed_relations"])
+            row: list[Any] = mine["assessed_relations"][0]
+            return row
+
+        disputed = self.fixture.governance.record_event(
+            self.fixture.lifecycle_command(source, rid, "dispute", "am5-dispute")
+        )
+        self.assertIsNotNone(disputed.relation_event_id)
+        owner_run, run = self.start(), self.start(agent)
+        disputed_at = run["default_known_at"]
+        row = states(owner_run, run)
+        self.assertEqual((row[10], row[11], row[12]), ("disputed", False, "disputed"))
+        self.close(owner_run)
+        self.close(run, agent)
+        retracted = self.fixture.governance.record_event(
+            self.fixture.lifecycle_command(source, rid, "retract", "am5-retract")
+        )
+        self.assertIsNotNone(retracted.relation_event_id)
+        owner_run, run = self.start(), self.start(agent)
+        row = states(owner_run, run)
+        self.assertEqual((row[10], row[11], row[12]), ("retracted", False, "retracted"))
+        # As of the disputed frame, both still see the dispute, never the retraction.
+        row = states(owner_run, run, known_at=disputed_at)
+        self.assertEqual((row[10], row[11], row[12]), ("disputed", False, "disputed"))
+        # History stays owner-only: the owner sees both events, the agent a gap.
+        events = "SELECT count(*) AS n FROM memory_v1.relation_events v"
+        _, owner_events = self.query(owner_run, events)
+        self.assertEqual(owner_events["page"]["rows"][0]["values"], ["2"])
+        _, my_events = self.query(run, events, secret=agent)
+        self.assertEqual(my_events["page"]["rows"][0]["values"], ["0"])
+        self.assertEqual(
+            my_events["result"]["coverage"]["gaps"],
+            [{"facet": "relation_history", "reason": "owner_only"}],
+        )
+
+    def test_agent_relation_reads_stay_inside_their_tenant(self) -> None:
+        grant, agent = self.home_agent(
+            ["memory.inspect", "memory.query", "source.read"]
+        )
+        relation = relation_agents.assessed_relation_for_agent(
+            self.db, self.fixture, self.paired_principal(grant)
+        )
+        workspace, _, owner, _ = self.fixture.second_tenant()
+        scope = uuid4()
+        # A paired agent of the second tenant, with the same capabilities over its
+        # own scope, reads in the agent mode and sees none of the first tenant.
+        stranger = hashlib.sha256(b"fictional second-tenant paired agent").hexdigest()
+        principal, now = uuid4(), datetime.now(UTC)
+        capabilities = ["memory.inspect", "memory.query", "source.read"]
+        with self.db.transaction():
+            self.db.execute("SET LOCAL ROLE memoriesql_application")
+            PostgresAuthorizationPort(self.db).begin_context(
+                credential_sha256=owner, requested_workspace_id=workspace
+            )
+            # Owner-private scopes admit no grants to other principals.
+            self.db.execute(
+                "SELECT memoriesql.create_access_scope(%s,%s,'explicit',%s,%s)",
+                (scope, uuid4(), "Fictional second orchard agents", now),
+            )
+            self.db.execute(
+                "SELECT memoriesql.pair_local_client("
+                "%s,%s,%s,%s,'agent','paired_agent',%s,%s,%s,%s,%s)",
+                (
+                    principal,
+                    uuid4(),
+                    uuid4(),
+                    uuid4(),
+                    capabilities,
+                    [scope],
+                    stranger,
+                    now,
+                    now + timedelta(hours=1),
+                ),
+            )
+            self.db.execute(
+                "SELECT memoriesql.create_access_grant(%s,%s,%s,%s,%s,%s)",
+                (uuid4(), principal, scope, ["read"], now, now + timedelta(hours=1)),
+            )
+        other = PostgresAgentSqlResults(
+            control_factory=self.fixture.connection,
+            reader_factory=self.reader_connection,
+            authority_profile=self.profile,
+            credential_sha256=stranger,
+            workspace_id=workspace,
+        )
+        started = json.loads(other.start_run())
+        self.assertEqual(started["outcome"], "available", started)
+        request = {
+            "contract_version": 1,
+            "run_ref": started["run"]["run_ref"],
+            "step_key": str(uuid4()),
+            "kind": "query",
+            "catalog_hash": SqlCatalog.installed().hash,
+            "sql": self.RELATION_READS["assessed_relations"],
+            "parameters": [],
+            "inputs": [],
+            "parents": [],
+            "scope": {
+                "source_refs": [],
+                "known_at": started["run"]["default_known_at"],
+                "view": "historical",
+            },
+            "intent": "enumerate",
+            "max_result_bytes": 64 * 1024 * 1024,
+            "page_size": 50,
+        }
+        reply = json.loads(other.handle(json.dumps(request).encode()))
+        self.assertEqual(reply["outcome"], "available", reply)
+        self.assertEqual(reply["page"]["rows"], [])
+        self.assertEqual(reply["result"]["coverage"]["gaps"], [])
+        self.assertNotIn(str(relation.relation_id), json.dumps(reply))
+        # The first tenant's agent credential opens nothing in the second.
+        foreign = PostgresAgentSqlResults(
+            control_factory=self.fixture.connection,
+            reader_factory=self.reader_connection,
+            authority_profile=self.profile,
+            credential_sha256=agent,
+            workspace_id=workspace,
+        )
+        self.assertEqual(json.loads(foreign.start_run())["outcome"], "unavailable")
+
+    def relation_in(
+        self, subject: UUID, candidates: tuple[UUID, ...], key: str, build: Any
+    ) -> UUID:
+        """One accepted assessed relation from a fresh activation; its ID."""
+        known = "SELECT relation_id FROM memoriesql.assessed_relations"
+        before = {row[0] for row in self.db.execute(known).fetchall()}
+        self.fixture.activate_relations(subject, candidates, key=key)
+        self.fixture.propose(build)
+        self.fixture.run_relations()
+        (created,) = {row[0] for row in self.db.execute(known).fetchall()} - before
+        relation: UUID = created
+        return relation
+
+    @staticmethod
+    def citing(proposal: dict[str, Any], statements: list[str]) -> dict[str, Any]:
+        """Keep only these statements' evidence; any 1 to 8 may be cited."""
+        proposal["evidence"] = [
+            e for e in proposal["evidence"] if e["statement_id"] in statements
+        ]
+        return proposal
+
+    def test_a_relation_whose_replacement_is_withheld_is_withheld_too(self) -> None:
+        # Review P1. X, W and Z live in their own scopes, and W is derived from
+        # Z. A (X supports W) cites only X's evidence. B replaces A and cites
+        # W's, whose root lineage reaches Z. An agent that reads X and W but not
+        # Z cannot read B, so it must not read A either: superseded, with B in
+        # relation_replacements, A would disclose that the hidden B exists.
+        fixture = self.fixture
+        tag = uuid4().hex[:8]
+        scopes = [relation_agents.explicit_scope(self.db, fixture) for _ in range(3)]
+        (sx, ox), (sw, ow), (sz, oz) = scopes
+        x = fixture.remote_bead(
+            "Fictional X: the orchard ledger balanced.",
+            key="x-" + tag,
+            scope=sx,
+            source=ox,
+        )
+        w = fixture.remote_bead(
+            "Fictional W: the audit relied on the ledger.",
+            key="w-" + tag,
+            scope=sw,
+            source=ow,
+        )
+        z = fixture.remote_bead(
+            "Fictional Z: the ledger's first draft.",
+            key="z-" + tag,
+            scope=sz,
+            source=oz,
+        )
+        derived = self.relation_in(
+            w,
+            (z,),
+            "derived-" + tag,
+            lambda p: [
+                fixture.proposal(
+                    p,
+                    "derived_from",
+                    fixture.endpoint(p, w, 0),
+                    fixture.endpoint(p, z, 0),
+                    basis="agent_inferred",
+                )
+            ],
+        )
+
+        def supports(p: Any, cited: UUID, **extra: Any) -> list[dict[str, Any]]:
+            proposal = fixture.proposal(
+                p,
+                "supports",
+                fixture.endpoint(p, x, 0),
+                fixture.endpoint(p, w, 0),
+                basis="agent_inferred",
+                **extra,
+            )
+            return [
+                self.citing(proposal, fixture.endpoint(p, cited, 0)["statement_ids"])
+            ]
+
+        first = self.relation_in(x, (w,), "first-" + tag, lambda p: supports(p, x))
+        retires = dict(
+            relation_kind="assessed",
+            relation_id=str(first),
+            reason="Fictional exact replacement.",
+        )
+        second = self.relation_in(
+            x, (w,), "second-" + tag, lambda p: supports(p, w, retires=retires)
+        )
+        _, agent = self.pair_agent_over(
+            [sx, sw], ["memory.inspect", "memory.query", "source.read"], label="no-z"
+        )
+        owner_run, run = self.start(), self.start(agent)
+        reads = dict(self.RELATION_READS)
+        reads["relation_replacements"] = (
+            "SELECT p.relation_id,p.replacement_relation_id "
+            "FROM memory_v1.relation_replacements p "
+            "ORDER BY p.relation_id,p.replacement_relation_id"
+        )
+        # The owner reads all three, with A superseded by B.
+        _, owner_replaced = self.query(
+            owner_run, reads["relation_replacements"], page_size=50
+        )
+        self.assertIn(
+            [str(first), str(second)],
+            [row["values"] for row in owner_replaced["page"]["rows"]],
+        )
+        _, owner_relations = self.query(
+            owner_run, reads["assessed_relations"], page_size=50
+        )
+        states = {
+            row["values"][0]: row["values"][10]
+            for row in owner_relations["page"]["rows"]
+        }
+        self.assertEqual(states[str(first)], "superseded")
+        self.assertIn(str(second), states)
+        self.assertIn(str(derived), states)
+        # The agent reads none of them, in any table, and no replacement row.
+        for table, text in reads.items():
+            _, reply = self.query(run, text, page_size=50, secret=agent)
+            self.assertEqual(reply["outcome"], "available", reply)
+            self.assertEqual(reply["result"]["coverage"]["gaps"], [], table)
+            disclosed = json.dumps(reply["page"])
+            for relation in (first, second, derived):
+                self.assertNotIn(str(relation), disclosed, table)
+        self.assertEqual(self.supports_types(run, agent), 0)
+        self.close(owner_run)
+        self.close(run, agent)
+
+    def withheld_with(
+        self, relation: UUID, scopes: list[UUID], member: UUID, label: str
+    ) -> None:
+        """The relation is read whole while `member`'s scope is readable, and is
+        absent everywhere, with no type pin, once only that scope's grant goes;
+        a result saved before then is no longer disclosed."""
+        caps = ["memory.inspect", "memory.query", "source.read"]
+        pairing, agent = self.pair_agent_over([*scopes, member], caps, label=label)
+        run = self.start(agent)
+        self.assertEqual(
+            len(self.relation_rows(run, relation, secret=agent)["assessed_relations"]),
+            1,
+            label,
+        )
+        _, saved = self.query(
+            run, self.RELATION_READS["assessed_relations"], page_size=50, secret=agent
+        )
+        access: UUID = self.h.scalar(
+            "SELECT grant_id FROM memoriesql.access_grants "
+            "WHERE target_principal_id=%s AND access_scope_id=%s",
+            (self.paired_principal(pairing), member),
+        )
+        with self.db.transaction():
+            self.fixture.begin()
+            self.db.execute(
+                "SELECT memoriesql.revise_access_grant(%s,1,%s,'revoked',%s,%s,%s)",
+                (
+                    access,
+                    ["read"],
+                    self.fixture.now,
+                    self.fixture.now + timedelta(hours=1),
+                    self.fixture.now,
+                ),
+            )
+        self.assertEqual(
+            self.relation_rows(run, relation, secret=agent),
+            {
+                "assessed_relations": [],
+                "relation_statements": [],
+                "relation_evidence": [],
+                "relation_types": [],
+            },
+            label,
+        )
+        again = self.reuse(run, saved["result"], page_size=50, secret=agent)
+        self.assertEqual(again["outcome"], "unavailable", label)
+        self.close(run, agent)
+
+    def test_each_kind_of_closure_member_withholds_its_relation(self) -> None:
+        # Review P2: one agent-mode case per closure member class that AM-5
+        # gates, each member in its own scope: a basis statement, lifecycle
+        # evidence, a replacement relation and a derivation-root lineage member.
+        fixture = self.fixture
+        tag = uuid4().hex[:8]
+        (sx, ox), (sw, ow), (sm, om) = (
+            relation_agents.explicit_scope(self.db, fixture) for _ in range(3)
+        )
+        x = fixture.remote_bead(
+            "Fictional X: the orchard ledger balanced.",
+            "Fictional X: every crate was counted.",
+            key="x-" + tag,
+            scope=sx,
+            source=ox,
+        )
+        w = fixture.remote_bead(
+            "Fictional W: the audit relied on the ledger.",
+            key="w-" + tag,
+            scope=sw,
+            source=ow,
+        )
+        m = fixture.remote_bead(
+            "Fictional M: the auditor's notes support the ledger.",
+            key="m-" + tag,
+            scope=sm,
+            source=om,
+        )
+
+        def supports(p: Any, **extra: Any) -> list[dict[str, Any]]:
+            return [
+                fixture.proposal(
+                    p,
+                    "supports",
+                    fixture.endpoint(p, x, 0),
+                    fixture.endpoint(p, w, 0),
+                    basis="agent_inferred",
+                    **extra,
+                )
+            ]
+
+        # A basis statement in the member's scope.
+        based = self.relation_in(
+            x,
+            (w, m),
+            "basis-" + tag,
+            lambda p: [
+                fixture.proposal(
+                    p,
+                    "supports",
+                    fixture.endpoint(p, x, 1),
+                    fixture.endpoint(p, w, 0),
+                    basis_statements=(fixture.basis_pin(p, m, 0),),
+                )
+            ],
+        )
+        self.withheld_with(based, [sx, sw], sm, "basis")
+        # Lifecycle evidence in the member's scope: a dispute that cites M.
+        disputed = self.relation_in(x, (w,), "disputed-" + tag, supports)
+        cited = self.db.execute(
+            "SELECT s.statement_id,e.evidence_source_unit_id,e.evidence_content_hash "
+            "FROM memoriesql.bead_semantic_statements s "
+            "JOIN memoriesql.bead_semantic_statement_evidence e "
+            "ON e.tenant_id=s.tenant_id AND e.statement_id=s.statement_id "
+            "WHERE s.bead_id=%s ORDER BY s.statement_id LIMIT 1",
+            (m,),
+        ).fetchone()
+        assert cited is not None
+        fixture.governance.record_event(
+            fixture.lifecycle_command(
+                x,
+                disputed,
+                "dispute",
+                "member-dispute-" + tag,
+                evidence=[
+                    dict(
+                        statement_id=cited[0],
+                        source_unit_id=cited[1],
+                        content_hash=cited[2],
+                    )
+                ],
+            )
+        )
+        self.withheld_with(disputed, [sx, sw], sm, "lifecycle evidence")
+        # A replacement whose own closure reaches the member's scope: it keeps
+        # the endpoints and rests on a basis statement there.
+        replaced = self.relation_in(x, (w,), "replaced-" + tag, supports)
+        retires = dict(
+            relation_kind="assessed",
+            relation_id=str(replaced),
+            reason="Fictional exact replacement.",
+        )
+        self.relation_in(
+            x,
+            (w, m),
+            "replacement-" + tag,
+            lambda p: [
+                fixture.proposal(
+                    p,
+                    "supports",
+                    fixture.endpoint(p, x, 0),
+                    fixture.endpoint(p, w, 0),
+                    basis_statements=(fixture.basis_pin(p, m, 0),),
+                    retires=retires,
+                )
+            ],
+        )
+        self.withheld_with(replaced, [sx, sw], sm, "replacement")
+        # A derivation-root lineage member: W is derived from M, and the
+        # relation cites W's evidence.
+        self.relation_in(
+            w,
+            (m,),
+            "derived-" + tag,
+            lambda p: [
+                fixture.proposal(
+                    p,
+                    "derived_from",
+                    fixture.endpoint(p, w, 0),
+                    fixture.endpoint(p, m, 0),
+                    basis="agent_inferred",
+                )
+            ],
+        )
+        lineage = self.relation_in(
+            x,
+            (w,),
+            "lineage-" + tag,
+            lambda p: [
+                self.citing(supports(p)[0], fixture.endpoint(p, w, 0)["statement_ids"])
+            ],
+        )
+        self.withheld_with(lineage, [sx, sw], sm, "root lineage")
+
+    def test_a_paired_service_reads_relations_only_as_before_am5(self) -> None:
+        # Review P2: AM-5 names paired agents. A paired background service with
+        # memory.query and source.read over a relation's whole closure keeps
+        # the earlier gate: no relation without raw source authority, and the
+        # gap says so.
+        grant, _ = self.home_agent(["memory.inspect", "memory.query", "source.read"])
+        relation = relation_agents.assessed_relation_for_agent(
+            self.db, self.fixture, self.paired_principal(grant)
+        )
+        service = hashlib.sha256(b"fictional paired background service").hexdigest()
+        principal, scopes = uuid4(), [relation.source_scope, relation.remote_scope]
+        with self.db.transaction():
+            self.fixture.begin()
+            self.db.execute(
+                "SELECT memoriesql.pair_local_client("
+                "%s,%s,%s,%s,'service','background_service',%s,%s,%s,%s,%s)",
+                (
+                    principal,
+                    uuid4(),
+                    uuid4(),
+                    uuid4(),
+                    ["memory.query", "source.read"],
+                    scopes,
+                    service,
+                    self.fixture.now,
+                    self.fixture.now + timedelta(hours=1),
+                ),
+            )
+            for scope in scopes:
+                self.db.execute(
+                    "SELECT memoriesql.create_access_grant(%s,%s,%s,%s,%s,%s)",
+                    (
+                        uuid4(),
+                        principal,
+                        scope,
+                        ["read"],
+                        self.fixture.now,
+                        self.fixture.now + timedelta(hours=1),
+                    ),
+                )
+        run = self.start(service)
+        _, reply = self.query(
+            run, self.RELATION_READS["assessed_relations"], page_size=50, secret=service
+        )
+        self.assertEqual(reply["outcome"], "available", reply)
+        self.assertEqual(reply["page"]["rows"], [])
+        self.assertEqual(
+            reply["result"]["coverage"]["gaps"],
+            [{"facet": "relation_tables", "reason": "source_raw_read_required"}],
+        )
+        self.assertNotIn(str(relation.relation_id), json.dumps(reply))
+        # Its observations read as before.
+        _, seen = self.query(
+            run,
+            "SELECT o.bead_id FROM memory_v1.observations o ORDER BY o.bead_id",
+            page_size=50,
+            secret=service,
+        )
+        self.assertIn(
+            str(relation.source_bead_id),
+            {row["values"][0] for row in seen["page"]["rows"]},
+        )
+        self.close(run, service)
 
     def test_paired_agent_cites_a_finding_to_its_retained_source_units(self) -> None:
         # Owner decision (2026-09-28): source.read admits retained unit text
