@@ -27,8 +27,11 @@ CREATE TABLE memoriesql.query_runs (
 CREATE INDEX query_runs_workspace_active ON memoriesql.query_runs(tenant_id,workspace_id,expires_at);
 -- An owner may end its own run early (trusted host only). Closing refunds
 -- nothing, keeps every charge in the rolling window and cannot be reopened.
+-- The closure records who closed the run: the owner principal and the
+-- credential it presented, kept as long as the run's own records.
 CREATE TABLE memoriesql.query_run_closures (
  tenant_id uuid NOT NULL, run_ref uuid NOT NULL, closed_at timestamptz NOT NULL,
+ closed_by_principal_id uuid NOT NULL, closed_by_credential_id uuid NOT NULL,
  PRIMARY KEY(tenant_id,run_ref),
  FOREIGN KEY(tenant_id,run_ref) REFERENCES memoriesql.query_runs(tenant_id,run_ref)
 );
@@ -211,6 +214,28 @@ REVOKE ALL ON FUNCTION memoriesql.query_run_state_v1(memoriesql.query_runs) FROM
 
 -- The trusted host starts a run after authentication. Callers cannot set the
 -- tenant, principal, workspace, allowances or policy; only the pinned baseline.
+-- Starting a run, admission, close and recovery check workspace caps after the
+-- workspace's query-access lock. Their REPEATABLE READ frame takes this same
+-- lock at session level before its snapshot, so the snapshot sees everything
+-- the previous holder committed. The function's own transaction-level lock is
+-- then re-entrant. The caller releases the returned key after its frame.
+CREATE FUNCTION memoriesql.acquire_query_access_lock_v1() RETURNS bigint
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,memoriesql
+ SET row_security=off AS $$
+DECLARE c memoriesql.authorization_contexts%ROWTYPE; key bigint;
+BEGIN
+ SELECT * INTO c FROM memoriesql.current_authorization_context();
+ IF NOT FOUND OR c.context_id IS NULL THEN
+  RAISE EXCEPTION 'query_access_unavailable' USING ERRCODE='42501';
+ END IF;
+ key:=hashtextextended(c.tenant_id::text||':query-access:'||c.workspace_id::text,0);
+ PERFORM pg_advisory_lock(key);
+ RETURN key;
+EXCEPTION WHEN OTHERS THEN IF key IS NOT NULL THEN PERFORM pg_advisory_unlock(key); END IF; RAISE;
+END $$;
+REVOKE ALL ON FUNCTION memoriesql.acquire_query_access_lock_v1() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION memoriesql.acquire_query_access_lock_v1() TO memoriesql_application;
+
 CREATE FUNCTION memoriesql.start_query_run_v1(catalog text,policy text) RETURNS jsonb
 LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,memoriesql
  SET row_security=off SET lock_timeout='500ms' AS $$
@@ -283,7 +308,7 @@ BEGIN
    AND run_ref=run AND state<>'settled') THEN
    RETURN jsonb_build_object('refused','settlement');
   END IF;
-  INSERT INTO memoriesql.query_run_closures VALUES(c.tenant_id,run,clock_timestamp()) RETURNING * INTO k;
+  INSERT INTO memoriesql.query_run_closures VALUES(c.tenant_id,run,clock_timestamp(),c.principal_id,c.credential_id) RETURNING * INTO k;
  END IF;
  RETURN jsonb_build_object('run_ref',run,
   'closed_at',to_char(k.closed_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'));

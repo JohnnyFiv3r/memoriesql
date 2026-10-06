@@ -5,9 +5,10 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import threading
 import time
 import unittest
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -19,6 +20,7 @@ import psycopg
 from psycopg import sql
 from psycopg.conninfo import make_conninfo
 
+import memoriesql.infrastructure.postgres.agent_sql_results as results_module
 from memoriesql.application.agent_sql_catalog import SqlCatalog
 from memoriesql.application.agent_sql_results import AGENT_RELATION_TABLES, POLICY_HASH
 from memoriesql.application.evidence_packages import NativeFacts
@@ -36,6 +38,9 @@ from memoriesql.infrastructure.postgres.query_result_commit import (
 )
 from memoriesql.infrastructure.postgres.relation_assessment import (
     PostgresRelationAssessments,
+)
+from memoriesql.infrastructure.postgres.relation_projection import (
+    relation_projection_frame,
 )
 from memoriesql.infrastructure.postgres.relation_sql_population import (
     prepare_query_population,
@@ -2822,6 +2827,451 @@ class AgentSqlResults(unittest.TestCase):
         self.assertEqual(status["failures"]["count"], 0)
         self.assertEqual(status["overdue"], {"runs": 0, "results": 0, "tombstones": 0})
         self.assertEqual(status["admission"], "open")
+
+    # Closing a run (the close_run contract) and the workspace caps under
+    # concurrency. A call checks a cap after taking the workspace lock; what
+    # another call committed while it waited must count.
+
+    @contextmanager
+    def concurrently(self, action: Callable[[], Any]) -> Iterator[list[Any]]:
+        """Run `action` on its own thread and connections once the next results
+        frame has taken its snapshot, give it up to two seconds, then let that
+        frame's call go on.
+
+        Without the query-access lock the action commits inside that window,
+        after the frame's snapshot, as a concurrent call can. With the lock it
+        waits on the frame and fails its 500 ms lock wait. Yields what the action
+        returned or raised."""
+        original = relation_projection_frame
+        outcome: list[Any] = []
+        threads: list[threading.Thread] = []
+
+        def run() -> None:
+            try:
+                outcome.append(action())
+            except BaseException as error:  # recorded, never lost
+                outcome.append(error)
+
+        @contextmanager
+        def frame(*args: Any, **kwargs: Any) -> Iterator[Any]:
+            with original(*args, **kwargs) as connection:
+                if not threads:
+                    thread = threading.Thread(target=run)
+                    threads.append(thread)
+                    thread.start()
+                    thread.join(timeout=2)
+                yield connection
+
+        with patch.object(results_module, "relation_projection_frame", frame):
+            yield outcome
+        for thread in threads:
+            thread.join(timeout=30)
+        self.assertTrue(threads)
+
+    def active_runs(self) -> int:
+        return int(
+            self.h.scalar(
+                "SELECT count(*) FROM memoriesql.query_runs r WHERE r.workspace_id=%s"
+                " AND r.expires_at>clock_timestamp() AND NOT EXISTS(SELECT 1 FROM"
+                " memoriesql.query_run_closures k WHERE k.tenant_id=r.tenant_id"
+                " AND k.run_ref=r.run_ref)",
+                (self.fixture.workspace,),
+            )
+        )
+
+    def run_records(self, run: dict[str, Any]) -> list[Any]:
+        """Every stored row of the run's work, results, charges and cursors."""
+        deliveries = (
+            "(SELECT d.delivery_ref FROM memoriesql.query_deliveries d"
+            " WHERE d.run_ref=%s)"
+        )
+        tables = {
+            "query_steps": "t.run_ref=%s",
+            "query_deliveries": "t.run_ref=%s",
+            "query_visible_refs": "t.run_ref=%s",
+            "query_disclosures": "t.delivery_ref IN " + deliveries,
+            "query_cursors": "t.issued_by_delivery IN " + deliveries,
+        }
+        records = []
+        for table, predicate in tables.items():
+            records.append(
+                [
+                    row[0]
+                    for row in self.db.execute(
+                        f"SELECT to_jsonb(t)::text FROM memoriesql.{table} t "
+                        f"WHERE {predicate} ORDER BY 1",
+                        (UUID(run["run_ref"]),),
+                    ).fetchall()
+                ]
+            )
+        return records
+
+    def test_concurrent_starts_keep_two_active_runs(self) -> None:
+        self.start()
+        with self.concurrently(self.service().start_run) as other:
+            late = json.loads(self.service().start_run())
+        self.assertLessEqual(self.active_runs(), 2, (late, other))
+
+    def test_concurrent_admissions_keep_one_operation(self) -> None:
+        self.fixture.assertion()
+        first, second = self.start(), self.start()
+        request, _ = self.request_only(
+            first, "SELECT bead_id FROM memory_v1.observations"
+        )
+        with self.concurrently(lambda: self.dispatch_then_die(request)) as other:
+            self.query(second, "SELECT bead_version_id FROM memory_v1.observations")
+        # At most one of the two operations was ever admitted.
+        admitted = self.h.scalar(
+            "SELECT count(*) FROM memoriesql.query_deliveries WHERE run_ref IN (%s,%s)",
+            (first["run_ref"], second["run_ref"]),
+        )
+        self.assertLessEqual(admitted, 1, other)
+        for reader in other:
+            if isinstance(reader, psycopg.Connection):
+                self.end_reader(reader)
+
+    def test_close_concurrent_with_admission_never_closes_beside_work(
+        self,
+    ) -> None:
+        self.fixture.assertion()
+        run = self.start()
+        request, _ = self.request_only(
+            run, "SELECT bead_id FROM memory_v1.observations"
+        )
+        with self.concurrently(lambda: self.dispatch_then_die(request)) as other:
+            closed = json.loads(self.service().close_run(run["run_ref"]))
+        unsettled = self.h.scalar(
+            "SELECT count(*) FROM memoriesql.query_deliveries"
+            " WHERE run_ref=%s AND state<>'settled'",
+            (run["run_ref"],),
+        )
+        closures = self.h.scalar("SELECT count(*) FROM memoriesql.query_run_closures")
+        # Never a closure beside unsettled work.
+        self.assertFalse(closures and unsettled, (closed, other))
+        for reader in other:
+            if isinstance(reader, psycopg.Connection):
+                self.end_reader(reader)
+
+    def test_concurrent_closes_never_fail_after_a_close(self) -> None:
+        run = self.start()
+        with self.concurrently(
+            lambda: self.service().close_run(run["run_ref"])
+        ) as other:
+            late = self.service().close_run(run["run_ref"])
+        # The call that holds the lock closes; a repeat returns the same reply.
+        self.assertEqual(json.loads(late)["outcome"], "available", (late, other))
+        self.assertEqual(self.service().close_run(run["run_ref"]), late)
+
+    def test_a_crash_before_close_commits_leaves_the_run_open(self) -> None:
+        self.fixture.assertion()
+        run = self.start()
+        original = relation_projection_frame
+
+        class Crash(BaseException):
+            pass
+
+        @contextmanager
+        def dying(*args: Any, **kwargs: Any) -> Iterator[Any]:
+            with original(*args, **kwargs) as connection:
+                yield connection
+                raise Crash()  # the host dies after the call, before commit
+
+        with patch.object(results_module, "relation_projection_frame", dying):
+            with self.assertRaises(Crash):
+                self.service().close_run(run["run_ref"])
+        self.assertEqual(
+            self.h.scalar("SELECT count(*) FROM memoriesql.query_run_closures"), 0
+        )
+        _, open_run = self.query(run, "SELECT bead_id FROM memory_v1.observations")
+        self.assertEqual(open_run["outcome"], "available", open_run)
+        closed = json.loads(self.service().close_run(run["run_ref"]))
+        self.assertEqual(closed["outcome"], "available", closed)
+
+    def test_another_principal_cannot_close_a_run(self) -> None:
+        scope, source_object, _ = self.fixture.remote_scope()
+        self.fixture.assertion(scope=scope, source_object=source_object)
+        run = self.start()
+        _, other = self.fixture.second_human(scope)
+        foreign = self.service(other).close_run(run["run_ref"])
+        unknown = self.service(other).close_run(str(uuid4()))
+        self.assertEqual(json.loads(foreign)["outcome"], "unavailable", foreign)
+        self.assertEqual(foreign, unknown)
+        self.assertEqual(
+            self.h.scalar("SELECT count(*) FROM memoriesql.query_run_closures"), 0
+        )
+        _, mine = self.query(run, "SELECT bead_id FROM memory_v1.observations")
+        self.assertEqual(mine["outcome"], "available", mine)
+
+    def other_tenant(self) -> tuple[UUID, str]:
+        """A second fictional tenant's owner: its workspace and credential secret.
+        Public fixture pattern (test_result_preparation, test_authored_relations)."""
+        secret = hashlib.sha256(b"other fictional tenant closing runs").hexdigest()
+        tenant, user, identity, principal, workspace, scope, policy = (
+            uuid4() for _ in range(7)
+        )
+        credential, session, now = uuid4(), uuid4(), self.fixture.now
+        rows = (
+            ("users", (tenant, user, "active", "Other fictional tenant", now, None)),
+            (
+                "auth_identities",
+                (
+                    tenant,
+                    identity,
+                    user,
+                    "memoriesql.local",
+                    str(identity),
+                    "local_interactive",
+                    "active",
+                    now,
+                    None,
+                ),
+            ),
+            (
+                "principals",
+                (tenant, principal, "human", user, user, "active", now, None),
+            ),
+            ("workspaces", (tenant, workspace, "personal_local", user, "active", now)),
+            (
+                "workspace_memberships",
+                (
+                    tenant,
+                    workspace,
+                    principal,
+                    "personal_owner",
+                    "active",
+                    1,
+                    now,
+                    now,
+                    None,
+                ),
+            ),
+            (
+                "access_scopes",
+                (
+                    tenant,
+                    workspace,
+                    scope,
+                    user,
+                    "owner_private",
+                    policy,
+                    "active",
+                    now,
+                ),
+            ),
+            (
+                "access_policy_revisions",
+                (
+                    tenant,
+                    workspace,
+                    scope,
+                    policy,
+                    1,
+                    "owner_private",
+                    user,
+                    "Fictional default scope",
+                    principal,
+                    now,
+                ),
+            ),
+            (
+                "authentication_credentials",
+                (
+                    tenant,
+                    credential,
+                    principal,
+                    "local_session",
+                    secret,
+                    "active",
+                    now,
+                    now + timedelta(hours=1),
+                    None,
+                ),
+            ),
+            ("local_auth_sessions", (tenant, session, credential, identity, now)),
+        )
+        with self.db.transaction():
+            for table, values in rows:
+                self.db.execute(
+                    sql.SQL("INSERT INTO memoriesql.{} VALUES ({})").format(
+                        sql.Identifier(table),
+                        sql.SQL(",").join(sql.Placeholder() for _ in values),
+                    ),
+                    values,
+                )
+        return workspace, secret
+
+    def test_another_tenant_cannot_close_a_run(self) -> None:
+        run = self.start()
+        workspace, secret = self.other_tenant()
+        other = PostgresAgentSqlResults(
+            control_factory=self.fixture.connection,
+            reader_factory=self.reader_connection,
+            authority_profile=self.profile,
+            credential_sha256=secret,
+            workspace_id=workspace,
+        )
+        foreign = other.close_run(run["run_ref"])
+        self.assertEqual(json.loads(foreign)["outcome"], "unavailable", foreign)
+        self.assertEqual(foreign, other.close_run(str(uuid4())))
+        self.assertEqual(
+            self.h.scalar("SELECT count(*) FROM memoriesql.query_run_closures"), 0
+        )
+
+    def test_another_workspace_cannot_close_a_run(self) -> None:
+        # The run's owner, authenticated into a second workspace of the same
+        # tenant, cannot close a run of the first: ownership includes the
+        # workspace, and the reply equals an unknown run's.
+        run = self.start()
+        fixture, workspace, scope, policy = self.fixture, uuid4(), uuid4(), uuid4()
+        tenant, user, principal, now = (
+            fixture.tenant,
+            fixture.user,
+            fixture.principal,
+            fixture.now,
+        )
+        rows = (
+            ("workspaces", (tenant, workspace, "personal_local", user, "active", now)),
+            (
+                "workspace_memberships",
+                (
+                    tenant,
+                    workspace,
+                    principal,
+                    "personal_owner",
+                    "active",
+                    1,
+                    now,
+                    now,
+                    None,
+                ),
+            ),
+            (
+                "access_scopes",
+                (
+                    tenant,
+                    workspace,
+                    scope,
+                    user,
+                    "owner_private",
+                    policy,
+                    "active",
+                    now,
+                ),
+            ),
+            (
+                "access_policy_revisions",
+                (
+                    tenant,
+                    workspace,
+                    scope,
+                    policy,
+                    1,
+                    "owner_private",
+                    user,
+                    "Fictional second workspace",
+                    principal,
+                    now,
+                ),
+            ),
+        )
+        with self.db.transaction():
+            for table, values in rows:
+                self.db.execute(
+                    sql.SQL("INSERT INTO memoriesql.{} VALUES ({})").format(
+                        sql.Identifier(table),
+                        sql.SQL(",").join(sql.Placeholder() for _ in values),
+                    ),
+                    values,
+                )
+        elsewhere = PostgresAgentSqlResults(
+            control_factory=self.fixture.connection,
+            reader_factory=self.reader_connection,
+            authority_profile=self.profile,
+            credential_sha256=self.fixture.secret_hash,
+            workspace_id=workspace,
+        )
+        foreign = elsewhere.close_run(run["run_ref"])
+        self.assertEqual(json.loads(foreign)["outcome"], "unavailable", foreign)
+        self.assertEqual(foreign, elsewhere.close_run(str(uuid4())))
+        self.assertEqual(
+            self.h.scalar("SELECT count(*) FROM memoriesql.query_run_closures"), 0
+        )
+        closed = json.loads(self.service().close_run(run["run_ref"]))
+        self.assertEqual(closed["outcome"], "available", closed)
+
+    def test_an_expired_run_may_be_closed_and_nothing_else_changes(self) -> None:
+        run = self.start()
+        # Age the run past its 30 minutes, as the test administrator only.
+        with self.db.transaction():
+            self.db.execute("SET LOCAL session_replication_role=replica")
+            self.db.execute(
+                "UPDATE memoriesql.query_runs SET started_at=started_at-interval '31 minutes',"
+                " expires_at=expires_at-interval '31 minutes',"
+                " default_known_at=default_known_at-interval '31 minutes' WHERE run_ref=%s",
+                (UUID(run["run_ref"]),),
+            )
+        before = self.run_records(run)
+        closed = json.loads(self.service().close_run(run["run_ref"]))
+        self.assertEqual(closed["outcome"], "available", closed)
+        self.assertEqual(self.run_records(run), before)
+
+    def test_close_rechecks_authority_on_every_call(self) -> None:
+        scope, _, _ = self.fixture.remote_scope()
+        capabilities = ["memory.inspect", "memory.query", "source.read"]
+        grant, agent = self.pair_agent(scope, capabilities)
+        run = self.start(agent)
+        with self.db.transaction():
+            self.fixture.begin()
+            self.db.execute(
+                "SELECT memoriesql.revise_pairing_grant(%s,1,%s,%s,'revoked',%s,%s,%s)",
+                (
+                    grant,
+                    capabilities,
+                    [scope],
+                    self.fixture.now,
+                    self.fixture.now + timedelta(hours=1),
+                    self.fixture.now,
+                ),
+            )
+        revoked = json.loads(self.service(agent).close_run(run["run_ref"]))
+        self.assertEqual(revoked["outcome"], "unavailable", revoked)
+        self.assertEqual(
+            self.h.scalar("SELECT count(*) FROM memoriesql.query_run_closures"), 0
+        )
+
+    def test_a_close_records_who_closed_the_run(self) -> None:
+        # Attributable authority: the closure durably names the owner principal
+        # and the credential it presented, with the time.
+        run = self.start()
+        closed = json.loads(self.service().close_run(run["run_ref"]))
+        self.assertEqual(closed["outcome"], "available", closed)
+        row = self.db.execute(
+            "SELECT k.closed_by_principal_id=r.principal_id,"
+            " k.closed_by_credential_id=a.credential_id,"
+            " to_char(k.closed_at AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"')"
+            " FROM memoriesql.query_run_closures k"
+            " JOIN memoriesql.query_runs r USING(tenant_id,run_ref)"
+            " JOIN memoriesql.authentication_credentials a"
+            " ON a.tenant_id=k.tenant_id AND a.secret_sha256=%s"
+            " WHERE k.run_ref=%s",
+            (self.fixture.secret_hash, UUID(run["run_ref"])),
+        ).fetchone()
+        self.assertEqual(row, (True, True, closed["closed"]["closed_at"]))
+
+    def test_closing_changes_no_step_result_charge_or_cursor(self) -> None:
+        # Closing is not completion and not settled billing: every stored row
+        # of the run is byte-identical after it, and its result stays reusable.
+        self.fixture.assertion()
+        first = self.start()
+        _, reply = self.query(first, "SELECT bead_id FROM memory_v1.observations")
+        self.assertEqual(reply["outcome"], "available", reply)
+        before = self.run_records(first)
+        closed = json.loads(self.service().close_run(first["run_ref"]))
+        self.assertEqual(closed["outcome"], "available", closed)
+        self.assertEqual(self.run_records(first), before)
+        second = self.start()
+        reused = self.reuse(second, reply["result"])
+        self.assertEqual(reused["outcome"], "available", reused)
 
     def request_only(
         self, run: dict[str, Any], text: str
