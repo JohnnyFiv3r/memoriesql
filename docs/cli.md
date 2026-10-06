@@ -10,7 +10,7 @@ Desktop and never loads private Python modules or arbitrary plugins. `contracts`
 
 | Command | Behavior |
 | --- | --- |
-| `doctor` | Reports installed version and whether local read inputs are configured. It contacts no database or model. |
+| `doctor [--check-database]` | Reports installed version and whether local read inputs are configured; it contacts no database or model by default. `--check-database` adds read-only checks of reachability, schema compatibility with the installed migrations and whether the login can run the adapters' prologue and assume the application role. An empty database fails as `schema_not_installed`. The migration history is owner-only, so a login that cannot read it reports `schema_version_readable: false`, `schema_compatibility: "unverified"` and `database_check: "login_ready_schema_unverified"` with a notice to verify compatibility with the owner or migration administrator login. That is never a full pass (`database_check: "passed"`). It never migrates, grants or repairs. |
 | `capabilities` | Lists the static core command set and names unavailable product capabilities. |
 | `inspect <bead-id>` | Uses the installed authorized stored-bead inspection; pending/thin/failed authorship remains distinct from accepted meaning. |
 | `source <bead-id> --selection-file selection.json` | Reads one exact selection through the installed source-evidence reader. The file contains a `StoredEvidenceSelection`, including package and inventory pins. No source is inferred from a bead ID alone. |
@@ -21,6 +21,10 @@ Desktop and never loads private Python modules or arbitrary plugins. `contracts`
 | `init --request-file request.json --secret-file PATH` | Operator-only, once per database: creates the single personal-local owner, workspace and an expiring owner credential through the existing bootstrap. Its secret is written once to a newly created owner-only file and never printed. |
 | `clients pair --request-file request.json --secret-file PATH` | Pairs one local agent client with explicit capabilities, owned scopes and expiry. Its new secret is written once to a newly created owner-only file and never printed. |
 | `clients revoke --request-file request.json` | Terminally revokes one pairing grant at its exact current revision. |
+| `schema` | Describes the installed logical query catalog, which relations are prepared, reserved or not prepared, the grants each prepared table family needs, the admission rules and delivery limits. It contacts no database and starts no run. |
+| `query --file query.sql --intent discover\|enumerate --view resolved\|historical` | Submits one caller-authored admitted SELECT with typed `$n` parameters through the trusted results executor and prints its closed reply. |
+| `result <result-id> --digest <content-digest> [--cursor C]` | Pages one retained immutable result by its exact pin under current authority, without rerunning its query. |
+| `broker serve\|provision\|check\|runs\|cleanup\|close-run --config PATH` | Operator-only commands of the local trusted query host, run as its service user with its private configuration. Each prints one JSON line. |
 
 Bare `sources` reports `source_inventory_not_released`; there is no public
 source-inventory reader yet. Provider-specific `sources connect` remains a
@@ -174,6 +178,99 @@ expected revision, capabilities and scopes from the pairing receipt and records 
 terminal revision; a changed revision is a conflict, not a success. A
 revocation that reports `revocation_outcome_unknown` may have applied; retrying
 it reports `pairing_revision_conflict` once it has.
+`query` and `result` speak `memoriesql.agent-sql-results.v1` through a trusted
+executor that alone holds the control login and the restricted reader login.
+`query --file` reads at most 32 KiB of SQL; `--parameters-file` holds the typed
+parameter list (`[{"position": 1, "type": "uuid", "value": "..."}]`). All values
+are parameters; the executor refuses SQL literals except structural ones,
+unprepared relations (`unsupported_query`, feature `unprepared_relation`) and
+not-yet-qualified refinement, expansion, refresh or source scopes. Replies are
+printed unchanged; `--json` prints the executor's exact reply bytes. Exit status
+is 0 only for `available`, 2 for `unavailable` and 3 for every other outcome,
+including `unsupported_query`, `invalid_request`, `budget_exhausted` and
+`settlement_pending`. A zero-row result is still `available`: it never proves
+absence. The caller's own grants decide what is returned, and a missing
+capability is named in `result.coverage.gaps`, which the human view also prints
+on stderr. Observation tables need `memory.query` and `source.read` over the
+scope; the assessed relation tables also need `source.raw.read`, which only the
+personal-local owner holds. `--known-at` takes an ISO 8601 timestamp with a UTC
+offset and is sent as UTC with a literal `Z`; without it the run's default
+cutoff applies.
+
+`memory_v1.source_units.search_text` is the normalized text of an authorized
+source unit. For a materialized unit it is the pinned package's normalized
+projection when every part is producer-normalized; otherwise `text_state` is
+`unsupported` and only the citation is returned. It is never raw bytes, exact
+source or a clause-level citation. A reply that uses `source_units` always says
+so as a coverage gap (`normalized_text_not_exact_source`), and also names any
+normalized projection, excluded package or unresolved package. Text inequality
+(`<>`, or `NOT (a = $n)`, which the planner rewrites to it) is outside the
+reviewed operator closure and replies `unavailable`; filter with equality
+instead.
+
+The trusted host must run its expired-result cleanup on a schedule. While that
+cleanup is more than a day overdue, new runs are refused as
+`budget_exhausted`/`settlement`, and the human view names this as host
+maintenance rather than a query error.
+
+The CLI keeps one run per authenticated principal and workspace in an owner-only
+state file under `MEMORIESQL_STATE_DIR` (default `$XDG_STATE_HOME/memoriesql`),
+reuses it across invocations and starts a new run shortly before the stored run
+expires; it never retries a refused or budgeted request. `--new-run` asks for a
+new run without ending the old one, which still counts against the workspace's
+active-run limit until it expires; a stored run the executor reports as ended is
+forgotten so the next command starts fresh. Runs are bounded
+(30 minutes, two active per workspace). A follow-up `result` needs both the
+`result_id` and `content_digest` from the query reply, plus its `next_cursor` for
+the following page. Access is rechecked on every page; a revoked dependency
+refuses the whole result.
+
+The trusted host is configured only in the process that may hold database
+credentials: `MEMORIESQL_DATABASE_URL` (a login that can assume the application
+role), `MEMORIESQL_QUERY_READER_URL` and `MEMORIESQL_QUERY_READER_ROLE` for the
+reviewed restricted reader, the local credential and workspace, and optionally
+`MEMORIESQL_QUERY_AUTHORITY_SHA256` to refuse a drifted reader profile. The
+database login is normally a non-superuser that inherits `memoriesql_application`
+(and `memoriesql_worker` for workers); a superuser login is not the normal
+configuration. Since migration 0033 a non-inheriting member cannot run the
+released adapters' prologue, and `doctor --check-database` reports it as
+`login_role_not_ready`. Never
+give those values to an agent's shell, files or processes: an agent that can
+read them could bypass admitted SQL. Without them `query` and `result` report
+`trusted_query_host_not_configured`.
+
+An agent reaches memory through the local trusted query host instead. The host
+is one process running as a dedicated service user. It alone holds both database
+logins, and it serves a Unix socket. With `MEMORIESQL_RESULTS_SOCKET` set to that
+socket, `query`, `result`, `inspect`, `source` and `relations` go only to the
+host. The agent's environment then needs only its own paired credential
+(`MEMORIESQL_LOCAL_CREDENTIAL`) and `MEMORIESQL_WORKSPACE_ID`, and never a
+database URL; one in the same environment is ignored, never used as a fallback.
+Before sending anything, the client checks that the socket is served by the uid
+that owns its directory and that this uid is not the caller's own. Every
+transport failure is the executor's canonical `unavailable` reply (exit 2). The
+host authenticates each request as a current paired agent of its workspace, so
+a paired agent's authority is exactly its pairing and grants.
+
+Through the host, a paired agent uses `schema`, `query` and `result`. It cites
+sources through query results: `memory_v1.source_units` returns the normalized
+text of authorized source units under `memory.query` and `source.read`, never
+raw bytes or clause-level citations. The exact source readers `inspect`,
+`source` and `relations` are owner-only. They answer
+`resource_unavailable` to paired agents, because they require raw-source
+authority that the paired-agent role cannot hold. `capabilities --json` reports
+this as `paired_agent_reads`, along with the host protocol version.
+
+The host's operator runs `broker provision` once to create both host logins with
+generated secrets and the private configuration. It reads the database
+administrator URL without echo and has no flag for it; `--control-role` and
+`--reader-role` override the default role names. `broker serve` runs the host
+until SIGTERM or SIGINT, then drains. `broker check` verifies the configuration,
+logins and file permissions; `broker runs` lists the runs the host recorded; and
+`broker close-run RUN_REF` closes one of them. `broker serve` also runs the
+expired-result cleanup at start and hourly, `broker cleanup` runs it once on
+demand, and `broker check` fails while cleanup is overdue or its last scheduled
+run is stale. Run these as the service user, never from an agent session.
 
 This slice does not route Desktop's Textual interface or provider adapters. A
 future, reviewed static service/client seam must preserve public core commands,

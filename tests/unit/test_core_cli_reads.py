@@ -63,7 +63,8 @@ class CoreCLIReadTests(unittest.TestCase):
         unavailable = capabilities["unavailable"]
         self.assertIsInstance(unavailable, dict)
         assert isinstance(unavailable, dict)
-        self.assertEqual(unavailable["query"], "pr05_query_result_not_released")
+        self.assertNotIn("query", unavailable)
+        self.assertIn("query", commands)
         self.assertIn("sources enroll", commands)
         self.assertEqual(unavailable["sources connect"], "provider_adapter_not_routed")
         self.assertEqual(unavailable["sources"], "source_inventory_not_released")
@@ -94,12 +95,14 @@ class CoreCLIReadTests(unittest.TestCase):
         connection = MagicMock()
         connection.__enter__.return_value = connection
         reader = MagicMock()
-        reader.inspect.return_value = {"outcome": "unavailable"}
+        reader.inspect.return_value.model_dump.return_value = {"outcome": "unavailable"}
         with (
             patch.dict(os.environ, LOCAL_ENV),
             patch("memoriesql.cli.psycopg.connect", return_value=connection) as connect,
             patch(
-                "memoriesql.cli.PostgresStoredBeadInspection", return_value=reader
+                "memoriesql.infrastructure.results_broker.readers."
+                "PostgresStoredBeadInspection",
+                return_value=reader,
             ) as reader_type,
         ):
             status, result = invoke(["inspect", str(BEAD), "--json"])
