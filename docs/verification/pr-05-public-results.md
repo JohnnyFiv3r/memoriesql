@@ -515,8 +515,16 @@ Reply metadata sealed into the digest:
     digest covers the nine relation tables, and the snapshot digest all
     fourteen.
   - The complete protected dependency record stays internal: the result's
-    sealed body frame, its stored manifest and records, the witness and the
-    invocation keep the full digest. Binding and invalidation use only those.
+    stored manifest and records, the witness and the invocation keep the full
+    digest. Binding and invalidation use only those.
+  - **The content digest too.** A result's `content_digest` is the SHA-256 of
+    its sealed body, so that body holds only what the caller may see. The
+    protected frame digests and the witness hash commit to records the caller
+    may not read, so they are kept in the internal dependency partition
+    (`protected_frame`, `witness_sha256`), which the artifact hash binds.
+    Migration 0039 restates result commit and the disclosure-time closure check
+    to read them there. Both refuse a revision-2 body that still carries them.
+    Revision-1 bodies reach no reply and keep their earlier shape.
 - **Coverage.** The query result is complete. Source capture, authorship,
   search readiness and discovery are all `unknown`, never claimed complete.
   Missing caller capabilities are listed as gaps.
@@ -609,7 +617,9 @@ to these properties:
 - it grants nothing;
 - it adds nothing to the query reader's schema;
 - it keeps raw revisiting only on the owner branches;
-- every earlier kernel name delegates in owner mode.
+- every earlier kernel name delegates in owner mode;
+- its restated result commit and closure check are their installed text with
+  exactly the listed edits.
 
 Development failures retained:
 
