@@ -26,7 +26,10 @@ from memoriesql.application.agent_sql_catalog import SqlCatalog
 from memoriesql.application.agent_sql_results import AGENT_RELATION_TABLES, POLICY_HASH
 from memoriesql.application.evidence_packages import NativeFacts
 from memoriesql.application.relation_inspection import InspectBeadRelationsV2
-from memoriesql.application.relation_lifecycle import RecordRelationEvent
+from memoriesql.application.relation_lifecycle import (
+    RecordRelationEvent,
+    RelationAction,
+)
 from memoriesql.infrastructure.postgres.agent_sql_results import (
     PostgresAgentSqlResults,
 )
@@ -1871,7 +1874,9 @@ class AgentSqlResults(unittest.TestCase):
         self.close(owner_run)
         self.close(run, reader)
 
-    def hidden_history(self, action: str = "confirm") -> tuple[str, Callable[[], None]]:
+    def hidden_history(
+        self, action: RelationAction = "confirm"
+    ) -> tuple[str, Callable[[], None]]:
         """A paired agent, and owner-only history that changes no row it reads.
 
         B is authored with a derived_from relation to C, and the assessed R
