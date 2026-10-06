@@ -1070,6 +1070,118 @@ class AgentSqlResults(unittest.TestCase):
             [],
         )
 
+    # -- owner decision 7 of 2026-10-06: a relation's author text needs its whole
+    # task (read-path audit candidate 1) --
+
+    def relation_quoting_a_hidden_candidate(self) -> dict[str, Any]:
+        """A relation-assessment task pins its subject, its target and a third
+        candidate. The fictional author quotes that candidate in the accepted
+        relation's qualification. Both endpoints lie in one explicit scope, and
+        the candidate in another."""
+        fixture, db = self.fixture, self.db
+        tag = uuid4().hex[:8]
+        (ends, ends_source), (hidden_scope, hidden_source) = [
+            relation_agents.explicit_scope(db, fixture) for _ in range(2)
+        ]
+        text = (
+            f"Fictional hidden candidate {tag}: the west orchard flooded on day nine."
+        )
+        source = fixture.remote_bead(
+            "Fictional source: the orchard ledger balanced.",
+            "Fictional second observation: every crate was counted.",
+            key="task-text-source-" + tag,
+            scope=ends,
+            source=ends_source,
+        )
+        target = fixture.remote_bead(
+            "Fictional target: the orchard audit passed.",
+            key="task-text-target-" + tag,
+            scope=ends,
+            source=ends_source,
+        )
+        hidden = fixture.remote_bead(
+            text,
+            key="task-text-hidden-" + tag,
+            scope=hidden_scope,
+            source=hidden_source,
+        )
+        fixture.activate_relations(source, (target, hidden), key="task-text-" + tag)
+        fixture.propose(
+            lambda packet: [
+                fixture.proposal(
+                    packet,
+                    "supports",
+                    fixture.endpoint(packet, source, 0),
+                    fixture.endpoint(packet, target, 0),
+                    basis="agent_inferred",
+                    qualification="Unless " + text,
+                )
+            ]
+        )
+        fixture.run_relations()
+        row = db.execute(
+            "SELECT relation_id FROM memoriesql.assessed_relations "
+            "WHERE source_bead_id=%s AND target_bead_id=%s",
+            (source, target),
+        ).fetchone()
+        assert row is not None, "the fictional relation was not accepted"
+        return {
+            "relation_id": str(row[0]),
+            "text": text,
+            "ends": ends,
+            "hidden_scope": hidden_scope,
+        }
+
+    def relation_text_seen(
+        self, case: dict[str, Any], secret: str | None
+    ) -> tuple[int, list[str]]:
+        """How many rows of the relation the caller reads, and which relation
+        tables' replies carry the hidden candidate's text."""
+        run = self.start(secret)
+        seen = self.every_relation_row(run, secret=secret)
+        self.close(run, secret)
+        rows = len(
+            [r for r in seen["assessed_relations"][0] if r[0] == case["relation_id"]]
+        )
+        carriers = sorted(
+            table for table, (_, reply) in seen.items() if case["text"] in reply
+        )
+        return rows, carriers
+
+    def test_a_relation_is_withheld_from_an_agent_that_cannot_read_its_whole_task(
+        self,
+    ) -> None:
+        # Owner decision 7 of 2026-10-06: the author wrote a relation's rationale
+        # and qualification from its task's whole packet. An agent reads the
+        # relation, text and all, only if it can read every bead pinned to that
+        # task. Reading both endpoints is not enough, and the relation is
+        # withheld whole.
+        case = self.relation_quoting_a_hidden_candidate()
+        caps = ["memory.inspect", "memory.query", "source.read"]
+        _, partial = self.pair_agent_over(
+            [case["ends"]], caps, label="task-text-partial"
+        )
+        self.assertEqual(self.relation_text_seen(case, partial), (0, []))
+        _, whole = self.pair_agent_over(
+            [case["ends"], case["hidden_scope"]], caps, label="task-text-whole"
+        )
+        rows, carriers = self.relation_text_seen(case, whole)
+        self.assertEqual(rows, 1)
+        self.assertIn("assessed_relations", carriers)
+
+    def test_a_relation_is_withheld_from_an_owner_mode_reader_of_part_of_its_task(
+        self,
+    ) -> None:
+        # The same rule in owner mode: a raw-read holder granted only the
+        # endpoints' scope reads nothing of the relation; the owner, who reads
+        # the whole task, reads it with its text.
+        case = self.relation_quoting_a_hidden_candidate()
+        _, reader = self.fixture.second_human(case["ends"])
+        self.assertEqual(self.relation_text_seen(case, reader), (0, []))
+        rows, carriers = self.relation_text_seen(case, None)
+        self.assertEqual(rows, 1)
+        self.assertIn("assessed_relations", carriers)
+
     @staticmethod
     def distinctive(values: list[Any]) -> set[str]:
         """The values that identify a relation's records: identifiers, hashes
@@ -1681,12 +1793,13 @@ class AgentSqlResults(unittest.TestCase):
         self.close(owner_run)
         self.close(run, reader)
 
-    def hidden_history(self) -> tuple[str, Callable[[], None]]:
+    def hidden_history(self, action: str = "confirm") -> tuple[str, Callable[[], None]]:
         """A paired agent, and owner-only history that changes no row it reads.
 
         B is authored with a derived_from relation to C, and the assessed R
         cites only B, so R's root lineage reaches C through that authored
-        relation. An authored confirm on it is owner-only history.
+        relation. An authored lifecycle event on it, `confirm`, `retract` or
+        `supersede`, recorded after the agent's frame, is owner-only history.
         """
         fixture = self.fixture
         tag = uuid4().hex[:8]
@@ -1711,6 +1824,22 @@ class AgentSqlResults(unittest.TestCase):
                 source=ob,
             )
         lineage = UUID(ids["lineage"])
+        replacement: UUID | None = None
+        if action == "supersede":
+            # A second authored derived_from relation into C, to replace the
+            # lineage with. It lies outside R's own lineage.
+            with self.in_scope(sb):
+                fixture.author(
+                    "Fictional B2: a second reading of the first count.",
+                    "b2-" + tag,
+                    candidates=(c,),
+                    plan=lambda extras, bead, found: ids.setdefault(
+                        "replacement",
+                        fixture.relate(extras, bead, found[0], "derived_from"),
+                    ),
+                    source=ob,
+                )
+            replacement = UUID(ids["replacement"])
         t = fixture.remote_bead(
             "Fictional T: the audit's finding.", key="t-" + tag, scope=st, source=ot
         )
@@ -1740,9 +1869,10 @@ class AgentSqlResults(unittest.TestCase):
         def confirm() -> None:
             fixture.lifecycle.record_relation_event(
                 RecordRelationEvent(
-                    idempotency_key="orchard.confirm." + tag,
+                    idempotency_key=f"orchard.{action}." + tag,
                     relation_id=lineage,
-                    action="confirm",
+                    action=action,
+                    replacement_relation_id=replacement,
                     reason="Fictional owner review.",
                     expected_last_event_id=fixture.latest_relation_event(lineage),
                 )
@@ -1874,6 +2004,45 @@ class AgentSqlResults(unittest.TestCase):
         self.assertEqual(reply["outcome"], "available", reply)
         self.close(run, agent)
         confirm()
+        later = self.start(agent)
+        again = self.reuse(later, reply["result"], page_size=50, secret=agent)
+        self.close(later, agent)
+        self.assertEqual(again["outcome"], "available", again)
+        self.assertEqual(again["page"]["rows"], reply["page"]["rows"])
+
+    def test_an_agents_saved_result_survives_a_retraction_it_cannot_see(self) -> None:
+        # John, 2026-10-06: "Add the retract and replace probes." An owner-only
+        # retraction of R's root-lineage relation, recorded after the agent's
+        # result was saved, does not decide what the agent is served: its reuse
+        # stays available with the same rows.
+        agent, retract = self.hidden_history("retract")
+        run = self.start(agent)
+        _, reply = self.query(
+            run, self.HIDDEN_HISTORY_QUERY, page_size=50, secret=agent
+        )
+        self.assertEqual(reply["outcome"], "available", reply)
+        self.close(run, agent)
+        retract()
+        later = self.start(agent)
+        again = self.reuse(later, reply["result"], page_size=50, secret=agent)
+        self.close(later, agent)
+        self.assertEqual(again["outcome"], "available", again)
+        self.assertEqual(again["page"]["rows"], reply["page"]["rows"])
+
+    def test_an_agents_saved_result_survives_a_replacement_it_cannot_see(
+        self,
+    ) -> None:
+        # The replace probe: an owner-only supersession of R's root-lineage
+        # relation by another relation, recorded after the agent's result was
+        # saved, leaves the agent's reuse available with the same rows.
+        agent, supersede = self.hidden_history("supersede")
+        run = self.start(agent)
+        _, reply = self.query(
+            run, self.HIDDEN_HISTORY_QUERY, page_size=50, secret=agent
+        )
+        self.assertEqual(reply["outcome"], "available", reply)
+        self.close(run, agent)
+        supersede()
         later = self.start(agent)
         again = self.reuse(later, reply["result"], page_size=50, secret=agent)
         self.close(later, agent)
