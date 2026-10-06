@@ -27,6 +27,11 @@ from memoriesql.application.agent_sql_results import AGENT_RELATION_TABLES, POLI
 from memoriesql.application.evidence_packages import NativeFacts
 from memoriesql.application.relation_inspection import InspectBeadRelationsV2
 from memoriesql.application.relation_lifecycle import RecordRelationEvent
+from memoriesql.application.stored_bead_inspection import (
+    InspectStoredBead,
+    ReadStoredBeadEvidence,
+    StoredEvidenceSelection,
+)
 from memoriesql.infrastructure.postgres.agent_sql_results import (
     PostgresAgentSqlResults,
 )
@@ -45,6 +50,9 @@ from memoriesql.infrastructure.postgres.relation_projection import (
 )
 from memoriesql.infrastructure.postgres.relation_sql_population import (
     prepare_query_population,
+)
+from memoriesql.infrastructure.postgres.stored_bead_inspection import (
+    PostgresStoredBeadInspection,
 )
 
 if TYPE_CHECKING:
@@ -69,7 +77,7 @@ class AgentSqlResults(unittest.TestCase):
         self.addCleanup(self.h.doCleanups)
         self.fixture = self.h.fixture
         self.db = self.h.db
-        migrate(self.db, expected_current_version=34, target_version=42)
+        migrate(self.db, expected_current_version=34, target_version=43)
         # The production reviewed provisioning path, on fictional data.
         self.reader = "pr05_results_" + uuid4().hex
         self.profile = provision_query_reader(self.db, self.reader, READER_PASSWORD)
@@ -484,6 +492,209 @@ class AgentSqlResults(unittest.TestCase):
         if artifacts:
             found["memoriesql.result_preparation_artifacts"] = artifacts
         return found
+
+    # -- owner decisions 6 and 8 of 2026-10-06: inspection withholds as queries
+    # do, and a denial leaves the trace an unknown note leaves --
+
+    def inspector(self) -> PostgresStoredBeadInspection:
+        return PostgresStoredBeadInspection(
+            self.db,
+            credential_sha256=self.fixture.secret_hash,
+            workspace_id=self.fixture.workspace,
+        )
+
+    def audit_rows(self) -> int:
+        count: int = self.h.scalar(
+            "SELECT count(*) FROM memoriesql.authorization_audit_events"
+        )
+        return count
+
+    def test_inspection_withholds_what_the_population_withholds(self) -> None:
+        # Owner decision 8: inspection and queries withhold alike, in the
+        # published inspection record shape. A note whose correction the reader
+        # cannot read is withheld by the query population, its whole family.
+        # Inspection now withholds it exactly as a note that does not exist.
+        _, target, _ = self.fixture.assertion()
+        hidden_source = self.fixture.add_source("inspection-hidden-correction")
+        local = self.fixture.source
+        self.fixture.source = hidden_source
+        try:
+            self.fixture.correction(target)
+        finally:
+            self.fixture.source = local
+        reader = self.inspector()
+        self.assertIsNotNone(reader.inspect(InspectStoredBead(bead_id=target)).bead)
+        self.db.execute(
+            "UPDATE memoriesql.protected_resources SET status='revoked',"
+            "revoked_at=clock_timestamp() WHERE resource_id=%s",
+            (hidden_source,),
+        )
+        run = self.start()
+        _, reply = self.query(
+            run, "SELECT o.bead_id FROM memory_v1.observations o", page_size=50
+        )
+        self.assertEqual(reply["outcome"], "available", reply)
+        self.assertNotIn(
+            str(target), {row["values"][0] for row in reply["page"]["rows"]}
+        )
+        hidden = reader.inspect(InspectStoredBead(bead_id=target))
+        missing = reader.inspect(InspectStoredBead(bead_id=uuid4()))
+        self.assertEqual(hidden, missing)
+        self.assertIsNone(hidden.bead)
+
+    def test_a_late_inspection_denial_leaves_the_trace_of_an_unknown_note(
+        self,
+    ) -> None:
+        # Pairs 3 and 4 (owner decision 6): a note denied late, after its first
+        # sources were authorized, wrote persistent "allowed" audit rows that an
+        # unknown note never writes. Here one statement also cites a unit of a
+        # second source of the same scope, as a multi-unit note can (attached
+        # by the test administrator), and that source is revoked. The denial
+        # now leaves exactly the unknown note's trace: none.
+        _, target, _ = self.fixture.assertion()
+        other_source = self.fixture.add_source("inspection-late-denial")
+        other = self.fixture.bead(
+            "Fictional second source: the cellar was dry.",
+            key="inspection-late-" + uuid4().hex[:8],
+            source=other_source,
+        )
+        with self.db.transaction():
+            self.db.execute("SET LOCAL session_replication_role=replica")
+            self.db.execute(
+                "INSERT INTO memoriesql.bead_semantic_statement_evidence "
+                "SELECT s.tenant_id,s.workspace_id,s.access_scope_id,s.statement_id,"
+                "u.event_id,u.source_unit_id,u.content_hash,clock_timestamp() "
+                "FROM memoriesql.bead_semantic_statements s "
+                "JOIN memoriesql.beads o ON o.bead_id=%s "
+                "JOIN memoriesql.source_units u ON u.source_unit_id=o.source_unit_id "
+                "WHERE s.bead_id=%s ORDER BY s.statement_sequence LIMIT 1",
+                (other, target),
+            )
+        reader = self.inspector()
+        self.assertIsNotNone(reader.inspect(InspectStoredBead(bead_id=target)).bead)
+        self.db.execute(
+            "UPDATE memoriesql.protected_resources SET status='revoked',"
+            "revoked_at=clock_timestamp() WHERE resource_id=%s",
+            (other_source,),
+        )
+        before = self.audit_rows()
+        denied = reader.inspect(InspectStoredBead(bead_id=target))
+        denied_rows = self.audit_rows() - before
+        before = self.audit_rows()
+        missing = reader.inspect(InspectStoredBead(bead_id=uuid4()))
+        missing_rows = self.audit_rows() - before
+        self.assertEqual(denied, missing)
+        self.assertEqual(denied_rows, missing_rows, (denied_rows, missing_rows))
+
+    def test_an_unreadable_oversized_note_never_reports_its_size(self) -> None:
+        # Pair 4 (owner decision 6): inspection decided its statement budget
+        # before it authorized the statements' sources, so a note the reader
+        # cannot read reported budget_exhausted where an unknown note reports
+        # unavailable. Here the note carries 33 statements under its watermark,
+        # as a full note does after one correction, and its first statement
+        # names a context unit of a second source, which is revoked. (The test
+        # administrator attaches both; each copied statement carries the first
+        # statement's own evidence, as every statement must.) The population's
+        # own reads never consult context, so this isolates the order of
+        # authorization.
+        _, target, _ = self.fixture.assertion()
+        other_source = self.fixture.add_source("inspection-oversized")
+        other = self.fixture.bead(
+            "Fictional second source: the barn was painted.",
+            key="inspection-oversized-" + uuid4().hex[:8],
+            source=other_source,
+        )
+        with self.db.transaction():
+            self.db.execute("SET LOCAL session_replication_role=replica")
+            self.db.execute(
+                "WITH head AS (SELECT * FROM memoriesql.bead_semantic_statements "
+                "WHERE bead_id=%s ORDER BY statement_sequence LIMIT 1), "
+                "top AS (SELECT max(statement_sequence) sequence FROM "
+                "memoriesql.bead_semantic_statements WHERE bead_id=%s), "
+                "copies AS (INSERT INTO memoriesql.bead_semantic_statements("
+                "tenant_id,workspace_id,access_scope_id,statement_id,bead_id,"
+                "bead_version_id,event_id,source_unit_id,statement_sequence,"
+                "statement_kind,statement_text,context_source_ids,"
+                "authored_by_principal_id,semantic_task_id,semantic_attempt_id,"
+                "semantic_run_id,created_at) "
+                "SELECT h.tenant_id,h.workspace_id,h.access_scope_id,"
+                "gen_random_uuid(),h.bead_id,h.bead_version_id,h.event_id,"
+                "h.source_unit_id,top.sequence+n,h.statement_kind,"
+                "h.statement_text||' (copy '||n||')',h.context_source_ids,"
+                "h.authored_by_principal_id,h.semantic_task_id,"
+                "h.semantic_attempt_id,h.semantic_run_id,h.created_at "
+                "FROM head h, top, generate_series(1,32) n "
+                "RETURNING tenant_id,workspace_id,access_scope_id,statement_id) "
+                "INSERT INTO memoriesql.bead_semantic_statement_evidence("
+                "tenant_id,workspace_id,access_scope_id,statement_id,"
+                "evidence_event_id,evidence_source_unit_id,evidence_content_hash,"
+                "linked_at) "
+                "SELECT c.tenant_id,c.workspace_id,c.access_scope_id,c.statement_id,"
+                "x.evidence_event_id,x.evidence_source_unit_id,"
+                "x.evidence_content_hash,x.linked_at "
+                "FROM copies c CROSS JOIN head h "
+                "JOIN memoriesql.bead_semantic_statement_evidence x "
+                "ON x.tenant_id=h.tenant_id AND x.statement_id=h.statement_id",
+                (target, target),
+            )
+            self.db.execute(
+                "UPDATE memoriesql.bead_statement_revisions r SET "
+                "statement_watermark=(SELECT max(statement_sequence) FROM "
+                "memoriesql.bead_semantic_statements WHERE bead_id=%s) "
+                "FROM memoriesql.accepted_bead_semantics a "
+                "WHERE a.bead_id=%s AND r.bead_version_id=a.bead_version_id",
+                (target, target),
+            )
+            self.db.execute(
+                "UPDATE memoriesql.bead_semantic_statements s SET "
+                "context_source_ids=ARRAY[o.source_unit_id] "
+                "FROM memoriesql.beads o WHERE o.bead_id=%s AND s.bead_id=%s "
+                "AND s.statement_sequence=(SELECT min(statement_sequence) FROM "
+                "memoriesql.bead_semantic_statements WHERE bead_id=%s)",
+                (other, target, target),
+            )
+        reader = self.inspector()
+        # A reader of the whole note learns that it is over budget.
+        self.assertEqual(
+            reader.inspect(InspectStoredBead(bead_id=target)).outcome,
+            "budget_exhausted",
+        )
+        self.db.execute(
+            "UPDATE memoriesql.protected_resources SET status='revoked',"
+            "revoked_at=clock_timestamp() WHERE resource_id=%s",
+            (other_source,),
+        )
+        hidden = reader.inspect(InspectStoredBead(bead_id=target))
+        missing = reader.inspect(InspectStoredBead(bead_id=uuid4()))
+        self.assertEqual(hidden, missing)
+        self.assertEqual(hidden.outcome, "unavailable")
+
+    def test_a_refused_evidence_read_leaves_the_trace_of_an_unknown_note(
+        self,
+    ) -> None:
+        # Pair 3 for the evidence reader (CLI `source`): a read refused after
+        # the note's own inspection succeeded kept that inspection's "allowed"
+        # audit rows, which a read of an unknown note never writes. Here the
+        # selection names a package that supports nothing in the note.
+        _, target, _ = self.fixture.assertion()
+        reader = self.inspector()
+        self.assertIsNotNone(reader.inspect(InspectStoredBead(bead_id=target)).bead)
+        selection = StoredEvidenceSelection(
+            package_id=uuid4(), inventory_sha256="0" * 64, part_ordinal=0, limit=8
+        )
+        before = self.audit_rows()
+        refused = reader.read(
+            ReadStoredBeadEvidence(bead_id=target, selection=selection)
+        )
+        refused_rows = self.audit_rows() - before
+        before = self.audit_rows()
+        missing = reader.read(
+            ReadStoredBeadEvidence(bead_id=uuid4(), selection=selection)
+        )
+        missing_rows = self.audit_rows() - before
+        self.assertEqual(refused.outcome, "unavailable")
+        self.assertEqual(refused, missing)
+        self.assertEqual(refused_rows, missing_rows, (refused_rows, missing_rows))
 
     def test_query_page_cursor_reuse_and_redelivery_without_rerun(self) -> None:
         source, target, _ = self.fixture.assertion()
