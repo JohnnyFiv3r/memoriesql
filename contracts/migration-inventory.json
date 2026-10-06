@@ -165,6 +165,10 @@
     {
       "filename": "0041_authored_statement_kinds.sql",
       "sha256": "3a7c5eca413aa8c573f62a446c957d2b048fc066d8bce1c1f8af2cff72fd623a"
+    },
+    {
+      "filename": "0042_terminal_pairing_revocation.sql",
+      "sha256": "4fa68c3e003a75fd12925c1e24900fb5a3aff434b1105374343e6ac34e8280dd"
     }
   ]
 }
