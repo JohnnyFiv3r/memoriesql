@@ -1070,6 +1070,118 @@ class AgentSqlResults(unittest.TestCase):
             [],
         )
 
+    # -- owner decision 7 of 2026-10-06: a relation's author text needs its whole
+    # task (read-path audit candidate 1) --
+
+    def relation_quoting_a_hidden_candidate(self) -> dict[str, Any]:
+        """A relation-assessment task pins its subject, its target and a third
+        candidate. The fictional author quotes that candidate in the accepted
+        relation's qualification. Both endpoints lie in one explicit scope, and
+        the candidate in another."""
+        fixture, db = self.fixture, self.db
+        tag = uuid4().hex[:8]
+        (ends, ends_source), (hidden_scope, hidden_source) = [
+            relation_agents.explicit_scope(db, fixture) for _ in range(2)
+        ]
+        text = (
+            f"Fictional hidden candidate {tag}: the west orchard flooded on day nine."
+        )
+        source = fixture.remote_bead(
+            "Fictional source: the orchard ledger balanced.",
+            "Fictional second observation: every crate was counted.",
+            key="task-text-source-" + tag,
+            scope=ends,
+            source=ends_source,
+        )
+        target = fixture.remote_bead(
+            "Fictional target: the orchard audit passed.",
+            key="task-text-target-" + tag,
+            scope=ends,
+            source=ends_source,
+        )
+        hidden = fixture.remote_bead(
+            text,
+            key="task-text-hidden-" + tag,
+            scope=hidden_scope,
+            source=hidden_source,
+        )
+        fixture.activate_relations(source, (target, hidden), key="task-text-" + tag)
+        fixture.propose(
+            lambda packet: [
+                fixture.proposal(
+                    packet,
+                    "supports",
+                    fixture.endpoint(packet, source, 0),
+                    fixture.endpoint(packet, target, 0),
+                    basis="agent_inferred",
+                    qualification="Unless " + text,
+                )
+            ]
+        )
+        fixture.run_relations()
+        row = db.execute(
+            "SELECT relation_id FROM memoriesql.assessed_relations "
+            "WHERE source_bead_id=%s AND target_bead_id=%s",
+            (source, target),
+        ).fetchone()
+        assert row is not None, "the fictional relation was not accepted"
+        return {
+            "relation_id": str(row[0]),
+            "text": text,
+            "ends": ends,
+            "hidden_scope": hidden_scope,
+        }
+
+    def relation_text_seen(
+        self, case: dict[str, Any], secret: str | None
+    ) -> tuple[int, list[str]]:
+        """How many rows of the relation the caller reads, and which relation
+        tables' replies carry the hidden candidate's text."""
+        run = self.start(secret)
+        seen = self.every_relation_row(run, secret=secret)
+        self.close(run, secret)
+        rows = len(
+            [r for r in seen["assessed_relations"][0] if r[0] == case["relation_id"]]
+        )
+        carriers = sorted(
+            table for table, (_, reply) in seen.items() if case["text"] in reply
+        )
+        return rows, carriers
+
+    def test_a_relation_is_withheld_from_an_agent_that_cannot_read_its_whole_task(
+        self,
+    ) -> None:
+        # Owner decision 7 of 2026-10-06: the author wrote a relation's rationale
+        # and qualification from its task's whole packet. An agent reads the
+        # relation, text and all, only if it can read every bead pinned to that
+        # task. Reading both endpoints is not enough, and the relation is
+        # withheld whole.
+        case = self.relation_quoting_a_hidden_candidate()
+        caps = ["memory.inspect", "memory.query", "source.read"]
+        _, partial = self.pair_agent_over(
+            [case["ends"]], caps, label="task-text-partial"
+        )
+        self.assertEqual(self.relation_text_seen(case, partial), (0, []))
+        _, whole = self.pair_agent_over(
+            [case["ends"], case["hidden_scope"]], caps, label="task-text-whole"
+        )
+        rows, carriers = self.relation_text_seen(case, whole)
+        self.assertEqual(rows, 1)
+        self.assertIn("assessed_relations", carriers)
+
+    def test_a_relation_is_withheld_from_an_owner_mode_reader_of_part_of_its_task(
+        self,
+    ) -> None:
+        # The same rule in owner mode: a raw-read holder granted only the
+        # endpoints' scope reads nothing of the relation; the owner, who reads
+        # the whole task, reads it with its text.
+        case = self.relation_quoting_a_hidden_candidate()
+        _, reader = self.fixture.second_human(case["ends"])
+        self.assertEqual(self.relation_text_seen(case, reader), (0, []))
+        rows, carriers = self.relation_text_seen(case, None)
+        self.assertEqual(rows, 1)
+        self.assertIn("assessed_relations", carriers)
+
     @staticmethod
     def distinctive(values: list[Any]) -> set[str]:
         """The values that identify a relation's records: identifiers, hashes
