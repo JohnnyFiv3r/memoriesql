@@ -193,13 +193,21 @@ class InternalResultCandidate:
                 source_text_labels=population.source_text_labels,
                 relation_read_mode=population.relation_read_mode,
             )
+            # Owner decision 6: the reply's digests cover only records the caller
+            # may see. The body frame above keeps the full protected digest,
+            # which binding and invalidation require.
+            if population.visible_manifest_sha256 is None or (
+                population.relation_manifest_sha256 is not None
+                and population.visible_relation_manifest_sha256 is None
+            ):
+                raise ValueError("internal result qualification unavailable")
             body["wire_frame"] = wire_frame(
                 frame_ref=str(witness.frame_ref),
                 known_at=str(encode_result_scalar(population.known_at)),
                 snapshot_at=str(encode_result_scalar(population.snapshot_at)),
                 view=request.scope.view,
-                snapshot_digest=population.dependency_manifest_sha256,
-                relation_manifest_sha256=population.relation_manifest_sha256,
+                snapshot_digest=population.visible_manifest_sha256,
+                relation_manifest_sha256=population.visible_relation_manifest_sha256,
                 relations=relations,
             )
             body["order_basis"] = order_basis(

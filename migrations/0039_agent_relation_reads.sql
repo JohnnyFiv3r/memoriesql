@@ -379,6 +379,7 @@ DECLARE
     assertions jsonb := '[]'; corrections jsonb := '[]'; types jsonb := '[]';
     pairs jsonb := '[]'; deps jsonb := '[]'; manifest jsonb; result jsonb;
     families jsonb := '[]'; needs jsonb; kept jsonb; disclosed uuid[];
+    discovered uuid[]; withheld uuid[] := '{}';
 BEGIN
     IF byte_budget IS NULL OR byte_budget NOT BETWEEN 8192 AND 67108864 THEN
         RAISE EXCEPTION 'invalid_request' USING ERRCODE='22023';
@@ -401,21 +402,29 @@ BEGIN
         BEGIN
             assertion := memoriesql.relation_assertion_row_v2(
                 c.tenant_id,'assessed',r.relation_id,NULL,known,read_mode);
+            item := memoriesql.relation_projection_v1(c.tenant_id,'assessed',r.relation_id,known);
             -- AM-5: lifecycle history (events and their evidence) stays owner-only.
+            -- The owner's decision of 2026-10-05: an agent cannot read
+            -- relation_events, so its head_token hashes only what it may see,
+            -- acceptance and its visible corrections with no events. Owner-only
+            -- history never changes it. The owner's token is unchanged.
             IF read_mode='agent' THEN
-                assertion := assertion || jsonb_build_object('events','[]'::jsonb);
+                assertion := assertion || jsonb_build_object('events','[]'::jsonb,
+                    'head_token',memoriesql.lifecycle_hash_v1(
+                        (item->'head_manifest') || jsonb_build_object('events','[]'::jsonb)));
             END IF;
             family_deps := memoriesql.relation_assertion_records_v2(
                 c.tenant_id,'assessed',r.relation_id,known,read_mode);
             family := memoriesql.relation_evidence_view_v4(
                 c.tenant_id,'assessed_relation',r.relation_id,known,read_mode);
             family_deps := family_deps || (family->'dependencies');
-            item := memoriesql.relation_projection_v1(c.tenant_id,'assessed',r.relation_id,known);
             -- Retain the complete assertion itself: the narrower acceptance/head
             -- records alone do not bind rationale, qualification or confidence.
             family_deps := family_deps || jsonb_build_array(jsonb_build_object(
                 'kind','assertion_projection','id',r.relation_id::text,'row',assertion));
-        EXCEPTION WHEN insufficient_privilege THEN CONTINUE;
+        EXCEPTION WHEN insufficient_privilege THEN
+            withheld := withheld || r.relation_id;
+            CONTINUE;
         END;
         -- The other assessed relations this family's records name: its
         -- replacement chain, and derived_from relations on its root lineage.
@@ -432,21 +441,25 @@ BEGIN
             RAISE EXCEPTION 'population_budget_exhausted' USING ERRCODE='54000';
         END IF;
     END LOOP;
-    -- AM-5: a family is disclosed only with every assessed relation its records
-    -- name, so no visible row shows a withheld relation's identity, state or
-    -- history (as a replacement or through root status). Repeat until stable.
-    IF read_mode='agent' THEN
-        LOOP
-            SELECT array_agg((f->>'relation_id')::uuid) INTO disclosed
-                FROM jsonb_array_elements(families) f;
-            SELECT COALESCE(jsonb_agg(f ORDER BY f->>'relation_id'),'[]') INTO kept
-                FROM jsonb_array_elements(families) f
-                WHERE NOT EXISTS(SELECT 1 FROM jsonb_array_elements_text(f->'needs') n(id)
-                    WHERE NOT n.id::uuid=ANY(COALESCE(disclosed,'{}')));
-            EXIT WHEN jsonb_array_length(kept)=jsonb_array_length(families);
-            families := kept;
-        END LOOP;
-    END IF;
+    -- A family is disclosed only with every assessed relation its records name,
+    -- so no visible row shows a withheld relation's identity, state or history
+    -- (as a replacement or through root status). Repeat until stable. Both read
+    -- modes: AM-5 for agents, and the owner's decision 5b for owner mode, which
+    -- is not permission to bypass an evidence restriction.
+    SELECT array_agg((f->>'relation_id')::uuid) INTO discovered
+        FROM jsonb_array_elements(families) f;
+    LOOP
+        SELECT array_agg((f->>'relation_id')::uuid) INTO disclosed
+            FROM jsonb_array_elements(families) f;
+        SELECT COALESCE(jsonb_agg(f ORDER BY f->>'relation_id'),'[]') INTO kept
+            FROM jsonb_array_elements(families) f
+            WHERE NOT EXISTS(SELECT 1 FROM jsonb_array_elements_text(f->'needs') n(id)
+                WHERE NOT n.id::uuid=ANY(COALESCE(disclosed,'{}')));
+        EXIT WHEN jsonb_array_length(kept)=jsonb_array_length(families);
+        families := kept;
+    END LOOP;
+    withheld := withheld || ARRAY(SELECT x FROM unnest(COALESCE(discovered,'{}')) x
+        WHERE NOT x=ANY(COALESCE(disclosed,'{}')));
     SELECT COALESCE(jsonb_agg(f->'assertion' ORDER BY f->>'relation_id'),'[]'),
            COALESCE(jsonb_agg(f->'correction' ORDER BY f->>'relation_id'),'[]'),
            COALESCE(jsonb_agg(f->'type' ORDER BY f->>'relation_id'),'[]')
@@ -476,6 +489,11 @@ BEGIN
             END LOOP;
             FOR r IN SELECT * FROM memoriesql.assessed_relations a
                      WHERE a.tenant_id=c.tenant_id AND a.task_id=task.task_id AND a.recorded_at<=known LOOP
+                -- Owner decision 5b: a task that recorded a relation withheld
+                -- from this reader discloses none of its pair coverage.
+                IF r.relation_id=ANY(withheld) THEN
+                    RAISE EXCEPTION 'pair_unavailable' USING ERRCODE='42501';
+                END IF;
                 family_deps := family_deps || memoriesql.relation_assertion_records_v2(c.tenant_id,'assessed',r.relation_id,known,read_mode);
             END LOOP;
             FOR pair IN SELECT p.* FROM memoriesql.relation_pair_dispositions p
