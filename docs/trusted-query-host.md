@@ -189,6 +189,13 @@ is expected, and it is not a full pass. Verify compatibility with the owner or
 migration administrator login: the doctor then reports `passed` when the
 database's schema version equals the installed package's.
 
+**A misprovisioned reader.** Replies to an agent do not say why a query was
+refused. A reader that is missing part of its reviewed authority therefore
+looks, from the agent's side, like a query outside the agent's own authority:
+both reply `unavailable`. Diagnose it on the host, where `broker check`
+qualifies the reader's effective authority against the pinned profile and names
+the refused construct.
+
 **Expiry cleanup.** PR-05's 24-hour content-cleanup deadline holds only while
 the host runs it. `serve` runs `cleanup_expired()` at start and hourly, and
 records each noncontent outcome in its private state. `broker check` fails when
