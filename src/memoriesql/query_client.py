@@ -327,8 +327,8 @@ def schema_description() -> dict[str, Any]:
             # including the relations its records name. One unreadable member
             # withholds the whole relation, and every relation naming it, without
             # disclosure; raw-source provenance records stay owner-only.
-            # Owner-approved scope clarification 12(a), 2026-10-01, bound by the
-            # custodian's ea-5 reconciliation with the exact implementation:
+            # Owner-approved scope clarification 12(a), 2026-10-01, which the
+            # custodian's ea-6 binds to the exact implementation (9f3aa77):
             # without raw read, these reads stay limited to the paired agents
             # AM-5 authorizes, and every other caller keeps the source.raw.read
             # gate and its gap.
