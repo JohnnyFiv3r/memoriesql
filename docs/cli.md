@@ -229,11 +229,12 @@ The trusted host is configured only in the process that may hold database
 credentials: `MEMORIESQL_DATABASE_URL` (a login that can assume the application
 role), `MEMORIESQL_QUERY_READER_URL` and `MEMORIESQL_QUERY_READER_ROLE` for the
 reviewed restricted reader, the local credential and workspace, and optionally
-`MEMORIESQL_QUERY_AUTHORITY_SHA256` to refuse a drifted reader profile. The database login
-must be a superuser or an inheriting member of `memoriesql_application` (and of
-`memoriesql_worker` for workers); since migration 0033 a non-inheriting member
-cannot run the released adapters' prologue, and `doctor --check-database` reports
-it as `login_role_not_ready`. Never
+`MEMORIESQL_QUERY_AUTHORITY_SHA256` to refuse a drifted reader profile. The
+database login is normally a non-superuser that inherits `memoriesql_application`
+(and `memoriesql_worker` for workers); a superuser login is not the normal
+configuration. Since migration 0033 a non-inheriting member cannot run the
+released adapters' prologue, and `doctor --check-database` reports it as
+`login_role_not_ready`. Never
 give those values to an agent's shell, files or processes: an agent that can
 read them could bypass admitted SQL. Without them `query` and `result` report
 `trusted_query_host_not_configured`.
