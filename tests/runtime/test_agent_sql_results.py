@@ -2472,11 +2472,56 @@ class AgentSqlResults(unittest.TestCase):
                 self.assertEqual(counts(), before)
                 # No stranded lock: neither call left an advisory lock behind.
                 self.assertEqual(advisory_locks(), 0)
-        # The same step is then admitted once, at the full allowance.
+        # Once the holder has released it, the next start, admission and close
+        # each acquire the lock and succeed; the step is admitted once, at the
+        # full allowance.
+        another = self.start()
         first = self.send(request)
         self.assertEqual(first["outcome"], "available", first)
         self.assertEqual(first["remaining"]["accesses"], 127)
+        for each in (another, run):
+            closed = json.loads(self.service().close_run(each["run_ref"]))
+            self.assertEqual(closed["outcome"], "available", closed)
         self.assertEqual(advisory_locks(), 0)
+
+    def test_a_statement_timeout_inside_the_access_lock_still_releases_it(
+        self,
+    ) -> None:
+        # The owner, 2026-10-06: a statement timeout after the query-access lock
+        # is acquired still releases it. The frame's connection stays open
+        # here, so only the frame's own release, never a disconnect, frees it.
+        self.fixture.assertion()
+
+        def held(pid: int) -> int:
+            return int(
+                self.h.scalar(
+                    "SELECT count(*) FROM pg_locks WHERE locktype='advisory' "
+                    "AND pid=%s",
+                    (pid,),
+                )
+            )
+
+        with self.fixture.connection() as connection:
+            pid = connection.info.backend_pid
+            with self.assertRaises(psycopg.errors.QueryCanceled):
+                with relation_projection_frame(
+                    connection,
+                    credential_sha256=self.fixture.secret_hash,
+                    workspace_id=self.fixture.workspace,
+                    statement_timeout_ms=100,
+                    query_access=True,
+                ) as frame:
+                    # The access lock (and the shared read fence) are held.
+                    self.assertGreaterEqual(held(pid), 1)
+                    frame.execute("SELECT pg_sleep(1)")
+            self.assertFalse(connection.closed)
+            self.assertEqual(held(pid), 0)
+        # The next start, admission and close each acquire it and succeed.
+        run = self.start()
+        _, reply = self.query(run, "SELECT bead_id FROM memory_v1.observations")
+        self.assertEqual(reply["outcome"], "available", reply)
+        closed = json.loads(self.service().close_run(run["run_ref"]))
+        self.assertEqual(closed["outcome"], "available", closed)
 
     def test_crash_after_commit_redelivers_same_result_without_rerun(self) -> None:
         self.fixture.assertion()
