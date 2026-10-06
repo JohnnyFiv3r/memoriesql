@@ -173,12 +173,21 @@ not restarted.
 | Stop | `sudo launchctl bootout system/local.memoriesql.query-host` (the host stops accepting and drains in-flight requests for up to 90 s) |
 | Check | `sudo -H -u _memoriesql <cli> broker check --config <config>` |
 | List host-started runs | `sudo -H -u _memoriesql <cli> broker runs --config <config>` (no credential digests are printed) |
-| Close a run early | `sudo -H -u _memoriesql <cli> broker close-run --config <config> --run-ref <uuid>`: PR-05's owner close for the run's own principal. Refused while any of its work is unsettled; refunds nothing; the run never reopens. |
+| Close a run early | `sudo -H -u _memoriesql <cli> broker close-run --config <config> <run-ref>`: PR-05's owner close for the run's own principal. Refused while any of its work is unsettled; refunds nothing; the run never reopens. |
 | Rotate both logins | `sudo -H -u _memoriesql <cli> broker provision --config <config> --rotate`, then restart. The new secrets are durable in the configuration before the roles change. |
+| Serve a new or recreated database | Rotation is not enough: `--rotate` only replaces the two passwords and re-pins. A recreated database has lost the reviewed reader's grants and the control login's default-privilege revoke, which only a first provisioning creates. Stop the host; drop both host roles (`DROP OWNED BY`, then `DROP ROLE`, for the control and the reader login); remove the old configuration, any kept configuration files beside it, and the host's run state; run `broker provision` as for a first installation; initialize the owner; start the host; run `broker check`. |
 | Provisioning reported `provisioning_outcome_unknown` | The database connection was lost while the role changes committed, and the run could not settle the outcome: the database was unreachable, or the transaction that sent the changes was still in progress after 30 seconds. The new secrets are kept in the file the report names, with that transaction's ID beside it. Follow the report's `next` step: once the database is reachable, or once that transaction has ended, run the same `broker provision` command again (with `--rotate` if it was a rotation). It settles the kept file before changing anything: the file becomes the configuration if the database requires its secrets, and is removed only after its recorded transaction ended without them. A kept file without a transaction record is never removed automatically: when the report says the database does not require its secrets, remove it once no provisioning run is in progress, and provision again. |
 | Revoke an agent | Revoke its pairing grant (`memoriesql clients revoke`, an owner operation). The next request is refused. |
 | Run expiry cleanup now | `sudo -H -u _memoriesql <cli> broker cleanup --config <config>` |
 | Logs | `sudo cat /usr/local/var/memoriesql-broker/log/host.log` |
+
+**Schema compatibility.** `memoriesql doctor --check-database`, run with the
+host's control login, reports `login_ready_schema_unverified`. The migration
+history is readable only by the schema's owner, so this least-privilege login can
+confirm that it is ready but not which schema version is installed. That result
+is expected, and it is not a full pass. Verify compatibility with the owner or
+migration administrator login: the doctor then reports `passed` when the
+database's schema version equals the installed package's.
 
 **Expiry cleanup.** PR-05's 24-hour content-cleanup deadline holds only while
 the host runs it. `serve` runs `cleanup_expired()` at start and hourly, and
