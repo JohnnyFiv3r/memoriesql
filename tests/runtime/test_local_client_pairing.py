@@ -581,6 +581,30 @@ class LocalClientPairing(unittest.TestCase):
         self.assertEqual(self.revisions(grant), [(1, "active"), (2, "revoked")])
         self.assert_never_authenticates(agent)
 
+    def test_pairing_again_after_a_revocation_gets_a_new_grant_and_secret(
+        self,
+    ) -> None:
+        # The way back after a revocation is a new pairing: a new grant and a
+        # new secret, which read. The revoked grant stays revoked, and its old
+        # secret never authenticates again.
+        migrate(
+            self.db,
+            expected_current_version=36,
+            target_version=discover_migrations()[-1].version,
+        )
+        grant, agent, revoke = self.paired_reader()
+        status, revoked = self.run_cli(["clients", "revoke"], revoke, OWNER_CREDENTIAL)
+        self.assertEqual(status, 0, revoked)
+        self.assert_never_authenticates(agent)
+
+        again, new_agent, _ = self.paired_reader()
+        self.assertNotEqual(again, grant)
+        self.assertNotEqual(new_agent, agent)
+        self.assertTrue(self.source_readable(new_agent))
+        self.assertEqual(self.revisions(again), [(1, "active")])
+        self.assertEqual(self.revisions(grant), [(1, "active"), (2, "revoked")])
+        self.assert_never_authenticates(agent)
+
     def test_terminal_revocation_waits_for_a_grant_reactivated_by_hand(
         self,
     ) -> None:
