@@ -178,6 +178,7 @@ class PostgresAgentSqlResults:
                     connection,
                     credential_sha256=self._credential,
                     workspace_id=self._workspace,
+                    query_access=True,
                 ) as frame:
                     row = frame.execute(
                         "SELECT memoriesql.start_query_run_v1(%s,%s)",
@@ -221,6 +222,7 @@ class PostgresAgentSqlResults:
                     connection,
                     credential_sha256=self._credential,
                     workspace_id=self._workspace,
+                    query_access=True,
                 ) as frame:
                     row = frame.execute(
                         "SELECT memoriesql.close_query_run_v1(%s)", (UUID(run_ref),)
@@ -258,6 +260,7 @@ class PostgresAgentSqlResults:
                 connection,
                 credential_sha256=self._credential,
                 workspace_id=self._workspace,
+                query_access=True,
             ) as frame:
                 row = frame.execute(
                     "SELECT memoriesql.abandon_query_deliveries_v1()"
@@ -1095,6 +1098,7 @@ class PostgresAgentSqlResults:
                 connection,
                 credential_sha256=self._credential,
                 workspace_id=self._workspace,
+                query_access=True,
             ) as frame:
                 row = frame.execute(
                     "SELECT memoriesql.admit_query_delivery_v1(%s,%s,%s,%s,%s,%s)",
