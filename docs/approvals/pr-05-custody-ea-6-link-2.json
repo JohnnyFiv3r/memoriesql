@@ -1,0 +1,376 @@
+{
+  "algorithm": "sha256",
+  "approved_interface_record": {
+    "amendments": [
+      {
+        "amendment_ref": "https://github.com/JohnnyFiv3r/memoriesql/pull/48#issuecomment-5851120561",
+        "supersedes": {
+          "algorithm": "sha256",
+          "dependencies": [
+            {
+              "commit": "2baffc688291dbfdeccaa46f7ca05f6e9ef0e12c",
+              "path": "docs/relation-assessment.md",
+              "sha256": "69a0d985466c6610a3a2abc73bcef9242749ff9535cb709e32867c7e06414d2a"
+            }
+          ],
+          "packet_commit": "2baffc688291dbfdeccaa46f7ca05f6e9ef0e12c",
+          "packet_path": "docs/agent-sql-results-v1.md",
+          "packet_sha256": "ba9e94b75b581949ff55e9b06b7271e2d4d0c79d6423e1dc6184d72245c585bb"
+        }
+      }
+    ],
+    "approval_ref": "https://github.com/JohnnyFiv3r/memoriesql/pull/49#issuecomment-5851352880",
+    "interface": {
+      "algorithm": "sha256",
+      "dependencies": [
+        {
+          "commit": "b3865f307b50bd94681b387ad0f3b16fbb20213a",
+          "path": "docs/relation-assessment.md",
+          "sha256": "69a0d985466c6610a3a2abc73bcef9242749ff9535cb709e32867c7e06414d2a"
+        }
+      ],
+      "packet_commit": "b3865f307b50bd94681b387ad0f3b16fbb20213a",
+      "packet_path": "docs/agent-sql-results-v1.md",
+      "packet_sha256": "78bbc04eaeffd0fd47b0576e270f25eaa30e07a90b42e53d27e64308dfd8269e"
+    },
+    "version": 2
+  },
+  "artifacts_verified": [
+    {
+      "byte_identical_to_base": false,
+      "bytes": 33816,
+      "commit": "8ee55c12d9f01053d51d4da757abd6c85508f741",
+      "path": "src/memoriesql/application/relation_assessment.py",
+      "repository": "JohnnyFiv3r/memoriesql",
+      "sha256": "6dab4f4348d852012de20d335b10c00b68ad708bd5f29a2f5cdd8bd6c5ef9b50"
+    },
+    {
+      "byte_identical_to_base": false,
+      "bytes": 78928,
+      "commit": "8ee55c12d9f01053d51d4da757abd6c85508f741",
+      "path": "tests/runtime/test_relation_assessment.py",
+      "repository": "JohnnyFiv3r/memoriesql",
+      "sha256": "b7a9778efdd48d5e9ac121fa2c0ac71d0e564da950120ff7099eff6dd3bb355a"
+    },
+    {
+      "byte_identical_to_base": false,
+      "bytes": 14660,
+      "commit": "8ee55c12d9f01053d51d4da757abd6c85508f741",
+      "path": "tests/unit/test_relation_assessment_contract.py",
+      "repository": "JohnnyFiv3r/memoriesql",
+      "sha256": "c4bd9366421f51e7941211ad1e6cf99429888ef8a00244e01700f5db3031b008"
+    },
+    {
+      "byte_identical_to_base": true,
+      "bytes": 321614,
+      "commit": "8ee55c12d9f01053d51d4da757abd6c85508f741",
+      "path": "contracts/records/memoriesql-relation-assessment-v1.json",
+      "repository": "JohnnyFiv3r/memoriesql",
+      "sha256": "292938ab85539b71795a3ec42879cd532ca4aa0f36892a531a215659b6693c98"
+    },
+    {
+      "byte_identical_to_base": true,
+      "bytes": 83809,
+      "commit": "8ee55c12d9f01053d51d4da757abd6c85508f741",
+      "path": "contracts/records/memoriesql-assessed-relation-lifecycle-v1.json",
+      "repository": "JohnnyFiv3r/memoriesql",
+      "sha256": "6ae6cffd91b2ccf27f12de4b33cf7925eb397837ebc58931d0c890864c1acf00"
+    },
+    {
+      "byte_identical_to_base": true,
+      "bytes": 251764,
+      "commit": "8ee55c12d9f01053d51d4da757abd6c85508f741",
+      "path": "contracts/records/memoriesql-authored-relations-v1.json",
+      "repository": "JohnnyFiv3r/memoriesql",
+      "sha256": "e7b9a34d97a159c4a07d50005509bfb9ee03c5b0b034985864b9f53c985ec67a"
+    },
+    {
+      "byte_identical_to_base": true,
+      "bytes": 88015,
+      "commit": "8ee55c12d9f01053d51d4da757abd6c85508f741",
+      "path": "contracts/public-registry.json",
+      "repository": "JohnnyFiv3r/memoriesql",
+      "sha256": "67694b1fed22d99d3bde93a76c8631c8cc6274d7802d8e064f680f280548c4f2"
+    },
+    {
+      "byte_identical_to_base": true,
+      "bytes": 5618,
+      "commit": "8ee55c12d9f01053d51d4da757abd6c85508f741",
+      "path": "contracts/migration-inventory.json",
+      "repository": "JohnnyFiv3r/memoriesql",
+      "sha256": "1e3d8ef02d684a3f3c9ba3e1cc8819fae9b1c9d2b695108c896c407f56d410a2"
+    },
+    {
+      "byte_identical_to_base": true,
+      "bytes": 241535,
+      "commit": "8ee55c12d9f01053d51d4da757abd6c85508f741",
+      "path": "migrations/0029_relation_assessment.sql",
+      "repository": "JohnnyFiv3r/memoriesql",
+      "sha256": "c073c47cce7b022ab5dfd94b86639705af2e5193ac79735c0ccb48ad00a22df9"
+    },
+    {
+      "byte_identical_to_base": true,
+      "bytes": 61527,
+      "commit": "8ee55c12d9f01053d51d4da757abd6c85508f741",
+      "path": "docs/relation-assessment.md",
+      "repository": "JohnnyFiv3r/memoriesql",
+      "sha256": "69a0d985466c6610a3a2abc73bcef9242749ff9535cb709e32867c7e06414d2a"
+    },
+    {
+      "byte_identical_to_base": true,
+      "bytes": 89906,
+      "commit": "8ee55c12d9f01053d51d4da757abd6c85508f741",
+      "path": "docs/agent-sql-results-v1.md",
+      "repository": "JohnnyFiv3r/memoriesql",
+      "sha256": "78bbc04eaeffd0fd47b0576e270f25eaa30e07a90b42e53d27e64308dfd8269e"
+    }
+  ],
+  "branch_scope": "The parent and previous-link references preserve the custody record chain, not Git ancestry. PR #81 is an independent PR-03 relation-assessment fix on the stated main base, which has migrations through 0036. This record does not claim that PR #81 contains PR #76, #78, #79 or #80, their later migrations or AM-5 implementation; it does not qualify a combined branch, later merge or released package.",
+  "custodian": {
+    "role": "independent PR-04 evaluation custodian",
+    "task_id": "01a0d40a-b91a-73a0-b5b3-8067f150c880"
+  },
+  "determination": {
+    "implementation_link_required": true,
+    "new_authority_or_evidence_semantic_reconciliation_required": false,
+    "normalization_and_grading_note_required": true,
+    "reason": "Accepting either spelling of an unordered pinned pair changes validation behavior and therefore needs exact implementation traceability even though the registered schemas and migration pins are unchanged. Under owner decision 7(a), a narrow implementation link plus the normalization/grading note suffices; no authority, evidence-credit, relation-direction or evaluation-policy amendment is made.",
+    "replacement_freeze_required": false
+  },
+  "evaluation_conditions": [
+    {
+      "name": "fixed PostgreSQL FTS/pg_trgm",
+      "profile_id": "fts-trgm-v1",
+      "profile_manifest_revision": "ep-1",
+      "profile_manifest_sha256": "1b7086621dcb6a508114cb5bf4bcbbe6380d0e594b9da4827ca51be7e47125c6",
+      "role": "evaluation-only lexical peer"
+    },
+    {
+      "name": "optional in-Postgres vector condition",
+      "profile_id": "fts-trgm-vector-v1",
+      "profile_manifest_revision": "ep-1",
+      "profile_manifest_sha256": "1b7086621dcb6a508114cb5bf4bcbbe6380d0e594b9da4827ca51be7e47125c6",
+      "role": "evaluation-only lexical-plus-exact-vector peer"
+    }
+  ],
+  "final_implementation_commit": "8ee55c12d9f01053d51d4da757abd6c85508f741",
+  "format": "pr04-independent-custody-implementation-link-v1",
+  "frozen_revisions": {
+    "approved_policy": {
+      "revision": "pr05-evaluation-preregistration-v3",
+      "sha256": "6bdf6b0e790cb7b0ef71337de5b494f03913ec5c47cb3c1d746686594bc545db"
+    },
+    "pack": {
+      "digest_scope": "frozen inventory of exact constituent bytes",
+      "revision": "ef-1",
+      "sha256": "e6e7844592ae4694266b9890f328e90f19f2795eeb1c38f7b28d786ba46fabdd"
+    },
+    "preregistration": {
+      "revision": "er-1",
+      "sha256": "21d6ce7a08eaa084a779db175f0e68fabffa9e42c0f1961c2b25495bb70ce9a9"
+    },
+    "profiles": {
+      "revision": "ep-1",
+      "sha256": "1b7086621dcb6a508114cb5bf4bcbbe6380d0e594b9da4827ca51be7e47125c6"
+    },
+    "supplemental_approval": {
+      "revision": "pr04-custody-policy-approval-v1",
+      "sha256": "3b0170773413c9e772abb93c3f93de92cdeb9d7fe6cd59894eab8891eac47a00"
+    },
+    "thresholds": {
+      "revision": "et-1",
+      "sha256": "cb8d09abf5cd4eaf632eb142c88a7a0cdc12dbfd88c67b63d32d788dc227a236"
+    }
+  },
+  "historical_records_preserved": [
+    {
+      "bytes": 7373,
+      "original_record_preserved": true,
+      "revision": "ea-2",
+      "sha256": "501ee401c88f4926431f8eb5f2e27b78082649a2949de7005bca17ce54b53711"
+    },
+    {
+      "bytes": 12916,
+      "original_record_preserved": true,
+      "revision": "ea-3",
+      "sha256": "12e802be3664a2c971ae144f692e993e43344e9d68dfff569cfc16f77547e60b"
+    },
+    {
+      "bytes": 12447,
+      "original_record_preserved": true,
+      "revision": "ea-4",
+      "sha256": "d118ded2578e7672d404b33c7c521f630bf4444e61cf57ca7e10cf6e2cea91f9"
+    },
+    {
+      "bytes": 2501,
+      "original_record_preserved": true,
+      "revision": "ea-4-link-1",
+      "sha256": "20447b37135ff4ae4bd09f3d5490fe610372c770aaa2a27c53742aec2c8b9252"
+    },
+    {
+      "bytes": 2919,
+      "original_record_preserved": true,
+      "revision": "ea-4-link-2",
+      "sha256": "4e2e350baf2daff2ec9825a3c5281381133b832c0db301321fa7a080bf791ae2"
+    },
+    {
+      "bytes": 11678,
+      "original_record_preserved": true,
+      "revision": "ea-4-link-3",
+      "sha256": "f4b1fddc3b9f1cd841260f15cade10b4a7751477365ea1237fd85ed9b18ac25d"
+    },
+    {
+      "bytes": 17333,
+      "original_record_preserved": true,
+      "revision": "ea-4-link-4",
+      "sha256": "04a6365a3387f4489ce8e3dad5c7b0ed1834cf7df747e04f99ba70fc97e19b09"
+    },
+    {
+      "bytes": 18783,
+      "original_record_preserved": true,
+      "revision": "ea-5",
+      "sha256": "be36131e51989b860d726b764cb96f6c027215c6b6a8ceac391446cb18eaa017"
+    },
+    {
+      "bytes": 7752,
+      "original_record_preserved": true,
+      "revision": "ea-5-link-1",
+      "sha256": "f1ea1a28162812d205af3e42eeca01ccb3944651672e8e8cc2e5c3fe1557ae1b"
+    },
+    {
+      "bytes": 12512,
+      "original_record_preserved": true,
+      "revision": "ea-5-link-2",
+      "sha256": "b66bc6806de4c58788906616e16ba10682119c7f76eedf123e672796f644f9f7"
+    }
+  ],
+  "implementation_base_commit": "76c6d716b47a62d97bcb32c5274d71e5e3f03c81",
+  "implementation_boundary": {
+    "duplicates": "Naming the same unordered pair twice, including once in each order, still fails the existing one-disposition-per-pinned-pair rule after normalization.",
+    "migration_scope": "No migration is added or changed. All 36 migration files present at this head are byte-identical to the bound base.",
+    "remaining_validation": "Existing UUID, shape, coverage, abstention, not_assessed and reason validation remains. Invalid or incomplete author output is not made valid merely by this normalization.",
+    "schema_limits": "Byte-identical contract records and catalogs establish unchanged registered payloads, not unchanged acceptance behavior or semantic correctness.",
+    "unchanged_fields": "The reason, disposition and abstention are not rewritten. The change does not alter proposal endpoints, direction, statement bindings, evidence bindings or specialist agreement.",
+    "unordered_pair": "PairDisposition.canonical_pair compares the normalized UUID spellings and returns a new mapping with only first_bead_id and second_bead_id exchanged when needed. Both orders identify the same unordered pair, retained in ascending canonical order."
+  },
+  "implementation_change_commit": "8ee55c12d9f01053d51d4da757abd6c85508f741",
+  "live_pr_observation": {
+    "base": "76c6d716b47a62d97bcb32c5274d71e5e3f03c81",
+    "base_branch": "main",
+    "head": "8ee55c12d9f01053d51d4da757abd6c85508f741",
+    "head_branch": "claude/pr-03-pair-order",
+    "number": 81,
+    "state": "OPEN",
+    "verified_via_github_this_turn": true
+  },
+  "normalization_and_grading_note": {
+    "ambiguous_positional_language": "Ambiguous positional language in a reason is not silently reinterpreted against the canonical pair order, rewritten into bead identities, or awarded semantic-quality credit. Preserve and report the ambiguity; do not infer a directional or evidentiary meaning that the retained output does not establish.",
+    "comparison_scope": "Only the two identifiers of an unordered pair may be canonicalized for identity comparison. Do not normalize away reason text, uncertainty, directional proposal roles, statement/source bindings, evidence, receipts or failure status.",
+    "historical_failures": "Earlier canonical-order refusals and all other recorded failures remain historical under their original implementation, receipts and run identity. Do not erase them, relabel them as passes or retroactively recompute their grades. Any later separately authorized run is separate evidence.",
+    "matched_conditions": "Both evaluation peers must use the same declared implementation baseline, unordered-pair normalization, interpretation, authority, evidence rules and budgets. Do not pool pre-change and post-change outcomes as if they were one matched run or give either condition extra attempts.",
+    "mechanical_and_semantic_separation": "Mechanical acceptance of a complete, valid unordered-pair disposition is distinct from semantic correctness. Decision 7(a) permits the unchanged reason at this head; that permission is not a semantic-quality pass. A required evidence or meaning expectation remains unmet if its support is ambiguous or missing, under the existing frozen grading rules.",
+    "no_new_grading_policy": "No new metric, denominator, quality floor, exclusion, rerun entitlement or ambiguity-specific runtime refusal is introduced. Do not require future bead-ID reason wording as a condition of acceptance at this head.",
+    "original_evidence": "Preserve original submitted outputs, their pair order and free-text reasons, existing receipts and the separately recorded canonical result. This note does not rewrite historical evidence or invent missing original outputs.",
+    "preserved_limits": "Frozen fictional judgments and mechanical integration tests establish no semantic-quality or workload certification. Generated answers do not select the retrieval architecture."
+  },
+  "original_frozen_at": "2026-09-26T22:01:04Z",
+  "owner_decision": {
+    "approval_basis": "Direct owner instruction in this custody conversation, reaffirming the attached decision; not inferred from CI, a merge, a model validator or an unchanged schema hash.",
+    "current_head_rule": "At the bound head, canonicalizing the unordered pair leaves the author's free-text reason unchanged. That reason text is accepted as-is under decision 7(a), subject to the existing contract validation; there is no new requirement at this head to rewrite positional language or name beads by ID.",
+    "date_as_recorded_in_notice": "2026-10-05",
+    "id": "7(a)",
+    "next_revision_rule": "The next relation-assessment contract revision must require reasons to name beads by ID. That forward requirement is not implemented, backdated or enforced by this link."
+  },
+  "owner_notice": {
+    "bytes": 3721,
+    "name": "06-core-pair-order-determination-request.txt",
+    "scope": "Content-free determination request; owner decision 7(a) is explicitly reaffirmed by the direct owner message bound above.",
+    "sha256": "486b244d132be0b6633c562ebfac6ff67d73368e0f58c9e669263594bdfbd1a1"
+  },
+  "owner_reported_proofs": {
+    "classification": "Fictional mechanical integration only; supplied proof results are attributed to the owner notice and were not independently rerun or requalified by the custodian.",
+    "database_free_tests_passed": 109,
+    "exact_head_qualification_date": "2026-10-01",
+    "installed_development_case_date": "2026-09-30",
+    "installed_python": [
+      "3.13.5",
+      "3.14.0"
+    ],
+    "package_checks_passed": 33,
+    "passed_per_python": 624,
+    "qualified_head": "8ee55c12d9f01053d51d4da757abd6c85508f741",
+    "receipt_sha256_3_13": "acf68d6e9c0d186027a51cef96f9cd50415d38b501a7bab7583c77f228b86e39",
+    "receipt_sha256_3_14": "70899ec0526fd231f4fe79b1d791a011160d82a7d65c51a7a1f247b5795c4360",
+    "sdist_sha256": "793c5c9d0ef60519f4b77f9d003995e92820b3b4da550cfee302e0d37f8457db",
+    "skipped_per_python": 0,
+    "two_byte_identical_builds": true,
+    "wheel_sha256": "61793f7da7b00c732f047cc117917d5ffd1b3d9847b94dcd645b8c1761fd70b3"
+  },
+  "owner_request": {
+    "message_text_sha256": "c0c979352853d9a1472893557bbb84d4dfa101891df264aa016fd54de08a1beb",
+    "scope": "Issue this exact-head implementation link and the previously determined normalization/grading note. No runtime or evaluation action is requested.",
+    "source": "Direct owner message in the current custody conversation",
+    "task_id": "01a0d40a-b91a-73a0-b5b3-8067f150c880",
+    "text": "John here: please issue the implementation link for PR #81 now, as a JSON record with its SHA-256 like the earlier links, binding head 8ee55c12d9f01053d51d4da757abd6c85508f741 and stating exactly what you listed in your determination: owner decision 7(a), under which the author's free-text reason stays unchanged at this head and reasons that name beads by ID belong to the next relation-assessment contract revision; and your normalization and grading note, under which ambiguous positional language is not silently reinterpreted or awarded semantic-quality credit, and earlier failures remain historical."
+  },
+  "parent_attestation": {
+    "bytes": 29178,
+    "original_record_preserved": true,
+    "revision": "ea-6",
+    "sha256": "74221b6fbc5674868590e548f1996cb3356a5404f26e23e8de1ba2af56a03c00"
+  },
+  "preservation": {
+    "all_previous_custody_bytes_preserved": true,
+    "authority_and_evidence_credit_boundaries_unchanged": true,
+    "exposure_incidents": [],
+    "raw_source_restrictions_unchanged": true,
+    "readable_relation_rows_gain_no_hydration_or_exact_source_credit": true,
+    "seen_regression_and_unseen_holdout_remain_separate": true,
+    "thresholds_budgets_grading_denominators_exclusions_and_rerun_rules_unchanged": true,
+    "unseen_content_disclosed": false,
+    "unseen_content_inspected": false
+  },
+  "previous_linkage": {
+    "bytes": 16704,
+    "original_record_preserved": true,
+    "revision": "ea-6-link-1",
+    "sha256": "1277e530ae69af7743b32b3dd3102b156dc396a405a2725b87490e7cbd2730a2"
+  },
+  "pull_request": "https://github.com/JohnnyFiv3r/memoriesql/pull/81",
+  "recorded_at": "2026-10-06T03:10:55Z",
+  "relation_assessment_r1_pins": {
+    "output_schema_sha256": "7b069836b3c71657aa5ade422e3310b4a5d203d15ebfb32bbdee2054889647b5",
+    "registry_hash": "semantic-tasks-v1:a331612010e79e75b7fe8851d322b462b0e575c85103259e5a383aeaadb5ca89",
+    "task_contract_sha256": "804fb7f351db5924cbe1409391965fcc23899a06761f56613ef6786141260373",
+    "verified_present_in_unchanged_migration_0029": true
+  },
+  "repository": "JohnnyFiv3r/memoriesql",
+  "revision": "ea-6-link-2",
+  "scope": "Content-free, append-only implementation linkage and normalization/grading clarification for the exact PR #81 head only. This is not new public-interface approval, semantic-quality certification, runtime/security/workload qualification, release readiness, merge permission or a new freeze. No model/provider calls, spending, live evaluation, database execution, repository edits, publication, deployment or external messages are performed or authorized by this record.",
+  "serialization": {
+    "encoding": "UTF-8 without BOM",
+    "final_newline": true,
+    "hash_scope": "Exact complete JSON document bytes; detached SHA-256 is not embedded in this document.",
+    "json": "Python json.dumps ensure_ascii=False, sort_keys=True, indent=2",
+    "line_endings": "LF"
+  },
+  "status": "issued_implementation_link_and_normalization_grading_note",
+  "verification": {
+    "all_generated_catalog_files_byte_identical_to_base": true,
+    "all_migration_files_at_bound_head_byte_identical_to_base": true,
+    "artifact_digests_independently_computed": true,
+    "changed_paths": [
+      "src/memoriesql/application/relation_assessment.py",
+      "tests/runtime/test_relation_assessment.py",
+      "tests/unit/test_relation_assessment_contract.py"
+    ],
+    "frozen_revision_digests_source": "Carried verbatim from the verified prior issued content-free custody link; no unseen pack content was opened or regraded for this link.",
+    "generated_catalog_files_checked": 8,
+    "generator_or_runtime_tests_rerun": false,
+    "live_pr_head_base_and_state_verified": true,
+    "migration_files_checked": 36,
+    "qualification_receipts_and_archives_independently_hashed": false,
+    "single_commit_parent_equals_bound_base": true,
+    "source_and_test_diff_read": true
+  }
+}
