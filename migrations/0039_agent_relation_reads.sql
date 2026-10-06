@@ -865,3 +865,185 @@ BEGIN
     END IF;
     RETURN result;
 END $$;
+
+-- Owner decision 6, completed. The reply's content_digest is the SHA-256 of the
+-- sealed body, so a population-revision-2 body holds only what the caller may
+-- see. Its protected frame digests and witness hash commit to records the
+-- caller may not read; they are bound in the internal dependency partition,
+-- which the artifact hash covers. Result commit and the disclosure-time closure
+-- check read them there, and refuse a revision-2 body that still carries them.
+-- Revision-1 bodies, which reach no reply, are checked exactly as before. Both
+-- statements are their installed text (0034, 0037) with only these edits.
+
+CREATE OR REPLACE FUNCTION memoriesql.commit_query_result_v1(op uuid,owner_ref uuid,invocation uuid,
+ result_ref uuid,receipt uuid,fingerprint text,body bytea,witnesses bytea,dependencies bytea,
+ artifact_hash text,digest text) RETURNS jsonb LANGUAGE plpgsql VOLATILE SECURITY DEFINER
+ SET search_path=pg_catalog,memoriesql,memoriesql_query SET row_security=off SET lock_timeout='500ms' AS $$
+DECLARE c memoriesql.authorization_contexts%ROWTYPE; o memoriesql.result_preparation_operations%ROWTYPE;
+ i memoriesql_query.invocations%ROWTYPE; r memoriesql.query_result_creations%ROWTYPE;
+ a memoriesql.result_preparation_artifacts%ROWTYPE; data jsonb; graph jsonb; deps jsonb; now_at timestamptz;
+BEGIN
+ c:=memoriesql.result_preparation_authority_v1();
+ SELECT * INTO o FROM memoriesql.result_preparation_operations WHERE tenant_id=c.tenant_id AND operation_ref=op;
+ IF NOT FOUND OR o.ownership_ref IS DISTINCT FROM owner_ref OR o.workspace_id<>c.workspace_id
+  OR o.principal_id<>c.principal_id OR o.owner_user_id IS DISTINCT FROM COALESCE(c.on_behalf_of_user_id,c.user_id)
+  OR o.state='discarded' THEN RAISE EXCEPTION 'query_result_unavailable' USING ERRCODE='42501'; END IF;
+ IF fingerprint IS NULL OR o.request_fingerprint IS DISTINCT FROM fingerprint THEN
+  RAISE EXCEPTION 'idempotency_conflict' USING ERRCODE='23505'; END IF;
+ PERFORM pg_advisory_xact_lock(hashtextextended(c.tenant_id::text||':result-preparation-operation:'||o.run_ref::text||':'||o.step_key::text,0));
+ SELECT * INTO r FROM memoriesql.query_result_creations WHERE tenant_id=c.tenant_id AND operation_ref=op;
+ IF FOUND THEN
+  SELECT * INTO a FROM memoriesql.result_preparation_artifacts WHERE tenant_id=c.tenant_id AND artifact_ref=r.result_id;
+  IF r.result_id IS DISTINCT FROM result_ref OR r.invocation_ref IS DISTINCT FROM invocation
+   OR r.receipt_ref IS DISTINCT FROM receipt OR r.content_digest IS DISTINCT FROM digest
+   OR a.artifact_sha256 IS DISTINCT FROM artifact_hash OR a.content_bytes IS DISTINCT FROM body
+   OR a.witness_bytes IS DISTINCT FROM witnesses OR a.dependency_bytes IS DISTINCT FROM dependencies THEN
+   RAISE EXCEPTION 'idempotency_conflict' USING ERRCODE='23505'; END IF;
+  PERFORM memoriesql.result_preparation_authority_v1();
+  RETURN memoriesql.query_result_creation_receipt_v1(r,true);
+ END IF;
+ SELECT * INTO i FROM memoriesql_query.invocations WHERE invocation_ref=invocation;
+ IF NOT FOUND OR i.tenant_id<>c.tenant_id OR i.workspace_id<>c.workspace_id OR i.principal_id<>c.principal_id
+  OR i.credential_id<>c.credential_id OR i.operation_ref<>op OR i.ownership_ref<>owner_ref
+  OR i.state<>'settled' OR i.outcome IS DISTINCT FROM 'complete' OR i.observed_ms IS NULL
+  OR NOT EXISTS(SELECT 1 FROM pg_stat_activity issuer WHERE issuer.pid=i.issuer_pid
+    AND issuer.backend_start=i.issuer_start AND issuer.datid=(SELECT oid FROM pg_database WHERE datname=current_database())
+    AND EXISTS(SELECT 1 FROM pg_locks WHERE pid=issuer.pid AND locktype='virtualxid' AND granted AND virtualxid=i.issuer_transaction)) THEN
+  RAISE EXCEPTION 'query_result_unavailable' USING ERRCODE='42501'; END IF;
+ IF clock_timestamp()>=i.deadline THEN RAISE EXCEPTION 'query_result_work_exhausted' USING ERRCODE='54000'; END IF;
+ IF body IS NULL OR witnesses IS NULL OR dependencies IS NULL OR result_ref IS NULL OR receipt IS NULL
+  OR digest IS NULL OR digest !~ '^[a-f0-9]{64}$' OR encode(sha256(body),'hex')<>digest THEN
+  RAISE EXCEPTION 'invalid_query_result' USING ERRCODE='22023'; END IF;
+ data:=convert_from(body,'UTF8')::jsonb; graph:=convert_from(witnesses,'UTF8')::jsonb; deps:=convert_from(dependencies,'UTF8')::jsonb;
+ IF data->>'serializer' IS DISTINCT FROM 'result-json-v1' OR data->>'provenance_revision' IS DISTINCT FROM 'native-bag-v1'
+  OR data->>'result_id' IS DISTINCT FROM result_ref::text OR data->>'query_fingerprint' IS DISTINCT FROM fingerprint
+  OR data#>>'{query,run_ref}' IS DISTINCT FROM o.run_ref::text OR data#>>'{query,step_key}' IS DISTINCT FROM o.step_key::text
+  OR data->>'catalog_hash' IS DISTINCT FROM i.catalog_hash OR data->>'policy_hash' IS DISTINCT FROM i.policy_hash
+  OR data#>>'{frame,frame_ref}' IS DISTINCT FROM i.frame_ref::text
+  OR (data#>>'{frame,known_at}')::timestamptz IS DISTINCT FROM i.known_at
+  OR (data#>>'{frame,snapshot_at}')::timestamptz IS DISTINCT FROM i.snapshot_at
+  OR (data->'population_revision' IS DISTINCT FROM '2'::jsonb AND (
+   data#>>'{frame,projection_manifest_sha256}' IS DISTINCT FROM i.projection_manifest_sha256
+   OR data->>'witness_sha256' IS DISTINCT FROM encode(sha256(witnesses),'hex')))
+  OR (data->'population_revision'='2'::jsonb AND (
+   data->'witness_sha256' IS NOT NULL OR data#>'{frame,snapshot_digest}' IS NOT NULL
+   OR data#>'{frame,projection_manifest_sha256}' IS NOT NULL
+   OR deps#>>'{protected_frame,snapshot_digest}' IS DISTINCT FROM i.projection_manifest_sha256
+   OR deps#>>'{protected_frame,projection_manifest_sha256}' IS DISTINCT FROM i.projection_manifest_sha256
+   OR deps->>'witness_sha256' IS DISTINCT FROM encode(sha256(witnesses),'hex')))
+  OR graph->>'qualification' IS DISTINCT FROM 'native-bag-v1' OR graph->>'frame_ref' IS DISTINCT FROM i.frame_ref::text
+  OR graph->>'projection_manifest_sha256' IS DISTINCT FROM i.projection_manifest_sha256
+  OR encode(sha256(decode(deps->>'manifest_base64','base64')),'hex') IS DISTINCT FROM i.projection_manifest_sha256
+  OR jsonb_typeof(data->'rows') IS DISTINCT FROM 'array' OR jsonb_typeof(graph->'row_provenance') IS DISTINCT FROM 'array'
+  OR jsonb_array_length(data->'rows')<>jsonb_array_length(graph->'row_provenance') THEN
+  RAISE EXCEPTION 'invalid_query_result' USING ERRCODE='22023'; END IF;
+ -- The trusted qualified compiler supplies complete partitions, not the agent.
+ -- A failure after sealing rolls back bodies, holds, creation and receipt alike.
+ PERFORM memoriesql.seal_result_preparation_v1(op,owner_ref,result_ref,body,witnesses,dependencies,artifact_hash,'[]'::jsonb);
+ c:=memoriesql.result_preparation_authority_v1();
+ now_at:=clock_timestamp();
+ IF now_at>=i.deadline THEN RAISE EXCEPTION 'query_result_work_exhausted' USING ERRCODE='54000'; END IF;
+ INSERT INTO memoriesql.query_result_creations VALUES(c.tenant_id,op,result_ref,invocation,receipt,digest,
+  GREATEST(0,ceil(extract(epoch FROM (now_at-i.settled_at))*1000)::bigint),now_at,now_at+interval '720 hours') RETURNING * INTO r;
+ RETURN memoriesql.query_result_creation_receipt_v1(r,false);
+END $$;
+
+CREATE OR REPLACE FUNCTION memoriesql.check_query_result_closure_v2(result_ref uuid,digest text)
+RETURNS boolean LANGUAGE plpgsql VOLATILE SECURITY DEFINER
+ SET search_path=pg_catalog,memoriesql SET row_security=off SET lock_timeout='500ms' AS $$
+DECLARE c memoriesql.authorization_contexts%ROWTYPE;
+ r memoriesql.query_result_creations%ROWTYPE;
+ ident memoriesql.query_result_identities%ROWTYPE;
+ a memoriesql.result_preparation_artifacts%ROWTYPE;
+ o memoriesql.result_preparation_operations%ROWTYPE;
+ body jsonb; graph jsonb; deps jsonb; saved_records jsonb; saved_manifest jsonb;
+ rebuilt jsonb; current_population jsonb; current_manifest jsonb;
+ manifest_text text; records_text text; artifact_hash text;
+BEGIN
+ IF result_ref IS NULL OR digest IS NULL OR digest !~ '^[a-f0-9]{64}$' THEN
+  RAISE EXCEPTION 'query_result_unavailable' USING ERRCODE='42501';
+ END IF;
+ c:=memoriesql.result_preparation_authority_v1();
+ SELECT * INTO r FROM memoriesql.query_result_creations
+  WHERE tenant_id=c.tenant_id AND result_id=result_ref FOR SHARE;
+ SELECT * INTO ident FROM memoriesql.query_result_identities
+  WHERE tenant_id=c.tenant_id AND result_id=result_ref FOR SHARE;
+ IF r.result_id IS NULL OR ident.result_id IS NULL OR r.content_digest<>digest
+  OR clock_timestamp()>=r.expires_at OR ident.workspace_id<>c.workspace_id
+  OR ident.principal_id<>c.principal_id OR ident.principal_kind<>c.principal_kind
+  OR ident.user_id IS DISTINCT FROM c.user_id
+  OR ident.on_behalf_of_user_id IS DISTINCT FROM c.on_behalf_of_user_id
+  OR ident.pairing_grant_id IS DISTINCT FROM c.pairing_grant_id THEN
+  RAISE EXCEPTION 'query_result_unavailable' USING ERRCODE='42501';
+ END IF;
+ SELECT * INTO o FROM memoriesql.result_preparation_operations
+  WHERE tenant_id=c.tenant_id AND operation_ref=r.operation_ref;
+ SELECT * INTO a FROM memoriesql.result_preparation_artifacts
+  WHERE tenant_id=c.tenant_id AND artifact_ref=result_ref FOR SHARE;
+ IF o.operation_ref IS NULL OR a.artifact_ref IS NULL OR o.state<>'sealed'
+  OR o.workspace_id<>c.workspace_id OR o.principal_id<>c.principal_id
+  OR o.owner_user_id IS DISTINCT FROM COALESCE(c.on_behalf_of_user_id,c.user_id)
+  OR encode(sha256(a.content_bytes),'hex')<>digest THEN
+  RAISE EXCEPTION 'query_result_unavailable' USING ERRCODE='42501';
+ END IF;
+ artifact_hash:=encode(sha256(convert_to('memoriesql-result-preparation-v1','UTF8')||decode('00','hex')||
+  int8send(octet_length(a.content_bytes)::bigint)||a.content_bytes||
+  int8send(octet_length(a.witness_bytes)::bigint)||a.witness_bytes||
+  int8send(octet_length(a.dependency_bytes)::bigint)||a.dependency_bytes),'hex');
+ IF artifact_hash<>a.artifact_sha256 THEN
+  RAISE EXCEPTION 'query_result_unavailable' USING ERRCODE='42501';
+ END IF;
+ body:=convert_from(a.content_bytes,'UTF8')::jsonb;
+ graph:=convert_from(a.witness_bytes,'UTF8')::jsonb;
+ deps:=convert_from(a.dependency_bytes,'UTF8')::jsonb;
+ IF body->>'result_id' IS DISTINCT FROM result_ref::text
+  OR body->'population_revision' IS DISTINCT FROM '2'::jsonb
+  OR body#>>'{frame,view}' NOT IN ('resolved','historical')
+  OR body->'witness_sha256' IS NOT NULL OR body#>'{frame,snapshot_digest}' IS NOT NULL
+  OR body#>'{frame,projection_manifest_sha256}' IS NOT NULL
+  OR deps->>'witness_sha256' IS DISTINCT FROM encode(sha256(a.witness_bytes),'hex')
+  OR graph->>'frame_ref' IS DISTINCT FROM body#>>'{frame,frame_ref}'
+  OR body#>>'{query,run_ref}' IS DISTINCT FROM o.run_ref::text
+  OR body#>>'{query,step_key}' IS DISTINCT FROM o.step_key::text
+  OR body->>'query_fingerprint' IS DISTINCT FROM o.request_fingerprint
+  OR jsonb_typeof(deps->'manifest_base64') IS DISTINCT FROM 'string'
+  OR jsonb_typeof(deps->'records_base64') IS DISTINCT FROM 'string' THEN
+  RAISE EXCEPTION 'query_result_unavailable' USING ERRCODE='42501';
+ END IF;
+ manifest_text:=convert_from(decode(deps->>'manifest_base64','base64'),'UTF8');
+ records_text:=convert_from(decode(deps->>'records_base64','base64'),'UTF8');
+ saved_manifest:=manifest_text::jsonb;
+ saved_records:=records_text::jsonb;
+ IF jsonb_typeof(saved_manifest)<>'array' OR jsonb_typeof(saved_records)<>'array'
+  OR manifest_text IS DISTINCT FROM memoriesql.lifecycle_canonical_json_v1(saved_manifest)
+  OR records_text IS DISTINCT FROM memoriesql.lifecycle_canonical_json_v1(saved_records)
+  OR encode(sha256(convert_to(manifest_text,'UTF8')),'hex') IS DISTINCT FROM deps#>>'{protected_frame,projection_manifest_sha256}'
+  OR deps#>>'{protected_frame,snapshot_digest}' IS DISTINCT FROM deps#>>'{protected_frame,projection_manifest_sha256}' THEN
+  RAISE EXCEPTION 'query_result_unavailable' USING ERRCODE='42501';
+ END IF;
+ SELECT COALESCE(jsonb_agg(jsonb_build_object('kind',v->'kind','id',v->'id',
+  'content_sha256',memoriesql.lifecycle_hash_v1(v->'row'))
+  ORDER BY v->>'kind',v->>'id',memoriesql.lifecycle_hash_v1(v->'row')),'[]'::jsonb)
+ INTO rebuilt FROM jsonb_array_elements(saved_records) x(v);
+ IF rebuilt IS DISTINCT FROM saved_manifest THEN
+  RAISE EXCEPTION 'query_result_unavailable' USING ERRCODE='42501';
+ END IF;
+ current_population:=memoriesql.prepare_query_sql_population_v2(
+  (body#>>'{frame,known_at}')::timestamptz,body#>>'{frame,view}',67108864);
+ current_manifest:=(current_population->>'dependency_manifest_json')::jsonb;
+ IF EXISTS(
+  SELECT 1 FROM (
+   SELECT value FROM jsonb_array_elements(saved_manifest)
+   EXCEPT ALL
+   SELECT value FROM jsonb_array_elements(current_manifest)
+  ) missing
+ ) THEN RAISE EXCEPTION 'query_result_unavailable' USING ERRCODE='42501'; END IF;
+ PERFORM memoriesql.result_preparation_authority_v1();
+ IF clock_timestamp()>=r.expires_at THEN
+  RAISE EXCEPTION 'query_result_unavailable' USING ERRCODE='42501';
+ END IF;
+ RETURN true;
+EXCEPTION WHEN invalid_text_representation OR invalid_parameter_value OR character_not_in_repertoire
+ OR invalid_datetime_format OR datetime_field_overflow THEN
+ RAISE EXCEPTION 'query_result_unavailable' USING ERRCODE='42501';
+END $$;

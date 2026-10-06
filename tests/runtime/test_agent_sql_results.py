@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import os
@@ -1522,13 +1523,13 @@ class AgentSqlResults(unittest.TestCase):
         self.close(owner_run)
         self.close(run, reader)
 
-    def test_an_agents_frame_digests_ignore_history_it_cannot_see(self) -> None:
-        # Owner decision 6. B is authored with a derived_from relation to C, and
-        # the assessed R cites only B, so R's root lineage reaches C through
-        # that authored relation. An authored confirm on it is owner-only
-        # history: no row the agent receives changes. The digests in the
-        # agent's reply must not change either, while the protected manifest
-        # its results bind to does.
+    def hidden_history(self) -> tuple[str, Callable[[], None]]:
+        """A paired agent, and owner-only history that changes no row it reads.
+
+        B is authored with a derived_from relation to C, and the assessed R
+        cites only B, so R's root lineage reaches C through that authored
+        relation. An authored confirm on it is owner-only history.
+        """
         fixture = self.fixture
         tag = uuid4().hex[:8]
         (sb, ob), (sc, oc), (st, ot) = [
@@ -1577,10 +1578,32 @@ class AgentSqlResults(unittest.TestCase):
             ["memory.inspect", "memory.query", "source.read"],
             label="digest-" + tag,
         )
-        query = (
-            "SELECT r.relation_id,r.state,r.roots_status,r.independent_root_count "
-            "FROM memory_v1.assessed_relations r ORDER BY r.relation_id"
-        )
+
+        def confirm() -> None:
+            fixture.lifecycle.record_relation_event(
+                RecordRelationEvent(
+                    idempotency_key="orchard.confirm." + tag,
+                    relation_id=lineage,
+                    action="confirm",
+                    reason="Fictional owner review.",
+                    expected_last_event_id=fixture.latest_relation_event(lineage),
+                )
+            )
+
+        return agent, confirm
+
+    HIDDEN_HISTORY_QUERY = (
+        "SELECT r.relation_id,r.state,r.roots_status,r.independent_root_count "
+        "FROM memory_v1.assessed_relations r ORDER BY r.relation_id"
+    )
+
+    def test_an_agents_frame_digests_ignore_history_it_cannot_see(self) -> None:
+        # Owner decision 6. No row the agent receives changes, so the digests in
+        # its reply must not change either, while the protected manifest its
+        # results bind to does.
+        fixture = self.fixture
+        agent, confirm = self.hidden_history()
+        query = self.HIDDEN_HISTORY_QUERY
 
         def read() -> tuple[list[Any], dict[str, Any], str]:
             # A run reads as of its start, so each read is a new run.
@@ -1602,21 +1625,83 @@ class AgentSqlResults(unittest.TestCase):
 
         rows, frame, protected = read()
         self.assertTrue(rows)
-        fixture.lifecycle.record_relation_event(
-            RecordRelationEvent(
-                idempotency_key="orchard.confirm." + tag,
-                relation_id=lineage,
-                action="confirm",
-                reason="Fictional owner review.",
-                expected_last_event_id=fixture.latest_relation_event(lineage),
-            )
-        )
+        confirm()
         after, after_frame, after_protected = read()
         self.assertEqual(after, rows)
         # The protected record the results bind to did change.
         self.assertNotEqual(after_protected, protected)
         for field in ("snapshot_digest", "projection_manifest_sha256"):
             self.assertEqual(after_frame[field], frame[field], field)
+
+    def test_an_agents_content_digest_hashes_nothing_it_cannot_see(self) -> None:
+        # Owner decision 6 (Codex P1 on #78). The reply's content_digest is the
+        # SHA-256 of the sealed body, so that body holds only what the caller
+        # may see. The protected manifest and the witness, which commit to
+        # records the caller may not read, are bound in the internal partitions.
+        agent, confirm = self.hidden_history()
+
+        def sealed() -> tuple[dict[str, Any], str, tuple[str, str]]:
+            run = self.start(agent)
+            request, reply = self.query(
+                run, self.HIDDEN_HISTORY_QUERY, page_size=50, secret=agent
+            )
+            self.assertEqual(reply["outcome"], "available", reply)
+            result = reply["result"]
+            # The same immutable result reaches the agent fresh, by exact
+            # redelivery of its step, and reused from a later run.
+            again = self.send(request, secret=agent)
+            self.close(run, agent)
+            later = self.start(agent)
+            reused = self.reuse(later, result, page_size=50, secret=agent)
+            self.close(later, agent)
+            replies = (reply, again, reused)
+            for each in replies:
+                self.assertEqual(each["outcome"], "available", each)
+                self.assertEqual(
+                    (each["result"]["result_id"], each["result"]["content_digest"]),
+                    (result["result_id"], result["content_digest"]),
+                )
+                self.assertEqual(each["result"]["frame"], result["frame"])
+            row = self.db.execute(
+                "SELECT content_bytes,witness_bytes,dependency_bytes "
+                "FROM memoriesql.result_preparation_artifacts WHERE artifact_ref=%s",
+                (UUID(result["result_id"]),),
+            ).fetchone()
+            assert row is not None
+            content, witness, dependencies = (bytes(part) for part in row)
+            self.assertEqual(
+                hashlib.sha256(content).hexdigest(), result["content_digest"]
+            )
+            manifest = base64.b64decode(json.loads(dependencies)["manifest_base64"])
+            hidden = (
+                hashlib.sha256(manifest).hexdigest(),
+                hashlib.sha256(witness).hexdigest(),
+            )
+            # No disclosed field of any of the three replies carries either.
+            for each in replies:
+                disclosed = json.dumps(each)
+                for value in hidden:
+                    self.assertNotIn(value, disclosed)
+            return json.loads(content), content.decode("utf-8"), hidden
+
+        before, before_text, before_hidden = sealed()
+        confirm()
+        after, after_text, after_hidden = sealed()
+        # The protected manifest moved on history the agent cannot read.
+        self.assertNotEqual(after_hidden[0], before_hidden[0])
+        for body, text, hidden in (
+            (before, before_text, before_hidden),
+            (after, after_text, after_hidden),
+        ):
+            for value in hidden:
+                self.assertNotIn(value, text)
+            self.assertNotIn("witness_sha256", body)
+            for field in ("snapshot_digest", "projection_manifest_sha256"):
+                self.assertNotIn(field, body["frame"])
+        for field in ("snapshot_digest", "projection_manifest_sha256"):
+            self.assertEqual(
+                after["wire_frame"][field], before["wire_frame"][field], field
+            )
 
     def test_an_agents_head_token_ignores_history_it_cannot_see(self) -> None:
         # The owner's decision of 2026-10-05: a caller that cannot read
