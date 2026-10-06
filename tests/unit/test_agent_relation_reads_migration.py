@@ -78,15 +78,32 @@ class AgentRelationReadsMigration(unittest.TestCase):
             closure,
         )
         population = body("prepare_relation_sql_population_v2", replaced=False)
+        # History stays owner-only, and an agent's head_token hashes no event
+        # (the owner's decision of 2026-10-05).
         self.assertIn(
-            "assertion := assertion || jsonb_build_object('events','[]'::jsonb);",
+            "IF read_mode='agent' THEN\n"
+            "                assertion := assertion || jsonb_build_object('events','[]'::jsonb,\n"
+            "                    'head_token',memoriesql.lifecycle_hash_v1(\n"
+            "                        (item->'head_manifest') || jsonb_build_object('events','[]'::jsonb)));",
             population,
         )
         self.assertIn("WHERE read_mode='owner' AND a.tenant_id=c.tenant_id", population)
-        # A family is disclosed to an agent only with every assessed relation
-        # its records name (review P1).
-        self.assertIn("IF read_mode='agent' THEN", population)
+        # A family is disclosed only with every assessed relation its records
+        # name (review P1), in both read modes (owner decision 5b).
         self.assertIn("WHERE NOT n.id::uuid=ANY(COALESCE(disclosed,'{}'))", population)
+        self.assertIn(
+            "        FROM jsonb_array_elements(families) f;\n    LOOP\n        SELECT array_agg(",
+            population,
+        )
+        # Owner decision 5b: a task that recorded a relation withheld from the
+        # reader discloses none of its pair coverage.
+        self.assertIn("withheld := withheld || r.relation_id;", population)
+        self.assertIn(
+            "IF r.relation_id=ANY(withheld) THEN\n"
+            "                    RAISE EXCEPTION 'pair_unavailable' USING ERRCODE='42501';",
+            population,
+        )
+        self.assertNotIn("IF read_mode='agent' THEN\n        LOOP", population)
         # Owner mode for raw-read holders, the agent mode for paired agents
         # only (AM-5), and the earlier gate with no mode for anyone else.
         entry = body("prepare_query_sql_population_v2", replaced=True)
