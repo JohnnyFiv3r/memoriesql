@@ -196,11 +196,16 @@ custodian's records, stored byte-identical:
     it stood at `9f3aa77` (`35fabf31…`);
   - the owner-reported qualification receipts.
 - **History unchanged.** AM-5's record, the addendum and ea-5 stay as they were.
+- **Implementation linkage: ea-5-link-2 → `9f3aa77`**
+  (`../approvals/pr-05-custody-ea-5-link-2.json`, 12,512 bytes, SHA-256
+  `b66bc680…`, recorded 2026-10-06T01:43:07Z). It advances ea-5-link-1 to this
+  pull request's repaired head. It binds migration 0039 `ee846ac7…`, the
+  migration inventory and this document at `9f3aa77`, under ea-5 and the scope
+  that ea-6 reconciles. No further authority amendment or freeze is required.
 - **Semantics only.** None of these is runtime, security, semantic-quality or
   workload certification, release readiness or a combined-branch qualification.
-- **Still requested:** ea-6 issues no implementation link. The next link after
-  ea-5-link-1, for `9f3aa77`, and the custodian's determination on #80 are
-  pending.
+- **The dependent #80** is linked separately under ea-6 (ea-6-link-1, on its own
+  branch).
 
 **One read mode in PR-03's single kernel.** Migration 0039 threads a read mode
 through the eleven read-path functions of M0030 and M0032 that reach a raw gate.
