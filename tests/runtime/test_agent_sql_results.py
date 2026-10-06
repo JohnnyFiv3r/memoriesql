@@ -23,6 +23,7 @@ from memoriesql.application.agent_sql_catalog import SqlCatalog
 from memoriesql.application.agent_sql_results import AGENT_RELATION_TABLES, POLICY_HASH
 from memoriesql.application.evidence_packages import NativeFacts
 from memoriesql.application.relation_inspection import InspectBeadRelationsV2
+from memoriesql.application.relation_lifecycle import RecordRelationEvent
 from memoriesql.infrastructure.postgres.agent_sql_results import (
     PostgresAgentSqlResults,
 )
@@ -35,6 +36,9 @@ from memoriesql.infrastructure.postgres.query_result_commit import (
 )
 from memoriesql.infrastructure.postgres.relation_assessment import (
     PostgresRelationAssessments,
+)
+from memoriesql.infrastructure.postgres.relation_sql_population import (
+    prepare_query_population,
 )
 
 if TYPE_CHECKING:
@@ -699,6 +703,139 @@ class AgentSqlResults(unittest.TestCase):
         ),
     }
     TYPES = "SELECT t.type_key,t.type_revision FROM memory_v1.relation_types t"
+    # Every column of each of the nine relation tables, in catalog order.
+    ALL_RELATION_COLUMNS = {
+        "assessed_relations": (
+            "relation_id",
+            "task_id",
+            "type_key",
+            "type_revision",
+            "source_bead_id",
+            "source_bead_version_id",
+            "target_bead_id",
+            "target_bead_version_id",
+            "basis",
+            "rationale",
+            "qualification",
+            "author_confidence",
+            "author_run_ref",
+            "specialist_run_ref",
+            "acceptance_receipt_id",
+            "recorded_at",
+            "state",
+            "head_token",
+            "support_eligible",
+            "support_reason",
+            "correction_pending",
+            "roots_status",
+            "independent_root_count",
+        ),
+        "relation_statements": (
+            "relation_id",
+            "role",
+            "statement_id",
+            "bead_id",
+            "bead_version_id",
+            "text",
+        ),
+        "relation_evidence": (
+            "relation_id",
+            "statement_id",
+            "source_unit_id",
+            "content_sha256",
+            "evidence_ref",
+            "roots_status",
+        ),
+        "relation_events": (
+            "event_id",
+            "relation_id",
+            "action",
+            "related_relation_id",
+            "reason",
+            "origin",
+            "authoring_bead_id",
+            "effective_at",
+            "recorded_at",
+            "event_number",
+            "previous_event_id",
+            "recorded_by_principal_id",
+            "recorded_by_user_id",
+            "idempotency_receipt_id",
+        ),
+        "relation_event_evidence": (
+            "event_id",
+            "statement_id",
+            "source_unit_id",
+            "bead_id",
+            "bead_version_id",
+            "statement_text",
+            "content_sha256",
+            "evidence_ref",
+        ),
+        "relation_types": (
+            "type_key",
+            "type_revision",
+            "namespace",
+            "label",
+            "definition",
+            "endpoint_rule",
+            "forward_reading",
+            "inverse_reading",
+            "symmetric",
+            "evidence_expectation",
+            "example",
+            "counterexample",
+            "cycle_policy",
+        ),
+        "relation_pairs": (
+            "task_id",
+            "first_bead_id",
+            "second_bead_id",
+            "first_bead_version_id",
+            "second_bead_version_id",
+            "disposition",
+            "abstention",
+            "reason",
+        ),
+        "relation_corrections": (
+            "relation_id",
+            "role",
+            "correcting_bead_id",
+            "correcting_bead_version_id",
+        ),
+        "relation_replacements": ("relation_id", "replacement_relation_id"),
+    }
+    # How many leading columns of each are its catalog key.
+    RELATION_KEYS = {
+        "assessed_relations": 1,
+        "relation_statements": 3,
+        "relation_evidence": 3,
+        "relation_events": 1,
+        "relation_event_evidence": 3,
+        "relation_types": 2,
+        "relation_pairs": 3,
+        "relation_corrections": 3,
+        "relation_replacements": 2,
+    }
+
+    def every_relation_row(
+        self, run: dict[str, Any], *, secret: str | None = None
+    ) -> dict[str, tuple[list[list[Any]], str]]:
+        """Each relation table read whole, every column: its rows and the whole
+        reply as JSON."""
+        seen: dict[str, tuple[list[list[Any]], str]] = {}
+        for table, columns in self.ALL_RELATION_COLUMNS.items():
+            listed = ",".join("t." + column for column in columns)
+            keys = ",".join("t." + c for c in columns[: self.RELATION_KEYS[table]])
+            text = f"SELECT {listed} FROM memory_v1.{table} t ORDER BY {keys}"
+            _, reply = self.query(run, text, page_size=50, secret=secret)
+            self.assertEqual(reply["outcome"], "available", reply)
+            self.assertFalse(reply["page"]["has_more"], table)
+            seen[table] = (
+                [row["values"] for row in reply["page"]["rows"]],
+                json.dumps(reply),
+            )
+        return seen
 
     def close(self, run: dict[str, Any], secret: str | None = None) -> None:
         closed = json.loads(self.service(secret).close_run(run["run_ref"]))
@@ -1188,6 +1325,343 @@ class AgentSqlResults(unittest.TestCase):
         self.assertEqual(self.supports_types(run, agent), 0)
         self.close(owner_run)
         self.close(run, agent)
+
+    def reader_without_z(self) -> tuple[UUID, UUID, UUID, UUID, str]:
+        """Review P1's X, W and Z, and a raw-read holder that cannot read Z.
+
+        A (X supports W) cites only X. B replaces A and cites W, whose root
+        lineage reaches Z through a derived_from relation. The reader holds
+        source.raw.read, so it reads in owner mode, but its authority covers X
+        and W only. Returns A, B, the derived relation, Z and the reader's secret.
+        """
+        fixture = self.fixture
+        tag = uuid4().hex[:8]
+        scopes = [relation_agents.explicit_scope(self.db, fixture) for _ in range(3)]
+        (sx, ox), (sw, ow), (sz, oz) = scopes
+        x = fixture.remote_bead(
+            "Fictional X: the orchard ledger balanced.",
+            key="x-" + tag,
+            scope=sx,
+            source=ox,
+        )
+        w = fixture.remote_bead(
+            "Fictional W: the audit relied on the ledger.",
+            key="w-" + tag,
+            scope=sw,
+            source=ow,
+        )
+        z = fixture.remote_bead(
+            "Fictional Z: the ledger's first draft.",
+            key="z-" + tag,
+            scope=sz,
+            source=oz,
+        )
+        derived = self.relation_in(
+            w,
+            (z,),
+            "derived-" + tag,
+            lambda p: [
+                fixture.proposal(
+                    p,
+                    "derived_from",
+                    fixture.endpoint(p, w, 0),
+                    fixture.endpoint(p, z, 0),
+                    basis="agent_inferred",
+                )
+            ],
+        )
+
+        def supports(p: Any, cited: UUID, **extra: Any) -> list[dict[str, Any]]:
+            proposal = fixture.proposal(
+                p,
+                "supports",
+                fixture.endpoint(p, x, 0),
+                fixture.endpoint(p, w, 0),
+                basis="agent_inferred",
+                **extra,
+            )
+            return [
+                self.citing(proposal, fixture.endpoint(p, cited, 0)["statement_ids"])
+            ]
+
+        first = self.relation_in(x, (w,), "first-" + tag, lambda p: supports(p, x))
+        retires = dict(
+            relation_kind="assessed",
+            relation_id=str(first),
+            reason="Fictional exact replacement.",
+        )
+        second = self.relation_in(
+            x, (w,), "second-" + tag, lambda p: supports(p, w, retires=retires)
+        )
+        # A raw-read holder whose authority covers X and W but not Z. In the
+        # shipped roles only the owner holds source.raw.read; a deployment can
+        # grant it to a service role, as here.
+        self.db.execute(
+            "INSERT INTO memoriesql.role_capabilities "
+            "VALUES('background_service','source.raw.read') ON CONFLICT DO NOTHING"
+        )
+        reader = hashlib.sha256(b"fictional raw reader without z").hexdigest()
+        principal = uuid4()
+        with self.db.transaction():
+            fixture.begin()
+            self.db.execute(
+                "SELECT memoriesql.pair_local_client("
+                "%s,%s,%s,%s,'service','background_service',%s,%s,%s,%s,%s)",
+                (
+                    principal,
+                    uuid4(),
+                    uuid4(),
+                    uuid4(),
+                    ["memory.query", "source.read", "source.raw.read"],
+                    [sx, sw],
+                    reader,
+                    fixture.now,
+                    fixture.now + timedelta(hours=1),
+                ),
+            )
+            for scope in (sx, sw):
+                self.db.execute(
+                    "SELECT memoriesql.create_access_grant(%s,%s,%s,%s,%s,%s)",
+                    (
+                        uuid4(),
+                        principal,
+                        scope,
+                        ["read"],
+                        fixture.now,
+                        fixture.now + timedelta(hours=1),
+                    ),
+                )
+        return first, second, derived, z, reader
+
+    def test_an_owner_mode_reader_never_sees_a_relation_it_cannot_read(self) -> None:
+        # Owner decision 5b: owner mode is not permission to bypass an evidence
+        # restriction. The reader cannot read B, so it must not read A either.
+        # Superseded, with B in relation_replacements, A would disclose that
+        # the unreadable B exists. All nine relation tables are read, every
+        # column, so no identifier, task or lifecycle state of the three
+        # relations, and nothing of Z, reaches the reader.
+        first, second, derived, z, reader = self.reader_without_z()
+        withheld = {str(first), str(second), str(derived)}
+        owner_run, run = self.start(), self.start(reader)
+        owner = self.every_relation_row(owner_run)
+
+        def column(table: str, name: str) -> int:
+            return self.ALL_RELATION_COLUMNS[table].index(name)
+
+        # The owner reads all three relations, their tasks' pair coverage and
+        # their lifecycle: A superseded by B, with its lifecycle events.
+        relations = {
+            row[0]: row for row in owner["assessed_relations"][0] if row[0] in withheld
+        }
+        self.assertEqual(set(relations), withheld)
+        state = column("assessed_relations", "state")
+        self.assertEqual(relations[str(first)][state], "superseded")
+        self.assertIn([str(first), str(second)], owner["relation_replacements"][0])
+        events = [row for row in owner["relation_events"][0] if row[1] in withheld]
+        self.assertTrue(events)
+        tasks = {row[1] for row in relations.values()}
+        self.assertEqual(len(tasks), 3)
+        self.assertLessEqual(tasks, {row[0] for row in owner["relation_pairs"][0]})
+        receipt = column("assessed_relations", "acceptance_receipt_id")
+        idempotency = column("relation_events", "idempotency_receipt_id")
+        hidden = (
+            withheld
+            | tasks
+            | {row[receipt] for row in relations.values() if row[receipt]}
+            | {row[0] for row in events}
+            | {row[idempotency] for row in events if row[idempotency]}
+            | {str(z)}
+        )
+        # The owner-mode reader without Z reads none of it, in any table:
+        # no row about these relations, their tasks or their lifecycle, and
+        # none of their identifiers anywhere in a reply.
+        mine = self.every_relation_row(run, secret=reader)
+        for table, (rows, reply) in mine.items():
+            if table != "relation_types":
+                self.assertEqual(rows, [], table)
+            for value in hidden:
+                self.assertNotIn(value, reply, table)
+        self.close(owner_run)
+        self.close(run, reader)
+
+    def test_an_owner_mode_reader_sees_no_pair_coverage_of_a_relation_it_cannot_read(
+        self,
+    ) -> None:
+        # Owner decision 5b, for pair coverage: a task that recorded a relation
+        # withheld from the reader discloses none of its pairs, which would
+        # show that the task assessed and proposed the withheld relation.
+        first, second, derived, _, reader = self.reader_without_z()
+        tasks = {
+            str(row[0])
+            for row in self.db.execute(
+                "SELECT task_id FROM memoriesql.assessed_relations"
+                " WHERE relation_id = ANY(%s)",
+                ([first, second, derived],),
+            ).fetchall()
+        }
+        pairs = (
+            "SELECT p.task_id,p.first_bead_id,p.second_bead_id "
+            "FROM memory_v1.relation_pairs p "
+            "ORDER BY p.task_id,p.first_bead_id,p.second_bead_id"
+        )
+        owner_run, run = self.start(), self.start(reader)
+        _, owner_pairs = self.query(owner_run, pairs, page_size=50)
+        self.assertLessEqual(
+            tasks, {row["values"][0] for row in owner_pairs["page"]["rows"]}
+        )
+        _, reader_pairs = self.query(run, pairs, page_size=50, secret=reader)
+        self.assertEqual(reader_pairs["outcome"], "available", reader_pairs)
+        self.assertFalse(
+            tasks & {row["values"][0] for row in reader_pairs["page"]["rows"]}
+        )
+        self.close(owner_run)
+        self.close(run, reader)
+
+    def test_an_agents_frame_digests_ignore_history_it_cannot_see(self) -> None:
+        # Owner decision 6. B is authored with a derived_from relation to C, and
+        # the assessed R cites only B, so R's root lineage reaches C through
+        # that authored relation. An authored confirm on it is owner-only
+        # history: no row the agent receives changes. The digests in the
+        # agent's reply must not change either, while the protected manifest
+        # its results bind to does.
+        fixture = self.fixture
+        tag = uuid4().hex[:8]
+        (sb, ob), (sc, oc), (st, ot) = [
+            relation_agents.explicit_scope(self.db, fixture) for _ in range(3)
+        ]
+        c = fixture.remote_bead(
+            "Fictional C: the ledger's first count.",
+            key="c-" + tag,
+            scope=sc,
+            source=oc,
+        )
+        ids: dict[str, str] = {}
+        with self.in_scope(sb):
+            b = fixture.author(
+                "Fictional B: the audit drew on the first count.",
+                "b-" + tag,
+                candidates=(c,),
+                plan=lambda extras, bead, found: ids.setdefault(
+                    "lineage", fixture.relate(extras, bead, found[0], "derived_from")
+                ),
+                source=ob,
+            )
+        lineage = UUID(ids["lineage"])
+        t = fixture.remote_bead(
+            "Fictional T: the audit's finding.", key="t-" + tag, scope=st, source=ot
+        )
+        self.relation_in(
+            b,
+            (t,),
+            "r-" + tag,
+            lambda p: [
+                self.citing(
+                    fixture.proposal(
+                        p,
+                        "supports",
+                        fixture.endpoint(p, b, 0),
+                        fixture.endpoint(p, t, 0),
+                        basis="agent_inferred",
+                    ),
+                    fixture.endpoint(p, b, 0)["statement_ids"],
+                )
+            ],
+        )
+        _, agent = self.pair_agent_over(
+            [sb, sc, st],
+            ["memory.inspect", "memory.query", "source.read"],
+            label="digest-" + tag,
+        )
+        query = (
+            "SELECT r.relation_id,r.state,r.roots_status,r.independent_root_count "
+            "FROM memory_v1.assessed_relations r ORDER BY r.relation_id"
+        )
+
+        def read() -> tuple[list[Any], dict[str, Any], str]:
+            # A run reads as of its start, so each read is a new run.
+            run = self.start(agent)
+            _, reply = self.query(run, query, page_size=50, secret=agent)
+            self.assertEqual(reply["outcome"], "available", reply)
+            self.close(run, agent)
+            with prepare_query_population(
+                self.db,
+                credential_sha256=agent,
+                workspace_id=fixture.workspace,
+                known_at=None,
+                view="resolved",
+                byte_budget=64 * 1024 * 1024,
+            ) as population:
+                protected = population.dependency_manifest_sha256
+            rows = [row["values"] for row in reply["page"]["rows"]]
+            return rows, reply["result"]["frame"], protected
+
+        rows, frame, protected = read()
+        self.assertTrue(rows)
+        fixture.lifecycle.record_relation_event(
+            RecordRelationEvent(
+                idempotency_key="orchard.confirm." + tag,
+                relation_id=lineage,
+                action="confirm",
+                reason="Fictional owner review.",
+                expected_last_event_id=fixture.latest_relation_event(lineage),
+            )
+        )
+        after, after_frame, after_protected = read()
+        self.assertEqual(after, rows)
+        # The protected record the results bind to did change.
+        self.assertNotEqual(after_protected, protected)
+        for field in ("snapshot_digest", "projection_manifest_sha256"):
+            self.assertEqual(after_frame[field], frame[field], field)
+
+    def test_an_agents_head_token_ignores_history_it_cannot_see(self) -> None:
+        # The owner's decision of 2026-10-05: a caller that cannot read
+        # relation_events gets a head_token over what it may see, acceptance
+        # and its visible corrections with no events. An owner-only confirm
+        # moves the owner's head and changes nothing the agent receives, its
+        # frame digests included.
+        grant, agent = self.home_agent(
+            ["memory.inspect", "memory.query", "source.read"]
+        )
+        relation = relation_agents.assessed_relation_for_agent(
+            self.db, self.fixture, self.paired_principal(grant)
+        )
+        source, rid = relation.source_bead_id, relation.relation_id
+        columns = self.ALL_RELATION_COLUMNS["assessed_relations"]
+        listed = ",".join("r." + column for column in columns)
+        text = f"SELECT {listed} FROM memory_v1.assessed_relations r ORDER BY r.relation_id"
+        head = columns.index("head_token")
+
+        def read(secret: str | None) -> tuple[list[Any], dict[str, Any]]:
+            # A run reads as of its start, so each read is a new run.
+            run = self.start(secret)
+            _, reply = self.query(run, text, page_size=50, secret=secret)
+            self.assertEqual(reply["outcome"], "available", reply)
+            self.close(run, secret)
+            rows = [
+                row["values"]
+                for row in reply["page"]["rows"]
+                if row["values"][0] == str(rid)
+            ]
+            self.assertEqual(len(rows), 1)
+            return rows[0], reply["result"]["frame"]
+
+        (owner, _), (mine, frame) = read(None), read(agent)
+        # With no history yet, the agent's row is the owner's, head included.
+        self.assertEqual(mine, owner)
+        confirmed = self.fixture.governance.record_event(
+            self.fixture.lifecycle_command(source, rid, "confirm", "am5-confirm")
+        )
+        self.assertIsNotNone(confirmed.relation_event_id)
+        (owner_after, _), (mine_after, frame_after) = read(None), read(agent)
+        self.assertNotEqual(owner_after[head], owner[head])
+        self.assertEqual(mine_after, mine)
+        for field in ("snapshot_digest", "projection_manifest_sha256"):
+            self.assertEqual(frame_after[field], frame[field], field)
+        # Every other column is still the owner's value.
+        self.assertEqual(
+            mine_after[:head] + mine_after[head + 1 :],
+            owner_after[:head] + owner_after[head + 1 :],
+        )
 
     def withheld_with(
         self, relation: UUID, scopes: list[UUID], member: UUID, label: str
