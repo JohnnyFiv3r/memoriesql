@@ -105,23 +105,43 @@ only:
 None of it touches populations, source authority, search candidates or evidence
 availability. Migration 0037 (`f8e2d468…`) is unchanged.
 
-**Implementation linkage: ea-4-link-2 → `f6b1de2`** (migration 0038
-`8835d25e…`). The custodian recorded it at 2026-09-29T01:53:32Z. It is stored
-byte-identical in `../approvals/pr-05-custody-ea-4-link-2.json` (2,919 bytes,
-SHA-256 `4e2e350b…`) and names change `92f7ccf` and migration 0037 `f8e2d468…`.
+**Implementation linkage: ea-4-link-4 → `98d7903`.** The custodian recorded it
+at 2026-10-06T01:03:56Z. It is stored byte-identical in
+`../approvals/pr-05-custody-ea-4-link-4.json` (17,333 bytes, SHA-256
+`04a6365a…`). Migrations 0037 (`f8e2d468…`) and 0038 (`eabebb7f…`) are those of
+link-3.
 
-- **Supersedes ea-4-link-1 → `6aca830`,** also stored byte-identical in
-  `../approvals/pr-05-custody-ea-4-link-1.json` (2,501 bytes, SHA-256
-  `20447b37…`).
-- **Semantics only.** The linkage is not a statement of runtime correctness or
-  release readiness. It records a linkage update only, with no new authority or
-  evidence-semantic reconciliation and no replacement freeze.
-- **Its grading note:** a committed result or `settlement_pending` response is
-  not successful receipted disclosure.
-- **This head's migration 0038** (`eabebb7f…`) differs from link-2's `8835d25e…`
-  only by the review fix to the cleanup pass. The linkage state is **ea-4-link-2
-  → `f6b1de2`; link-3 for this head has been requested** from the custodian. No
-  coverage is claimed beyond that.
+- **An outcome-compatibility reconciliation, in the same record.** This head's
+  corrected failures and its admitted membership execution are observable
+  changes. The record maps them onto the unchanged packet's outcomes and the
+  frozen F0–F3 fault classes. ea-4-link-2's wording about unchanged failure
+  grading must not be read as unchanged runtime outcomes. No new authority or
+  evidence-semantic amendment, replacement freeze or numerical-policy approval
+  is required.
+- **Supersedes ea-4-link-3 → `33e1c42`,** stored byte-identical in
+  `../approvals/pr-05-custody-ea-4-link-3.json` (11,678 bytes, SHA-256
+  `f4b1fddc…`). Before it came ea-4-link-2 → `f6b1de2`
+  (`../approvals/pr-05-custody-ea-4-link-2.json`, SHA-256 `4e2e350b…`) and
+  ea-4-link-1 → `6aca830` (`../approvals/pr-05-custody-ea-4-link-1.json`,
+  SHA-256 `20447b37…`).
+- **Semantics only.** The linkage is not runtime, security, workload or
+  semantic-quality certification, and not release readiness.
+- **Schema 38.** This head is linked on schema 38. The AM-5 records (ea-5 and
+  ea-5-link-1) stay unchanged for migration 0039, and no combined head of this
+  pull request with migration 0039 is linked or qualified.
+- **The reader closure.** The record pins this head's provisioning source with
+  the six reviewed hash functions. Before the first query, a host upgrades the
+  package, grants those six functions through the owner/admin path, rebuilds or
+  re-pins the reader profile, and qualifies it. Missing or extra executable
+  privileges are never bypassed: a missing reviewed function makes provisioning
+  unavailable. The record itself grants nothing.
+- **Grading notes:**
+  - a committed result or `settlement_pending` response is not successful
+    receipted disclosure, and unknown ownership or accounting stays F2;
+  - refusals for unreviewed operators, comparison grouping and correction
+    recursion happen before owned work. They are never new deferrals or
+    automatic passes: an unavailable required pattern, or correction
+    recursion, remains unmet acceptance.
 
 The PR-05 part of the rules the custodian named:
 
