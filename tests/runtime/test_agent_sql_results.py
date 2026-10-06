@@ -696,10 +696,10 @@ class AgentSqlResults(unittest.TestCase):
         self.assertEqual(refused, missing)
         self.assertEqual(refused_rows, missing_rows, (refused_rows, missing_rows))
 
-    def relations_of(self, bead: UUID) -> Any:
+    def relations_of(self, bead: UUID, secret: str | None = None) -> Any:
         return PostgresRelationAssessments(
             self.db,
-            credential_sha256=self.fixture.secret_hash,
+            credential_sha256=secret or self.fixture.secret_hash,
             workspace_id=self.fixture.workspace,
         ).inspect_relations(InspectBeadRelationsV2(bead_id=bead))
 
@@ -752,6 +752,27 @@ class AgentSqlResults(unittest.TestCase):
         self.assertEqual(denied.outcome, "unavailable")
         self.assertEqual(denied, missing)
         self.assertEqual(denied_rows, missing_rows, (denied_rows, missing_rows))
+
+    def test_relation_inspection_needs_the_whole_task_of_a_relation_it_shows(
+        self,
+    ) -> None:
+        # Owner decision 7 in inspection, as it already holds. An assessed
+        # relation's endpoints and basis beads are pinned to its task, the task
+        # disposes of every pinned pair, and inspection authorizes both beads of
+        # each pair it lists. So a raw reader of the endpoints' scope never reads
+        # the relation's text by inspecting its target either.
+        case = self.relation_quoting_a_hidden_candidate()
+        row = self.db.execute(
+            "SELECT target_bead_id FROM memoriesql.assessed_relations "
+            "WHERE relation_id=%s",
+            (case["relation_id"],),
+        ).fetchone()
+        assert row is not None
+        self.assertIn(case["text"], self.relations_of(row[0]).model_dump_json())
+        _, reader = self.fixture.second_human(case["ends"])
+        self.assertEqual(
+            self.relations_of(row[0], reader), self.relations_of(uuid4(), reader)
+        )
 
     def test_query_page_cursor_reuse_and_redelivery_without_rerun(self) -> None:
         source, target, _ = self.fixture.assertion()

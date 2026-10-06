@@ -128,6 +128,12 @@ Each runtime test below failed before the change and passes after it.
   - leaves only the handlers returning a bare refusal or budget;
   - places every check that can deny a bead before the first budget.
 
+`test_relation_inspection_needs_the_whole_task_of_a_relation_it_shows` pins
+decision 7's existing hold in inspection. A raw reader of the endpoints' scope
+inspects a relation's target and gets exactly what it gets for an unknown
+bead, while the owner reads the relation's text. It passes before and after
+the change.
+
 The existing inspection suites stay green: `test_stored_bead_inspection`,
 `test_authored_statement_kinds`, `test_declared_evidence_scope` and
 `test_installed_migrations`. Three suites were rerun with their final
