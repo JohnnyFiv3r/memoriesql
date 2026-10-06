@@ -105,23 +105,32 @@ only:
 None of it touches populations, source authority, search candidates or evidence
 availability. Migration 0037 (`f8e2d468…`) is unchanged.
 
-**Implementation linkage: ea-4-link-2 → `f6b1de2`** (migration 0038
-`8835d25e…`). The custodian recorded it at 2026-09-29T01:53:32Z. It is stored
-byte-identical in `../approvals/pr-05-custody-ea-4-link-2.json` (2,919 bytes,
-SHA-256 `4e2e350b…`) and names change `92f7ccf` and migration 0037 `f8e2d468…`.
+**Implementation linkage: ea-4-link-3 → `33e1c42`** (migration 0038
+`eabebb7f…`). The custodian recorded it at 2026-10-06T01:03:56Z. It is stored
+byte-identical in `../approvals/pr-05-custody-ea-4-link-3.json` (11,678 bytes,
+SHA-256 `f4b1fddc…`). It names migration 0037 `f8e2d468…` unchanged, and the
+review fix to the cleanup pass as migration 0038's only change since link-2.
 
-- **Supersedes ea-4-link-1 → `6aca830`,** also stored byte-identical in
+- **Supersedes ea-4-link-2 → `f6b1de2`** (migration 0038 `8835d25e…`), stored
+  byte-identical in `../approvals/pr-05-custody-ea-4-link-2.json` (2,919 bytes,
+  SHA-256 `4e2e350b…`). That link superseded ea-4-link-1 → `6aca830`, stored in
   `../approvals/pr-05-custody-ea-4-link-1.json` (2,501 bytes, SHA-256
   `20447b37…`).
 - **Semantics only.** The linkage is not a statement of runtime correctness or
-  release readiness. It records a linkage update only, with no new authority or
-  evidence-semantic reconciliation and no replacement freeze.
-- **Its grading note:** a committed result or `settlement_pending` response is
-  not successful receipted disclosure.
-- **This head's migration 0038** (`eabebb7f…`) differs from link-2's `8835d25e…`
-  only by the review fix to the cleanup pass. The linkage state is **ea-4-link-2
-  → `f6b1de2`; link-3 for this head has been requested** from the custodian. No
-  coverage is claimed beyond that.
+  release readiness. It records an implementation-reference update. This head
+  stays compatible with ea-4's authority and evidence rules and the frozen
+  grading policy, with no new authority amendment and no replacement freeze.
+- **The merged baseline.** The link identifies this head's merged pairing,
+  initialization and runtime-inventory changes as its baseline. It does not
+  certify those features or authorize more agent capabilities.
+- **Its grading notes:**
+  - a committed result or `settlement_pending` response is not successful
+    receipted disclosure;
+  - an oversized undeliverable row is now `budget_exhausted`/`transport`. That
+    is an observable outcome correction, and no evidence of an empty
+    population, a successful disclosure or a completed retrieval;
+  - cleanup mechanics changed, but expiry, holds, charges, authority and
+    grading obligations are not relaxed.
 
 The PR-05 part of the rules the custodian named:
 
