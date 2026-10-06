@@ -105,6 +105,15 @@ only:
 None of it touches populations, source authority, search candidates or evidence
 availability. Migration 0037 (`f8e2d468…`) is unchanged.
 
+**Migration 0038 after the close_run approval.** On the owner's close_run
+approval of 2026-10-06, migration 0038, still unreleased, changes in place
+again, to `97e19e2c…`. It changes only two things:
+- the closure's attribution columns;
+- `acquire_query_access_lock_v1`.
+
+ea-4-link-3 binds the earlier bytes. The link for this head is the custodian's
+determination, and the request is with the owner.
+
 **Implementation linkage: ea-4-link-3 → `33e1c42`** (migration 0038
 `eabebb7f…`). The custodian recorded it at 2026-10-06T01:03:56Z. It is stored
 byte-identical in `../approvals/pr-05-custody-ea-4-link-3.json` (11,678 bytes,
@@ -258,12 +267,30 @@ These remain qualification targets, not measured capacity.
   - Rows are deleted logically. PostgreSQL vacuum reclaims their space, and WAL
     and backups follow their own storage lifecycle.
 
-**Extension outside the approved packet (owner decision #11):**
-`close_run(run_ref)` is a trusted-host, owner-only early close, never an agent
-wire action. It is refused while any of the run's deliveries is unsettled,
-refunds nothing, keeps charges in the rolling window and cannot be reopened.
-"Active" means neither expired nor closed; the two-run cap and 30-minute
-maximum are unchanged.
+**close_run, a trusted-host extension outside the approved packet.** It is
+governed by its own owner-approved contract,
+`../approvals/pr-05-close-run-contract.md` (SHA-256 `965fb398…`). The approval
+of 2026-10-06 is recorded in `../approvals/pr-05-close-run-approval.md`: the
+contract and proof scope, which is not a release approval.
+- **Host only, owner only.** `close_run(run_ref)` is never an agent wire action.
+  Every call starts a fresh authorization context. Only the run's owner may
+  close it. Anyone else, and any unknown run, gets the same `unavailable`.
+- **Not stopping, completing or billing.** Close is refused while any of the
+  run's work is unsettled. It refunds nothing, keeps charges in the rolling
+  window, changes no step, result or cursor, and cannot be reopened.
+- **Attributed.** The closure records the closing principal, its credential and
+  the time.
+- **"Active" means neither expired nor closed.** The two-run cap and the
+  30-minute maximum are unchanged.
+- **Concurrency.** Starting a run, admission, close and recovery take the
+  workspace's query-access lock at session level, before their REPEATABLE READ
+  snapshot (`acquire_query_access_lock_v1`). A cap check therefore sees
+  everything the previous holder committed.
+  - Before this, four races were reproduced on `913be9d`: a third active run,
+    two admitted operations, a close beside unsettled work, and a second close
+    failing instead of returning the first close's reply.
+  - The installed proof tests in `test_agent_sql_results` reproduce each of them
+    and pass with the fix.
 
 ## Measured preview range (Decision 1, items 1 and 2)
 
