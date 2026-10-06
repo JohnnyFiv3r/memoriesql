@@ -14,7 +14,7 @@ not synthesized. Statements retain their correction/supersession identities.
 No titles or summaries are invented as replacements for authored meaning.
 
 The accepted version's own receipt and successful apply operation establish
-mentions capability. A complete revision-4/5 authorized result can have `mentions=[]`.
+mentions capability. A complete revision-4/5/6/7 authorized result can have `mentions=[]`.
 Legacy unsupported mentions/classification are null. Revision 5 cannot have an
 empty accepted classification. No newest-task heuristic establishes acceptance.
 Thin, pending, failed and accepted lifecycle states remain distinct; raw task

@@ -27,6 +27,7 @@ def main() -> None:
             ActivateClassifiedAuthorship,
         )
         from memoriesql.application.local_entity_mentions import (
+            ActivateAuthoredMentions,
             ActivateMentionAuthorship,
         )
         from memoriesql.application.source_stable_identity import (
@@ -54,7 +55,7 @@ def main() -> None:
             Path(str(installed.locate_file(p))).resolve() for p in installed.files or ()
         }
         migrations = discover_migrations()
-        assert len(migrations) == 40
+        assert len(migrations) == 41
         for migration in migrations:
             assert Path(str(migration.path)).resolve() in owned
             assert (
@@ -83,6 +84,7 @@ def main() -> None:
         assert callable(PostgresLogicalUnitMaterialization.materialize_source_stable)
         for identifier in (
             "memoriesql.local-entity-mentions.v1",
+            "memoriesql.local-entity-mentions.v2",
             "memoriesql.authored-relations.v1",
             "memoriesql.relation-profile.v1",
             "memoriesql.bead-classification.v1",
@@ -95,6 +97,10 @@ def main() -> None:
         assert (
             ActivateMentionAuthorship.model_fields["expected_schema_version"].default
             == 22
+        )
+        assert (
+            ActivateAuthoredMentions.model_fields["expected_schema_version"].default
+            == 41
         )
         assert (
             ActivateClassifiedAuthorship.model_fields["expected_schema_version"].default

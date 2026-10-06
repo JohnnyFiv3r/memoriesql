@@ -36,3 +36,35 @@ No provider, production activation, migration deployment, global resolution,
 private consumption or live qualification is included. Source delivery and unique
 coverage retain their existing revisiting semantics; a successful delivery does
 not prove comprehension or fidelity.
+
+## Revision 7: the statement kinds a new note can carry
+
+Schema 41 adds author-complete-unit task revision 7, activated by
+`activate_complete_input_v6` (activation version 6) and applied by apply version
+8. Its inputs, apply and render semantics are revision 4's. Its output contract,
+`memory.semantic.local-mentions.output` revision 2, differs in one respect: it
+offers an author only the statement kinds a new note can carry, `observation`,
+`context` and `qualification`.
+
+Revision 4's schema also offers `correction`, but no apply path accepts it for
+a new note. A correction needs an earlier statement to supersede, and a new note
+has none. An author that chose it returned invalid output, its unit's one
+attempt was spent, and the note was lost.
+
+Revision 7's schema states two rules that revision 4 left unstated:
+- A correction heard in the source is an observation of what is now said to be
+  true, with the earlier belief as context.
+- Every authored statement appears in the note's rendered text or in its
+  omissions.
+
+An output that carries `correction` anyway fails the schema before any
+canonical rule runs, and writes nothing. Revision 7's statements keep revision
+4's canonical keys, with the supersession fields always null. Superseding an
+earlier note remains the governed correction command; stored statements of every
+historical kind read as before.
+
+Revision 7 has its own task contract, registry, admission policy and author agent
+key (`memory.semantic.local-mentions-author.v2`). So a worker runs it only from
+the revision-7 registry, and a dispatch policy and claim policy must name
+revision 7. Revision 4 is unchanged and remains available. The public record is
+`contracts/records/memoriesql-local-entity-mentions-v2.json`.
