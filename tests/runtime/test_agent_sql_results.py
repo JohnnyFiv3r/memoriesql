@@ -2419,6 +2419,65 @@ class AgentSqlResults(unittest.TestCase):
             "available",
         )
 
+    def test_genuine_lock_contention_is_a_budget_refusal_that_strands_nothing(
+        self,
+    ) -> None:
+        # The owner, 2026-10-06: the timeout regression under genuine
+        # contention. A real executor call (recovery, which changes nothing
+        # here) holds the workspace's query-access lock from before its
+        # snapshot. A start, an admission and a close competing with it each
+        # fail their 500 ms wait as budget_exhausted / time, write nothing and
+        # leave no lock behind.
+        self.fixture.assertion()
+        run = self.start()
+        request, _ = self.request_only(
+            run, "SELECT bead_id FROM memory_v1.observations"
+        )
+        timed_out = ("budget_exhausted", {"code": "time"})
+
+        def counts() -> tuple[int, ...]:
+            return tuple(
+                int(self.h.scalar("SELECT count(*) FROM memoriesql." + table))
+                for table in (
+                    "query_runs",
+                    "query_steps",
+                    "query_deliveries",
+                    "query_run_closures",
+                )
+            )
+
+        def advisory_locks() -> int:
+            return int(
+                self.h.scalar(
+                    "SELECT count(*) FROM pg_locks WHERE locktype='advisory' "
+                    "AND database=(SELECT oid FROM pg_database "
+                    "WHERE datname=current_database())"
+                )
+            )
+
+        before = counts()
+        for name, competing in (
+            ("start", lambda: json.loads(self.service().start_run())),
+            ("admission", lambda: self.send(request)),
+            ("close", lambda: json.loads(self.service().close_run(run["run_ref"]))),
+        ):
+            with self.subTest(call=name):
+                with self.concurrently(competing) as outcome:
+                    self.assertEqual(self.service().recover_abandoned(), 0)
+                self.assertEqual(len(outcome), 1, outcome)
+                reply = outcome[0]
+                self.assertIsInstance(reply, dict, reply)
+                self.assertEqual((reply["outcome"], reply["error"]), timed_out, reply)
+                # No partial state: nothing started, admitted or closed.
+                self.assertEqual(counts(), before)
+                # No stranded lock: neither call left an advisory lock behind.
+                self.assertEqual(advisory_locks(), 0)
+        # The same step is then admitted once, at the full allowance.
+        first = self.send(request)
+        self.assertEqual(first["outcome"], "available", first)
+        self.assertEqual(first["remaining"]["accesses"], 127)
+        self.assertEqual(advisory_locks(), 0)
+
     def test_crash_after_commit_redelivers_same_result_without_rerun(self) -> None:
         self.fixture.assertion()
         run = self.start()
