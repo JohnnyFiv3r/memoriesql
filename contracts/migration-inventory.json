@@ -156,7 +156,7 @@
     },
     {
       "filename": "0039_agent_relation_reads.sql",
-      "sha256": "cab057cf094ac6789020c097e34b5d474297ebebd4094fea30a72859ff9f2a1b"
+      "sha256": "74fb8e5c1c9b297cc5e70c7e694ef1d8ba77e6f4a2daeb072cbeaedb4621d117"
     },
     {
       "filename": "0040_authorization_context_cleanup.sql",

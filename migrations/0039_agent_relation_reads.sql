@@ -365,6 +365,36 @@ END $$;
 REVOKE ALL ON FUNCTION memoriesql.relation_assertion_row_v2(uuid,text,uuid,uuid,timestamptz,text) FROM PUBLIC;
 
 -- From 0032_relation_sql_population.sql: prepare_relation_sql_population_v1.
+-- Owner decision 7 of 2026-10-06: an assessed relation's author wrote its
+-- rationale, its qualification and any retirement reason from the task's whole
+-- packet. So that text is disclosed only to a reader of every bead pinned to the
+-- task, checked exactly as pair coverage checks its pins: each pinned version
+-- authored at the frame and authorized, and each pinned bead's records readable.
+-- Declared references never narrow this. Narrower access needs the later
+-- qualified contract. The records join the family's dependencies, so every
+-- later disclosure checks them again.
+CREATE FUNCTION memoriesql.relation_task_population_records_v1(t uuid,task uuid,
+ known timestamptz,read_mode text) RETURNS jsonb
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,memoriesql
+ SET row_security=off AS $$
+DECLARE a memoriesql.relation_assessments%ROWTYPE; d jsonb; pin memoriesql.bead_versions%ROWTYPE;
+ result jsonb:='[]';
+BEGIN
+ SELECT * INTO a FROM memoriesql.relation_assessments WHERE tenant_id=t AND task_id=task;
+ IF NOT FOUND THEN RAISE EXCEPTION 'task_population_unavailable' USING ERRCODE='42501'; END IF;
+ FOR d IN SELECT value FROM jsonb_array_elements(a.beads) LOOP
+  SELECT v.* INTO pin FROM memoriesql.bead_versions v
+   WHERE v.tenant_id=t AND v.bead_version_id=(d->>'bead_version_id')::uuid;
+  IF NOT FOUND OR pin.authored_at>known OR NOT memoriesql.current_context_bead_version_authorized(
+   t,pin.workspace_id,pin.access_scope_id,pin.bead_version_id) THEN
+   RAISE EXCEPTION 'task_population_unavailable' USING ERRCODE='42501';
+  END IF;
+  result:=result||memoriesql.relation_bead_records_v2(t,pin.bead_id,known,read_mode);
+ END LOOP;
+ RETURN result;
+END $$;
+REVOKE ALL ON FUNCTION memoriesql.relation_task_population_records_v1(uuid,uuid,timestamptz,text) FROM PUBLIC;
+
 CREATE FUNCTION memoriesql.prepare_relation_sql_population_v2(
     requested_known_at timestamptz, byte_budget integer
 ,read_mode text) RETURNS jsonb
@@ -379,7 +409,7 @@ DECLARE
     assertions jsonb := '[]'; corrections jsonb := '[]'; types jsonb := '[]';
     pairs jsonb := '[]'; deps jsonb := '[]'; manifest jsonb; result jsonb;
     families jsonb := '[]'; needs jsonb; kept jsonb; disclosed uuid[];
-    discovered uuid[]; withheld uuid[] := '{}';
+    discovered uuid[]; withheld uuid[] := '{}'; retirement record;
 BEGIN
     IF byte_budget IS NULL OR byte_budget NOT BETWEEN 8192 AND 67108864 THEN
         RAISE EXCEPTION 'invalid_request' USING ERRCODE='22023';
@@ -422,6 +452,24 @@ BEGIN
             -- records alone do not bind rationale, qualification or confidence.
             family_deps := family_deps || jsonb_build_array(jsonb_build_object(
                 'kind','assertion_projection','id',r.relation_id::text,'row',assertion));
+            -- Owner decision 7 of 2026-10-06: the relation, with its author's
+            -- rationale and qualification, only for a reader of its task's whole
+            -- pinned population, in both modes. Otherwise it is withheld whole.
+            family_deps := family_deps || memoriesql.relation_task_population_records_v1(
+                c.tenant_id,(SELECT ar.task_id FROM memoriesql.assessed_relations ar
+                    WHERE ar.tenant_id=c.tenant_id AND ar.relation_id=r.relation_id),
+                known,read_mode);
+            -- In owner mode the row also discloses retirement reasons, which the
+            -- retiring task's author wrote: each needs that task's population.
+            IF read_mode='owner' THEN
+                FOR retirement IN SELECT DISTINCT x.task_id FROM memoriesql.relation_retirements x
+                                  WHERE x.tenant_id=c.tenant_id AND x.retired_kind='assessed'
+                                    AND x.retired_relation_id=r.relation_id AND x.recorded_at<=known
+                                  ORDER BY x.task_id LOOP
+                    family_deps := family_deps || memoriesql.relation_task_population_records_v1(
+                        c.tenant_id,retirement.task_id,known,read_mode);
+                END LOOP;
+            END IF;
         EXCEPTION WHEN insufficient_privilege THEN
             withheld := withheld || r.relation_id;
             CONTINUE;

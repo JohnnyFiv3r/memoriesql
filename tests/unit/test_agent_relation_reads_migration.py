@@ -68,7 +68,9 @@ RESTATED = {
 
 
 def statement(text: str, create: str, name: str) -> str:
-    match = re.search(re.escape(f"{create} memoriesql.{name}(") + r".*?\$\$;", text, re.S)
+    match = re.search(
+        re.escape(f"{create} memoriesql.{name}(") + r".*?\$\$;", text, re.S
+    )
     assert match is not None, name
     return match.group(0)
 
@@ -76,12 +78,15 @@ def statement(text: str, create: str, name: str) -> str:
 def restated(name: str) -> str:
     """The installed statement of `name` with exactly its listed edits."""
     source, edits = RESTATED[name]
-    text = statement((ROOT / "migrations" / source).read_text(), "CREATE FUNCTION", name)
+    text = statement(
+        (ROOT / "migrations" / source).read_text(), "CREATE FUNCTION", name
+    )
     for old, new in edits:
         if text.count(old) != 1:
             raise AssertionError(f"{name}: edit does not apply once")
         text = text.replace(old, new)
     return text.replace("CREATE FUNCTION", "CREATE OR REPLACE FUNCTION", 1)
+
 
 # Every earlier kernel name delegates to one mode-threaded body.
 THREADED = {
@@ -122,10 +127,46 @@ class AgentRelationReadsMigration(unittest.TestCase):
         created = re.findall(r"^CREATE FUNCTION memoriesql\.([a-z_0-9]+)\(", SQL, re.M)
         self.assertEqual(
             sorted(created),
-            sorted([*THREADED.values(), "relation_read_source_authorized_v1"]),
+            sorted(
+                [
+                    *THREADED.values(),
+                    "relation_read_source_authorized_v1",
+                    # Owner decision 7 of 2026-10-06: a relation's task population.
+                    "relation_task_population_records_v1",
+                ]
+            ),
         )
         for name in created:
             self.assertIn(f"REVOKE ALL ON FUNCTION memoriesql.{name}(", SQL)
+
+    def test_a_relation_needs_its_whole_task_population(self) -> None:
+        # Owner decision 7 of 2026-10-06: the family block discloses a relation,
+        # with its author's text, only with its task's whole pinned population,
+        # in both modes, and in owner mode with each retiring task's too. Any
+        # failure is a 42501 inside the block, so the relation is withheld whole.
+        # The helper checks every pin exactly as pair coverage does.
+        population = body("prepare_relation_sql_population_v2", replaced=False)
+        block = population.split(
+            "EXCEPTION WHEN insufficient_privilege THEN\n            withheld"
+        )[0]
+        self.assertIn(
+            "memoriesql.relation_task_population_records_v1(\n"
+            "                c.tenant_id,(SELECT ar.task_id",
+            block,
+        )
+        self.assertIn(
+            "IF read_mode='owner' THEN\n                FOR retirement IN", block
+        )
+        helper = body("relation_task_population_records_v1", replaced=False)
+        self.assertIn(
+            "pin.authored_at>known OR NOT "
+            "memoriesql.current_context_bead_version_authorized(",
+            helper,
+        )
+        self.assertIn(
+            "memoriesql.relation_bead_records_v2(t,pin.bead_id,known,read_mode)", helper
+        )
+        self.assertEqual(helper.count("ERRCODE='42501'"), 2)
 
     def test_earlier_names_delegate_in_owner_mode(self) -> None:
         for old, new in THREADED.items():
