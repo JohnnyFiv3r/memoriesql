@@ -137,3 +137,30 @@ both 55P03 and 57014 in each of the three commands and checks that each becomes
 
 Migrations 0001–0039 keep their bytes. The executor's installed tests now run on
 schema 40.
+
+## Custody
+
+**Implementation linkage: ea-6-link-1 → `104d83f`.** The independent custodian
+recorded it at 2026-10-06T01:43:07Z. It is stored byte-identical in
+`../approvals/pr-05-custody-ea-6-link-1.json` (16,704 bytes, SHA-256
+`1277e530…`).
+
+- **Its determination.** No authority or evidence-policy amendment is
+  identified. The custody-bound implementation still changes: migration 0040
+  replaces the context cleanup mechanics, and source-authority commands gain a
+  distinct busy outcome. So the record supplies a narrow implementation link
+  under ea-6, keeping ea-5 and ea-4 as ancestry. No new semantic reconciliation
+  or replacement freeze is required.
+- **What it binds.** It binds this head `104d83f`, carrying #78 at `9f3aa77`.
+  It binds migration 0040 `09ce9ead…` and migration 0039 `ee846ac7…`
+  (unchanged), the migration inventory, the CLI, the source-authority adapter,
+  this document and the retained public-results document, all at `104d83f`.
+  Its previous linkage is ea-5-link-2 → `9f3aa77`.
+- **Its boundaries.** Authority commands keep the exclusive tenant fence while
+  reads hold it shared, and the 500 ms source-authority wait is not increased.
+  `source_authority_busy` is a failure reason, never a successful enrollment,
+  grant or revocation. An identical retry is permitted only once the earlier
+  transaction is conclusively settled; it adds no evaluation attempt and resets
+  no budget.
+- **Semantics only.** It is not runtime, security, workload or semantic-quality
+  certification, and not release readiness. It claims no combined head with #79.
