@@ -247,13 +247,25 @@ the same frame.
   that is withheld: a replacement in its chain, or a `derived_from` relation on
   its root lineage. Otherwise its state, `relation_replacements` row or root
   status would show that the withheld relation exists. The population drops
-  such families until nothing more is withheld.
+  such families until nothing more is withheld. This holds in both read modes:
+  under the owner's decision 5b (2026-10-05), owner mode is not permission to
+  bypass an evidence restriction. A raw-read holder whose authority does not
+  cover a relation's closure reads neither that relation nor any relation whose
+  records name it.
+- In owner mode, a relation-assessment task that recorded a relation withheld
+  from the reader discloses none of its pair coverage, which would otherwise
+  show that the task assessed the withheld relation (decision 5b).
 - `relation_events`, `relation_event_evidence` and `relation_pairs` stay
   owner-only. A query that references them gets
   `relation_history`/`owner_only`. "Owner" here means PR-03's own gate for
   every relation read, `source.raw.read`: in the shipped role model only
   `personal_owner` holds it, and a deployment that grants it to a service gives
   that service PR-03's raw-holder reads, as before migration 0039.
+- An agent's `head_token` hashes only what it may see, under the owner's
+  decision of 2026-10-05: the head manifest with the acceptance and its visible
+  corrections, and no events. So an owner-only governance event, such as a
+  confirm, moves the owner's token and never the agent's. The owner's token, and
+  the governed writes that compare it, are unchanged.
 - A caller without `source.read` that references a relation table gets
   `relation_tables`/`source_read_required`.
 - `source_raw_read_required` remains for frames from a schema-38 database and
@@ -453,8 +465,22 @@ and gates any agent-facing deployment (packet §2).
 Reply metadata sealed into the digest:
 
 - **Wire frame.** Lifecycle fields are null unless a relation projection was
-  used. Otherwise they are version 1 and the relation projector's own manifest
-  hash. Per-source watermarks are not computed.
+  used. Otherwise they are version 1 and a manifest hash of what the caller may
+  see. Per-source watermarks are not computed.
+- **Visible digests (owner decision 6, 2026-10-05).** The reply's
+  `snapshot_digest` and `projection_manifest_sha256` are built only from records
+  the caller may see, so they never change when inaccessible history changes.
+  - For a raw-read holder, that is its whole population, and both values are
+    the projector's full manifest hashes, unchanged.
+  - For any other caller (an AM-5 agent, or a caller without raw authority),
+    they hash the rows the caller receives: one entry per row, with its
+    relation, its unique key and the hash of its values, sorted. The private
+    evidence handles minted for each preparation are left out. The relation
+    digest covers the nine relation tables, and the snapshot digest all
+    fourteen.
+  - The complete protected dependency record stays internal: the result's
+    sealed body frame, its stored manifest and records, the witness and the
+    invocation keep the full digest. Binding and invalidation use only those.
 - **Coverage.** The query result is complete. Source capture, authorship,
   search readiness and discovery are all `unknown`, never claimed complete.
   Missing caller capabilities are listed as gaps.

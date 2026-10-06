@@ -133,6 +133,12 @@ class PreparedRelationPopulation:
     # with raw source authority, "agent" under AM-5. None means a database
     # before migration 0039, where relations still need raw source authority.
     relation_read_mode: str | None = None
+    # The caller-visible frame digests (owner decision 6): built only from
+    # records the caller may see, so they never change when inaccessible
+    # history changes. The full manifest above stays internal, for binding and
+    # invalidation. None only for populations never committed as a result.
+    visible_manifest_sha256: str | None = None
+    visible_relation_manifest_sha256: str | None = None
 
 
 def _time(value: str) -> datetime:
@@ -160,6 +166,84 @@ def _native(value: Any, pg_type: str, nullable: bool) -> Any:
     if pg_type == "text" and type(value) is str:
         return value
     raise RelationPopulationError("projection_mismatch")
+
+
+def _canonical(value: Any) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+
+
+def _plain(value: Any) -> Any:
+    if isinstance(value, UUID | Decimal):
+        return str(value)
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return value
+
+
+def _visible_manifest_sha256(
+    schemas: Mapping[str, SqlRelation],
+    native: Mapping[str, tuple[tuple[Any, ...], ...]],
+    names: tuple[str, ...],
+) -> str:
+    """The digest of the rows a caller actually receives (owner decision 6).
+
+    One entry per distinct disclosed row: its relation, its unique key and the
+    hash of its values, sorted. Private evidence references are handles minted
+    for each preparation, not disclosed content, so they are left out.
+    """
+    entries: set[tuple[str, str, str]] = set()
+    for name in names:
+        relation = "memory_v1." + name
+        columns = [c.name for c in schemas[relation].columns]
+        keyed = [
+            columns.index(k)
+            for k in schemas[relation].unique_keys[0]
+            if k != "evidence_ref"
+        ]
+        for row in native[relation]:
+            values = {
+                c: _plain(v) for c, v in zip(columns, row, strict=True) if c != "evidence_ref"
+            }
+            entries.add(
+                (
+                    relation,
+                    _canonical([_plain(row[i]) for i in keyed]),
+                    hashlib.sha256(_canonical(values).encode("ascii")).hexdigest(),
+                )
+            )
+    manifest = [
+        {"kind": kind, "id": key, "content_sha256": content}
+        for kind, key, content in sorted(entries)
+    ]
+    return hashlib.sha256(_canonical(manifest).encode("ascii")).hexdigest()
+
+
+def _visible_digests(
+    *,
+    revision: int,
+    raw_authority: bool,
+    read_mode: str | None,
+    digest: str,
+    relation_manifest: str | None,
+    schemas: Mapping[str, SqlRelation],
+    native: Mapping[str, tuple[tuple[Any, ...], ...]],
+    names: tuple[str, ...],
+) -> tuple[str, str | None]:
+    """The caller-visible frame digests for one population.
+
+    A raw-read holder may see every record its own population holds, so its
+    visible digests are the full ones, byte for byte. Any other caller, an AM-5
+    agent or a caller without raw authority, gets digests of the rows it
+    receives, never of records it cannot see. A revision-1 population is
+    relation-only and reaches no reply (the query service prepares revision 2),
+    so it keeps the full ones too.
+    """
+    if revision == 1 or (raw_authority and read_mode in {None, "owner"}):
+        return digest, relation_manifest
+    return (
+        _visible_manifest_sha256(schemas, native, names),
+        _visible_manifest_sha256(schemas, native, RELATIONS),
+    )
 
 
 def _prepare(
@@ -346,6 +430,16 @@ def _prepare(
     size = len(data.encode("utf-8")) + len(manifest) + 8192 + len(references) * 512
     if size > byte_budget:
         raise RelationPopulationError("budget_exhausted")
+    visible, visible_relations = _visible_digests(
+        revision=revision,
+        raw_authority=raw_authority,
+        read_mode=read_mode,
+        digest=digest,
+        relation_manifest=relation_manifest,
+        schemas=schemas,
+        native=native,
+        names=names,
+    )
     frame = raw["frame"]
     return PreparedRelationPopulation(
         _time(frame["known_at"]),
@@ -365,6 +459,8 @@ def _prepare(
         source_read_authority=source_authority,
         source_text_labels=labels,
         relation_read_mode=read_mode,
+        visible_manifest_sha256=visible,
+        visible_relation_manifest_sha256=visible_relations,
     )
 
 
