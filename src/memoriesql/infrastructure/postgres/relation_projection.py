@@ -20,14 +20,27 @@ def relation_projection_frame(
     *,
     credential_sha256: str,
     workspace_id: UUID,
+    statement_timeout_ms: int = 2500,
+    query_access: bool = False,
 ) -> Iterator[Connection[Any]]:
+    """`statement_timeout_ms` may carry an admitted operation's remaining budget
+    (at most its 30 s reservation); the default keeps the canonical 2.5 s.
+
+    `query_access` takes the workspace's query-access lock before the snapshot,
+    for calls that check a workspace cap (starting a run, admission, close,
+    recovery). Their snapshot then sees everything the previous lock holder
+    committed. A snapshot taken before the lock could not."""
     if connection.info.transaction_status != TransactionStatus.IDLE:
         raise RuntimeError("relation projection requires transaction ownership")
+    if type(statement_timeout_ms) is not int or not 1 <= statement_timeout_ms <= 30000:
+        raise ValueError("invalid statement timeout")
+    timeout = f"SET LOCAL statement_timeout='{statement_timeout_ms}ms'"
     key: int | None = None
+    access: int | None = None
     try:
         with connection.transaction():
             connection.execute("SET LOCAL lock_timeout='500ms'")
-            connection.execute("SET LOCAL statement_timeout='2500ms'")
+            connection.execute(timeout)
             connection.execute("SET LOCAL ROLE memoriesql_application")
             PostgresAuthorizationPort(connection).begin_context(
                 credential_sha256=credential_sha256,
@@ -42,10 +55,16 @@ def relation_projection_frame(
                 ).fetchone()
                 if row:
                     key = row[0]
+            if query_access:
+                held = connection.execute(
+                    "SELECT memoriesql.acquire_query_access_lock_v1()"
+                ).fetchone()
+                if held:
+                    access = held[0]
         with connection.transaction():
             connection.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
             connection.execute("SET LOCAL lock_timeout='500ms'")
-            connection.execute("SET LOCAL statement_timeout='2500ms'")
+            connection.execute(timeout)
             connection.execute("SET LOCAL ROLE memoriesql_application")
             PostgresAuthorizationPort(connection).begin_context(
                 credential_sha256=credential_sha256,
@@ -53,6 +72,9 @@ def relation_projection_frame(
             )
             yield connection
     finally:
+        if access is not None and not connection.closed:
+            with connection.transaction():
+                connection.execute("SELECT pg_advisory_unlock(%s)", (access,))
         if key is not None and not connection.closed:
             with connection.transaction():
                 connection.execute("SELECT pg_advisory_unlock_shared(%s)", (key,))

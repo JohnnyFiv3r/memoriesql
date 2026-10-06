@@ -20,6 +20,11 @@ from uuid import UUID, uuid4
 from psycopg import Connection
 from psycopg.pq import TransactionStatus
 
+from memoriesql.application.agent_sql_results import (
+    order_basis,
+    wire_coverage,
+    wire_frame,
+)
 from memoriesql.application.investigation_contracts import (
     QueryRequest,
     encode_result_scalar,
@@ -171,6 +176,35 @@ class InternalResultCandidate:
                 ),
             },
         }
+        if population.revision == 2:
+            # Revision 2 seals the exact disclosed metadata into the digest: the
+            # wire frame, coverage and order basis never change after commit.
+            if request.scope.view != population.view:
+                raise ValueError("internal result qualification unavailable")
+            relations = tuple(actual["derivation_program"]["relations"])
+            limited = any(s["operation"] == "limit" for s in witness_graph["stages"])
+            body["population_revision"] = 2
+            body["coverage"] = wire_coverage(
+                relations=relations,
+                limited=limited,
+                recursion=bool(request.recursion),
+                relation_raw_authority=population.relation_raw_authority,
+                source_read_authority=population.source_read_authority,
+                source_text_labels=population.source_text_labels,
+            )
+            body["wire_frame"] = wire_frame(
+                frame_ref=str(witness.frame_ref),
+                known_at=str(encode_result_scalar(population.known_at)),
+                snapshot_at=str(encode_result_scalar(population.snapshot_at)),
+                view=request.scope.view,
+                snapshot_digest=population.dependency_manifest_sha256,
+                relation_manifest_sha256=population.relation_manifest_sha256,
+                relations=relations,
+            )
+            body["order_basis"] = order_basis(
+                actual["derivation_program"]["tree"], [c.name for c in execution.columns]
+            )
+            body["total_rows"] = str(len(rows))
         dependencies = {
             # Lifecycle records have their own exact numeric encoding. Preserve
             # bytes rather than round-trip accepted values through JSON floats.
