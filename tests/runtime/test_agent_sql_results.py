@@ -1148,6 +1148,164 @@ class AgentSqlResults(unittest.TestCase):
             [],
         )
 
+    @staticmethod
+    def distinctive(values: list[Any]) -> set[str]:
+        """The values that identify a relation's records: identifiers, hashes
+        and authored text, never short enum words or numbers."""
+        found: set[str] = set()
+        for value in values:
+            text = str(value) if value is not None else ""
+            if len(text) >= 20 and not text.isdigit():
+                found.add(text)
+        return found
+
+    def test_withheld_and_blind_agents_read_no_relation_value_anywhere(self) -> None:
+        # PR-06's #73 host case 2 as an installed test (F3). An agent missing one
+        # closure member, and an agent without source.read, each read all nine
+        # relation tables, every column. Neither reply carries any value of the
+        # relation anywhere; withholding adds no gap the full-closure agent does
+        # not also get; reusing a result an agent has lost replies exactly as an
+        # unknown result does; and agents with the same readable scopes get the
+        # same frame digests.
+        caps = ["memory.inspect", "memory.query", "source.read"]
+        grant, agent = self.home_agent(caps)
+        relation = relation_agents.assessed_relation_for_agent(
+            self.db, self.fixture, self.paired_principal(grant)
+        )
+        rid = str(relation.relation_id)
+        owner_run = self.start()
+        owner = self.every_relation_row(owner_run)
+        self.close(owner_run)
+        mine = [r for r in owner["assessed_relations"][0] if r[0] == rid]
+        self.assertEqual(len(mine), 1)
+        task = mine[0][1]
+        relation_values: set[str] = set()
+        for table, (rows, _) in owner.items():
+            if table == "relation_types":
+                continue
+            for row in rows:
+                cells = [str(v) for v in row]
+                if rid in cells or task in cells:
+                    relation_values |= self.distinctive(row)
+        self.assertIn(rid, relation_values)
+
+        def own_reads(run: dict[str, Any], secret: str) -> str:
+            """What the caller may read on its own: its observation family."""
+            catalog = SqlCatalog.installed()
+            texts = []
+            for table in (
+                "observations",
+                "statements",
+                "statement_sources",
+                "source_units",
+            ):
+                name = "memory_v1." + table
+                columns = ",".join(
+                    "t." + c.name for c in catalog.relations[name].columns
+                )
+                _, reply = self.query(
+                    run, f"SELECT {columns} FROM {name} t", page_size=50, secret=secret
+                )
+                self.assertEqual(reply["outcome"], "available", reply)
+                texts.append(json.dumps(reply["page"]["rows"]))
+            return "".join(texts)
+
+        def gaps(seen: dict[str, tuple[list[list[Any]], str]]) -> dict[str, Any]:
+            return {
+                table: json.loads(reply)["result"]["coverage"]["gaps"]
+                for table, (_, reply) in seen.items()
+            }
+
+        full_run = self.start(agent)
+        full = self.every_relation_row(full_run, secret=agent)
+        self.assertEqual(
+            [r for r in full["assessed_relations"][0] if r[0] == rid][0], mine[0]
+        )
+        _, saved = self.query(
+            full_run,
+            self.RELATION_READS["assessed_relations"],
+            page_size=50,
+            secret=agent,
+        )
+        self.close(full_run, agent)
+        _, partial = self.pair_agent(relation.source_scope, caps, label="partial-f3")
+        _, blind = self.pair_agent_over(
+            [relation.source_scope, relation.remote_scope],
+            ["memory.inspect", "memory.query"],
+            label="blind-f3",
+        )
+        for name, secret in (("partial", partial), ("blind", blind)):
+            with self.subTest(caller=name):
+                run = self.start(secret)
+                seen = self.every_relation_row(run, secret=secret)
+                legitimate = own_reads(run, secret)
+                self.close(run, secret)
+                hidden = {v for v in relation_values if v not in legitimate}
+                self.assertIn(rid, hidden)
+                for table, (rows, reply) in seen.items():
+                    if table != "relation_types":
+                        self.assertEqual(rows, [], table)
+                    for value in hidden:
+                        self.assertNotIn(value, reply, table)
+                if name == "partial":
+                    # Withholding adds no gap the full-closure agent lacks.
+                    self.assertEqual(gaps(seen), gaps(full))
+                else:
+                    for table, found in gaps(seen).items():
+                        self.assertIn(
+                            {
+                                "facet": "relation_tables",
+                                "reason": "source_read_required",
+                            },
+                            found,
+                            table,
+                        )
+        # Same readable scopes, same frame: the same frame digests.
+        _, twin = self.pair_agent_over(
+            [relation.source_scope, relation.remote_scope], caps, label="twin-f3"
+        )
+        first_run = self.start(agent)
+        _, first = self.query(
+            first_run,
+            self.RELATION_READS["assessed_relations"],
+            page_size=50,
+            secret=agent,
+        )
+        self.close(first_run, agent)
+        twin_run = self.start(twin)
+        _, second = self.query(
+            twin_run,
+            self.RELATION_READS["assessed_relations"],
+            page_size=50,
+            secret=twin,
+            known_at=first["result"]["frame"]["known_at"],
+        )
+        self.close(twin_run, twin)
+        for field in ("snapshot_digest", "projection_manifest_sha256"):
+            self.assertEqual(
+                second["result"]["frame"][field], first["result"]["frame"][field], field
+            )
+        # A lost result's reuse refusal is byte-identical to an unknown result's,
+        # apart from the per-request fields.
+        relation_agents.revoke_member(self.db, self.fixture, relation)
+        run = self.start(agent)
+        lost = self.reuse(run, saved["result"], page_size=50, secret=agent)
+        unknown = self.reuse(
+            run,
+            {"result_id": str(uuid4()), "content_digest": "0" * 64},
+            page_size=50,
+            secret=agent,
+        )
+        self.close(run, agent)
+        per_request = {"step_key", "receipt_ref", "access_receipt_ref", "remaining"}
+
+        def shape(reply: dict[str, Any]) -> dict[str, Any]:
+            return {k: v for k, v in reply.items() if k not in per_request}
+
+        self.assertEqual(lost["outcome"], "unavailable", lost)
+        self.assertEqual(shape(lost), shape(unknown))
+        self.assertEqual(sorted(lost), sorted(unknown))
+
     def test_agent_relation_lifecycle_matches_the_owner_frame_by_frame(self) -> None:
         grant, agent = self.home_agent(
             ["memory.inspect", "memory.query", "source.read"]
@@ -1780,6 +1938,25 @@ class AgentSqlResults(unittest.TestCase):
             self.assertEqual(
                 after["wire_frame"][field], before["wire_frame"][field], field
             )
+
+    def test_an_agents_saved_result_survives_history_it_cannot_see(self) -> None:
+        # The owner's refinement (2026-10-06): a reused result is re-authorized
+        # for the reusing caller, and hidden history never decides what it is
+        # served. An owner-only confirm on R's root lineage changes no row the
+        # agent receives, so the agent's saved result stays reusable.
+        agent, confirm = self.hidden_history()
+        run = self.start(agent)
+        _, reply = self.query(
+            run, self.HIDDEN_HISTORY_QUERY, page_size=50, secret=agent
+        )
+        self.assertEqual(reply["outcome"], "available", reply)
+        self.close(run, agent)
+        confirm()
+        later = self.start(agent)
+        again = self.reuse(later, reply["result"], page_size=50, secret=agent)
+        self.close(later, agent)
+        self.assertEqual(again["outcome"], "available", again)
+        self.assertEqual(again["page"]["rows"], reply["page"]["rows"])
 
     def test_an_agents_head_token_ignores_history_it_cannot_see(self) -> None:
         # The owner's decision of 2026-10-05: a caller that cannot read
