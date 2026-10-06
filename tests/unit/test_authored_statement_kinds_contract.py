@@ -14,8 +14,8 @@ from pydantic import ValidationError
 from memoriesql.application.canonical_transactions import StatementKind
 from memoriesql.application.local_entity_mentions import (
     AUTHORED_MENTION_TASK,
-    CORRECTION_IN_SOURCE,
-    EVERY_STATEMENT_RENDERED,
+    CORRECTION_WITHIN_NOTE,
+    EVERY_CURRENT_STATEMENT_RENDERED,
     MENTION_EXECUTION_TASK,
     AuthoredMentionOutput,
     AuthoredMentionStep,
@@ -58,18 +58,62 @@ def output(**statement: Any) -> dict[str, Any]:
     }
 
 
+def note(*statements: dict[str, Any], rendered: list[int]) -> dict[str, Any]:
+    """An output whose statements cite the note's unit; `rendered` indexes them."""
+    data = output()
+    annotation = data["annotations"][0]
+    unit = annotation["source_unit_id"]
+    drafts = []
+    for statement in statements:
+        drafts.append(
+            {
+                "statement_id": str(uuid.uuid4()),
+                "evidence": [{"source_unit_id": unit, "content_hash": HASH}],
+                "model_run_ref": "orchard.run",
+            }
+            | statement
+        )
+    for draft in drafts:
+        target = draft.get("supersedes_statement_id")
+        if isinstance(target, int):
+            draft["supersedes_statement_id"] = drafts[target]["statement_id"]
+    clause = {
+        "text": "Fictional note.",
+        "statement_ids": [drafts[i]["statement_id"] for i in rendered],
+    }
+    annotation["statements"] = drafts
+    annotation["render"] = {"title": clause, "summary": [clause]}
+    return data
+
+
+def earlier(text: str = "Alex first counted four fictional trees.") -> dict[str, Any]:
+    return {"statement_kind": "observation", "statement_text": text}
+
+
+def correction(
+    target: int, reason: str = "Alex corrected the count."
+) -> dict[str, Any]:
+    return {
+        "statement_kind": "correction",
+        "statement_text": "Alex says there are five fictional trees.",
+        "supersedes_statement_id": target,
+        "correction_reason": reason,
+    }
+
+
 def offered(model: Any) -> list[str]:
     return sorted(set(KINDS.findall(json.dumps(model.model_json_schema()))))
 
 
 class AuthoredStatementKindsContract(unittest.TestCase):
-    def test_revision_7_offers_only_the_kinds_a_new_note_can_carry(self) -> None:
+    def test_revision_7_offers_a_correction_within_its_note(self) -> None:
         self.assertEqual(
-            offered(AuthoredMentionStep), ["context", "observation", "qualification"]
+            offered(AuthoredMentionStep),
+            ["context", "correction", "observation", "qualification"],
         )
         schema = json.dumps(AuthoredMentionStep.model_json_schema())
-        self.assertIn(CORRECTION_IN_SOURCE, schema)
-        self.assertIn(EVERY_STATEMENT_RENDERED, schema)
+        self.assertIn(CORRECTION_WITHIN_NOTE, schema)
+        self.assertIn(EVERY_CURRENT_STATEMENT_RENDERED, schema)
         self.assertEqual(AUTHORED_MENTION_TASK.contract_revision, 7)
         self.assertEqual(
             AUTHORED_MENTION_TASK.output_contract.reference.contract_id,
@@ -77,25 +121,56 @@ class AuthoredStatementKindsContract(unittest.TestCase):
         )
         self.assertEqual(AUTHORED_MENTION_TASK.output_contract.reference.revision, 2)
 
-    def test_the_correction_kind_is_refused_at_the_schema(self) -> None:
-        AuthoredMentionOutput.model_validate(output())
+    def test_a_correction_supersedes_an_earlier_statement_of_its_note(self) -> None:
+        # The earlier statement keeps the prior meaning; the render covers the
+        # correction, and a chain of corrections renders only the last.
         AuthoredMentionOutput.model_validate(
-            output(statement_kind="observation", statement_text="Now five.")
+            note(earlier(), correction(0), rendered=[1])
         )
-        with self.assertRaises(ValidationError) as refused:
-            AuthoredMentionOutput.model_validate(output(statement_kind="correction"))
-        # Refused as a value the schema never offers, before the canonical
-        # supersession rule could apply.
-        errors = refused.exception.errors()
-        self.assertIn("enum", {error["type"] for error in errors})
-        self.assertFalse(any("supersession" in error["msg"] for error in errors))
-        with self.assertRaises(ValidationError):
-            AuthoredMentionOutput.model_validate(
-                output(
-                    statement_kind="observation",
-                    supersedes_statement_id=str(uuid.uuid4()),
-                )
-            )
+        AuthoredMentionOutput.model_validate(
+            note(earlier(), correction(0), correction(1, "Again."), rendered=[2])
+        )
+        refused = {
+            "a later target": note(
+                earlier(), correction(2), earlier("x"), rendered=[0, 1]
+            ),
+            "a target outside the note": note(
+                earlier(),
+                correction(0) | {"supersedes_statement_id": str(uuid.uuid4())},
+                rendered=[0, 1],
+            ),
+            "two corrections of one statement": note(
+                earlier(), correction(0), correction(0, "Twice."), rendered=[1, 2]
+            ),
+            "the superseded statement rendered": note(
+                earlier(), correction(0), rendered=[0, 1]
+            ),
+            "a superseded statement omitted": note(
+                earlier(), correction(0), rendered=[1]
+            ),
+            "no reason": note(
+                earlier(), correction(0) | {"correction_reason": None}, rendered=[1]
+            ),
+            "a blank reason": note(earlier(), correction(0, "   "), rendered=[1]),
+            "supersession on an observation": note(
+                earlier(),
+                earlier("y") | {"supersedes_statement_id": 0},
+                rendered=[1],
+            ),
+        }
+        refused["a superseded statement omitted"]["annotations"][0]["render"][
+            "omissions"
+        ] = [
+            {
+                "statement_id": refused["a superseded statement omitted"][
+                    "annotations"
+                ][0]["statements"][0]["statement_id"],
+                "reason": "Superseded.",
+            }
+        ]
+        for label, data in refused.items():
+            with self.subTest(label), self.assertRaises(ValidationError):
+                AuthoredMentionOutput.model_validate(data)
 
     def test_revision_4_and_stored_history_are_unchanged(self) -> None:
         # Revision 4 keeps its pinned contract, including the kind it offers but

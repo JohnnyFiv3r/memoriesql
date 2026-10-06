@@ -35,6 +35,45 @@ R4_OUTPUT = "0baecb82f0993a29dbc6c1afb6e41a5f3b83b8ebfe1f70315d87b5a7672d8e8c"
 R6_OUTPUT = "7873968a84f6e7279040e45045a4948068c0cde6fcfdb68b417698ad330e0cfd"
 APPLY_V5 = "'complete_input.apply.v4','complete_input.apply.v5'"
 APPLY_V6 = APPLY_V5 + ",'complete_input.apply.v6'"
+STATEMENTS = "jsonb_array_elements(requested_command#>'{payload,annotations,0,statements}')"
+CONTEXT_AUTHORIZED = (
+    "   FOREACH source IN ARRAY s.context_source_ids LOOP\n"
+    "    PERFORM memoriesql.revisiting_source_authorize(source); sources:=array_append(sources,source);\n"
+    "   END LOOP;\n"
+)
+CONTEXT_AUTHORIZED_BY_UNIT = (
+    "   FOREACH source IN ARRAY s.context_source_ids LOOP\n"
+    "    -- A context source is a unit of the statement's own evidence. Authorize\n"
+    "    -- its event's source object, as evidence is; missing or unreadable reads\n"
+    "    -- exactly as an unknown note.\n"
+    "    SELECT e.source_object_id INTO source FROM memoriesql.source_units cu\n"
+    "     JOIN memoriesql.source_events e ON e.tenant_id=cu.tenant_id AND e.event_id=cu.event_id\n"
+    "     WHERE cu.tenant_id=s.tenant_id AND cu.source_unit_id=source;\n"
+    "    IF NOT FOUND THEN RETURN unavailable; END IF;\n"
+    "    PERFORM memoriesql.revisiting_source_authorize(source); sources:=array_append(sources,source);\n"
+    "   END LOOP;\n"
+)
+CORRECTIONS_REFUSED = (
+    "        OR EXISTS(SELECT 1 FROM " + STATEMENTS + " q WHERE q->>'statement_kind'='correction')\n"
+    "    ) THEN RAISE EXCEPTION 'complete_input_exposure_required' USING ERRCODE='42501'; END IF;\n"
+)
+CORRECTIONS_REFUSED_BEFORE_8 = (
+    "        OR (requested_command->>'contract_version'<>'8' AND EXISTS(SELECT 1 FROM "
+    + STATEMENTS + " q WHERE q->>'statement_kind'='correction'))\n"
+    "    ) THEN RAISE EXCEPTION 'complete_input_exposure_required' USING ERRCODE='42501'; END IF;\n"
+)
+CORRECTION_TARGETS = (
+    "    -- Revision 7 (apply version 8): a correction supersedes an earlier\n"
+    "    -- statement of the same note, and a statement has at most one correction.\n"
+    "    IF requested_command->>'contract_version'='8' AND EXISTS(\n"
+    "        SELECT 1 FROM " + STATEMENTS + " WITH ORDINALITY q(s,i)\n"
+    "        WHERE s->>'statement_kind'='correction' AND (\n"
+    "            NOT EXISTS(SELECT 1 FROM " + STATEMENTS + " WITH ORDINALITY p(t,j)\n"
+    "                WHERE j<i AND t->>'statement_id'=s->>'supersedes_statement_id')\n"
+    "            OR (SELECT count(*) FROM " + STATEMENTS + " u(v)\n"
+    "                WHERE v->>'supersedes_statement_id'=s->>'supersedes_statement_id')>1)\n"
+    "    ) THEN RAISE EXCEPTION 'invalid_correction_target' USING ERRCODE='22023'; END IF;\n"
+)
 
 # Function: (its latest installed source, its name in 0041, the edits).
 # Each edit is (installed text, 0041 text, occurrences).
@@ -188,6 +227,9 @@ RESTATED: dict[str, tuple[str, str, tuple[tuple[str, str, int], ...]]] = {
                 " WHEN requested_command->>'contract_version'='7' THEN 7",
                 1,
             ),
+            # Revision 7 only: a correction supersedes an earlier statement of
+            # the same note, at most once each (the existing statement write).
+            (CORRECTIONS_REFUSED, CORRECTIONS_REFUSED_BEFORE_8 + CORRECTION_TARGETS, 1),
         ),
     ),
     "record_source_delivery_v1": (
@@ -228,6 +270,10 @@ RESTATED: dict[str, tuple[str, str, tuple[tuple[str, str, int], ...]]] = {
                 "     (r.task_contract_version=7 AND ir.operation_kind='complete_input.apply.v6')) THEN",
                 1,
             ),
+            # A context source is a unit of the statement's own evidence:
+            # authorize its event's source object, as evidence is. Before, the
+            # unit ID was read as a source object, so the note was unavailable.
+            (CONTEXT_AUTHORIZED, CONTEXT_AUTHORIZED_BY_UNIT, 1),
         ),
     ),
 }

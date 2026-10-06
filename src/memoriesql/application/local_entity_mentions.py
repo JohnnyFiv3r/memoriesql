@@ -4,7 +4,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import replace
 from enum import StrEnum
-from typing import Literal, cast
+from typing import Literal, Self, cast
 from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
@@ -148,18 +148,21 @@ class ApplyLocalMentions(ApplyCompleteInput):
 
 # Revision 7. Revision 4's response schema offers the statement kind
 # `correction`, but no apply path accepts it for a new note, so an author that
-# chose it lost the note. Revision 7 offers only the kinds a new note can carry
-# and states the render coverage rule. Inputs, apply and render semantics are
-# revision 4's; superseding an earlier note stays the governed correction
-# command.
+# chose it lost the note. In revision 7 a correction supersedes an earlier
+# statement of the same note, which keeps the prior meaning, and the render
+# covers exactly the statements no correction supersedes. Inputs and render
+# semantics are otherwise revision 4's.
 
-CORRECTION_IN_SOURCE = (
-    "A correction heard in the source is an observation of what is now said to "
-    "be true, with the earlier belief as context."
+CORRECTION_WITHIN_NOTE = (
+    "A correction of something this note states supersedes that earlier "
+    "statement: it names the statement in supersedes_statement_id and gives the "
+    "reason in correction_reason. The superseded statement keeps the prior "
+    "meaning."
 )
-EVERY_STATEMENT_RENDERED = (
-    "Every authored statement appears in the note's rendered text or in its "
-    "omissions."
+EVERY_CURRENT_STATEMENT_RENDERED = (
+    "Every statement that no correction supersedes appears in the note's "
+    "rendered text or in its omissions, and a superseded statement appears in "
+    "neither."
 )
 
 
@@ -169,24 +172,76 @@ class AuthoredStatementKind(StrEnum):
     OBSERVATION = "observation"
     CONTEXT = "context"
     QUALIFICATION = "qualification"
+    CORRECTION = "correction"
 
 
 class AuthoredStatementDraft(SemanticStatementDraft):
     statement_kind: AuthoredStatementKind = Field(  # type: ignore[assignment]
-        description=CORRECTION_IN_SOURCE
+        description=CORRECTION_WITHIN_NOTE
     )
-    # Kept as always-null keys so the canonical statement shape is revision 4's.
-    supersedes_statement_id: None = None
-    correction_reason: None = None
+
+    @model_validator(mode="after")
+    def nonblank_correction_reason(self) -> Self:
+        if self.correction_reason is not None and not self.correction_reason.strip():
+            raise ValueError("a correction reason must not be blank")
+        return self
 
 
 class AuthoredMentionBeadDraft(MentionBeadDraft):
-    statements: tuple[AuthoredStatementDraft, ...] = Field(
-        min_length=1, max_length=64
-    )
-    render: AuthoredBeadRender = Field(
-        description=EVERY_STATEMENT_RENDERED
-    )
+    statements: tuple[AuthoredStatementDraft, ...] = Field(min_length=1, max_length=64)
+    render: AuthoredBeadRender = Field(description=EVERY_CURRENT_STATEMENT_RENDERED)
+
+    @model_validator(mode="after")
+    def reject_within_bead_corrections(self) -> Self:
+        # Replaces InitialBeadDraft's refusal: a correction supersedes an
+        # earlier statement of this note, and a statement has at most one.
+        earlier: set[UUID] = set()
+        superseded: set[UUID] = set()
+        for statement in self.statements:
+            target = statement.supersedes_statement_id
+            if target is not None:
+                if target not in earlier:
+                    raise ValueError(
+                        "a correction supersedes an earlier statement of its note"
+                    )
+                if target in superseded:
+                    raise ValueError("a statement has at most one correction")
+                superseded.add(target)
+            earlier.add(statement.statement_id)
+        return self
+
+    @model_validator(mode="after")
+    def validate_initial_semantics(self) -> Self:
+        # Replaces BeadAnnotationBundle's rule: the render classifies exactly
+        # the statements no correction supersedes, as the database requires.
+        ids = [statement.statement_id for statement in self.statements]
+        if len(ids) != len(set(ids)):
+            raise ValueError("statement IDs must be unique within a bead bundle")
+        superseded = {
+            statement.supersedes_statement_id
+            for statement in self.statements
+            if statement.supersedes_statement_id is not None
+        }
+        if self.render.classified_statement_ids != set(ids) - superseded:
+            raise ValueError(
+                "the render classifies exactly the statements no correction supersedes"
+            )
+        observations = [
+            statement
+            for statement in self.statements
+            if statement.statement_kind == AuthoredStatementKind.OBSERVATION
+        ]
+        if not observations:
+            raise ValueError("initial bead semantics require an observation")
+        if any(
+            self.source_unit_id
+            not in {evidence.source_unit_id for evidence in statement.evidence}
+            for statement in observations
+        ):
+            raise ValueError(
+                "initial observations require evidence from their own source unit"
+            )
+        return self
 
 
 class AuthoredMentionOutput(MentionExecutionOutput):

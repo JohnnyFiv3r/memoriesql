@@ -1907,13 +1907,13 @@
       "version": "1"
     },
     {
-      "canonical_payload_sha256": "af98152b54b736f8ec2b0ab7f827edaa7700e4d9015fcd370fa27efb25b4493f",
+      "canonical_payload_sha256": "b8a8e0f8f626bdfb54e0ac9d3cf1a6f67754e74fb52f7ed2e8c1a53dbe6cbe11",
       "catalog": "json_schema",
       "classification": "proposed_open_core",
       "id": "memoriesql.local-entity-mentions.v2",
       "package_disposition": "include",
       "path": "contracts/records/memoriesql-local-entity-mentions-v2.json",
-      "public_sha256": "e98e865d9da755805c5c84a431be784d6f8d0d1ac9ad3de16e28d7eaee8341f5",
+      "public_sha256": "1a9fa7c3c3d71136c78d3c09ba568493229c47dc78ab8d8d45ea55fb67533bd7",
       "reason": "Public-authored revision-7 local mention contracts that offer authors only the statement kinds a new note can carry.",
       "version": "2"
     },

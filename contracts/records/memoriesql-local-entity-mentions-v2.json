@@ -2,8 +2,8 @@
   "contract": {
     "empty_set": "Required mentions array may be empty. Accepted bead version's own task receipt (author-complete-unit revision 7) proves capability; legacy or unavailable results do not imply empty.",
     "evidence": "Enclosing immutable bead/source unit and original task/package pin; no fabricated character offsets or statement links.",
-    "registry_hash": "semantic-tasks-v1:5b00443fe1872092d8bac8f20eab7ffd9412e53cf541471331e4aef5f7d51b0c",
-    "render_coverage": "Every authored statement appears in the note's rendered text or in its omissions.",
+    "registry_hash": "semantic-tasks-v1:3947b54e1de17faf103093bbb68854e0643c5a7ea48a64429eef460b75f64de8",
+    "render_coverage": "Every statement that no correction supersedes appears in the note's rendered text or in its omissions, and a superseded statement appears in neither.",
     "schemas": {
       "ActivateAuthoredMentions": {
         "$defs": {
@@ -222,7 +222,7 @@
               },
               "render": {
                 "$ref": "#/$defs/AuthoredBeadRender",
-                "description": "Every authored statement appears in the note's rendered text or in its omissions."
+                "description": "Every statement that no correction supersedes appears in the note's rendered text or in its omissions, and a superseded statement appears in neither."
               },
               "source_unit_id": {
                 "format": "uuid",
@@ -335,9 +335,18 @@
                 "type": "array"
               },
               "correction_reason": {
+                "anyOf": [
+                  {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
                 "default": null,
-                "title": "Correction Reason",
-                "type": "null"
+                "title": "Correction Reason"
               },
               "evidence": {
                 "items": {
@@ -361,7 +370,7 @@
               },
               "statement_kind": {
                 "$ref": "#/$defs/AuthoredStatementKind",
-                "description": "A correction heard in the source is an observation of what is now said to be true, with the earlier belief as context."
+                "description": "A correction of something this note states supersedes that earlier statement: it names the statement in supersedes_statement_id and gives the reason in correction_reason. The superseded statement keeps the prior meaning."
               },
               "statement_text": {
                 "maxLength": 8192,
@@ -370,9 +379,17 @@
                 "type": "string"
               },
               "supersedes_statement_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
                 "default": null,
-                "title": "Supersedes Statement Id",
-                "type": "null"
+                "title": "Supersedes Statement Id"
               }
             },
             "required": [
@@ -390,7 +407,8 @@
             "enum": [
               "observation",
               "context",
-              "qualification"
+              "qualification",
+              "correction"
             ],
             "title": "AuthoredStatementKind",
             "type": "string"
@@ -822,9 +840,18 @@
                 "type": "array"
               },
               "correction_reason": {
+                "anyOf": [
+                  {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
                 "default": null,
-                "title": "Correction Reason",
-                "type": "null"
+                "title": "Correction Reason"
               },
               "evidence": {
                 "items": {
@@ -848,7 +875,7 @@
               },
               "statement_kind": {
                 "$ref": "#/$defs/AuthoredStatementKind",
-                "description": "A correction heard in the source is an observation of what is now said to be true, with the earlier belief as context."
+                "description": "A correction of something this note states supersedes that earlier statement: it names the statement in supersedes_statement_id and gives the reason in correction_reason. The superseded statement keeps the prior meaning."
               },
               "statement_text": {
                 "maxLength": 8192,
@@ -857,9 +884,17 @@
                 "type": "string"
               },
               "supersedes_statement_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
                 "default": null,
-                "title": "Supersedes Statement Id",
-                "type": "null"
+                "title": "Supersedes Statement Id"
               }
             },
             "required": [
@@ -877,7 +912,8 @@
             "enum": [
               "observation",
               "context",
-              "qualification"
+              "qualification",
+              "correction"
             ],
             "title": "AuthoredStatementKind",
             "type": "string"
@@ -992,7 +1028,7 @@
           },
           "render": {
             "$ref": "#/$defs/AuthoredBeadRender",
-            "description": "Every authored statement appears in the note's rendered text or in its omissions."
+            "description": "Every statement that no correction supersedes appears in the note's rendered text or in its omissions, and a superseded statement appears in neither."
           },
           "source_unit_id": {
             "format": "uuid",
@@ -1786,7 +1822,7 @@
               },
               "render": {
                 "$ref": "#/$defs/AuthoredBeadRender",
-                "description": "Every authored statement appears in the note's rendered text or in its omissions."
+                "description": "Every statement that no correction supersedes appears in the note's rendered text or in its omissions, and a superseded statement appears in neither."
               },
               "source_unit_id": {
                 "format": "uuid",
@@ -1879,9 +1915,18 @@
                 "type": "array"
               },
               "correction_reason": {
+                "anyOf": [
+                  {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
                 "default": null,
-                "title": "Correction Reason",
-                "type": "null"
+                "title": "Correction Reason"
               },
               "evidence": {
                 "items": {
@@ -1905,7 +1950,7 @@
               },
               "statement_kind": {
                 "$ref": "#/$defs/AuthoredStatementKind",
-                "description": "A correction heard in the source is an observation of what is now said to be true, with the earlier belief as context."
+                "description": "A correction of something this note states supersedes that earlier statement: it names the statement in supersedes_statement_id and gives the reason in correction_reason. The superseded statement keeps the prior meaning."
               },
               "statement_text": {
                 "maxLength": 8192,
@@ -1914,9 +1959,17 @@
                 "type": "string"
               },
               "supersedes_statement_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
                 "default": null,
-                "title": "Supersedes Statement Id",
-                "type": "null"
+                "title": "Supersedes Statement Id"
               }
             },
             "required": [
@@ -1934,7 +1987,8 @@
             "enum": [
               "observation",
               "context",
-              "qualification"
+              "qualification",
+              "correction"
             ],
             "title": "AuthoredStatementKind",
             "type": "string"
@@ -2112,7 +2166,7 @@
               },
               "render": {
                 "$ref": "#/$defs/AuthoredBeadRender",
-                "description": "Every authored statement appears in the note's rendered text or in its omissions."
+                "description": "Every statement that no correction supersedes appears in the note's rendered text or in its omissions, and a superseded statement appears in neither."
               },
               "source_unit_id": {
                 "format": "uuid",
@@ -2225,9 +2279,18 @@
                 "type": "array"
               },
               "correction_reason": {
+                "anyOf": [
+                  {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
                 "default": null,
-                "title": "Correction Reason",
-                "type": "null"
+                "title": "Correction Reason"
               },
               "evidence": {
                 "items": {
@@ -2251,7 +2314,7 @@
               },
               "statement_kind": {
                 "$ref": "#/$defs/AuthoredStatementKind",
-                "description": "A correction heard in the source is an observation of what is now said to be true, with the earlier belief as context."
+                "description": "A correction of something this note states supersedes that earlier statement: it names the statement in supersedes_statement_id and gives the reason in correction_reason. The superseded statement keeps the prior meaning."
               },
               "statement_text": {
                 "maxLength": 8192,
@@ -2260,9 +2323,17 @@
                 "type": "string"
               },
               "supersedes_statement_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
                 "default": null,
-                "title": "Supersedes Statement Id",
-                "type": "null"
+                "title": "Supersedes Statement Id"
               }
             },
             "required": [
@@ -2280,7 +2351,8 @@
             "enum": [
               "observation",
               "context",
-              "qualification"
+              "qualification",
+              "correction"
             ],
             "title": "AuthoredStatementKind",
             "type": "string"
@@ -2480,7 +2552,8 @@
             "enum": [
               "observation",
               "context",
-              "qualification"
+              "qualification",
+              "correction"
             ],
             "title": "AuthoredStatementKind",
             "type": "string"
@@ -2519,9 +2592,18 @@
             "type": "array"
           },
           "correction_reason": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "default": null,
-            "title": "Correction Reason",
-            "type": "null"
+            "title": "Correction Reason"
           },
           "evidence": {
             "items": {
@@ -2545,7 +2627,7 @@
           },
           "statement_kind": {
             "$ref": "#/$defs/AuthoredStatementKind",
-            "description": "A correction heard in the source is an observation of what is now said to be true, with the earlier belief as context."
+            "description": "A correction of something this note states supersedes that earlier statement: it names the statement in supersedes_statement_id and gives the reason in correction_reason. The superseded statement keeps the prior meaning."
           },
           "statement_text": {
             "maxLength": 8192,
@@ -2554,9 +2636,17 @@
             "type": "string"
           },
           "supersedes_statement_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "default": null,
-            "title": "Supersedes Statement Id",
-            "type": "null"
+            "title": "Supersedes Statement Id"
           }
         },
         "required": [
@@ -2615,8 +2705,8 @@
         "type": "object"
       }
     },
-    "statement_kinds": "observation, context and qualification. A correction heard in the source is an observation of what is now said to be true, with the earlier belief as context. Superseding an earlier note is the governed correction command, never an authored statement.",
-    "task_contract_hash": "7ece3a75f9677667e0ef3f003c71ecfe131603cbc39fe94bb2ec2603daa3495e",
+    "statement_kinds": "observation, context, qualification and correction. A correction of something this note states supersedes that earlier statement: it names the statement in supersedes_statement_id and gives the reason in correction_reason. The superseded statement keeps the prior meaning. A correction never targets a statement outside its note.",
+    "task_contract_hash": "c3b0a5a0d83767674b299a30bbe9459ff3d20255b224fe89d9399636195547cc",
     "task_definition": {
       "allowed_delegate_keys": [],
       "allowed_tool_keys": [],
@@ -3401,7 +3491,7 @@
                 },
                 "render": {
                   "$ref": "#/$defs/AuthoredBeadRender",
-                  "description": "Every authored statement appears in the note's rendered text or in its omissions."
+                  "description": "Every statement that no correction supersedes appears in the note's rendered text or in its omissions, and a superseded statement appears in neither."
                 },
                 "source_unit_id": {
                   "format": "uuid",
@@ -3494,9 +3584,18 @@
                   "type": "array"
                 },
                 "correction_reason": {
+                  "anyOf": [
+                    {
+                      "maxLength": 1024,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
                   "default": null,
-                  "title": "Correction Reason",
-                  "type": "null"
+                  "title": "Correction Reason"
                 },
                 "evidence": {
                   "items": {
@@ -3520,7 +3619,7 @@
                 },
                 "statement_kind": {
                   "$ref": "#/$defs/AuthoredStatementKind",
-                  "description": "A correction heard in the source is an observation of what is now said to be true, with the earlier belief as context."
+                  "description": "A correction of something this note states supersedes that earlier statement: it names the statement in supersedes_statement_id and gives the reason in correction_reason. The superseded statement keeps the prior meaning."
                 },
                 "statement_text": {
                   "maxLength": 8192,
@@ -3529,9 +3628,17 @@
                   "type": "string"
                 },
                 "supersedes_statement_id": {
+                  "anyOf": [
+                    {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
                   "default": null,
-                  "title": "Supersedes Statement Id",
-                  "type": "null"
+                  "title": "Supersedes Statement Id"
                 }
               },
               "required": [
@@ -3549,7 +3656,8 @@
               "enum": [
                 "observation",
                 "context",
-                "qualification"
+                "qualification",
+                "correction"
               ],
               "title": "AuthoredStatementKind",
               "type": "string"
@@ -3641,7 +3749,7 @@
           "type": "object"
         },
         "revision": 2,
-        "schema_hash": "360953819cc83cc29ccaaa629e4d505aab2e289c0618dd6e42f0a7cc9213c638"
+        "schema_hash": "700d0b9656e4a7e6a1c4d5547b5a23e77c16762018613d4c237672ed176158d0"
       },
       "owning_module": "memoriesql.kernel",
       "run_budget": {
@@ -3666,6 +3774,6 @@
   "id": "memoriesql.local-entity-mentions.v2",
   "kind": "json_schema",
   "status": "available",
-  "summary": "Atomic authored local mentions through revision-7 source revisiting, whose authors offer only the statement kinds a new note can carry; no global identity resolution.",
+  "summary": "Atomic authored local mentions through revision-7 source revisiting, in which a correction supersedes an earlier statement of the same note; no global identity resolution.",
   "version": "2"
 }

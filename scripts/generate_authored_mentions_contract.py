@@ -27,14 +27,14 @@ def record() -> dict[str, object]:
     return dict(
         id="memoriesql.local-entity-mentions.v2", version="2", kind="json_schema",
         status="available",
-        summary="Atomic authored local mentions through revision-7 source revisiting, whose authors offer only the statement kinds a new note can carry; no global identity resolution.",
+        summary="Atomic authored local mentions through revision-7 source revisiting, in which a correction supersedes an earlier statement of the same note; no global identity resolution.",
         contract=dict(
             schemas={m.__name__: m.model_json_schema() for m in models},
             task_definition=lm.AUTHORED_MENTION_TASK.canonical_payload(),
             task_contract_hash=lm.AUTHORED_MENTION_TASK.contract_hash,
             registry_hash=registry.registry_hash,
-            statement_kinds="observation, context and qualification. " + lm.CORRECTION_IN_SOURCE + " Superseding an earlier note is the governed correction command, never an authored statement.",
-            render_coverage=lm.EVERY_STATEMENT_RENDERED,
+            statement_kinds="observation, context, qualification and correction. " + lm.CORRECTION_WITHIN_NOTE + " A correction never targets a statement outside its note.",
+            render_coverage=lm.EVERY_CURRENT_STATEMENT_RENDERED,
             evidence="Enclosing immutable bead/source unit and original task/package pin; no fabricated character offsets or statement links.",
             empty_set="Required mentions array may be empty. Accepted bead version's own task receipt (author-complete-unit revision 7) proves capability; legacy or unavailable results do not imply empty.",
             uncertainty="Immutable local unresolved/ambiguous state is separate from later governed entity resolution; no canonical candidates invented.",

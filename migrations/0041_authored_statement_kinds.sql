@@ -1,16 +1,15 @@
--- Revision 7 of memory.semantic.author-complete-unit: authors are offered only
--- the statement kinds a new note can carry.
+-- Revision 7 of memory.semantic.author-complete-unit: a correction supersedes
+-- an earlier statement of the same note.
 --
 -- Revision 4's author response schema offers the statement kind `correction`,
--- but no apply path accepts it for a new note: a correction needs an earlier
--- statement to supersede, and a new note has none. An author that chose it
--- returned invalid output, its unit's one attempt was spent, and the note was
--- lost. Revision 7 keeps revision 4's inputs, apply and render semantics. Its
--- output contract, memory.semantic.local-mentions.output revision 2, offers
--- only observation, context and qualification: a correction heard in the
--- source is an observation of what is now said to be true, with the earlier
--- belief as context. Superseding an earlier note stays the governed correction
--- command.
+-- but no apply path accepts it for a new note: a new note refuses within-note
+-- corrections, and the complete-input path refuses every correction. An
+-- author that chose it returned invalid output, its unit's one attempt was
+-- spent, and the note was lost. Revision 7's output contract,
+-- memory.semantic.local-mentions.output revision 2, lets a correction supersede
+-- an earlier statement of the same note, with its reason. The superseded
+-- statement keeps the prior meaning, and the render covers exactly the
+-- statements no correction supersedes, as the render trigger already requires.
 --
 -- This migration admits revision 7 beside revision 4:
 -- - the execution revision CHECKs accept 7;
@@ -18,9 +17,16 @@
 -- - activate_complete_input_v6 activates revision 7, as v3 does revision 4;
 -- - every installed function that treats revision 4 specially is restated
 --   with revision 7 (apply command contract version 8, operation
---   complete_input.apply.v6) handled exactly like it, and nothing else
---   changed. Each restatement is generated from the installed text and held to
---   it by tests/unit/test_authored_statement_kinds_migration.py.
+--   complete_input.apply.v6) handled like it. For revision 7 only, apply
+--   accepts a correction whose target is an earlier statement of the same
+--   note, at most one correction per target, and writes the existing
+--   statement supersession. Each restatement is generated from the installed
+--   text and held to it by tests/unit/test_authored_statement_kinds_migration.py.
+-- - inspect_stored_bead_v1 authorizes each context source, a unit of the
+--   statement's own evidence, through its event's source object, as it does
+--   evidence. Before, it read the unit ID as a source object, so every note
+--   with a context source inspected as unavailable. An unreadable or missing
+--   context source still reads exactly as an unknown note.
 --
 -- Revisions 2-6, every stored statement and the PR-05 packet are unchanged.
 -- Forward-only; migrations 0001-0040 keep their bytes.
@@ -35,7 +41,7 @@ ALTER TABLE memoriesql.complete_input_dispatch_policies
     ADD CONSTRAINT complete_input_dispatch_polic_execution_contract_revision_check
         CHECK (execution_contract_revision IN (2, 3, 4, 5, 6, 7));
 
-INSERT INTO memoriesql.semantic_task_admission_policies (semantic_registry_hash,task_kind,contract_revision,owning_module,task_contract_hash,target_kind,required_capability,queue_name,base_priority,max_attempts,concurrency_key,concurrency_limit) VALUES ('semantic-tasks-v1:5b00443fe1872092d8bac8f20eab7ffd9412e53cf541471331e4aef5f7d51b0c','memory.semantic.author-complete-unit',7,'memoriesql.kernel','7ece3a75f9677667e0ef3f003c71ecfe131603cbc39fe94bb2ec2603daa3495e','canonical_semantics','memory.capture','capture',50,3,NULL,NULL);
+INSERT INTO memoriesql.semantic_task_admission_policies (semantic_registry_hash,task_kind,contract_revision,owning_module,task_contract_hash,target_kind,required_capability,queue_name,base_priority,max_attempts,concurrency_key,concurrency_limit) VALUES ('semantic-tasks-v1:3947b54e1de17faf103093bbb68854e0643c5a7ea48a64429eef460b75f64de8','memory.semantic.author-complete-unit',7,'memoriesql.kernel','c3b0a5a0d83767674b299a30bbe9459ff3d20255b224fe89d9399636195547cc','canonical_semantics','memory.capture','capture',50,3,NULL,NULL);
 
 CREATE OR REPLACE FUNCTION memoriesql.semantic_task_input_reference_safe(
     candidate jsonb,
@@ -590,8 +596,8 @@ BEGIN
     END IF;
     IF e.execution_task_id IS NULL OR b.task_id IS NULL OR t.task_id IS NULL OR t.input_payload IS DISTINCT FROM expected OR t.rerun_of_task_id IS DISTINCT FROM b.task_id OR
        t.origin_principal_id IS DISTINCT FROM p.producer_principal_id OR t.access_scope_id IS DISTINCT FROM b.access_scope_id OR t.workspace_id IS DISTINCT FROM b.workspace_id OR
-       t.task_contract_hash IS DISTINCT FROM (CASE WHEN e.execution_contract_revision=7 THEN '7ece3a75f9677667e0ef3f003c71ecfe131603cbc39fe94bb2ec2603daa3495e' WHEN e.execution_contract_revision=6 THEN '6308137bf480b96ac56fef5e93de23bcd1967077c8c6952209ded979c1b4ed6e' WHEN e.execution_contract_revision=5 THEN 'ff9fe274fc8f9fe4d2a7d5f4e3c0f53b58e0fec4158a525e3aca484ab347e493' WHEN e.execution_contract_revision=4 THEN '8488d4fddf19e65a2eb41203d6b26d7b400d73516c044700246ab3a7e75adce5' WHEN e.execution_contract_revision=3 THEN 'c8c172146c570bde75077745d7f00afa116b5db8f1b78bca4aebada561066e2d' ELSE '5288a780557724d7c5be81afd28f50a0cc5e5b86a3c8e89ae241033e12f3f3fe' END) OR
-       t.semantic_registry_hash IS DISTINCT FROM (CASE WHEN e.execution_contract_revision=7 THEN 'semantic-tasks-v1:5b00443fe1872092d8bac8f20eab7ffd9412e53cf541471331e4aef5f7d51b0c' WHEN e.execution_contract_revision=6 THEN 'semantic-tasks-v1:4caf4a3a8fe55ab9f56a73620e9e8839660bc8097cf6f6189230338d1ca88d40' WHEN e.execution_contract_revision=5 THEN 'semantic-tasks-v1:a351bceba3c90d5e9edf2e5e3c4d98c20148fc061f635c3b23199bae4caf0e25' WHEN e.execution_contract_revision=4 THEN 'semantic-tasks-v1:0876addc48bcf62db405dff9d1a8b75eb497cbec739945d741d4db72aea4b6dd' WHEN e.execution_contract_revision=3 THEN 'semantic-tasks-v1:116ac71ae8ac94ad8abc3018a0577a60a5e5e543ddf3660ae7db467f09764aef' ELSE 'semantic-tasks-v1:7e8a296cf1143deb86715144ed06cceefcb28dcc9955892ba7df5a06ded8f71f' END) THEN
+       t.task_contract_hash IS DISTINCT FROM (CASE WHEN e.execution_contract_revision=7 THEN 'c3b0a5a0d83767674b299a30bbe9459ff3d20255b224fe89d9399636195547cc' WHEN e.execution_contract_revision=6 THEN '6308137bf480b96ac56fef5e93de23bcd1967077c8c6952209ded979c1b4ed6e' WHEN e.execution_contract_revision=5 THEN 'ff9fe274fc8f9fe4d2a7d5f4e3c0f53b58e0fec4158a525e3aca484ab347e493' WHEN e.execution_contract_revision=4 THEN '8488d4fddf19e65a2eb41203d6b26d7b400d73516c044700246ab3a7e75adce5' WHEN e.execution_contract_revision=3 THEN 'c8c172146c570bde75077745d7f00afa116b5db8f1b78bca4aebada561066e2d' ELSE '5288a780557724d7c5be81afd28f50a0cc5e5b86a3c8e89ae241033e12f3f3fe' END) OR
+       t.semantic_registry_hash IS DISTINCT FROM (CASE WHEN e.execution_contract_revision=7 THEN 'semantic-tasks-v1:3947b54e1de17faf103093bbb68854e0643c5a7ea48a64429eef460b75f64de8' WHEN e.execution_contract_revision=6 THEN 'semantic-tasks-v1:4caf4a3a8fe55ab9f56a73620e9e8839660bc8097cf6f6189230338d1ca88d40' WHEN e.execution_contract_revision=5 THEN 'semantic-tasks-v1:a351bceba3c90d5e9edf2e5e3c4d98c20148fc061f635c3b23199bae4caf0e25' WHEN e.execution_contract_revision=4 THEN 'semantic-tasks-v1:0876addc48bcf62db405dff9d1a8b75eb497cbec739945d741d4db72aea4b6dd' WHEN e.execution_contract_revision=3 THEN 'semantic-tasks-v1:116ac71ae8ac94ad8abc3018a0577a60a5e5e543ddf3660ae7db467f09764aef' ELSE 'semantic-tasks-v1:7e8a296cf1143deb86715144ed06cceefcb28dcc9955892ba7df5a06ded8f71f' END) THEN
         RAISE EXCEPTION 'complete_execution_binding_conflict' USING ERRCODE='23514'; END IF;
     RETURN NULL;
 END; $$;
@@ -728,7 +734,7 @@ BEGIN
                 AND requested_command->>'output_contract_hash'='7873968a84f6e7279040e45045a4948068c0cde6fcfdb68b417698ad330e0cfd')
             OR (requested_command->>'contract_version'='8' AND requested_command->>'expected_schema_version'='41'
                 AND requested_command->>'task_kind'='memory.semantic.author-complete-unit' AND requested_command->>'contract_revision'='7'
-                AND requested_command->>'output_contract_hash'='360953819cc83cc29ccaaa629e4d505aab2e289c0618dd6e42f0a7cc9213c638')
+                AND requested_command->>'output_contract_hash'='700d0b9656e4a7e6a1c4d5547b5a23e77c16762018613d4c237672ed176158d0')
             OR (is_v2
              AND requested_command ->> 'expected_schema_version' IS NOT DISTINCT FROM '15'
              AND requested_command ->> 'contract_revision' IS NOT DISTINCT FROM '2'
@@ -962,8 +968,18 @@ BEGIN
         OR requested_command#>>'{payload,annotations,0,expected_bead_version}' IS DISTINCT FROM '0'
         OR requested_command#>>'{payload,annotations,0,event_id}' IS DISTINCT FROM task_record.input_payload#>>'{payload,event_id}'
         OR requested_command#>>'{payload,annotations,0,source_unit_id}' IS DISTINCT FROM task_record.input_payload#>>'{payload,source_unit_ids,0}'
-        OR EXISTS(SELECT 1 FROM jsonb_array_elements(requested_command#>'{payload,annotations,0,statements}') q WHERE q->>'statement_kind'='correction')
+        OR (requested_command->>'contract_version'<>'8' AND EXISTS(SELECT 1 FROM jsonb_array_elements(requested_command#>'{payload,annotations,0,statements}') q WHERE q->>'statement_kind'='correction'))
     ) THEN RAISE EXCEPTION 'complete_input_exposure_required' USING ERRCODE='42501'; END IF;
+    -- Revision 7 (apply version 8): a correction supersedes an earlier
+    -- statement of the same note, and a statement has at most one correction.
+    IF requested_command->>'contract_version'='8' AND EXISTS(
+        SELECT 1 FROM jsonb_array_elements(requested_command#>'{payload,annotations,0,statements}') WITH ORDINALITY q(s,i)
+        WHERE s->>'statement_kind'='correction' AND (
+            NOT EXISTS(SELECT 1 FROM jsonb_array_elements(requested_command#>'{payload,annotations,0,statements}') WITH ORDINALITY p(t,j)
+                WHERE j<i AND t->>'statement_id'=s->>'supersedes_statement_id')
+            OR (SELECT count(*) FROM jsonb_array_elements(requested_command#>'{payload,annotations,0,statements}') u(v)
+                WHERE v->>'supersedes_statement_id'=s->>'supersedes_statement_id')>1)
+    ) THEN RAISE EXCEPTION 'invalid_correction_target' USING ERRCODE='22023'; END IF;
     IF cardinality(command_model_runs) <> (
         SELECT count(*)
         FROM memoriesql.semantic_task_runs AS run
@@ -1750,6 +1766,13 @@ BEGIN
     THEN RETURN unavailable; END IF;
    -- Context is provenance, not support; still requires authorization before disclosure.
    FOREACH source IN ARRAY s.context_source_ids LOOP
+    -- A context source is a unit of the statement's own evidence. Authorize
+    -- its event's source object, as evidence is; missing or unreadable reads
+    -- exactly as an unknown note.
+    SELECT e.source_object_id INTO source FROM memoriesql.source_units cu
+     JOIN memoriesql.source_events e ON e.tenant_id=cu.tenant_id AND e.event_id=cu.event_id
+     WHERE cu.tenant_id=s.tenant_id AND cu.source_unit_id=source;
+    IF NOT FOUND THEN RETURN unavailable; END IF;
     PERFORM memoriesql.revisiting_source_authorize(source); sources:=array_append(sources,source);
    END LOOP;
    evidence:='[]';
@@ -1911,7 +1934,7 @@ BEGIN
     input:=jsonb_build_object('task_id',tid,'task_kind','memory.semantic.author-complete-unit','contract_revision',7,'target_reference',b.source_unit_id,'expected_target_revision',0,'requested_effort_key',NULL,'requested_budget',NULL,
       'evidence_manifest',jsonb_build_object('manifest_id','complete-input.'||tid::text,'revision',1,'references',jsonb_build_array(jsonb_build_object('reference_id',b.source_unit_id,'content_hash',p.inventory_hash,'declared_characters',p.character_count))),
       'payload',jsonb_build_object('binding_task_id',b.task_id,'source_object_id',p.source_object_id,'event_id',b.event_id,'source_unit_ids',jsonb_build_array(b.source_unit_id),'bead_ids',jsonb_build_array(b.bead_id),'package',b.package_pin,'producer_policy_id',b.producer_policy_id,'dispatch_policy_id',request->>'dispatch_policy_id','declaration',p.declaration,'event_declaration',(SELECT declaration FROM memoriesql.source_event_materializations WHERE tenant_id=b.tenant_id AND event_id=b.event_id),'parent_source_unit_id',(SELECT parent_unit_id FROM memoriesql.source_units WHERE tenant_id=b.tenant_id AND source_unit_id=b.source_unit_id),'parent_resolution',(SELECT structure->'parent_resolution' FROM memoriesql.source_units WHERE tenant_id=b.tenant_id AND source_unit_id=b.source_unit_id),'required_execution','trusted_source_revisiting_v1','authorized_context',request->'authorized_context'));
-    SELECT q.idempotency_receipt_id INTO eid FROM memoriesql.enqueue_semantic_task(tid,'complete-input.v6:'||b.task_id::text,'memoriesql.kernel','memory.semantic.author-complete-unit',7,'7ece3a75f9677667e0ef3f003c71ecfe131603cbc39fe94bb2ec2603daa3495e','semantic-tasks-v1:5b00443fe1872092d8bac8f20eab7ffd9412e53cf541471331e4aef5f7d51b0c',b.source_unit_id::text,0,input,input#>>'{evidence_manifest,manifest_id}',b.access_scope_id,started,b.task_id,started) q;
+    SELECT q.idempotency_receipt_id INTO eid FROM memoriesql.enqueue_semantic_task(tid,'complete-input.v6:'||b.task_id::text,'memoriesql.kernel','memory.semantic.author-complete-unit',7,'c3b0a5a0d83767674b299a30bbe9459ff3d20255b224fe89d9399636195547cc','semantic-tasks-v1:3947b54e1de17faf103093bbb68854e0643c5a7ea48a64429eef460b75f64de8',b.source_unit_id::text,0,input,input#>>'{evidence_manifest,manifest_id}',b.access_scope_id,started,b.task_id,started) q;
     result:=jsonb_build_object('contract_version',6,'authorized_context',request->'authorized_context','binding_task_id',b.task_id,'execution_task_id',tid,'idempotency_receipt_id',rid,'enqueue_receipt_id',eid,'package',b.package_pin,'replayed',false);
     PERFORM memoriesql.complete_input_authorize(c.tenant_id,b.task_id,(request->>'dispatch_policy_id')::uuid);
 
