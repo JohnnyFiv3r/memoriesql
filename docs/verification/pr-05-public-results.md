@@ -173,6 +173,40 @@ source-read authority over their entire disclosed dependency closure. PR-03's
 read kernel required raw revisiting authority there instead, so paired agents
 saw `relation_tables`/`source_raw_read_required`.
 
+**Custody: reconciled by ea-6, a child of ea-5.** These are the independent
+custodian's records, stored byte-identical:
+
+- **ea-5** (`../approvals/pr-05-custody-ea-5.json`, 18,783 bytes, SHA-256
+  `be36131e…`, issued 2026-09-29T12:26:52Z) reconciles AM-5's authority and
+  evidence semantics with ea-2, ea-3 and ea-4. It binds AM-5's record
+  (`4491ca29…`) and the content-free reply-visible addendum.
+- **ea-5-link-1** (`../approvals/pr-05-custody-ea-5-link-1.json`, 7,752 bytes,
+  SHA-256 `f1ea1a28…`) links ea-5 to implementation `f560fce`, with qualified
+  head `7f8e4a8` and migration 0039 at `ed951d1a…`. That implementation predates
+  the review repairs in `9f3aa77`.
+- **ea-6** (`../approvals/pr-05-custody-ea-6.json`, 29,178 bytes, SHA-256
+  `74221b6f…`, issued 2026-10-06T01:30:11Z) is ea-5's child. It binds the
+  owner's scope clarification of 2026-10-01 (decision 12(a)). At schema 39,
+  relation reads without raw-read authority are limited to the paired agents
+  AM-5 authorizes. Every other caller keeps its existing restrictions, so
+  `relation_tables`/`source_raw_read_required` remains at schema 39 for callers
+  AM-5 does not authorize. ea-6 also binds the exact implementation:
+  - head `9f3aa77`, with migration 0039 `ee846ac7…`;
+  - the migration inventory, the reply coverage source, and this document as
+    it stood at `9f3aa77` (`35fabf31…`);
+  - the owner-reported qualification receipts.
+- **History unchanged.** AM-5's record, the addendum and ea-5 stay as they were.
+- **Implementation linkage: ea-5-link-2 → `9f3aa77`**
+  (`../approvals/pr-05-custody-ea-5-link-2.json`, 12,512 bytes, SHA-256
+  `b66bc680…`, recorded 2026-10-06T01:43:07Z). It advances ea-5-link-1 to this
+  pull request's repaired head. It binds migration 0039 `ee846ac7…`, the
+  migration inventory and this document at `9f3aa77`, under ea-5 and the scope
+  that ea-6 reconciles. No further authority amendment or freeze is required.
+- **Semantics only.** None of these is runtime, security, semantic-quality or
+  workload certification, release readiness or a combined-branch qualification.
+- **The dependent #80** is linked separately under ea-6 (ea-6-link-1, on its own
+  branch).
+
 **One read mode in PR-03's single kernel.** Migration 0039 threads a read mode
 through the eleven read-path functions of M0030 and M0032 that reach a raw gate.
 The owner's mode keeps every existing check. The agent's mode changes exactly one

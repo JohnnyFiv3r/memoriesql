@@ -1,0 +1,159 @@
+{
+  "algorithm": "sha256",
+  "authority_record": {
+    "bytes": 4763,
+    "commit": "e9d7d642da87d5fa3993720fe287a188636ef317",
+    "path": "docs/approvals/pr-05-agent-relation-reads.md",
+    "repository": "JohnnyFiv3r/memoriesql",
+    "sha256": "4491ca295d761955d4662dad43cb3e70840ef1bc199d8a1408c46b3bfe9530e3"
+  },
+  "base_commit": "33e1c4281dca0845daea374dbf3f457160ec6e9a",
+  "branch_as_notified": "claude/pr-05-relation-reads",
+  "custodian": {
+    "role": "independent PR-04 evaluation custodian",
+    "task_id": "01a0d40a-b91a-73a0-b5b3-8067f150c880"
+  },
+  "format": "pr04-independent-custody-implementation-link-v1",
+  "historical_implementation_links_preserved": [
+    {
+      "bytes": 2501,
+      "original_record_preserved": true,
+      "revision": "ea-4-link-1",
+      "sha256": "20447b37135ff4ae4bd09f3d5490fe610372c770aaa2a27c53742aec2c8b9252"
+    },
+    {
+      "bytes": 2919,
+      "original_record_preserved": true,
+      "revision": "ea-4-link-2",
+      "sha256": "4e2e350baf2daff2ec9825a3c5281381133b832c0db301321fa7a080bf791ae2"
+    }
+  ],
+  "historical_link_scope": "The earlier ea-4 links retain their original heads and M0038 hashes. This new link binds the supplied 33e1c42 baseline and M0039 implementation; it does not retrospectively certify intervening M0038 behavior or rewrite earlier links.",
+  "implementation_commit": "f560fce1bbff9169caffaefa5a0a9f720239c97b",
+  "implementation_parent": "e9d7d642da87d5fa3993720fe287a188636ef317",
+  "implementation_scope_as_notified": [
+    "One read mode added to the existing PR-03 relation read kernel: owner preserves prior checks; agent substitutes source.read on the same event for raw revisiting authority only.",
+    "Earlier kernel names delegate in owner mode; governed writes refuse agent mode.",
+    "PR-05 population selects owner with source.raw.read and agent otherwise; no new grants or query-reader objects.",
+    "Agents receive no relation_events, relation_event_evidence or relation_pairs rows; relation_history/owner_only records that table-level limitation."
+  ],
+  "links_to": {
+    "bytes": 18783,
+    "revision": "ea-5",
+    "sha256": "be36131e51989b860d726b764cb96f6c027215c6b6a8ceac391446cb18eaa017"
+  },
+  "migrations_at_implementation_commit": [
+    {
+      "bytes": 42551,
+      "commit": "f560fce1bbff9169caffaefa5a0a9f720239c97b",
+      "path": "migrations/0037_observation_sql_population.sql",
+      "repository": "JohnnyFiv3r/memoriesql",
+      "sha256": "f8e2d46829258da4c49d011c6766711d55cb48940b3476681d8ad9dffcad1d1b"
+    },
+    {
+      "bytes": 65340,
+      "commit": "f560fce1bbff9169caffaefa5a0a9f720239c97b",
+      "path": "migrations/0038_query_result_access.sql",
+      "repository": "JohnnyFiv3r/memoriesql",
+      "sha256": "eabebb7fe2a03cb79942e9b86b8a7f71dfcf4be72e12596282728d41a253ac4f"
+    },
+    {
+      "bytes": 69828,
+      "commit": "f560fce1bbff9169caffaefa5a0a9f720239c97b",
+      "path": "migrations/0039_agent_relation_reads.sql",
+      "repository": "JohnnyFiv3r/memoriesql",
+      "sha256": "ed951d1ab83891ff7ec66ef3c28358a4dc4582d3f9540a41f3a8f9c88ccb83b9"
+    }
+  ],
+  "owner_notice": {
+    "at": "2026-09-29T12:21:06.177Z",
+    "bytes": 5005,
+    "digest_scope": "Exact UTF-8 user-message text, including its supplied trailing newlines.",
+    "message_id": "msg_01a0ed1c-8c01-70e0-b80e-932cae3a25ce",
+    "sha256": "e94bc6df66416fa5ac993fbfc77f12dea7fc4ac2be5132a11009dda14a1ec20c",
+    "task_id": "01a0d40a-b91a-73a0-b5b3-8067f150c880"
+  },
+  "owner_reported_proofs": {
+    "archives_reported_unchanged_since_implementation_commit": true,
+    "classification": "Fictional mechanical integration only; provenance supplied by the owner notice, not independently rerun or elevated by custody.",
+    "development_executor_tests": {
+      "am5_tests": 4,
+      "passed": 29
+    },
+    "implementation_commit_package_job": "33 commands, all exit 0; two byte-identical builds.",
+    "installed_tests": [
+      {
+        "all_steps_exit_zero": true,
+        "passed": 652,
+        "python": "3.13.5",
+        "receipt_sha256": "bc78032dacdba551c81dfa2fad77adca27f0b3c1b98f8bfeb6b4b45b62fc3ca8",
+        "sdist_rebuild_wheel_byte_equal": true,
+        "skipped": 0
+      },
+      {
+        "all_steps_exit_zero": true,
+        "passed": 652,
+        "python": "3.14.0",
+        "receipt_sha256": "7aaa5e7a24833b95534f21e31c91ae1ce2bf4963bec07285ba5ce1f796de6217",
+        "sdist_rebuild_wheel_byte_equal": true,
+        "skipped": 0
+      }
+    ],
+    "package_job": "Passed, two byte-identical builds.",
+    "qualified_head": "7f8e4a87462e54e5f146a2b3ae00ed44c9401c41",
+    "query_reader_profile_before_after_38_to_39_sha256": "7d2676b8cfff6e980ac5a86846aeb6e13f4699e89ca5ec03d6510d8fd34a0505",
+    "relation_lifecycle_population_tests": "191 tests at schema 38 and schema 39; identical per-test outcomes.",
+    "reported_window": "2026-09-29 04:47-05:52 CDT",
+    "sdist_sha256": "b01ee0ccf6883397e2624a6b78399201492cc3f297fe8d439d361f0652b10073",
+    "wheel_sha256": "ec0d0ff0ae5c3dcc6fef58c504c46861a503f4b53822a6d36cbc413f6bcdc781"
+  },
+  "owner_reported_qualified_head": "7f8e4a87462e54e5f146a2b3ae00ed44c9401c41",
+  "preservation": {
+    "ea5_semantic_record_unchanged": true,
+    "new_freeze_or_profile_or_threshold_change": false,
+    "original_freeze_and_all_prior_records_unchanged": true
+  },
+  "recorded_at": "2026-09-29T12:26:52Z",
+  "repository": "JohnnyFiv3r/memoriesql",
+  "revision": "ea-5-link-1",
+  "scope": "Exact implementation linkage to ea-5 only. Named proof results are owner-reported mechanical evidence with their supplied limits. This record adds no runtime or security certification, semantic/workload certification, release readiness, live evaluation, model call, spending, publication, deployment, merge or external messaging authorization.",
+  "serialization": {
+    "encoding": "UTF-8 without BOM",
+    "final_newline": true,
+    "hash_scope": "Exact complete JSON document bytes; detached SHA-256 is not embedded in this document.",
+    "json": "Python json.dumps ensure_ascii=False, sort_keys=True, indent=2",
+    "line_endings": "LF"
+  },
+  "status": "issued_exact_implementation_artifact_link",
+  "verification_document": {
+    "bytes": 36207,
+    "commit": "f560fce1bbff9169caffaefa5a0a9f720239c97b",
+    "path": "docs/verification/pr-05-public-results.md",
+    "repository": "JohnnyFiv3r/memoriesql",
+    "sha256": "d9a1bf91c2f4a77dcd3d1be5dd0abb0635e207deffa9e9aa4c630afa7d6adf22"
+  },
+  "verified_linkage": {
+    "all_migrations_0001_through_0038_byte_identical_to_base": true,
+    "authority_record_byte_identical_at_authority_implementation_and_named_head": true,
+    "base_authority_implementation_head_ancestry_verified": true,
+    "implementation_to_named_head_only_changed_files": [
+      "tests/migrations/test_installed_migrations.py",
+      "tests/runtime/agent_relation_fixtures.py"
+    ],
+    "listed_prior_docs_and_contracts_byte_identical_to_base": [
+      "docs/agent-sql-results-v1.md",
+      "docs/relation-assessment.md",
+      "docs/approvals/pr-05-custody-ea-3.json",
+      "docs/approvals/pr-05-custody-ea-4.json",
+      "docs/approvals/pr-05-custody-ea-4-link-1.json",
+      "docs/approvals/pr-05-custody-ea-4-link-2.json",
+      "src/memoriesql/application/relation_assessment.py",
+      "contracts/records/memoriesql-relation-assessment-v1.json"
+    ],
+    "method": "Read-only verification of exact local Git objects and cryptographic file digests; no branch-currentness, test rerun or artifact-download claim.",
+    "migration_0039_only_new_migration": true,
+    "migration_0039_src_and_docs_unchanged_at_named_head": true,
+    "proof_results_independently_reexecuted": false,
+    "qualification_receipts_or_built_archives_independently_hashed": false
+  }
+}
