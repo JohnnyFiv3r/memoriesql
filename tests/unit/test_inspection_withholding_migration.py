@@ -1,9 +1,13 @@
 """Database-free structure of migration 0043 (inspection withholding).
 
-0043 restates stored-bead inspection (inspect_stored_bead_v1, latest installed
-in 0041) and its evidence reader (read_stored_bead_evidence_v1, latest
-installed in 0024) from their installed text with exactly the listed edits,
-for the owner's decisions of 2026-10-06:
+0043 restates, from their installed text with exactly the listed edits:
+- stored-bead inspection (inspect_stored_bead_v1, latest installed in 0041) and
+  its evidence reader (read_stored_bead_evidence_v1, 0024);
+- relation inspection's base, frame and legacy wrappers
+  (inspect_bead_relations_v3_base, relation_inspection_frame_v1,
+  inspect_bead_relations_v2 and inspect_bead_relations_v1, all 0030).
+
+They implement the owner's decisions of 2026-10-06:
 - decision 8: inspection withholds what the query population withholds;
 - decision 6 (pairs 3 and 4): a denial, or a budget, leaves no audit trace, and
   every dependency that can deny the bead is authorized before any budget;
@@ -22,6 +26,10 @@ MIGRATIONS = ROOT / "migrations"
 NAME = "0043_inspection_withholding.sql"
 INSPECT = "inspect_stored_bead_v1"
 EVIDENCE = "read_stored_bead_evidence_v1"
+BASE = "inspect_bead_relations_v3_base"
+FRAME = "relation_inspection_frame_v1"
+V2 = "inspect_bead_relations_v2"
+V1 = "inspect_bead_relations_v1"
 
 UNAVAILABLE = "RAISE EXCEPTION 'stored_bead_unavailable' USING ERRCODE='42501';"
 BUDGET = "RAISE EXCEPTION 'stored_bead_budget' USING ERRCODE='54000';"
@@ -191,6 +199,137 @@ EVIDENCE_EDITS: tuple[tuple[str, str, int], ...] = (
     ),
 )
 
+# Relation inspection: the base lists one bead's relations, the frame then
+# authorizes each relation's closure and the current authority, and the v1 and
+# v2 wrappers check roots. Every refusal after the first audit write now raises
+# inside its function's block, and the response size and time budgets move from
+# the base to the frame's end, after every check.
+RELATIONS_UNAVAILABLE = (
+    "RAISE EXCEPTION 'bead_relations_unavailable' USING ERRCODE='42501';"
+)
+RELATIONS_BUDGET = "RAISE EXCEPTION 'bead_relations_budget' USING ERRCODE='54000';"
+BASE_HANDLER = """EXCEPTION
+    WHEN insufficient_privilege THEN RETURN unavailable;
+    -- A derivation lineage over its limit is reported, never truncated.
+    WHEN program_limit_exceeded THEN RETURN budget;
+"""
+BASE_SIZE = (
+    "    IF octet_length(memoriesql.canonical_semantic_json_text(result)) > 524288"
+    " THEN RETURN budget; END IF;\n"
+)
+BASE_TIME = (
+    "    IF pg_catalog.clock_timestamp() - started > interval '2 seconds'"
+    " THEN RETURN budget; END IF;\n"
+)
+BASE_BUDGETS_MOVED = """    -- Owner decision 6 of 2026-10-06 (pair 4): the frame decides the response
+    -- size and time budgets, after its own checks.
+"""
+BASE_EDITS: tuple[tuple[str, str, int], ...] = (
+    (
+        "CREATE FUNCTION memoriesql.inspect_bead_relations_v3_base(",
+        "CREATE OR REPLACE FUNCTION memoriesql.inspect_bead_relations_v3_base(",
+        1,
+    ),
+    (BASE_HANDLER, "@@HANDLER@@\n", 1),
+    (
+        "RETURN unavailable;",
+        "RAISE EXCEPTION 'bead_relations_unavailable' USING ERRCODE = '42501';",
+        9,
+    ),
+    (BASE_SIZE, BASE_BUDGETS_MOVED, 1),
+    (BASE_TIME, "", 1),
+    ("@@HANDLER@@\n", BASE_HANDLER, 1),
+)
+
+FRAME_SIZE = (
+    " IF octet_length(memoriesql.lifecycle_canonical_json_v1(response))>524288"
+    ' THEN RETURN \'{"contract_version":3,"outcome":"budget_exhausted"}\'; END IF;\n'
+)
+FRAME_AUTHORITY = (
+    " IF NOT memoriesql.relation_current_authority_v1(c.tenant_id) THEN "
+    + RELATIONS_UNAVAILABLE
+    + " END IF;\n"
+)
+FRAME_BUDGETS = (
+    " -- Owner decision 6 of 2026-10-06 (pair 4): the response size and time\n"
+    " -- budgets, the base's included, only after every check.\n"
+    " IF octet_length(memoriesql.lifecycle_canonical_json_v1(response))>524288"
+    " THEN " + RELATIONS_BUDGET + " END IF;\n"
+    " IF clock_timestamp()-snapshot_at>interval '2 seconds' THEN "
+    + RELATIONS_BUDGET
+    + " END IF;\n"
+)
+FRAME_EDITS: tuple[tuple[str, str, int], ...] = (
+    (
+        "CREATE FUNCTION memoriesql.relation_inspection_frame_v1(",
+        "CREATE OR REPLACE FUNCTION memoriesql.relation_inspection_frame_v1(",
+        1,
+    ),
+    (
+        'RETURN \'{"contract_version":3,"outcome":"unavailable"}\'; END IF;',
+        RELATIONS_UNAVAILABLE + " END IF;",
+        4,
+    ),
+    (FRAME_SIZE + FRAME_AUTHORITY, FRAME_AUTHORITY + FRAME_BUDGETS, 1),
+)
+
+V2_EDITS: tuple[tuple[str, str, int], ...] = (
+    (
+        " IF r->>'roots_status'<>'qualified' THEN"
+        ' RETURN \'{"contract_version":2,"outcome":"unavailable"}\'; END IF;\n',
+        " -- Owner decision 6 of 2026-10-06 (pair 3): a refusal after the frame's\n"
+        " -- success rolls back its audit rows.\n"
+        " IF r->>'roots_status'<>'qualified' THEN "
+        + RELATIONS_UNAVAILABLE
+        + " END IF;\n",
+        1,
+    ),
+    (
+        "END $$;\n",
+        "EXCEPTION WHEN insufficient_privilege THEN"
+        ' RETURN \'{"contract_version":2,"outcome":"unavailable"}\';\n'
+        "END $$;\n",
+        1,
+    ),
+)
+
+V1_LEGACY = (
+    " RETURN memoriesql.inspect_bead_relations_v1_schema29("
+    "request||jsonb_build_object('known_at',projected->'known_at'));\n"
+    "END $$;\n"
+)
+V1_LEGACY_RAISED = (
+    " -- Owner decision 6 of 2026-10-06 (pair 3): a refusal after the frame's\n"
+    " -- success rolls back its audit rows, the legacy reader's included.\n"
+    " projected:=memoriesql.inspect_bead_relations_v1_schema29("
+    "request||jsonb_build_object('known_at',projected->'known_at'));\n"
+    " IF projected->>'outcome'='budget_exhausted' THEN " + RELATIONS_BUDGET + "\n"
+    " ELSIF projected->>'outcome'<>'available' THEN "
+    + RELATIONS_UNAVAILABLE
+    + " END IF;\n"
+    " RETURN projected;\n"
+    "EXCEPTION WHEN insufficient_privilege THEN"
+    ' RETURN \'{"contract_version":1,"outcome":"unavailable"}\';\n'
+    " WHEN program_limit_exceeded THEN"
+    ' RETURN \'{"contract_version":1,"outcome":"budget_exhausted"}\';\n'
+    "END $$;\n"
+)
+V1_EDITS: tuple[tuple[str, str, int], ...] = (
+    (
+        "CREATE FUNCTION memoriesql.inspect_bead_relations_v1(",
+        "CREATE OR REPLACE FUNCTION memoriesql.inspect_bead_relations_v1(",
+        1,
+    ),
+    (
+        'THEN RETURN \'{"contract_version":1,"outcome":"unavailable"}\'; END IF;\n',
+        "THEN " + RELATIONS_UNAVAILABLE + " END IF;\n",
+        1,
+    ),
+    (V1_LEGACY, V1_LEGACY_RAISED, 1),
+)
+
+RELATION_EDITS = {BASE: BASE_EDITS, FRAME: FRAME_EDITS, V2: V2_EDITS, V1: V1_EDITS}
+
 
 def function(text: str, name: str) -> str:
     match = re.search(
@@ -238,6 +377,10 @@ def restated_evidence() -> str:
     return edited(installed(EVIDENCE), EVIDENCE_EDITS)
 
 
+def restated_relation(name: str) -> str:
+    return edited(installed(name), RELATION_EDITS[name])
+
+
 class InspectionWithholdingMigration(unittest.TestCase):
     def test_the_restatement_is_the_installed_text_with_exactly_the_edits(
         self,
@@ -245,6 +388,8 @@ class InspectionWithholdingMigration(unittest.TestCase):
         sql = (MIGRATIONS / NAME).read_text()
         self.assertEqual(function(sql, INSPECT), restated())
         self.assertEqual(function(sql, EVIDENCE), restated_evidence())
+        for name in RELATION_EDITS:
+            self.assertEqual(function(sql, name), restated_relation(name), name)
 
     def test_every_denial_and_budget_in_the_body_rolls_back(self) -> None:
         body = function((MIGRATIONS / NAME).read_text(), INSPECT)
@@ -276,6 +421,34 @@ class InspectionWithholdingMigration(unittest.TestCase):
             body.rfind("revisiting_source_authorize"), body.find(BYTES_BUDGET)
         )
 
+    def test_relation_inspection_refuses_without_a_trace_and_budgets_last(
+        self,
+    ) -> None:
+        sql = (MIGRATIONS / NAME).read_text()
+        base = function(sql, BASE)
+        # The base refuses only through its handler and decides no budget of its
+        # own; a lineage over its limit is still reported as one.
+        self.assertEqual(base.count("RETURN unavailable"), 1)
+        self.assertEqual(base.count("RETURN budget"), 1)
+        self.assertNotIn("524288", base)
+        self.assertNotIn("interval '2 seconds'", base)
+        frame = function(sql, FRAME)
+        for outcome in ("unavailable", "budget_exhausted"):
+            reply = f'RETURN \'{{"contract_version":3,"outcome":"{outcome}"}}\''
+            self.assertEqual(frame.count(reply), 1, outcome)
+        # Both budgets follow the last check, the current authority.
+        self.assertLess(frame.find(FRAME_AUTHORITY), frame.find(FRAME_BUDGETS))
+        self.assertEqual(frame.count(RELATIONS_BUDGET), 2)
+        for name, version in ((V2, 2), (V1, 1)):
+            wrapper = function(sql, name)
+            reply = (
+                f'RETURN \'{{"contract_version":{version},"outcome":"unavailable"}}\''
+            )
+            self.assertEqual(wrapper.count(reply), 1, name)
+            self.assertIn(
+                "EXCEPTION WHEN insufficient_privilege THEN " + reply, wrapper
+            )
+
     def test_nothing_else_changes(self) -> None:
         sql = (MIGRATIONS / NAME).read_text()
         self.assertNotRegex(sql, r"(?im)^\s*GRANT\b")
@@ -285,7 +458,7 @@ class InspectionWithholdingMigration(unittest.TestCase):
                 sql,
                 re.M,
             ),
-            [INSPECT, EVIDENCE],
+            [INSPECT, EVIDENCE, BASE, FRAME, V2, V1],
         )
 
 

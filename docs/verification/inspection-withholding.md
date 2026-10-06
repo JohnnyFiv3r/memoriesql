@@ -1,11 +1,16 @@
 # Inspection withholding (migration 0043)
 
-Owner decisions 6 and 8 of 2026-10-06 cover stored-bead inspection
-(`inspect_stored_bead_v1`, CLI `inspect`) and its evidence reader
-(`read_stored_bead_evidence_v1`, CLI `source`). Migration 0043 restates both
-functions from their installed text (0041 and 0024) with exactly the edits
-that `tests/unit/test_inspection_withholding_migration.py` lists. The record
-shapes and outcomes are unchanged.
+Owner decisions 6 and 8 of 2026-10-06 cover two inspection readers:
+- stored-bead inspection (`inspect_stored_bead_v1`, CLI `inspect`) and its
+  evidence reader (`read_stored_bead_evidence_v1`, CLI `source`);
+- relation inspection (`inspect_bead_relations_v2` and `_v3`, CLI
+  `relations`, and the legacy `_v1`), built on `inspect_bead_relations_v3_base`
+  and `relation_inspection_frame_v1`.
+
+Migration 0043 restates those functions from their installed text (0041, 0024
+and 0030) with exactly the edits that
+`tests/unit/test_inspection_withholding_migration.py` lists. The record shapes
+and outcomes are unchanged.
 
 ## The defects
 
@@ -14,20 +19,27 @@ shapes and outcomes are unchanged.
   note, plus the supersession neighbours of its accepted version. Inspection
   never consulted the neighbours. A note whose correction the reader could
   not read was therefore missing from query results but whole in inspection.
-- **A late denial left a trace (pair 3).** Inspection authorized sources one
-  by one while walking a note. Each authorization wrote an "allowed"
-  `authorization_audit_events` row. A denial further on returned
-  `unavailable` normally, so those rows stayed, where an unknown note leaves
-  none. The evidence reader did the same whenever it refused after the note's
-  own inspection had succeeded, for example on a selection that supports
-  nothing in the note.
-- **A note the reader cannot read reported its size (pair 4).** The
-  statement budget (more than 32 statements under the watermark) was decided
-  before the statements' evidence and context sources were authorized. The
-  classification contribution's checks, which can deny the whole note, ran
-  only after the statement, link and mention budgets. An unreadable note over
-  budget therefore reported `budget_exhausted`, where an unknown note reports
-  `unavailable`.
+- **A late denial left a trace (pair 3).** Both readers authorized sources one
+  by one while walking. Each authorization wrote an "allowed"
+  `authorization_audit_events` row. A denial further on returned `unavailable`
+  normally, so those rows stayed, where an unknown bead leaves none.
+  - Stored-bead inspection was denied this way on a later source.
+  - The evidence reader did the same whenever it refused after the note's own
+    inspection had succeeded, for example on a selection that supports nothing
+    in the note.
+  - Relation inspection did the same when a listed relation's other endpoint,
+    closure, pair or task was unreadable, and when its v1 or v2 wrapper
+    refused after the frame had succeeded.
+- **A bead the reader cannot read reported its size (pair 4).**
+  - Stored-bead inspection decided its statement budget (more than 32
+    statements under the watermark) before the statements' evidence and
+    context sources were authorized. The classification contribution's
+    checks, which can deny the whole note, ran only after the statement, link
+    and mention budgets. An unreadable note over budget therefore reported
+    `budget_exhausted`, where an unknown note reports `unavailable`.
+  - Relation inspection decided its response-size and time budgets in the
+    base, before the frame authorized each relation's closure and the
+    reader's current authority.
 - **Context sources (the approved context-source fix).** A context source is a
   unit of the statement's own evidence. Inspection authorized the unit ID as
   if it were a source object, so every note with a context source inspected as
@@ -42,18 +54,29 @@ shapes and outcomes are unchanged.
   inspects the note before and after each page, so it withholds alike.
 - **No trace.** Every denial and every budget now raises inside the
   function's block. That block rolls its audit rows back, and the handler
-  returns the same `unavailable` or `budget_exhausted` record as before. The
-  evidence reader's refusals after its first inspection, and its budget,
-  behave the same way. Audit rows persist only for a read that succeeds.
-- **Authorize before any budget.** These checks run before the first budget:
-  - every statement under the watermark;
-  - every source that its evidence and context name;
-  - the classification contribution's checks, moved unchanged.
+  returns the same refusal record as before. This applies to:
+  - stored-bead inspection;
+  - the evidence reader's refusals after its first inspection, and its
+    budget;
+  - the relation base, the frame, and the v1 and v2 wrappers, which gain
+    handlers that return their unchanged refusal records.
 
-  Later checks only repeat them. The mentions' own checks never deny the note:
-  an unreadable resolution decision is reported per mention, as before. The
-  response-size and time budgets now follow the return boundary's
-  revalidation.
+  Audit rows persist only for a read that succeeds.
+- **Authorize before any budget.**
+  - In stored-bead inspection, these checks run before the first budget:
+    - every statement under the watermark;
+    - every source that its evidence and context name;
+    - the classification contribution's checks, moved unchanged.
+
+    Later checks only repeat them. The mentions' own checks never deny the
+    note: an unreadable resolution decision is reported per mention, as
+    before. The response-size and time budgets follow the return boundary's
+    revalidation.
+  - In relation inspection, the base's response-size and time budgets move to
+    the frame's end, after every check. The size bound is unchanged at
+    512 KiB. The two-second time budget now runs from the statement's start
+    and covers the whole inspection, not only the base. A derivation lineage
+    over its limit is still reported as `budget_exhausted`, never truncated.
 - **Context sources** are authorized through their unit's event's source
   object, as evidence is. A missing or unreadable context source reads exactly
   as an unknown note.
@@ -61,6 +84,13 @@ shapes and outcomes are unchanged.
 One further consequence: the evidence reader's handler now maps every program
 limit inside it to `budget_exhausted`. That includes the raw-page chunk work
 bound, which previously escaped as an unmapped error.
+
+Decision 7 already holds in relation inspection. Every endpoint and basis bead
+of an assessed relation is pinned to its task, and the task disposes of every
+pinned pair. Inspection lists each pair that involves the inspected bead and
+authorizes both beads, so a bead shows an assessed relation's author text only
+to a reader of the task's whole pinned population. No change was needed for
+that.
 
 Migrations 0001–0042 keep their bytes.
 
@@ -84,16 +114,23 @@ Each runtime test below failed before the change and passes after it.
   - `test_a_refused_evidence_read_leaves_the_trace_of_an_unknown_note`: an
     evidence read refused after the note's own inspection now writes the same
     audit rows as one for an unknown note (none).
+  - `test_a_late_relation_inspection_denial_leaves_the_trace_of_an_unknown_bead`:
+    a relation inspection denied on the relation's revoked target, after the
+    inspected bead's own source was authorized, now writes the same audit rows
+    as an unknown bead (none).
 - `test_authored_statement_kinds.test_a_note_with_a_context_source_is_inspectable`:
   a note whose statement names a context source is inspectable. Once that
   source is revoked, the note reads exactly as an unknown note.
 - `test_inspection_withholding_migration` (database-free) checks that 0043:
-  - restates the two functions with exactly the listed edits, and creates
+  - restates the six functions with exactly the listed edits, and creates
     nothing else;
   - grants nothing;
-  - leaves only the handler returning a bare refusal or budget;
-  - places every check that can deny the note before the first budget.
+  - leaves only the handlers returning a bare refusal or budget;
+  - places every check that can deny a bead before the first budget.
 
-The existing suites stay green: `test_stored_bead_inspection`,
+The existing inspection suites stay green: `test_stored_bead_inspection`,
 `test_authored_statement_kinds`, `test_declared_evidence_scope` and
-`test_installed_migrations`.
+`test_installed_migrations`. Three suites were rerun with their final
+migration hop retargeted: PR-03's relation-assessment and assessed-lifecycle
+suites, and the revision-6 suite. Each gives identical per-test outcomes at
+schema 42 and at schema 43, 87 tests each.

@@ -696,6 +696,63 @@ class AgentSqlResults(unittest.TestCase):
         self.assertEqual(refused, missing)
         self.assertEqual(refused_rows, missing_rows, (refused_rows, missing_rows))
 
+    def relations_of(self, bead: UUID) -> Any:
+        return PostgresRelationAssessments(
+            self.db,
+            credential_sha256=self.fixture.secret_hash,
+            workspace_id=self.fixture.workspace,
+        ).inspect_relations(InspectBeadRelationsV2(bead_id=bead))
+
+    def test_a_late_relation_inspection_denial_leaves_the_trace_of_an_unknown_bead(
+        self,
+    ) -> None:
+        # Pair 3 for relation inspection (CLI `relations`): a relation's target
+        # lies in a second source, which is revoked. Inspecting the relation's
+        # source passed that bead's own source, writing "allowed" audit rows,
+        # and was then denied on the target. The rows persisted, where an
+        # unknown bead leaves none; now the denial leaves none either.
+        fixture = self.fixture
+        tag = uuid4().hex[:8]
+        other_source = fixture.add_source("relation-late-" + tag)
+        source = fixture.bead(
+            "Fictional source: the ledger balanced.",
+            "Fictional second observation: every crate was counted.",
+            key="relation-late-source-" + tag,
+        )
+        target = fixture.bead(
+            "Fictional target: the audit passed.",
+            key="relation-late-target-" + tag,
+            source=other_source,
+        )
+        fixture.activate_relations(source, (target,), key="relation-late-" + tag)
+        fixture.propose(
+            lambda packet: [
+                fixture.proposal(
+                    packet,
+                    "supports",
+                    fixture.endpoint(packet, source, 0),
+                    fixture.endpoint(packet, target, 0),
+                    basis="agent_inferred",
+                )
+            ]
+        )
+        fixture.run_relations()
+        self.assertEqual(self.relations_of(source).outcome, "available")
+        self.db.execute(
+            "UPDATE memoriesql.protected_resources SET status='revoked',"
+            "revoked_at=clock_timestamp() WHERE resource_id=%s",
+            (other_source,),
+        )
+        before = self.audit_rows()
+        denied = self.relations_of(source)
+        denied_rows = self.audit_rows() - before
+        before = self.audit_rows()
+        missing = self.relations_of(uuid4())
+        missing_rows = self.audit_rows() - before
+        self.assertEqual(denied.outcome, "unavailable")
+        self.assertEqual(denied, missing)
+        self.assertEqual(denied_rows, missing_rows, (denied_rows, missing_rows))
+
     def test_query_page_cursor_reuse_and_redelivery_without_rerun(self) -> None:
         source, target, _ = self.fixture.assertion()
         run = self.start()
