@@ -9,6 +9,80 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 SQL = (ROOT / "migrations/0039_agent_relation_reads.sql").read_text()
 
+# Owner decision 6, completed (Codex P1 on #78). The reply's content_digest is
+# the SHA-256 of the sealed body, so a revision-2 body holds only what the
+# caller may see: its protected frame digests and witness hash are bound in the
+# internal dependency partition. Result commit and the disclosure-time closure
+# check read them there. Each restatement is its installed text with exactly
+# these edits; revision-1 bodies, which reach no reply, are checked as before.
+PROTECTED_KEYS_ABSENT = (
+    "{0}->'witness_sha256' IS NOT NULL OR {0}#>'{{frame,snapshot_digest}}' IS NOT NULL\n"
+    "{1}OR {0}#>'{{frame,projection_manifest_sha256}}' IS NOT NULL"
+)
+RESTATED = {
+    "commit_query_result_v1": (
+        "0034_query_result_commit.sql",
+        (
+            (
+                "  OR data#>>'{frame,projection_manifest_sha256}' IS DISTINCT FROM"
+                " i.projection_manifest_sha256\n"
+                "  OR data->>'witness_sha256' IS DISTINCT FROM"
+                " encode(sha256(witnesses),'hex')\n",
+                "  OR (data->'population_revision' IS DISTINCT FROM '2'::jsonb AND (\n"
+                "   data#>>'{frame,projection_manifest_sha256}' IS DISTINCT FROM"
+                " i.projection_manifest_sha256\n"
+                "   OR data->>'witness_sha256' IS DISTINCT FROM"
+                " encode(sha256(witnesses),'hex')))\n"
+                "  OR (data->'population_revision'='2'::jsonb AND (\n"
+                "   " + PROTECTED_KEYS_ABSENT.format("data", "   ") + "\n"
+                "   OR deps#>>'{protected_frame,snapshot_digest}' IS DISTINCT FROM"
+                " i.projection_manifest_sha256\n"
+                "   OR deps#>>'{protected_frame,projection_manifest_sha256}' IS DISTINCT FROM"
+                " i.projection_manifest_sha256\n"
+                "   OR deps->>'witness_sha256' IS DISTINCT FROM"
+                " encode(sha256(witnesses),'hex')))\n",
+            ),
+        ),
+    ),
+    "check_query_result_closure_v2": (
+        "0037_observation_sql_population.sql",
+        (
+            (
+                "  OR body->>'witness_sha256' IS DISTINCT FROM"
+                " encode(sha256(a.witness_bytes),'hex')\n",
+                "  OR " + PROTECTED_KEYS_ABSENT.format("body", "  ") + "\n"
+                "  OR deps->>'witness_sha256' IS DISTINCT FROM"
+                " encode(sha256(a.witness_bytes),'hex')\n",
+            ),
+            (
+                "IS DISTINCT FROM body#>>'{frame,projection_manifest_sha256}'\n"
+                "  OR body#>>'{frame,snapshot_digest}' IS DISTINCT FROM"
+                " body#>>'{frame,projection_manifest_sha256}' THEN\n",
+                "IS DISTINCT FROM deps#>>'{protected_frame,projection_manifest_sha256}'\n"
+                "  OR deps#>>'{protected_frame,snapshot_digest}' IS DISTINCT FROM"
+                " deps#>>'{protected_frame,projection_manifest_sha256}' THEN\n",
+            ),
+        ),
+    ),
+}
+
+
+def statement(text: str, create: str, name: str) -> str:
+    match = re.search(re.escape(f"{create} memoriesql.{name}(") + r".*?\$\$;", text, re.S)
+    assert match is not None, name
+    return match.group(0)
+
+
+def restated(name: str) -> str:
+    """The installed statement of `name` with exactly its listed edits."""
+    source, edits = RESTATED[name]
+    text = statement((ROOT / "migrations" / source).read_text(), "CREATE FUNCTION", name)
+    for old, new in edits:
+        if text.count(old) != 1:
+            raise AssertionError(f"{name}: edit does not apply once")
+        text = text.replace(old, new)
+    return text.replace("CREATE FUNCTION", "CREATE OR REPLACE FUNCTION", 1)
+
 # Every earlier kernel name delegates to one mode-threaded body.
 THREADED = {
     "relation_closure_authorized_v1": "relation_closure_authorized_v2",
@@ -39,7 +113,12 @@ class AgentRelationReadsMigration(unittest.TestCase):
         # The reviewed query reader's profile cannot change: nothing is granted
         # and nothing in the reader's schema is touched.
         self.assertNotRegex(SQL, r"(?im)^\s*GRANT\b")
-        self.assertNotIn("memoriesql_query", SQL)
+        # Only the restated result commit reads the reader schema's invocation
+        # records, exactly as its installed text does.
+        rest = SQL
+        for name in RESTATED:
+            rest = rest.replace(statement(SQL, "CREATE OR REPLACE FUNCTION", name), "")
+        self.assertNotIn("memoriesql_query", rest)
         created = re.findall(r"^CREATE FUNCTION memoriesql\.([a-z_0-9]+)\(", SQL, re.M)
         self.assertEqual(
             sorted(created),
@@ -70,6 +149,12 @@ class AgentRelationReadsMigration(unittest.TestCase):
         # The agent gate is source.read on the exact event of the source object.
         self.assertIn("'source.read','read'", helper)
         self.assertIn("ev.source_object_id=source", helper)
+
+    def test_result_digests_bind_protected_values_only_internally(self) -> None:
+        for name in RESTATED:
+            self.assertEqual(
+                statement(SQL, "CREATE OR REPLACE FUNCTION", name), restated(name)
+            )
 
     def test_agent_mode_never_governs_and_withholds_history(self) -> None:
         closure = body("relation_closure_authorized_v2", replaced=False)
