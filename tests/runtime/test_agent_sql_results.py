@@ -1793,12 +1793,13 @@ class AgentSqlResults(unittest.TestCase):
         self.close(owner_run)
         self.close(run, reader)
 
-    def hidden_history(self) -> tuple[str, Callable[[], None]]:
+    def hidden_history(self, action: str = "confirm") -> tuple[str, Callable[[], None]]:
         """A paired agent, and owner-only history that changes no row it reads.
 
         B is authored with a derived_from relation to C, and the assessed R
         cites only B, so R's root lineage reaches C through that authored
-        relation. An authored confirm on it is owner-only history.
+        relation. An authored lifecycle event on it, `confirm`, `retract` or
+        `supersede`, recorded after the agent's frame, is owner-only history.
         """
         fixture = self.fixture
         tag = uuid4().hex[:8]
@@ -1823,6 +1824,22 @@ class AgentSqlResults(unittest.TestCase):
                 source=ob,
             )
         lineage = UUID(ids["lineage"])
+        replacement: UUID | None = None
+        if action == "supersede":
+            # A second authored derived_from relation into C, to replace the
+            # lineage with. It lies outside R's own lineage.
+            with self.in_scope(sb):
+                fixture.author(
+                    "Fictional B2: a second reading of the first count.",
+                    "b2-" + tag,
+                    candidates=(c,),
+                    plan=lambda extras, bead, found: ids.setdefault(
+                        "replacement",
+                        fixture.relate(extras, bead, found[0], "derived_from"),
+                    ),
+                    source=ob,
+                )
+            replacement = UUID(ids["replacement"])
         t = fixture.remote_bead(
             "Fictional T: the audit's finding.", key="t-" + tag, scope=st, source=ot
         )
@@ -1852,9 +1869,10 @@ class AgentSqlResults(unittest.TestCase):
         def confirm() -> None:
             fixture.lifecycle.record_relation_event(
                 RecordRelationEvent(
-                    idempotency_key="orchard.confirm." + tag,
+                    idempotency_key=f"orchard.{action}." + tag,
                     relation_id=lineage,
-                    action="confirm",
+                    action=action,
+                    replacement_relation_id=replacement,
                     reason="Fictional owner review.",
                     expected_last_event_id=fixture.latest_relation_event(lineage),
                 )
@@ -1986,6 +2004,45 @@ class AgentSqlResults(unittest.TestCase):
         self.assertEqual(reply["outcome"], "available", reply)
         self.close(run, agent)
         confirm()
+        later = self.start(agent)
+        again = self.reuse(later, reply["result"], page_size=50, secret=agent)
+        self.close(later, agent)
+        self.assertEqual(again["outcome"], "available", again)
+        self.assertEqual(again["page"]["rows"], reply["page"]["rows"])
+
+    def test_an_agents_saved_result_survives_a_retraction_it_cannot_see(self) -> None:
+        # John, 2026-10-06: "Add the retract and replace probes." An owner-only
+        # retraction of R's root-lineage relation, recorded after the agent's
+        # result was saved, does not decide what the agent is served: its reuse
+        # stays available with the same rows.
+        agent, retract = self.hidden_history("retract")
+        run = self.start(agent)
+        _, reply = self.query(
+            run, self.HIDDEN_HISTORY_QUERY, page_size=50, secret=agent
+        )
+        self.assertEqual(reply["outcome"], "available", reply)
+        self.close(run, agent)
+        retract()
+        later = self.start(agent)
+        again = self.reuse(later, reply["result"], page_size=50, secret=agent)
+        self.close(later, agent)
+        self.assertEqual(again["outcome"], "available", again)
+        self.assertEqual(again["page"]["rows"], reply["page"]["rows"])
+
+    def test_an_agents_saved_result_survives_a_replacement_it_cannot_see(
+        self,
+    ) -> None:
+        # The replace probe: an owner-only supersession of R's root-lineage
+        # relation by another relation, recorded after the agent's result was
+        # saved, leaves the agent's reuse available with the same rows.
+        agent, supersede = self.hidden_history("supersede")
+        run = self.start(agent)
+        _, reply = self.query(
+            run, self.HIDDEN_HISTORY_QUERY, page_size=50, secret=agent
+        )
+        self.assertEqual(reply["outcome"], "available", reply)
+        self.close(run, agent)
+        supersede()
         later = self.start(agent)
         again = self.reuse(later, reply["result"], page_size=50, secret=agent)
         self.close(later, agent)
