@@ -237,9 +237,9 @@ lists the admission rules agents follow:
   chains `a = b = $1`, so both reply `unsupported_query` with
   `{"code": "feature", "feature": "comparison_grouping", "position": N}` at the
   comparison's first operand; `(x = y) IS NULL` runs as written.
-- Recursion may expand over relation endpoints. Recursion over correction edges
-  replies `unsupported_query` with
-  `{"code": "feature", "feature": "correction_recursion"}`, without a position.
+- `memoriesql query` sends no recursion declaration in this release, so a query
+  using `WITH RECURSIVE` never runs through it: it replies `invalid_request` with
+  `{"code": "binding"}`, without a feature or a position.
 - `position` is the 0-based character offset, in the SQL as sent, of the first
   operand of the refused operator, or of the `$` of a parameter.
 - Parameters may be written without spaces, as in `IN ($1,$2)`.

@@ -80,10 +80,10 @@ ADMISSION_RULES = (
     "`position` is the 0-based character offset, in the SQL as sent, of the "
     "first operand of the refused operator, or of the `$` of a parameter.",
     "Aggregate window functions need an explicit ROWS frame.",
-    "One bounded recursive CTE requires the declared recursion object. It may "
-    "expand over relation endpoints; recursion over correction edges replies "
-    'unsupported_query with error {"code": "feature", "feature": '
-    '"correction_recursion"}, without a position.',
+    "`memoriesql query` sends no recursion declaration in this release, so a "
+    "query using `WITH RECURSIVE` never runs through it: it replies "
+    'invalid_request with error {"code": "binding"}, without a feature or a '
+    "position.",
     "Other refused constructs reply invalid_request or unsupported_query with a "
     "code and position; project a column instead of `EXISTS (SELECT 1 ...)`.",
 )
