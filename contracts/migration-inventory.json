@@ -161,6 +161,10 @@
     {
       "filename": "0040_authorization_context_cleanup.sql",
       "sha256": "09ce9ead7d3de5c1f68f7ae72b357c02e47f9bc48bb4aef114bf86919a50a3b2"
+    },
+    {
+      "filename": "0041_authored_statement_kinds.sql",
+      "sha256": "3a7c5eca413aa8c573f62a446c957d2b048fc066d8bce1c1f8af2cff72fd623a"
     }
   ]
 }

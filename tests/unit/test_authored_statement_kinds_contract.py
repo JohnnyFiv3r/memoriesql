@@ -1,0 +1,124 @@
+"""Database-free contract of author-complete-unit revision 7."""
+
+from __future__ import annotations
+
+import copy
+import json
+import re
+import unittest
+import uuid
+from typing import Any
+
+from pydantic import ValidationError
+
+from memoriesql.application.canonical_transactions import StatementKind
+from memoriesql.application.local_entity_mentions import (
+    AUTHORED_MENTION_TASK,
+    CORRECTION_IN_SOURCE,
+    EVERY_STATEMENT_RENDERED,
+    MENTION_EXECUTION_TASK,
+    AuthoredMentionOutput,
+    AuthoredMentionStep,
+    MentionAuthorStep,
+    MentionExecutionOutput,
+)
+
+HASH = "a" * 64
+KINDS = re.compile(r'"(observation|context|qualification|correction)"')
+
+
+def output(**statement: Any) -> dict[str, Any]:
+    observation = str(uuid.uuid4())
+    unit = str(uuid.uuid4())
+    clause = {"text": "Fictional note.", "statement_ids": [observation]}
+    return {
+        "annotations": [
+            {
+                "bead_id": str(uuid.uuid4()),
+                "event_id": str(uuid.uuid4()),
+                "source_unit_id": unit,
+                "bead_version_id": str(uuid.uuid4()),
+                "expected_bead_version": 0,
+                "bead_type_key": "observation",
+                "bead_type_revision": 1,
+                "statements": [
+                    {
+                        "statement_id": observation,
+                        "statement_kind": "observation",
+                        "statement_text": "Fictional note.",
+                        "evidence": [{"source_unit_id": unit, "content_hash": HASH}],
+                        "model_run_ref": "orchard.run",
+                    }
+                    | statement
+                ],
+                "render": {"title": clause, "summary": [clause]},
+                "mentions": [],
+            }
+        ]
+    }
+
+
+def offered(model: Any) -> list[str]:
+    return sorted(set(KINDS.findall(json.dumps(model.model_json_schema()))))
+
+
+class AuthoredStatementKindsContract(unittest.TestCase):
+    def test_revision_7_offers_only_the_kinds_a_new_note_can_carry(self) -> None:
+        self.assertEqual(
+            offered(AuthoredMentionStep), ["context", "observation", "qualification"]
+        )
+        schema = json.dumps(AuthoredMentionStep.model_json_schema())
+        self.assertIn(CORRECTION_IN_SOURCE, schema)
+        self.assertIn(EVERY_STATEMENT_RENDERED, schema)
+        self.assertEqual(AUTHORED_MENTION_TASK.contract_revision, 7)
+        self.assertEqual(
+            AUTHORED_MENTION_TASK.output_contract.reference.contract_id,
+            "memory.semantic.local-mentions.output",
+        )
+        self.assertEqual(AUTHORED_MENTION_TASK.output_contract.reference.revision, 2)
+
+    def test_the_correction_kind_is_refused_at_the_schema(self) -> None:
+        AuthoredMentionOutput.model_validate(output())
+        AuthoredMentionOutput.model_validate(
+            output(statement_kind="observation", statement_text="Now five.")
+        )
+        with self.assertRaises(ValidationError) as refused:
+            AuthoredMentionOutput.model_validate(output(statement_kind="correction"))
+        # Refused as a value the schema never offers, before the canonical
+        # supersession rule could apply.
+        errors = refused.exception.errors()
+        self.assertIn("enum", {error["type"] for error in errors})
+        self.assertFalse(any("supersession" in error["msg"] for error in errors))
+        with self.assertRaises(ValidationError):
+            AuthoredMentionOutput.model_validate(
+                output(
+                    statement_kind="observation",
+                    supersedes_statement_id=str(uuid.uuid4()),
+                )
+            )
+
+    def test_revision_4_and_stored_history_are_unchanged(self) -> None:
+        # Revision 4 keeps its pinned contract, including the kind it offers but
+        # never accepts; stored statements still read every historical kind.
+        self.assertEqual(
+            offered(MentionAuthorStep),
+            ["context", "correction", "observation", "qualification"],
+        )
+        self.assertEqual(
+            MENTION_EXECUTION_TASK.contract_hash,
+            "8488d4fddf19e65a2eb41203d6b26d7b400d73516c044700246ab3a7e75adce5",
+        )
+        self.assertEqual(
+            MENTION_EXECUTION_TASK.output_contract.schema_hash,
+            "0baecb82f0993a29dbc6c1afb6e41a5f3b83b8ebfe1f70315d87b5a7672d8e8c",
+        )
+        self.assertIn("correction", {kind.value for kind in StatementKind})
+        # A valid revision-7 output keeps revision 4's canonical statement keys.
+        data = output()
+        seven = AuthoredMentionOutput.model_validate(copy.deepcopy(data))
+        four = MentionExecutionOutput.model_validate(copy.deepcopy(data))
+        self.assertEqual(seven.model_dump(mode="json"), four.model_dump(mode="json"))
+
+
+if __name__ == "__main__":
+    unittest.main()

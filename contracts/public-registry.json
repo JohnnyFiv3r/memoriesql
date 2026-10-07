@@ -1446,7 +1446,7 @@
     },
     {
       "disposition": "include",
-      "expected_record_count": 62,
+      "expected_record_count": 63,
       "filename": "json-schema.json",
       "kind": "json_schema",
       "note": "Provider-neutral capture, host, source-range, transcript-fold, and harness-lifecycle schemas."
@@ -1905,6 +1905,17 @@
       "public_sha256": "b420d80f6e4638533a4c3c0f1516b427af09eac996a58c9dec3cce2eb503b919",
       "reason": "Public-authored immutable local mention persistence and forward revisiting contracts.",
       "version": "1"
+    },
+    {
+      "canonical_payload_sha256": "af98152b54b736f8ec2b0ab7f827edaa7700e4d9015fcd370fa27efb25b4493f",
+      "catalog": "json_schema",
+      "classification": "proposed_open_core",
+      "id": "memoriesql.local-entity-mentions.v2",
+      "package_disposition": "include",
+      "path": "contracts/records/memoriesql-local-entity-mentions-v2.json",
+      "public_sha256": "e98e865d9da755805c5c84a431be784d6f8d0d1ac9ad3de16e28d7eaee8341f5",
+      "reason": "Public-authored revision-7 local mention contracts that offer authors only the statement kinds a new note can carry.",
+      "version": "2"
     },
     {
       "canonical_payload_sha256": "d8ff1aed2dd98a17e7ffe555328695d9b6c16f1f5c936ba743eb0d177fe69ad5",
