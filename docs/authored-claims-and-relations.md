@@ -146,7 +146,12 @@ revision.
 `inspect_bead_relations_v1` returns one bead's claims, incoming and outgoing
 relations, candidate assessments and authored claim judgments as of `known_at`.
 Every disclosed bead, statement, evidence event and derivation root must be
-currently readable; otherwise the whole response is `unavailable`. Responses are
+currently readable; otherwise the whole response is `unavailable`. Since
+migration 0043, by the owner's decision of 2026-10-07, an authored relation is
+disclosed, from either endpoint, only to a reader currently authorized for
+every candidate supplied to its author. Otherwise the response is
+`unavailable`, exactly as for a missing bead. The reason is written only to
+the server log, for operators. Responses are
 bounded at 262,144 canonical bytes and derivation lineages at 128 beads; past
 either bound the response is `budget_exhausted`, never truncated.
 

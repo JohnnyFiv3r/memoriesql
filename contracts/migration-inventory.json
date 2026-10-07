@@ -169,6 +169,10 @@
     {
       "filename": "0042_terminal_pairing_revocation.sql",
       "sha256": "4fa68c3e003a75fd12925c1e24900fb5a3aff434b1105374343e6ac34e8280dd"
+    },
+    {
+      "filename": "0043_inspection_withholding.sql",
+      "sha256": "82da31c4a8e0afdf45e62c4ef40102629e59bd0db013285384765d6ef42a3ccc"
     }
   ]
 }
