@@ -921,7 +921,13 @@ class PostgresAgentSqlResults:
             }
             for item in page["rows"]
         ]
-        keys = sorted({ref_key(ref) for row in rows for ref in row["evidence_refs"]})
+        # Delivering a row makes its evidence and its own fact visible. An
+        # aggregate's fact makes none of its contributors visible.
+        visible = [
+            [*row["evidence_refs"], {"kind": "result_fact", "fact": row["fact_ref"]}]
+            for row in rows
+        ]
+        keys = sorted({ref_key(ref) for row_refs in visible for ref in row_refs})
         known = frame.execute(
             "SELECT memoriesql.query_visible_refs_v1(%s,%s)",
             (UUID(admission["delivery_ref"]), keys),
@@ -959,7 +965,7 @@ class PostgresAgentSqlResults:
             if exact_rows is not None and len(rows) < exact_rows:
                 raise _Failure("execution_error", "database")
             shown = rows[:count]
-            refs = {ref_key(r): r for row in shown for r in row["evidence_refs"]}
+            refs = {ref_key(r): r for row_refs in visible[:count] for r in row_refs}
             new = [refs[k] for k in sorted(refs) if k not in previous_keys]
             old = [refs[k] for k in sorted(refs) if k in previous_keys]
             next_row = first_row + count if first_row + count <= total else None
