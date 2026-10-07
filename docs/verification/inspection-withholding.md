@@ -1,6 +1,7 @@
 # Inspection withholding (migration 0043)
 
-Owner decisions 6 and 8 of 2026-10-06 cover two inspection readers:
+Owner decisions 6 and 8 of 2026-10-06, and decision 7 as the owner extended it
+on 2026-10-07, cover two inspection readers:
 - stored-bead inspection (`inspect_stored_bead_v1`, CLI `inspect`) and its
   evidence reader (`read_stored_bead_evidence_v1`, CLI `source`);
 - relation inspection (`inspect_bead_relations_v2` and `_v3`, CLI
@@ -44,6 +45,14 @@ and outcomes are unchanged.
   unit of the statement's own evidence. Inspection authorized the unit ID as
   if it were a source object, so every note with a context source inspected as
   `unavailable`.
+- **A revision-6 relation showed text about a candidate its reader could not
+  read (decision 7, extended on 2026-10-07).** A revision-6 author is shown
+  every candidate supplied to it, so its relation's rationale or
+  qualification may quote any of them. Inspecting the authoring bead required
+  every supplied candidate, through its candidate assessments. Inspecting the
+  relation's target required only the relation's own endpoints, evidence and
+  closure. So once a candidate other than the endpoints became unreadable, the
+  target still showed the relation's text.
 
 ## The change
 
@@ -80,17 +89,34 @@ and outcomes are unchanged.
 - **Context sources** are authorized through their unit's event's source
   object, as evidence is. A missing or unreadable context source reads exactly
   as an unknown note.
+- **Every supplied candidate, from either endpoint.** An authored relation is
+  disclosed only to a reader currently authorized for every candidate
+  supplied to its author.
+  - The base checks each supplied candidate's version for every listed
+    authored relation.
+  - The frame retains and re-reads each candidate's records as a dependency.
+  - Otherwise the entire relation is withheld. The whole read is then exactly
+    a read of missing data, its audit trace included.
+- **Private operational diagnostics.** Each such withholding writes one line to
+  the PostgreSQL server log, for operators. It names the relation, the
+  principal and the unreadable candidate by identifier, and carries no text.
+  Both functions pin `client_min_messages`, so the line never reaches a client
+  connection, even one that asks for log messages. The server log is an
+  operator-only channel. Its lines may name identifiers the caller may not
+  see, which is why they never reach a client connection. No exception
+  message, audit row or notice carries the reason: callers see only the
+  refusal they would see for a missing bead.
 
 One further consequence: the evidence reader's handler now maps every program
 limit inside it to `budget_exhausted`. That includes the raw-page chunk work
 bound, which previously escaped as an unmapped error.
 
-Decision 7 already holds in relation inspection. Every endpoint and basis bead
-of an assessed relation is pinned to its task, and the task disposes of every
-pinned pair. Inspection lists each pair that involves the inspected bead and
-authorizes both beads, so a bead shows an assessed relation's author text only
-to a reader of the task's whole pinned population. No change was needed for
-that.
+For assessed relations, decision 7 already held in relation inspection. Every
+endpoint and basis bead of an assessed relation is pinned to its task, and the
+task disposes of every pinned pair. Inspection lists each pair that involves
+the inspected bead and authorizes both beads. So a bead shows an assessed
+relation's author text only to a reader of the task's whole pinned population.
+No change was needed for that.
 
 Migrations 0001–0042 keep their bytes.
 
@@ -118,6 +144,14 @@ Each runtime test below failed before the change and passes after it.
     a relation inspection denied on the relation's revoked target, after the
     inspected bead's own source was authorized, now writes the same audit rows
     as an unknown bead (none).
+- `test_authored_relations.test_an_authored_relation_needs_every_candidate_its_author_was_supplied`:
+  - fully authorized, both endpoints show the relation with its text, through
+    v2 and the legacy v1;
+  - once a supplied candidate that is neither endpoint is revoked, both
+    endpoints read exactly as a missing bead, audit trace included. Before the
+    change, the target still showed the text;
+  - a caller's connection that asks for server log messages hears nothing of
+    the withholding.
 - `test_authored_statement_kinds.test_a_note_with_a_context_source_is_inspectable`:
   a note whose statement names a context source is inspectable. Once that
   source is revoked, the note reads exactly as an unknown note.
@@ -126,7 +160,9 @@ Each runtime test below failed before the change and passes after it.
     nothing else;
   - grants nothing;
   - leaves only the handlers returning a bare refusal or budget;
-  - places every check that can deny a bead before the first budget.
+  - places every check that can deny a bead before the first budget;
+  - logs only the two revision-6 withholdings, from functions that pin
+    `client_min_messages`.
 
 `test_relation_inspection_needs_the_whole_task_of_a_relation_it_shows` pins
 decision 7's existing hold in inspection. A raw reader of the endpoints' scope
@@ -139,4 +175,7 @@ The existing inspection suites stay green: `test_stored_bead_inspection`,
 `test_installed_migrations`. Three suites were rerun with their final
 migration hop retargeted: PR-03's relation-assessment and assessed-lifecycle
 suites, and the revision-6 suite. Each gives identical per-test outcomes at
-schema 42 and at schema 43, 87 tests each.
+schema 42 and at schema 43, 87 tests each. With the revision-6 check added, the
+same suites at schema 43 again give identical outcomes. The one exception is
+the new revision-6 test, which migrates inside the test and so errors by
+construction when its suite is retargeted.

@@ -46,9 +46,19 @@
 -- - Pair 4: the base's response-size and time budgets move to the frame's
 --   end, after every check. The time budget now covers the whole inspection,
 --   two seconds from the statement's start, not only the base.
--- Decision 7 already holds there. Every endpoint and basis bead of an assessed
--- relation is pinned to its task, and inspection authorizes both beads of every
--- pinned pair that involves the inspected bead.
+-- Decision 7 already holds there for assessed relations. Every endpoint and
+-- basis bead of an assessed relation is pinned to its task, and inspection
+-- authorizes both beads of every pinned pair that involves the inspected bead.
+-- On 2026-10-07 the owner extended decision 7 to revision-6 authored relations.
+-- Disclosure requires current authorization to every candidate supplied to the
+-- relation's author; otherwise the entire relation is withheld. Inspection
+-- showed such a relation's rationale from its target even when a candidate
+-- other than its endpoints was unreadable. The base now checks every supplied
+-- candidate's version, and the frame retains and re-reads each one's records.
+-- A withholding reads exactly as missing data to the caller, its audit trace
+-- included. Its reason goes only to the server log, for operators: identifiers
+-- only, never text, through RAISE LOG. Both functions pin client_min_messages,
+-- so that line never reaches a client connection.
 --
 -- Forward-only; migrations 0001-0042 keep their bytes.
 
@@ -341,7 +351,7 @@ END; $$;
 
 CREATE OR REPLACE FUNCTION memoriesql.inspect_bead_relations_v3_base(request jsonb) RETURNS jsonb
 LANGUAGE plpgsql VOLATILE SECURITY DEFINER
-SET search_path = pg_catalog, memoriesql SET row_security = off SET lock_timeout = '500ms'
+SET search_path = pg_catalog, memoriesql SET row_security = off SET lock_timeout = '500ms' SET client_min_messages = notice
 AS $$
 DECLARE
     c memoriesql.authorization_contexts%ROWTYPE;
@@ -351,7 +361,7 @@ DECLARE
     known timestamp with time zone; amount integer;
     relations jsonb := '[]'; dispositions jsonb := '[]'; assessments jsonb := '[]'; tasks jsonb := '[]';
     types jsonb; type_ids uuid[] := '{}'; statements jsonb; evidence jsonb; events jsonb; state jsonb; result jsonb;
-    roots uuid[]; sources uuid[] := '{}'; source uuid;
+    roots uuid[]; sources uuid[] := '{}'; source uuid; withheld uuid;
     started timestamp with time zone := pg_catalog.clock_timestamp();
     unavailable constant jsonb := '{"contract_version":2,"outcome":"unavailable"}';
     budget constant jsonb := '{"contract_version":2,"outcome":"budget_exhausted"}';
@@ -405,6 +415,22 @@ BEGIN
                     'statement', jsonb_build_object('statement_id', link.statement_id, 'bead_id', link.bead_id,
                         'bead_version_id', link.bead_version_id, 'text', link.statement_text)));
             END LOOP;
+            -- Owner decision 7, extended by the owner on 2026-10-07 to
+            -- revision-6 authored relations: the author was shown every candidate
+            -- supplied to it, so the relation needs current authorization to each.
+            -- Otherwise it is withheld whole and the read is exactly a read of
+            -- missing data; the reason goes only to the server log, for operators.
+            SELECT a.candidate_bead_id INTO withheld FROM memoriesql.relation_candidate_assessments AS a
+            WHERE a.tenant_id = rel.tenant_id AND a.authoring_bead_id = rel.authoring_bead_id
+              AND a.recorded_at <= known
+              AND NOT memoriesql.current_context_bead_version_authorized(a.tenant_id, a.workspace_id,
+                      a.candidate_access_scope_id, a.candidate_bead_version_id)
+            ORDER BY a.candidate_bead_id LIMIT 1;
+            IF FOUND THEN
+                RAISE LOG 'memoriesql relation inspection withheld authored relation % from principal %: supplied candidate % is not readable',
+                    rel.relation_id, c.principal_id, withheld;
+                RAISE EXCEPTION 'bead_relations_unavailable' USING ERRCODE = '42501';
+            END IF;
             evidence := memoriesql.relation_evidence_view_v3(rel.tenant_id, 'relation', rel.relation_id, known);
             sources := sources || ARRAY(SELECT (x.v->>'source')::uuid FROM jsonb_array_elements(evidence->'sources') AS x(v));
             SELECT count(*) INTO amount FROM (SELECT 1 FROM memoriesql.bead_relation_events AS e
@@ -585,7 +611,7 @@ END;
 $$;
 
 CREATE OR REPLACE FUNCTION memoriesql.relation_inspection_frame_v1(request jsonb) RETURNS jsonb
-LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,memoriesql SET row_security=off AS $$
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,memoriesql SET row_security=off SET client_min_messages=notice AS $$
 DECLARE c memoriesql.authorization_contexts%ROWTYPE; response jsonb; row_item jsonb; q jsonb; roots_status text; roots jsonb; rows jsonb:='[]'; deps jsonb:='[]'; evidence jsonb; manifest jsonb; known timestamptz; snapshot_at timestamptz:=statement_timestamp(); d jsonb; r record;
 BEGIN
  IF jsonb_typeof(request) IS DISTINCT FROM 'object' OR NOT(request ?& ARRAY['contract_version','bead_id','known_at']) OR request-ARRAY['contract_version','bead_id','known_at']<>'{}' OR request->'contract_version'<>'3'::jsonb OR COALESCE(request->>'bead_id','')!~'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' OR jsonb_typeof(request->'known_at') NOT IN('string','null') THEN RETURN '{"contract_version":3,"outcome":"refused","error":"invalid_request"}'; END IF;
@@ -622,6 +648,22 @@ BEGIN
  UNION SELECT (v->>'candidate_bead_id')::uuid FROM jsonb_array_elements(response->'candidate_assessments') x(v)
  UNION SELECT candidate::text::uuid FROM jsonb_array_elements(response->'relation_tasks') x(v) CROSS JOIN LATERAL jsonb_array_elements_text(v->'candidate_bead_ids') c(candidate)
  ) closure LOOP deps:=deps||memoriesql.relation_bead_records_v1(c.tenant_id,r.bead_id,known); END LOOP;
+ -- Owner decision 7, extended by the owner on 2026-10-07 to revision-6
+ -- authored relations: every candidate supplied to a listed authored
+ -- relation's author is a retained dependency. An unreadable one withholds
+ -- the read, and the reason goes only to the server log, for operators.
+ FOR r IN SELECT DISTINCT (v->>'relation_id')::uuid relation_id,a.candidate_bead_id bead_id
+   FROM jsonb_array_elements(response->'relations') x(v)
+   JOIN memoriesql.relation_candidate_assessments a ON a.tenant_id=c.tenant_id
+    AND a.authoring_bead_id=(v->>'authoring_bead_id')::uuid AND a.recorded_at<=known
+   WHERE v->>'kind'='authored' ORDER BY 1,2 LOOP
+  BEGIN
+   deps:=deps||memoriesql.relation_bead_records_v1(c.tenant_id,r.bead_id,known);
+  EXCEPTION WHEN insufficient_privilege THEN
+   RAISE LOG 'memoriesql relation inspection withheld authored relation % from principal %: supplied candidate % is not readable',r.relation_id,c.principal_id,r.bead_id;
+   RAISE EXCEPTION 'bead_relations_unavailable' USING ERRCODE='42501';
+  END;
+ END LOOP;
  SELECT COALESCE(jsonb_agg(v ORDER BY v->>'kind',v->>'id',memoriesql.lifecycle_hash_v1(v->'row')),'[]') INTO deps FROM (SELECT DISTINCT value v FROM jsonb_array_elements(deps)) x;
  SELECT COALESCE(jsonb_agg(jsonb_build_object('kind',v->'kind','id',v->'id','content_sha256',memoriesql.lifecycle_hash_v1(v->'row')) ORDER BY v->>'kind',v->>'id',memoriesql.lifecycle_hash_v1(v->'row')),'[]') INTO manifest FROM jsonb_array_elements(deps) x(v);
  response:=response||jsonb_build_object('frame',jsonb_build_object('known_at',memoriesql.relation_packet_time(known),'snapshot_at',memoriesql.relation_packet_time(snapshot_at),'dependency_manifest_sha256',memoriesql.lifecycle_hash_v1(manifest)));

@@ -7,10 +7,14 @@
   (inspect_bead_relations_v3_base, relation_inspection_frame_v1,
   inspect_bead_relations_v2 and inspect_bead_relations_v1, all 0030).
 
-They implement the owner's decisions of 2026-10-06:
+They implement the owner's decisions of 2026-10-06 and 2026-10-07:
 - decision 8: inspection withholds what the query population withholds;
 - decision 6 (pairs 3 and 4): a denial, or a budget, leaves no audit trace, and
   every dependency that can deny the bead is authorized before any budget;
+- decision 7, extended on 2026-10-07 to revision-6 authored relations: such a
+  relation needs current authorization to every candidate supplied to its
+  author. A withholding reads exactly as missing data to the caller, and its
+  reason goes only to the server log, for operators;
 - the approved context-source fix: a context source is authorized through its
   event's source object, as evidence is.
 """
@@ -224,6 +228,50 @@ BASE_TIME = (
 BASE_BUDGETS_MOVED = """    -- Owner decision 6 of 2026-10-06 (pair 4): the frame decides the response
     -- size and time budgets, after its own checks.
 """
+
+# Owner decision 7, extended by the owner on 2026-10-07 to revision-6 authored
+# relations: disclosure needs current authorization to every candidate supplied
+# to the relation's author, or the whole relation is withheld. The read is then
+# exactly a read of missing data, and the reason goes only to the server log,
+# for operators. Both functions pin client_min_messages, so the log line never
+# reaches a client connection, whatever that connection asked for.
+WITHHELD_LOG = (
+    "'memoriesql relation inspection withheld authored relation % from principal"
+    " %: supplied candidate % is not readable'"
+)
+BASE_SETTINGS = (
+    "SET search_path = pg_catalog, memoriesql SET row_security = off"
+    " SET lock_timeout = '500ms'\n"
+)
+BASE_DECLARE = "    roots uuid[]; sources uuid[] := '{}'; source uuid;\n"
+AUTHORED_STATEMENTS_END = (
+    "            END LOOP;\n"
+    "            evidence := memoriesql.relation_evidence_view_v3(rel.tenant_id,"
+    " 'relation', rel.relation_id, known);\n"
+)
+AUTHORED_CANDIDATES = (
+    "            -- Owner decision 7, extended by the owner on 2026-10-07 to\n"
+    "            -- revision-6 authored relations: the author was shown every candidate\n"
+    "            -- supplied to it, so the relation needs current authorization to each.\n"
+    "            -- Otherwise it is withheld whole and the read is exactly a read of\n"
+    "            -- missing data; the reason goes only to the server log, for operators.\n"
+    "            SELECT a.candidate_bead_id INTO withheld"
+    " FROM memoriesql.relation_candidate_assessments AS a\n"
+    "            WHERE a.tenant_id = rel.tenant_id"
+    " AND a.authoring_bead_id = rel.authoring_bead_id\n"
+    "              AND a.recorded_at <= known\n"
+    "              AND NOT memoriesql.current_context_bead_version_authorized("
+    "a.tenant_id, a.workspace_id,\n"
+    "                      a.candidate_access_scope_id, a.candidate_bead_version_id)\n"
+    "            ORDER BY a.candidate_bead_id LIMIT 1;\n"
+    "            IF FOUND THEN\n"
+    "                RAISE LOG " + WITHHELD_LOG + ",\n"
+    "                    rel.relation_id, c.principal_id, withheld;\n"
+    "                RAISE EXCEPTION 'bead_relations_unavailable'"
+    " USING ERRCODE = '42501';\n"
+    "            END IF;\n"
+)
+
 BASE_EDITS: tuple[tuple[str, str, int], ...] = (
     (
         "CREATE FUNCTION memoriesql.inspect_bead_relations_v3_base(",
@@ -239,6 +287,15 @@ BASE_EDITS: tuple[tuple[str, str, int], ...] = (
     (BASE_SIZE, BASE_BUDGETS_MOVED, 1),
     (BASE_TIME, "", 1),
     ("@@HANDLER@@\n", BASE_HANDLER, 1),
+    (BASE_SETTINGS, BASE_SETTINGS[:-1] + " SET client_min_messages = notice\n", 1),
+    (BASE_DECLARE, BASE_DECLARE[:-1] + " withheld uuid;\n", 1),
+    (
+        AUTHORED_STATEMENTS_END,
+        "            END LOOP;\n"
+        + AUTHORED_CANDIDATES
+        + AUTHORED_STATEMENTS_END.split("\n", 1)[1],
+        1,
+    ),
 )
 
 FRAME_SIZE = (
@@ -259,6 +316,36 @@ FRAME_BUDGETS = (
     + RELATIONS_BUDGET
     + " END IF;\n"
 )
+FRAME_SETTINGS = (
+    "LANGUAGE plpgsql VOLATILE SECURITY DEFINER"
+    " SET search_path=pg_catalog,memoriesql SET row_security=off AS $$\n"
+)
+FRAME_CLOSURE_END = (
+    " ) closure LOOP"
+    " deps:=deps||memoriesql.relation_bead_records_v1(c.tenant_id,r.bead_id,known);"
+    " END LOOP;\n"
+)
+AUTHORING_CANDIDATES = (
+    " -- Owner decision 7, extended by the owner on 2026-10-07 to revision-6\n"
+    " -- authored relations: every candidate supplied to a listed authored\n"
+    " -- relation's author is a retained dependency. An unreadable one withholds\n"
+    " -- the read, and the reason goes only to the server log, for operators.\n"
+    " FOR r IN SELECT DISTINCT (v->>'relation_id')::uuid relation_id,"
+    "a.candidate_bead_id bead_id\n"
+    "   FROM jsonb_array_elements(response->'relations') x(v)\n"
+    "   JOIN memoriesql.relation_candidate_assessments a"
+    " ON a.tenant_id=c.tenant_id\n"
+    "    AND a.authoring_bead_id=(v->>'authoring_bead_id')::uuid"
+    " AND a.recorded_at<=known\n"
+    "   WHERE v->>'kind'='authored' ORDER BY 1,2 LOOP\n"
+    "  BEGIN\n"
+    "   deps:=deps||memoriesql.relation_bead_records_v1(c.tenant_id,r.bead_id,known);\n"
+    "  EXCEPTION WHEN insufficient_privilege THEN\n"
+    "   RAISE LOG " + WITHHELD_LOG + ",r.relation_id,c.principal_id,r.bead_id;\n"
+    "   " + RELATIONS_UNAVAILABLE + "\n"
+    "  END;\n"
+    " END LOOP;\n"
+)
 FRAME_EDITS: tuple[tuple[str, str, int], ...] = (
     (
         "CREATE FUNCTION memoriesql.relation_inspection_frame_v1(",
@@ -271,6 +358,12 @@ FRAME_EDITS: tuple[tuple[str, str, int], ...] = (
         4,
     ),
     (FRAME_SIZE + FRAME_AUTHORITY, FRAME_AUTHORITY + FRAME_BUDGETS, 1),
+    (
+        FRAME_SETTINGS,
+        FRAME_SETTINGS.replace(" AS $$", " SET client_min_messages=notice AS $$"),
+        1,
+    ),
+    (FRAME_CLOSURE_END, FRAME_CLOSURE_END + AUTHORING_CANDIDATES, 1),
 )
 
 V2_EDITS: tuple[tuple[str, str, int], ...] = (
@@ -448,6 +541,21 @@ class InspectionWithholdingMigration(unittest.TestCase):
             self.assertIn(
                 "EXCEPTION WHEN insufficient_privilege THEN " + reply, wrapper
             )
+
+    def test_revision_six_relations_need_every_supplied_candidate(self) -> None:
+        # Both the base and the frame check the candidates supplied to an
+        # authored relation's author. Each withholding is logged once, only to
+        # the server log: both functions pin client_min_messages, so the line
+        # never reaches a client connection, and nothing else in 0043 logs.
+        sql = (MIGRATIONS / NAME).read_text()
+        base, frame = function(sql, BASE), function(sql, FRAME)
+        self.assertEqual(base.count(AUTHORED_CANDIDATES), 1)
+        self.assertEqual(frame.count(AUTHORING_CANDIDATES), 1)
+        self.assertIn("SET client_min_messages = notice", base.split("AS $$", 1)[0])
+        self.assertIn("SET client_min_messages=notice", frame.split("AS $$", 1)[0])
+        self.assertEqual((base.count("RAISE LOG"), frame.count("RAISE LOG")), (1, 1))
+        bodies = (INSPECT, EVIDENCE, BASE, FRAME, V2, V1)
+        self.assertEqual(sum(function(sql, n).count("RAISE LOG") for n in bodies), 2)
 
     def test_nothing_else_changes(self) -> None:
         sql = (MIGRATIONS / NAME).read_text()
