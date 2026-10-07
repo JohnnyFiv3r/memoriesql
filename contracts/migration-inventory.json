@@ -153,6 +153,10 @@
     {
       "filename": "0038_query_result_access.sql",
       "sha256": "97e19e2c845e223127e0b64c2b40642f5dd4a4ea75452c930d3a24462e834933"
+    },
+    {
+      "filename": "0039_agent_relation_reads.sql",
+      "sha256": "74fb8e5c1c9b297cc5e70c7e694ef1d8ba77e6f4a2daeb072cbeaedb4621d117"
     }
   ]
 }

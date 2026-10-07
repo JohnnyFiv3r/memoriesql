@@ -111,35 +111,46 @@ again, to `97e19e2c…`. It changes only two things:
 - the closure's attribution columns;
 - `acquire_query_access_lock_v1`.
 
-ea-4-link-3 binds the earlier bytes. The link for this head is the custodian's
+ea-4-link-4 binds the earlier bytes. The link for this head is the custodian's
 determination, and the request is with the owner.
 
-**Implementation linkage: ea-4-link-3 → `33e1c42`** (migration 0038
-`eabebb7f…`). The custodian recorded it at 2026-10-06T01:03:56Z. It is stored
-byte-identical in `../approvals/pr-05-custody-ea-4-link-3.json` (11,678 bytes,
-SHA-256 `f4b1fddc…`). It names migration 0037 `f8e2d468…` unchanged, and the
-review fix to the cleanup pass as migration 0038's only change since link-2.
+**Implementation linkage: ea-4-link-4 → `98d7903`.** The custodian recorded it
+at 2026-10-06T01:03:56Z. It is stored byte-identical in
+`../approvals/pr-05-custody-ea-4-link-4.json` (17,333 bytes, SHA-256
+`04a6365a…`). Migrations 0037 (`f8e2d468…`) and 0038 (`eabebb7f…`) are those of
+link-3.
 
-- **Supersedes ea-4-link-2 → `f6b1de2`** (migration 0038 `8835d25e…`), stored
-  byte-identical in `../approvals/pr-05-custody-ea-4-link-2.json` (2,919 bytes,
-  SHA-256 `4e2e350b…`). That link superseded ea-4-link-1 → `6aca830`, stored in
-  `../approvals/pr-05-custody-ea-4-link-1.json` (2,501 bytes, SHA-256
-  `20447b37…`).
-- **Semantics only.** The linkage is not a statement of runtime correctness or
-  release readiness. It records an implementation-reference update. This head
-  stays compatible with ea-4's authority and evidence rules and the frozen
-  grading policy, with no new authority amendment and no replacement freeze.
-- **The merged baseline.** The link identifies this head's merged pairing,
-  initialization and runtime-inventory changes as its baseline. It does not
-  certify those features or authorize more agent capabilities.
-- **Its grading notes:**
+- **An outcome-compatibility reconciliation, in the same record.** This head's
+  corrected failures and its admitted membership execution are observable
+  changes. The record maps them onto the unchanged packet's outcomes and the
+  frozen F0–F3 fault classes. ea-4-link-2's wording about unchanged failure
+  grading must not be read as unchanged runtime outcomes. No new authority or
+  evidence-semantic amendment, replacement freeze or numerical-policy approval
+  is required.
+- **Supersedes ea-4-link-3 → `33e1c42`,** stored byte-identical in
+  `../approvals/pr-05-custody-ea-4-link-3.json` (11,678 bytes, SHA-256
+  `f4b1fddc…`). Before it came ea-4-link-2 → `f6b1de2`
+  (`../approvals/pr-05-custody-ea-4-link-2.json`, SHA-256 `4e2e350b…`) and
+  ea-4-link-1 → `6aca830` (`../approvals/pr-05-custody-ea-4-link-1.json`,
+  SHA-256 `20447b37…`).
+- **Semantics only.** The linkage is not runtime, security, workload or
+  semantic-quality certification, and not release readiness.
+- **Schema 38.** This head is linked on schema 38. The AM-5 records (ea-5 and
+  ea-5-link-1) stay unchanged for migration 0039, and no combined head of this
+  pull request with migration 0039 is linked or qualified.
+- **The reader closure.** The record pins this head's provisioning source with
+  the six reviewed hash functions. Before the first query, a host upgrades the
+  package, grants those six functions through the owner/admin path, rebuilds or
+  re-pins the reader profile, and qualifies it. Missing or extra executable
+  privileges are never bypassed: a missing reviewed function makes provisioning
+  unavailable. The record itself grants nothing.
+- **Grading notes:**
   - a committed result or `settlement_pending` response is not successful
-    receipted disclosure;
-  - an oversized undeliverable row is now `budget_exhausted`/`transport`. That
-    is an observable outcome correction, and no evidence of an empty
-    population, a successful disclosure or a completed retrieval;
-  - cleanup mechanics changed, but expiry, holds, charges, authority and
-    grading obligations are not relaxed.
+    receipted disclosure, and unknown ownership or accounting stays F2;
+  - refusals for unreviewed operators, comparison grouping and correction
+    recursion happen before owned work. They are never new deferrals or
+    automatic passes: an unavailable required pattern, or correction
+    recursion, remains unmet acceptance.
 
 The PR-05 part of the rules the custodian named:
 
@@ -151,15 +162,12 @@ The PR-05 part of the rules the custodian named:
 
 Evaluation-condition parity and grading credit are enforced outside this core.
 
-PR-03's nine assessed relations keep their unchanged projection and its
-raw-source-gated provenance records. Only `personal_owner` holds
-`source.raw.read`, so a paired agent's relation tables are empty. Coverage
-discloses that as a gap, `relation_tables`/`source_raw_read_required`, never as
-absence. A caller without `source.read` likewise gets
-`observation_tables`/`source_read_required`. Both gaps describe only the caller's
-own capabilities, never whether protected data exists. Whether paired agents may
-read assessed relations is a PR-03/owner policy question; this cut changes no
-PR-03 authority.
+PR-03's nine assessed relations keep their unchanged projection. How a paired
+agent reads them is decided by the owner's AM-5 record
+(`../approvals/pr-05-agent-relation-reads.md`) and implemented by migration 0039
+(see "Schema 39: agent relation reads" below). A caller without `source.read`
+gets `observation_tables`/`source_read_required`. All gaps describe only the
+caller's own capabilities, never whether protected data exists.
 
 Column mapping decisions (implementation readings of the approved enums; review
 welcome):
@@ -185,6 +193,122 @@ reprojecting the saved cutoff and view under current authority. Entity, alias,
 mention and topic relations remain unprepared: queries naming them reply
 `unsupported_query` with feature `unprepared_relation`, never an empty table.
 
+## Schema 39: agent relation reads (AM-5)
+
+**Authority.** The owner decision AM-5 is committed byte-identical as
+`../approvals/pr-05-agent-relation-reads.md` (SHA-256 `4491ca29…`). It clarifies
+the lifecycle dependency's rule that reads use current `memory.query` and
+source-read authority over their entire disclosed dependency closure. PR-03's
+read kernel required raw revisiting authority there instead, so paired agents
+saw `relation_tables`/`source_raw_read_required`.
+
+**Custody: reconciled by ea-6, a child of ea-5.** These are the independent
+custodian's records, stored byte-identical:
+
+- **ea-5** (`../approvals/pr-05-custody-ea-5.json`, 18,783 bytes, SHA-256
+  `be36131e…`, issued 2026-09-29T12:26:52Z) reconciles AM-5's authority and
+  evidence semantics with ea-2, ea-3 and ea-4. It binds AM-5's record
+  (`4491ca29…`) and the content-free reply-visible addendum.
+- **ea-5-link-1** (`../approvals/pr-05-custody-ea-5-link-1.json`, 7,752 bytes,
+  SHA-256 `f1ea1a28…`) links ea-5 to implementation `f560fce`, with qualified
+  head `7f8e4a8` and migration 0039 at `ed951d1a…`. That implementation predates
+  the review repairs in `9f3aa77`.
+- **ea-6** (`../approvals/pr-05-custody-ea-6.json`, 29,178 bytes, SHA-256
+  `74221b6f…`, issued 2026-10-06T01:30:11Z) is ea-5's child. It binds the
+  owner's scope clarification of 2026-10-01 (decision 12(a)). At schema 39,
+  relation reads without raw-read authority are limited to the paired agents
+  AM-5 authorizes. Every other caller keeps its existing restrictions, so
+  `relation_tables`/`source_raw_read_required` remains at schema 39 for callers
+  AM-5 does not authorize. ea-6 also binds the exact implementation:
+  - head `9f3aa77`, with migration 0039 `ee846ac7…`;
+  - the migration inventory, the reply coverage source, and this document as
+    it stood at `9f3aa77` (`35fabf31…`);
+  - the owner-reported qualification receipts.
+- **History unchanged.** AM-5's record, the addendum and ea-5 stay as they were.
+- **Implementation linkage: ea-5-link-2 → `9f3aa77`**
+  (`../approvals/pr-05-custody-ea-5-link-2.json`, 12,512 bytes, SHA-256
+  `b66bc680…`, recorded 2026-10-06T01:43:07Z). It advances ea-5-link-1 to this
+  pull request's repaired head. It binds migration 0039 `ee846ac7…`, the
+  migration inventory and this document at `9f3aa77`, under ea-5 and the scope
+  that ea-6 reconciles. No further authority amendment or freeze is required.
+- **Semantics only.** None of these is runtime, security, semantic-quality or
+  workload certification, release readiness or a combined-branch qualification.
+- **The dependent #80** is linked separately under ea-6 (ea-6-link-1, on its own
+  branch).
+
+**One read mode in PR-03's single kernel.** Migration 0039 threads a read mode
+through the eleven read-path functions of M0030 and M0032 that reach a raw gate.
+The owner's mode keeps every existing check. The agent's mode changes exactly one
+thing: where the owner's read requires raw revisiting authority over a source
+object, it requires `source.read` on the same event.
+- The ten gate sites are M0030 lines 142, 150, 153, 160, 255, 317, 329, 360, 382
+  and 1493 at `33e1c42`; line 317 authorizes each derivation root through its
+  primary event.
+- Memory.query closure checks, whole-family withholding, the lifecycle projection
+  and root computation are shared and unchanged.
+- Every earlier function name becomes a one-line wrapper over its mode-threaded
+  body in owner mode, so no second lifecycle interpreter exists.
+- Governed writes refuse the agent mode.
+- The population entry `prepare_query_sql_population_v2` is redefined in
+  M0039. The M0037 file is not edited. It selects the owner mode for a caller
+  holding `source.raw.read`, and the agent mode only for a paired agent (an
+  `agent` principal with a pairing grant): AM-5 names paired agents. Any other
+  caller, such as a paired background service or device, keeps the earlier
+  gate, which withholds every relation without raw source authority, and gets
+  `relation_tables`/`source_raw_read_required` as before. The mode is recorded
+  in the internal frame field `relation_read_mode`, which never appears in a
+  reply; it is empty for those other callers.
+- M0039 grants nothing and adds no object the query reader can see, so the
+  reviewed reader profile is unchanged.
+
+**What an agent reads.** With `memory.query` and `source.read` over a relation's
+whole closure, an agent reads whole rows of `assessed_relations`,
+`relation_statements`, `relation_evidence`, `relation_types`,
+`relation_corrections` and `relation_replacements`, with the owner's values at
+the same frame.
+- The closure is the endpoint and basis beads, versions and statements, every
+  evidence event, lifecycle evidence, corrections and replacements, and the root
+  units and events.
+- A relation with any unreadable closure member is absent from every table. No
+  gap, count, type pin or history is disclosed for it, and the query stays
+  available.
+- A relation is also absent when its records name another assessed relation
+  that is withheld: a replacement in its chain, or a `derived_from` relation on
+  its root lineage. Otherwise its state, `relation_replacements` row or root
+  status would show that the withheld relation exists. The population drops
+  such families until nothing more is withheld. This holds in both read modes:
+  under the owner's decision 5b (2026-10-05), owner mode is not permission to
+  bypass an evidence restriction. A raw-read holder whose authority does not
+  cover a relation's closure reads neither that relation nor any relation whose
+  records name it.
+- In owner mode, a relation-assessment task that recorded a relation withheld
+  from the reader discloses none of its pair coverage, which would otherwise
+  show that the task assessed the withheld relation (decision 5b).
+- `relation_events`, `relation_event_evidence` and `relation_pairs` stay
+  owner-only. A query that references them gets
+  `relation_history`/`owner_only`. "Owner" here means PR-03's own gate for
+  every relation read, `source.raw.read`: in the shipped role model only
+  `personal_owner` holds it, and a deployment that grants it to a service gives
+  that service PR-03's raw-holder reads, as before migration 0039.
+- An agent's `head_token` hashes only what it may see, under the owner's
+  decision of 2026-10-05: the head manifest with the acceptance and its visible
+  corrections, and no events. So an owner-only governance event, such as a
+  confirm, moves the owner's token and never the agent's. The owner's token, and
+  the governed writes that compare it, are unchanged.
+- A caller without `source.read` that references a relation table gets
+  `relation_tables`/`source_read_required`.
+- `source_raw_read_required` remains for frames from a schema-38 database and
+  for callers that are neither raw-read holders nor paired agents.
+- Root identities are source-object UUIDs; no relation column carries one.
+  Raw bytes, lineage, source revisiting, the `relations` inspection reader,
+  activation and governed writes stay owner-only.
+- Returned relation rows earn no hydration or exact-source credit.
+
+**Lifecycle.** State, support eligibility, head and roots come from the one
+`relation_projection_v1`, so an agent sees exactly the owner's state at each
+frame. Withdrawn and disputed assertions are not support-eligible, and recursive
+path support additionally requires qualified roots.
+
 ## Schema 38: runs, accesses and disclosure
 
 The approved baseline (packet §5) is enforced in the database and pinned by
@@ -202,6 +326,17 @@ These remain qualification targets, not measured capacity.
   - one executing operation per workspace.
 - **Refusals write nothing.** Any unsettled delivery blocks new admission, and a
   dead owner's work is reported as `settlement`.
+- **A busy database is a budget refusal.** At run start, admission, owner close
+  and cleanup status, a lock or statement timeout (SQLSTATE 55P03, 57014) is
+  `budget_exhausted` / `time`, a storage or byte limit (53400, 54000) is
+  `budget_exhausted` / `storage`, and a conflict with work still in flight
+  (40001, 55000) is `budget_exhausted` / `settlement`. A passed deadline is also
+  54000, which the database names `..._work_exhausted`; it is `time`. These calls
+  own nothing yet: a refused run start or admission starts and charges nothing,
+  so the same step key is admitted afterwards. Every other failure there keeps
+  the one `unavailable` shape. Resolving a reuse cursor classifies database
+  errors as disclosure does. A prepared population over its byte budget is
+  `storage`; one that met a timeout is `time`.
 - **Charges.** Charged time is the observed wall time of the whole operation
   (not CPU or I/O); commit latency is not separately metered. Unknown timing
   keeps the full reservation. Allocation remains M0031's 64/128/512 MiB ledger
@@ -231,6 +366,27 @@ These remain qualification targets, not measured capacity.
     it. If recovery settled the access while the commit was in flight, the
     host replies `settlement_pending` and the exact redelivery discloses the
     committed result without rerunning.
+  - **Only proof settles a step.** A redelivery first probes the step's own
+    preparation, then recovers it. If either meets a lock or statement timeout,
+    a lost connection or any other failure, whether the step's result committed
+    is unknown. The reply is `settlement_pending`, the step stays open, and the
+    next exact redelivery finds out. A redelivered step that holds a preparation
+    is only ever recovered, never screened or run again. As the packet requires
+    for uncertain work, a pending access blocks new admission in its workspace
+    until it is settled. If the caller's own authority ends during that
+    redelivery, its own recovery cannot run, so run-expiry cleanup settles it.
+  - A committed result's first disclosure that fails on a busy database or a
+    lost connection leaves its step open in the same way. Only a definitive
+    refusal fixes the step as failed: authority lost at the fence, a row larger
+    than the page's transport limit, or a duplicate.
+  - A failure of the host's own code before any commit was sent is an
+    `execution_error`, and the step's single-use preparation is discarded at
+    once instead of being held until the run expires. From the commit on, the
+    same failure is `settlement_pending`.
+  - `handle()` answers every request. When it cannot take the owner lock, confirm
+    an abandonment, or record a settlement, it replies `settlement_pending`,
+    charged the full reservation as recovery will charge it, and recovery or
+    the exact redelivery settles the access.
 - **Expiry cleanup** (owner Decision 1, item 3). Access ends at expiry through
   the closure verdict. Owned cleanup then removes the content and every
   sensitive copy:
@@ -370,6 +526,117 @@ two invocation predicates. `reviewed_query_reader_profile` rebuilds the profile
 from that specification at host start, and the executor independently
 re-qualifies it before every invocation.
 
+**The reviewed closure is narrower than the admitted grammar.** The packet's
+grammar admits typed `= <> < <= > >=`, LIKE/ILIKE, unary minus and membership in
+up to 64 bound values. The reader is granted:
+
+- all six comparisons over `int8` and `numeric`;
+- equality only over `text`, `uuid`, `bool` and `timestamptz`;
+- the default hash function of each of those six types: `hashtext(text)`,
+  `uuid_hash(uuid)`, `hashbool(boolean)`, `hashint8(bigint)`,
+  `hash_numeric(numeric)` and `timestamptz_hash(timestamptz)`;
+- no comparison or hash function over `float8`, no LIKE or ILIKE and no unary
+  minus.
+
+So a time-range filter and a text inequality or pattern are admitted by the
+grammar and cannot run. Inside the reader each failed as a permission error,
+which replied `unavailable`: the caller could not tell it from missing
+authority. Membership in nine or more bound values failed the same way until
+the owner reviewed the six hash functions into the closure, and nothing else.
+
+Admission now inventories the builtins a statement's own operators call, as
+PostgreSQL resolves them once it has planned the statement:
+
+- under `NOT`, the negator of a comparison, a pattern match or a membership
+  test, through AND, OR and NOT;
+- `NOT LIKE` and `NOT ILIKE` as the operators they are (`textnlike`,
+  `texticnlike`), which the planner negates back into LIKE under `NOT`;
+- nothing for a comparison with a NULL bound value, and nothing for `x = $1` or
+  `x <> $1` with a bound boolean, which the planner rewrites to `x` or `NOT x`
+  (the negation then lands on the operators inside `x`);
+- for two bound values, the operator as written, which the planner evaluates
+  itself;
+- from nine bound values in `= ANY(array)` or `IN (list)`, the type's equality
+  and its hash function, under `NOT` as well, because the planner then probes a
+  hash table;
+- the equalities that DISTINCT, GROUP BY, set operations other than UNION ALL,
+  window keys, joins, IN and NULLIF imply, and the aggregate MIN or MAX runs as.
+
+The executor refuses a statement that calls a builtin outside the reviewed
+closure as `unsupported_query` / `feature` `unreviewed_operator`, with the
+source position of the leftmost such operator's first operand. It refuses before
+any reservation or preparation, whether or not an identifier is bound.
+
+The inventory is a model of the planner. An installed test holds it to the
+pinned server (see Acceptance). It does not cover two things:
+
+- a constant the planner computes from bound values. Admission follows bound
+  values, not computed ones, so for a comparison with one, such as
+  `x = ($1 = $2)` or `kind <> lower($1)` with a NULL value, the inventory may
+  miss a negator PostgreSQL calls or name a builtin it does not. The first still
+  fails inside the reader as `unavailable`; the second is refused although it
+  could run;
+- the equality the witness lowering adds over values a statement already
+  orders, aggregates or combines. It is reviewed for every type a public
+  relation can produce, which a unit test holds, so only a `float8` parameter in
+  such a position lacks it and fails inside the reader as before.
+
+Widening the closure is a reviewed change to reader provisioning.
+`provision_query_reader` grants the whole reviewed closure to a new reader. An
+existing reader must be granted the added builtins in the same step as the
+package upgrade: qualification requires the reader's executable functions to
+equal the reviewed set exactly, so a reader missing any of them answers every
+query `unavailable`, not only lists. The order on every host is upgrade, grant,
+rebuild or re-pin the reader's profile, then the first query.
+`grant_reviewed_closure(admin_connection, reader)` performs the grant; it is
+idempotent. The equivalent statement for the six hash functions, run by the
+database administrator, is:
+
+```sql
+GRANT EXECUTE ON FUNCTION pg_catalog.hashtext(text), pg_catalog.uuid_hash(uuid),
+  pg_catalog.hashint8(bigint), pg_catalog.hash_numeric(numeric),
+  pg_catalog.timestamptz_hash(timestamptz), pg_catalog.hashbool(boolean)
+  TO memoriesql_query_reader;
+```
+
+with the host's own reader role name. A host that constructs
+`PostgresRestrictedQuery` itself states the closure with `reviewed_builtins`;
+without it, the reader's own privileges decide alone.
+
+**Identifier parameters.** An identifier column compares only with a value
+bound under its own reference type, for example `statement_ref` or
+`statement_ref[]` with `= ANY($1::uuid[])`, and only identifiers in the caller's
+visible population bind. A plain `uuid` against an identifier column, or another
+identifier kind, replies `invalid_request` / `type` with `feature`
+`reference_type` and the position of the comparison. An identifier that is not
+visible replies the one shared `unavailable` shape, with no position or
+feature; no internal refusal name reaches a reply.
+
+**Positions.** A refused value expression carries the source offset of its first
+token: an operator is located by its first operand, a parameter by its `$`. A
+refused clause, relation or whole statement carries none. A refusal that was
+settled on a step is redelivered with its outcome and code only.
+
+**An admitted statement means what PostgreSQL will run.** The parser and
+PostgreSQL group two forms differently. PostgreSQL binds `IS` looser than a
+comparison, so it reads `x = y IS NULL` as `(x = y) IS NULL`, where the parser
+reads `x = (y IS NULL)` and would emit it unparenthesized. PostgreSQL never
+chains comparisons, so `a = b = $1` cannot run at all. A comparison whose
+operand is another comparison or an `IS` test is therefore refused unless that
+operand is parenthesized: `unsupported_query` / `feature` `comparison_grouping`,
+at the comparison's first operand. Parenthesized, it is admitted and emitted as
+written.
+
+**Recursion over correction edges is refused.** The packet admits key-equality
+expansion over correction edges as well as relation endpoints. Admission
+emitted a call to `memoriesql_query_private.correction_path_qualified` as the
+support predicate for a correction edge, and no migration defines it, so such a
+query was admitted, reserved and prepared, then failed in the reader. It is now
+refused before any work as `unsupported_query` / `feature`
+`correction_recursion`, without a position (a clause). Delivering it needs a
+reviewed database predicate for a qualified correction path, which is outside
+this change.
+
 A least-privilege control login (not a superuser; an inheriting member of
 `memoriesql_application`) additionally needs three operator provisioning steps,
 found by the trusted-host lane:
@@ -388,8 +655,30 @@ and gates any agent-facing deployment (packet §2).
 Reply metadata sealed into the digest:
 
 - **Wire frame.** Lifecycle fields are null unless a relation projection was
-  used. Otherwise they are version 1 and the relation projector's own manifest
-  hash. Per-source watermarks are not computed.
+  used. Otherwise they are version 1 and a manifest hash of what the caller may
+  see. Per-source watermarks are not computed.
+- **Visible digests (owner decision 6, 2026-10-05).** The reply's
+  `snapshot_digest` and `projection_manifest_sha256` are built only from records
+  the caller may see, so they never change when inaccessible history changes.
+  - For a raw-read holder, that is its whole population, and both values are
+    the projector's full manifest hashes, unchanged.
+  - For any other caller (an AM-5 agent, or a caller without raw authority),
+    they hash the rows the caller receives: one entry per row, with its
+    relation, its unique key and the hash of its values, sorted. The private
+    evidence handles minted for each preparation are left out. The relation
+    digest covers the nine relation tables, and the snapshot digest all
+    fourteen.
+  - The complete protected dependency record stays internal: the result's
+    stored manifest and records, the witness and the invocation keep the full
+    digest. Binding and invalidation use only those.
+  - **The content digest too.** A result's `content_digest` is the SHA-256 of
+    its sealed body, so that body holds only what the caller may see. The
+    protected frame digests and the witness hash commit to records the caller
+    may not read, so they are kept in the internal dependency partition
+    (`protected_frame`, `witness_sha256`), which the artifact hash binds.
+    Migration 0039 restates result commit and the disclosure-time closure check
+    to read them there. Both refuse a revision-2 body that still carries them.
+    Revision-1 bodies reach no reply and keep their earlier shape.
 - **Coverage.** The query result is complete. Source capture, authorship,
   search readiness and discovery are all `unknown`, never claimed complete.
   Missing caller capabilities are listed as gaps.
@@ -404,8 +693,8 @@ lists source refs as hydration-required.
 
 ## Acceptance and preserved development failures
 
-Fictional installed tests (`test_agent_sql_results`, 25 cases) use the
-production reader provisioning path. They cover:
+Fictional installed tests (`test_agent_sql_results`) use the production reader
+provisioning path. They cover:
 
 - query, page, cursor and reuse
 - a paired agent citing a finding to its supporting units under its own grant:
@@ -431,11 +720,50 @@ production reader provisioning path. They cover:
 - exact redelivery with no rerun
 - a zero-row available result versus unavailable, and the distinct
   unsupported, invalid and idempotency outcomes
+- identifier parameters (`test_agent_sql_screening`): a plain `uuid[]` is a
+  positioned `reference_type` error with nothing reserved; the reference-typed
+  array returns exactly the unfiltered rows; an identifier outside the visible
+  population is `unavailable`
+- the operator inventory against the pinned server (`test_agent_sql_screening`):
+  - every comparison, pattern, unary minus and hash builtin admission names is
+    the one the server's own operator and hash catalogs name;
+  - a role that may call no function reads a scratch table with a column of each
+    catalog type. For every comparison over every type and its negation, the
+    folded forms above, and membership in 8, 9, 16 and 64 values of every type,
+    plain and under NOT, granting exactly the inventoried builtins lets the
+    statement plan and run, and revoking any one of them, including each hash
+    function, makes PostgreSQL refuse it. Implied equalities are shown
+    sufficient only, since the planner may choose a plan that calls less.
+- the same operators through the public executor: each statement runs as the
+  reader, or is refused as `unreviewed_operator` with its position and with
+  nothing reserved or sent to the reader; none replies `unavailable`. Membership
+  in 9, 16 and 64 bound values runs for each of the six types a public relation
+  has. A bound identifier, visible or not, changes neither.
+- the rollout rule: with one of the six hash functions revoked from the
+  provisioned reader, even a plain equality query replies `unavailable`, and
+  `grant_reviewed_closure`, run twice, restores it.
 - source revocation refusing a whole aggregate, and regrant restoring it
 - another principal refused
 - resolved versus historical views over a real correction, with correction lineage
 - run admission, expiry and no budget reset
+- another session holding the workspace's admission lock past the lock timeout:
+  run start, admission and owner close each reply `budget_exhausted` / `time`;
+  no run, delivery or closure is written; the same step key is then admitted at
+  the full allowance
 - crash after commit, host recovery and owner close
+- a redelivery that cannot find out (`test_agent_sql_results`): the host died
+  after its step's result committed, or before any work; the exact redelivery
+  then meets a real lock timeout, statement timeout or terminated backend while
+  it probes the step, or while it recovers the committed result or the
+  uncommitted invocation. All twelve reply `settlement_pending` with the step
+  still open; the next exact redelivery discloses the committed result or
+  replies `execution_error`, and nothing reruns
+- the same three faults at a committed result's first disclosure:
+  `settlement_pending`, then the exact redelivery discloses that result
+- a failure of the host's own code before commit: `execution_error` with the
+  preparation discarded at once
+- a population over its byte budget is `budget_exhausted` / `storage`, and a
+  disclosure whose database deadline passed is `budget_exhausted` / `time`
 - host death mid-query: capacity, close and admission stay blocked until the
   reader backend is confirmed gone; recovery then settles the orphaned
   invocation at the full reservation, and a new step is admitted without
@@ -453,9 +781,38 @@ production reader provisioning path. They cover:
   redelivery discloses that same result with no rerun
 - group, window, set, EXISTS and relation-join shapes, with frame lifecycle
   fields and coverage gaps
+- AM-5 (schema 39), a fresh paired agent holding `memory.query` and
+  `source.read` but no raw authority. It reads a real assessed relation, created
+  through activation, author, specialist, attestor and apply.
+  - Its rows in the six readable tables equal the owner's.
+  - Pair coverage and history give `relation_history`/`owner_only`.
+  - No source-object identity appears in any column of the six tables.
+  - The inspection reader stays owner-only.
+  - After one member's grant is revoked, the relation is absent from a fresh
+    step of the same run, with no gap or type pin. Re-disclosing the saved
+    result is `unavailable`.
+- AM-5 withholding: the whole relation is withheld from each of these callers,
+  and the source endpoint stays readable where its scope is.
+  - An agent that reads only the source endpoint's scope.
+  - An agent with `memory.query` over the whole closure but no `source.read`,
+    which gets `relation_tables`/`source_read_required`.
+  - An agent whose remote grant has expired.
+- AM-5 lifecycle: after a dispute and then a retraction, agent and owner see the
+  same state, support eligibility and reason at each frame. That includes the
+  disputed frame, read again after the retraction. The history counts stay
+  owner-only.
+- AM-5 tenancy: a paired agent of a second tenant reads no relation of the
+  first, and the first tenant's credential opens nothing in the second.
 
 Database-free contract tests pin the policy hash, the prepared set, the order
-basis, evidence refs and reply sizing.
+basis, evidence refs and reply sizing. A structural test holds migration 0039
+to these properties:
+- it grants nothing;
+- it adds nothing to the query reader's schema;
+- it keeps raw revisiting only on the owner branches;
+- every earlier kernel name delegates in owner mode;
+- its restated result commit and closure check are their installed text with
+  exactly the listed edits.
 
 Development failures retained:
 
@@ -484,6 +841,18 @@ Development failures retained:
   inspect, hydrate_source and checkpoints are not delivered, with no delivered
   or released claim. The logical catalog hash changes with the stage text. A
   unit test fails on the previous text.
+- A mutation that disabled the agent-mode `source.read` gate of migration 0039
+  changed no test outcome.
+  - M0011's bead-version authorization already requires `source.read` on each
+    closure bead's event, and scope grants cover both capabilities. The gate is
+    therefore implied by existing checks in every configuration today's
+    authority model can express.
+  - It remains the explicit AM-5 substitution point. It also checks that the
+    event and the source object belong to the caller's tenant and workspace, so a
+    mis-threaded gate withholds rather than authorizes.
+- The first draft of the shared relation fixture paired agents over the
+  owner-private default scope. That scope admits no grants to other principals,
+  so the fixture now creates explicit scopes.
 - The trusted-host lane's late-commit case found that a successful commit
   followed by a refused first disclosure deleted the committed result through
   the generic failure path, and replied `unavailable`. That disclosure was
@@ -493,9 +862,36 @@ Development failures retained:
 - The hostile-request test found that refused SQL still reserved, then
   discarded, a preparation. SQL is now screened before any reservation. Only
   the population-dependent reference-anchor check waits for full admission.
-- **Open finding:** `NOT (text = $1)` is rewritten by the planner to `<>`,
-  whose `textne` lies outside the reviewed builtin closure. Such queries fail as
-  `unavailable` rather than `unsupported_query`.
+- Review found that this did not hold for a statement that binds an identifier.
+  The screen stopped at the first one, so every refusal of such a statement
+  still came after a reservation and a preparation. The screen now runs with the
+  request's own identifiers standing in as anchors, and only their visibility
+  waits for full admission.
+- `NOT (text = $1)` is rewritten by the planner to `<>`, whose `textne` lies
+  outside the reviewed builtin closure, so such a query failed inside the reader
+  and replied `unavailable`. It was one case of a wider gap: text, identifier
+  and timestamp inequalities and orderings, LIKE, ILIKE, unary minus and any
+  membership test over nine or more values were all admitted and none was
+  granted. A time-range filter therefore also replied `unavailable`, and an
+  agent could pass at most eight values to `= ANY` or `IN`. The executor now
+  refuses every such operator as `unsupported_query` with its position (see Host
+  interface). The owner then reviewed the six hash functions into the closure,
+  so membership runs at any admitted size; the other operators stay refused.
+- Review of the first inventory found it wrong in both directions. It missed
+  the hash function behind nine or more bound values, and it refused statements
+  that ran: `flag <> $1`, which the planner rewrites without calling a builtin,
+  and any comparison with a NULL value. The inventory now follows bound values,
+  and the installed test holds it to PostgreSQL's own privilege checks instead
+  of to itself.
+- An agent bound a plain `uuid[]` against an identifier column and got
+  `invalid_request` / `type` with no position, which it could not act on. The
+  reply now names the mismatch and its position. An identifier outside the
+  visible population replied `unavailable` with the internal code
+  `parameter_anchor`, which is not a packet safe code.
+- Two parameters with nothing between them but punctuation, as in
+  `IN ($1,$2)` or `coalesce($1,$2)`, were refused as a syntax error: the parser
+  read `$1,$` as the opening tag of a dollar-quoted string. `$` now starts only
+  a parameter. Dollar-quoted strings were never admitted and stay refused.
 - Cleanup initially failed with `permission denied for function uuid_eq`: M0033
   had revoked builtins from the staged-row owner. It was fixed with the narrow
   grant above.
@@ -503,6 +899,43 @@ Development failures retained:
   observation families reused PR-03's provenance records, which require
   `source.raw.read`, a capability the `paired_agent` role can never hold. The
   regression test fails on that code and passes on the query-level records.
+- **Timeouts were reported as missing authority.** `start_run()` replied
+  `unavailable` to every database error, including a 500 ms lock timeout while
+  a cleanup pass held the workspace's admission lock. The packet reports a
+  timeout or a storage or work limit as `budget_exhausted`. Admission, owner
+  close and cleanup status had the same mapping, the operator's cleanup pass
+  reported a lock timeout as `execution_error`, and resolving a reuse cursor
+  reported every database error as `execution_error`. They now share the
+  executor's SQLSTATE table. Database-free tests (`test_agent_sql_refusals`)
+  cover each SQLSTATE at each call and fail on the previous code; the installed
+  test above produces a real lock timeout.
+- **A busy database during redelivery failed the step.** When a redelivered
+  step's preparation probe or its recovery met a lock timeout, the step was
+  settled as failed (`unavailable` or `execution_error`) although its result
+  might already be committed. A busy first disclosure of a committed result
+  failed its step too, so the result could never be disclosed. The packet's
+  outcome for unknown commit ownership is `settlement_pending`. Only proof now
+  settles a step (see Crash recovery); the installed fault tests fail on the
+  previous code.
+- An independent review found six more defects; each was reproduced first:
+  - SQLSTATE 54000 is both a deadline and a byte limit. A passed delivery
+    deadline replied `storage`, and a population over its byte budget replied
+    `time`.
+  - `handle()` raised when the owner lock, an abandonment or a settlement call
+    failed.
+  - A failure of the host's own code before commit was settled as an
+    `execution_error` but held the step's reservation until the run expired.
+  - `x = y IS NULL` was admitted and emitted unparenthesized, so PostgreSQL ran
+    `(x = y) IS NULL` instead; `a = b = $1` was admitted although PostgreSQL
+    cannot run it.
+  - `a NOT LIKE b` was refused as an unknown clause; it is now inventoried and
+    refused as `unreviewed_operator`, like LIKE.
+  - Recursion over correction edges emitted an undefined function (see Host
+    interface).
+  Database-free tests reproduce each in `test_agent_sql_refusals` and
+  `test_agent_sql_admission` and fail on the previous code; the installed tests
+  above produce the reservation, deadline and byte-budget cases on a real
+  database.
 
 Exact-head installed 3.13/3.14 qualification and CI belong on the PR.
 

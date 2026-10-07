@@ -176,6 +176,7 @@ class InternalResultCandidate:
                 ),
             },
         }
+        internal: dict[str, Any] = {}
         if population.revision == 2:
             # Revision 2 seals the exact disclosed metadata into the digest: the
             # wire frame, coverage and order basis never change after commit.
@@ -191,20 +192,42 @@ class InternalResultCandidate:
                 relation_raw_authority=population.relation_raw_authority,
                 source_read_authority=population.source_read_authority,
                 source_text_labels=population.source_text_labels,
+                relation_read_mode=population.relation_read_mode,
             )
+            # Owner decision 6: the reply's digests cover only records the caller
+            # may see. The full protected digest, which binding and invalidation
+            # require, stays internal (below).
+            if population.visible_manifest_sha256 is None or (
+                population.relation_manifest_sha256 is not None
+                and population.visible_relation_manifest_sha256 is None
+            ):
+                raise ValueError("internal result qualification unavailable")
             body["wire_frame"] = wire_frame(
                 frame_ref=str(witness.frame_ref),
                 known_at=str(encode_result_scalar(population.known_at)),
                 snapshot_at=str(encode_result_scalar(population.snapshot_at)),
                 view=request.scope.view,
-                snapshot_digest=population.dependency_manifest_sha256,
-                relation_manifest_sha256=population.relation_manifest_sha256,
+                snapshot_digest=population.visible_manifest_sha256,
+                relation_manifest_sha256=population.visible_relation_manifest_sha256,
                 relations=relations,
             )
             body["order_basis"] = order_basis(
                 actual["derivation_program"]["tree"], [c.name for c in execution.columns]
             )
             body["total_rows"] = str(len(rows))
+            # The reply's content_digest hashes this body, so it holds only what
+            # the caller may see. The protected frame digests and the witness
+            # hash commit to records the caller may not read: they move to the
+            # internal dependency partition, which the artifact hash binds.
+            internal = {
+                "protected_frame": {
+                    "snapshot_digest": body["frame"].pop("snapshot_digest"),
+                    "projection_manifest_sha256": body["frame"].pop(
+                        "projection_manifest_sha256"
+                    ),
+                },
+                "witness_sha256": body.pop("witness_sha256"),
+            }
         dependencies = {
             # Lifecycle records have their own exact numeric encoding. Preserve
             # bytes rather than round-trip accepted values through JSON floats.
@@ -229,6 +252,7 @@ class InternalResultCandidate:
                 }
                 for ref, pin in population.evidence_bindings.items()
             },
+            **internal,
         }
         content = PreparedContent(
             result_json_bytes(body), witness.bytes, result_json_bytes(dependencies)
