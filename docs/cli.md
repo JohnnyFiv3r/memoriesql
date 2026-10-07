@@ -176,7 +176,9 @@ use to read broader credentials. `clients revoke` takes the pairing grant,
 expected revision, capabilities and scopes from the pairing receipt and records a
 terminal revision; a changed revision is a conflict, not a success. A
 revocation that reports `revocation_outcome_unknown` may have applied; retrying
-it reports `pairing_revision_conflict` once it has.
+it reports `pairing_revision_conflict` once it has. A revoked grant accepts no
+further revision: revoking it again at its new revision reports
+`resource_unavailable`, and nothing can reactivate it.
 
 This slice does not route Desktop's Textual interface or provider adapters. A
 future, reviewed static service/client seam must preserve public core commands,
