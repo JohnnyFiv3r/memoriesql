@@ -173,6 +173,10 @@
     {
       "filename": "0043_inspection_withholding.sql",
       "sha256": "82da31c4a8e0afdf45e62c4ef40102629e59bd0db013285384765d6ef42a3ccc"
+    },
+    {
+      "filename": "0044_saved_query_frame_closure.sql",
+      "sha256": "50a2164bd2bdf51dd51284460f61a390640ba96cc169ffe614530289e8e61474"
     }
   ]
 }
