@@ -534,7 +534,11 @@ class PostgresRestrictedQuery:
                 )
             ):
                 raise SqlAdmissionError("unavailable", "invocation_epoch")
-            if cancel_started or time.monotonic() >= deadline:
+            if (
+                cancel_started
+                or time.monotonic() >= deadline
+                or (cancellation is not None and cancellation.is_set())
+            ):
                 raise _StopQuery(
                     "cancelled"
                     if cancellation is not None and cancellation.is_set()
@@ -590,6 +594,11 @@ class PostgresRestrictedQuery:
             }.get(code or "", "database")
         except (ValueError, TypeError, OverflowError):
             outcome, safe_error = "execution_error", "type"
+        except Exception:
+            # Local driver/callback failures still pass through owned cleanup
+            # and journal settlement. Never expose their text or return rows.
+            # An unconfirmed staging exit remains recovery-owned below.
+            outcome, safe_error = "execution_error", "database"
         finally:
             stop.set()
             if reader is not None:
