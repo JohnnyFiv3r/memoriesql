@@ -375,7 +375,8 @@ class SavedQueryFrames(unittest.TestCase):
         self.record.setdefault("family_reads", {})[label] = replies
         try:
             for table, columns in self.r.ALL_RELATION_COLUMNS.items():
-                text = "SELECT " + ",".join(columns) + " FROM memory_v1." + table
+                listed = ",".join(f'"{column}"' for column in columns)
+                text = "SELECT " + listed + " FROM memory_v1." + table
                 _, reply = self.r.query(
                     run, text, page_size=50, secret=secret, known_at=known_at
                 )

@@ -78,3 +78,21 @@ installed CPU test discovers the complete reviewed44-resource stream without a
 DB connection and checks each resource digest. It reproduces the preflight error
 on the unchanged071c88d wheel. No query executor Python, contract/catalog or
 historical SQL is changed by this follow-up. A new exact-head DB grant is required.
+
+## First installed test stop: fixture identifier syntax
+
+The granted a103e7e r2 run successfully discovers/applies the44-resource stream,
+then fails the first additive method before any temporal mutation/assertion.
+Five initial denied-family queries return available with zero rows; the sixth,
+relation_types, returns execution_error/database. The retained PostgreSQL log
+shows syntax error at bare `symmetric` in the additive fixture SELECT list.
+This is not evidence of a saved-frame closure failure or pass. The fail-fast
+wrapper stops after one failed method; no original probes, remaining methods,
+guards or3.14 run. The isolated container stops, with exact failure retained.
+
+The fixture-only correction quotes every catalog column identifier; requested
+columns and all privacy/temporal/settlement assertions stay unchanged. Product
+SQL/Python, historical inventory and all original seven probes remain exact.
+CPU admission/witness compilation of all nine quoted queries is separate from
+PostgreSQL runtime validation. A fresh exact-head coordinator grant is needed;
+no retry under the consumed assignment.
