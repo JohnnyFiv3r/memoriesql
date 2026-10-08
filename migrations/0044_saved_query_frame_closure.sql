@@ -44,7 +44,7 @@ DECLARE
  d jsonb; row_data jsonb; expected jsonb; rebuilt jsonb:='[]'; required jsonb;
  head jsonb; heads jsonb; projection jsonb; events jsonb; event jsonb; item jsonb;
  pins jsonb; raw jsonb; event_ids uuid[];
- r record; p record; link record; task record; src record;
+ r record; retained_pin record; link record; task record; src record;
  mode text; relation_kind text; saved_relation_id uuid; saved_bead_id uuid; saved_unit_id uuid;
 BEGIN
  c:=memoriesql.result_preparation_authority_v1();
@@ -103,9 +103,9 @@ BEGIN
    'id',r.acceptance_receipt_id::text,'row',expected));
   required:=memoriesql.relation_bead_records_v2(c.tenant_id,r.source_bead_id,known,mode)
    ||memoriesql.relation_bead_records_v2(c.tenant_id,r.target_bead_id,known,mode);
-  FOR p IN SELECT DISTINCT s.bead_id FROM memoriesql.assessed_relation_statements s
+  FOR retained_pin IN SELECT DISTINCT s.bead_id FROM memoriesql.assessed_relation_statements s
    WHERE r.kind='assessed' AND s.tenant_id=c.tenant_id AND s.relation_id=r.relation_id AND s.role='basis' LOOP
-   required:=required||memoriesql.relation_bead_records_v2(c.tenant_id,p.bead_id,known,mode);
+   required:=required||memoriesql.relation_bead_records_v2(c.tenant_id,retained_pin.bead_id,known,mode);
   END LOOP;
   IF r.kind='assessed' THEN
    SELECT a.judgment,to_jsonb(a) INTO expected,raw FROM memoriesql.assessed_relations a
@@ -152,20 +152,20 @@ BEGIN
     END LOOP;
    END IF;
    FOR item IN SELECT v FROM jsonb_array_elements(event->'evidence') x(v) LOOP
-    SELECT s.* INTO p FROM memoriesql.bead_semantic_statements s
+    SELECT s.* INTO retained_pin FROM memoriesql.bead_semantic_statements s
      JOIN memoriesql.bead_semantic_statement_evidence e
       ON e.tenant_id=s.tenant_id AND e.statement_id=s.statement_id
      WHERE s.tenant_id=c.tenant_id AND s.statement_id=(item->>'statement_id')::uuid
       AND e.evidence_source_unit_id=(item->>'source_unit_id')::uuid
       AND e.evidence_content_hash=item->>'content_hash';
     IF NOT FOUND OR NOT memoriesql.current_context_bead_version_authorized(
-     c.tenant_id,p.workspace_id,p.access_scope_id,p.bead_version_id)
+     c.tenant_id,retained_pin.workspace_id,retained_pin.access_scope_id,retained_pin.bead_version_id)
      OR NOT memoriesql.current_context_semantic_statement_authorized(
-      c.tenant_id,p.workspace_id,p.access_scope_id,p.statement_id) THEN
+      c.tenant_id,retained_pin.workspace_id,retained_pin.access_scope_id,retained_pin.statement_id) THEN
      RAISE EXCEPTION 'query_result_unavailable' USING ERRCODE='42501';
     END IF;
     required:=required||memoriesql.relation_unit_records_v2(c.tenant_id,(item->>'source_unit_id')::uuid,known,mode)
-     ||memoriesql.relation_bead_records_v2(c.tenant_id,p.bead_id,known,mode);
+     ||memoriesql.relation_bead_records_v2(c.tenant_id,retained_pin.bead_id,known,mode);
     rebuilt:=rebuilt||jsonb_build_array(jsonb_build_object('kind','lifecycle_evidence',
      'id',memoriesql.lifecycle_canonical_json_v1(jsonb_build_array(event->'event_id',item->'statement_id',item->'source_unit_id')),'row',item));
    END LOOP;

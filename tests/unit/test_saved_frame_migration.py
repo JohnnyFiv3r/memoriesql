@@ -51,6 +51,20 @@ class SavedFrameMigration(unittest.TestCase):
         )
         self.assertEqual(function(NEW, "query_saved_events_v1"), expected)
 
+    def test_private_saved_helper_record_names_do_not_shadow_sql_aliases(self) -> None:
+        helper = function(NEW, "query_saved_records_authorized_v1")
+        declared = set(re.findall(r"\b(\w+)\s+record\s*[;,]", helper))
+        # This helper uses plain table/CTE aliases and one derived statement bag.
+        # PostgreSQL can bind a matching PL/pgSQL record before resolving alias
+        # fields, failing even before an initial whole-result disclosure.
+        aliases = set(
+            re.findall(r"\b(?:FROM|JOIN)\s+[\w.]+\s+(\w+)\s+(?:JOIN|ON|WHERE)", helper)
+        )
+        aliases.update(re.findall(r"\)\s+(\w+)\s+JOIN", helper))
+        self.assertIn("p", aliases)
+        self.assertTrue(declared)
+        self.assertEqual(declared & aliases, set())
+
     def test_forward_migration_adds_no_application_or_public_privilege(self) -> None:
         self.assertNotRegex(NEW, r"(?i)\bGRANT\s")
         self.assertEqual(

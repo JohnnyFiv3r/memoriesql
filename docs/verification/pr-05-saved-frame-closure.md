@@ -96,3 +96,25 @@ SQL/Python, historical inventory and all original seven probes remain exact.
 CPU admission/witness compilation of all nine quoted queries is separate from
 PostgreSQL runtime validation. A fresh exact-head coordinator grant is needed;
 no retry under the consumed assignment.
+
+## First nonempty retained-closure runtime stop
+
+On installed adba38c/schema44, the corrected already-ungranted-material case
+passes on3.13: all nine family tables remain absent before/after a new protected
+material event; visible coverage/digests and the independent observation result's
+original partitions/redelivery/reuse remain unchanged. This is one narrow case,
+not a completed matrix. The next method fails on INITIAL result disclosure
+before applying its canonical-statement storage fault. PostgreSQL reports record
+`p` has no field statement_id in query_saved_records_authorized_v1: its declared
+PL/pgSQL record shadows the statement-bag SQL alias. Stop after one pass/one fail;
+no further method/original/guard/3.14 executes; owned container stops.
+
+The unpublished0044 repair renames only that private PL/pgSQL record and its
+references to retained_pin, leaving SQL aliases/queries and closure predicates
+unchanged. This also avoids the same declared name shadowing recursive-path and
+pair-disposition aliases. The migration inventory checksum is refreshed. Existing
+closure-v2 integrity/authority restatement and canonical event gates remain exact;
+no conflict-resolution compiler option, privilege, contract, temporal oracle or
+fixture change. A narrow source regression reproduces the declared-record/alias
+collision on old SQL and passes after renaming; it does not execute PostgreSQL.
+New installed runtime evidence still requires a fresh exact-head grant.
