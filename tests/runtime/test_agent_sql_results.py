@@ -832,6 +832,53 @@ class AgentSqlResults(unittest.TestCase):
         self.assertIn(str(source), json.dumps(page["rows"]) + json.dumps(following))
         self.assertIn(str(target), json.dumps(again) + json.dumps(following))
 
+    def test_expired_and_purged_cursors_keep_result_refusals(self) -> None:
+        self.fixture.assertion()
+        original_run = self.start()
+        query = "SELECT bead_id FROM memory_v1.observations ORDER BY bead_id"
+        _, saved = self.query(original_run, query, page_size=1)
+        self.assertEqual(saved["outcome"], "available", saved)
+        cursor = saved["page"]["next_cursor"]
+        self.assertIsNotNone(cursor)
+        result = saved["result"]
+        # Start while the original run is live; start_run itself performs cleanup.
+        probing_run = self.start()
+        self.age(original_run["run_ref"], timedelta(days=30))
+        expired = self.reuse(probing_run, result, cursor=cursor)
+        cleaned = json.loads(self.service().cleanup_expired())
+        self.assertEqual(cleaned["cleanup"]["purged"]["results"], 1)
+        purged = self.reuse(probing_run, result, cursor=cursor)
+        plain = self.reuse(probing_run, result)
+        missing = self.reuse(
+            probing_run,
+            {"result_id": str(uuid4()), "content_digest": "0" * 64},
+            cursor=str(uuid4()),
+        )
+        for refused in (expired, purged, plain, missing):
+            self.assertEqual(refused["outcome"], "unavailable", refused)
+            self.assertEqual(refused["error"], {"code": "unavailable"})
+            self.assertFalse(
+                set(refused) & {"result", "page", "facts", "sources", "provenance"}
+            )
+        invocations = self.h.scalar("SELECT count(*) FROM memoriesql_query.invocations")
+        _, live = self.query(probing_run, query, page_size=1)
+        self.assertEqual(live["outcome"], "available", live)
+        disclosures = self.h.scalar("SELECT count(*) FROM memoriesql.query_disclosures")
+        for bad_cursor in (str(uuid4()), "not-a-uuid"):
+            refused = self.reuse(probing_run, live["result"], cursor=bad_cursor)
+            self.assertEqual(refused["outcome"], "invalid_request", refused)
+            self.assertEqual(refused["error"], {"code": "cursor"})
+            self.assertNotIn("result", refused)
+            self.assertNotIn("page", refused)
+        self.assertEqual(
+            self.h.scalar("SELECT count(*) FROM memoriesql_query.invocations"),
+            invocations + 1,
+        )
+        self.assertEqual(
+            self.h.scalar("SELECT count(*) FROM memoriesql.query_disclosures"),
+            disclosures,
+        )
+
     def test_distinct_refusals_and_empty_result(self) -> None:
         self.fixture.assertion()
         run = self.start()

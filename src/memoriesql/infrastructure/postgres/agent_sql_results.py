@@ -777,15 +777,45 @@ class PostgresAgentSqlResults:
             except ValueError:
                 raise _Failure("invalid_request", "cursor") from None
             with self._control() as connection:
-                with relation_projection_frame(
-                    connection,
-                    credential_sha256=self._credential,
-                    workspace_id=self._workspace,
-                ) as frame:
-                    row = frame.execute(
-                        "SELECT memoriesql.resolve_query_cursor_v1(%s)", (cursor,)
-                    ).fetchone()
-            binding = row[0] if row else None
+                try:
+                    with relation_projection_frame(
+                        connection,
+                        credential_sha256=self._credential,
+                        workspace_id=self._workspace,
+                        statement_timeout_ms=self._remaining_ms(deadline),
+                    ) as frame:
+                        row = frame.execute(
+                            "SELECT memoriesql.resolve_query_cursor_v1(%s)", (cursor,)
+                        ).fetchone()
+                        binding = row[0] if row else None
+                        if binding is None:
+                            # Cleanup can remove a once-valid cursor. Classify
+                            # its requested result under the existing whole
+                            # authority fence, without disclosing a page or
+                            # recording a disclosure for an invalid cursor.
+                            usable = frame.execute(
+                                "SELECT memoriesql.check_query_result_closure_v2(%s,%s)",
+                                (
+                                    UUID(request.result.result_id),
+                                    request.result.content_digest,
+                                ),
+                            ).fetchone()
+                            if usable is None or usable[0] is not True:
+                                raise _Failure("unavailable", "unavailable")
+                except Error as error:
+                    code = _STATE_CODES.get(error.sqlstate or "", "database")
+                    raise _Failure(
+                        "unavailable"
+                        if code == "unavailable"
+                        else "idempotency_conflict"
+                        if code == "idempotency"
+                        else "budget_exhausted"
+                        if code in {"time", "storage"}
+                        else "execution_error",
+                        code,
+                    ) from None
+                except PermissionError:
+                    raise _Failure("unavailable", "unavailable") from None
             if (
                 binding is None
                 or binding["result_id"] != request.result.result_id
