@@ -212,8 +212,13 @@ The authority and run sections state the required grants and current limits.
 Compose your own SQL and typed parameters. `--view resolved` follows recorded
 corrections, withholding superseded predecessors while preserving unresolved
 successor branches. `--view historical` includes accepted predecessors known at
-the chosen frame. `--known-at` sets that frame; otherwise the run's default
-cutoff applies. This cut executes `discover` and `enumerate` with the same
+the chosen frame. `--known-at` selects the recorded-knowledge cutoff; otherwise
+the run's default cutoff applies. The cutoff does not prove that every earlier
+timestamped transaction has committed. The actual visible revisions, snapshot
+digest and per-source watermarks identify the frame, so two fresh reads with the
+same cutoff can have different manifests. A retained result keeps its original
+frame and bytes under current authority; paging its pin does not refresh it.
+This cut executes `discover` and `enumerate` with the same
 query behavior. Saved inputs, refinement, expansion, refresh, candidate profiles
 and source scopes are approved contract capabilities awaiting implementation
 qualification; the executor currently refuses them as `unsupported_query`.
