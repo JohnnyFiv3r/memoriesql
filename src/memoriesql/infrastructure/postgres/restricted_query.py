@@ -268,7 +268,9 @@ class PostgresRestrictedQuery:
         control: Connection[Any] | None = None
         query = None
         stage_started = False
+        stage_body_complete = False
         stage_confirmed = False
+        stage_rolled_back = False
         witness_builder: NativeWitnessBuilder | None = None
         witnesses: NativeWitnesses | None = None
         frame_ref = uuid4()
@@ -430,6 +432,7 @@ class PostgresRestrictedQuery:
                 if response is None:
                     raise SqlAdmissionError("unavailable", "invocation")
                 ref = UUID(response[0]["invocation_ref"])
+                stage_body_complete = True
             stage_confirmed = True
             if time.monotonic() >= deadline:
                 raise _StopQuery("budget_exhausted", "time")
@@ -546,6 +549,21 @@ class PostgresRestrictedQuery:
             error_position = error.position
         except Error as error:
             code = error.sqlstate
+            # A server refusal before the staging body completes cannot have
+            # committed an invocation if the owned frame rolled back to IDLE.
+            # Preserve its typed outcome so the caller can discard preparation
+            # and settle this delivery. A lost connection, failed rollback or
+            # error during/after commit remains uncertain and recovery-owned.
+            stage_rolled_back = (
+                stage_started
+                and not stage_confirmed
+                and not stage_body_complete
+                and code is not None
+                and not code.startswith("08")
+                and control is not None
+                and not control.closed
+                and control.info.transaction_status == TransactionStatus.IDLE
+            )
             if code in {"57014", "55P03", "54000", "53400"}:
                 outcome = (
                     "cancelled"
@@ -616,7 +634,7 @@ class PostgresRestrictedQuery:
                     outcome = "settlement_pending"
             except Exception:
                 outcome, settlement = "settlement_pending", "settlement_pending"
-        if stage_started and not stage_confirmed:
+        if stage_started and not stage_confirmed and not stage_rolled_back:
             outcome = "settlement_pending"
         if outcome != "complete":
             return NativeQueryExecution(
