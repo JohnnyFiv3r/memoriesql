@@ -20,13 +20,25 @@ a later replacement cannot add facts to a saved result. Unknown/missing/changed
 records refuse the whole result. No new privilege is granted.
 
 Fresh query preparation, lifecycle projection, inspection and discovery are
-unchanged. Fresh root metadata after hidden retract/supersede still changes from
-qualified/1 to indeterminate/null in the original private reproduction. That
-privacy finding remains open; timestamp drift alone does not resolve it. The
-original seven-probe script and its failed evidence are preserved unchanged.
-The new repository regressions isolate saved-frame obligations while retaining
-the hidden-confirm fresh-values/digests control. Do not describe a narrower
-saved-frame pass as passing all seven original privacy probes.
+unchanged. Independent lane6 review reconciled the approved packet, lifecycle L4
+and AM-5 with the original recorded replies. Fresh qualified/1→indeterminate/null
+is correct for withdrawal and the fixture's B2→C replacement: B2 is a different
+source bead, so it does not close B's derivation gap. The original probe's universal
+fresh-invariance assertion is an oracle mismatch, masked by its earlier real
+saved-frame refusal. Preserve that script and failed evidence byte-for-byte;
+do not freeze fresh roots to make it pass. Only unchanged complete visible values
+and authorized metadata require equal visible digests.
+
+The additive tests score original saved pins separately from these qualified fresh
+oracles. They add a same-source-bead B→D replacement, actual ungranted lifecycle
+material evidence, changes within an already unreadable material family, revoked
+original lifecycle evidence and a revoked original nonendpoint derivation root.
+The negative controls check all nine relation tables, total rows, coverage/digests,
+protected identifier absence, applicable owner targeted refusal and whole saved
+refusal; measured charges stay unnormalized. These controls are prepared, not
+executed. A new late protected replacement and an original dependency revocation
+are distinct conditions. TG01–08 and their exact contract pins are recorded in
+lane-owned coordinator evidence; no policy or timestamp interpretation changes.
 
 Public disclosure/reuse routes through `query_result_access_v1` to the existing
 `check_query_result_closure_v2`; no Python executor change or new sealed-result
@@ -46,6 +58,7 @@ Database validation pending: real PostgreSQL parsing, schema-43 artifact upgrade
 compatibility, positive unchanged-frame coverage,
 all four reproduced saved failures, original source and newly revoked nonendpoint
 task-candidate authority, protected new replacements, storage corruption and
-canonical-statement corruption. Database runs require a new coordinator slot.
+canonical-statement corruption, corrected fresh conservative semantics and genuine
+material-closure controls. Database runs require a new coordinator slot.
 Source-only checks and skipped DB tests are not installed database proof. No
 constant-time, resource-policy, full qualification, release or custody claim.
