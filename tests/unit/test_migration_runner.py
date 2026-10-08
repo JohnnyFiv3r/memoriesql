@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import tempfile
 import unittest
 from pathlib import Path
@@ -11,6 +12,17 @@ from memoriesql.infrastructure.postgres import migration_runner as runner
 
 
 class MigrationStreamTests(unittest.TestCase):
+    def test_packaged_stream_discovers_all_reviewed_resources_without_a_database(
+        self,
+    ) -> None:
+        stream = runner.discover_migrations()
+        self.assertEqual([m.version for m in stream], list(range(1, 45)))
+        for migration in stream:
+            self.assertEqual(
+                hashlib.sha256(migration.path.read_bytes()).hexdigest(),
+                migration.sha256,
+            )
+
     def test_explicit_stream_rejects_invalid_entries(self) -> None:
         for name, data in [
             ("0002_gap.sql", "SELECT 1;"),

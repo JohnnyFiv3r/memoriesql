@@ -62,3 +62,19 @@ canonical-statement corruption, corrected fresh conservative semantics and genui
 material-closure controls. Database runs require a new coordinator slot.
 Source-only checks and skipped DB tests are not installed database proof. No
 constant-time, resource-policy, full qualification, release or custody claim.
+
+## Installed discovery preflight repair
+
+The coordinator-granted071c88d slot stopped before any test/migration execution:
+packaged migration discovery still expected43 resources at both runtime count
+guards despite the44-resource wheel. The isolated server reached external TCP
+readiness, then the runner refused before loading fixtures. Container stop was
+verified; no retry or temporal pass was inferred. Original failure evidence and
+071c88d artifacts are retained.
+
+The follow-up advances only those two runtime resource counts43→44, retaining
+all inventory format/name/hash/duplicate/ownership/default-deny checks. A new
+installed CPU test discovers the complete reviewed44-resource stream without a
+DB connection and checks each resource digest. It reproduces the preflight error
+on the unchanged071c88d wheel. No query executor Python, contract/catalog or
+historical SQL is changed by this follow-up. A new exact-head DB grant is required.
