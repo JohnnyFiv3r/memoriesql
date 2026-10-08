@@ -577,6 +577,8 @@ class PostgresRestrictedQuery:
             else:
                 outcome = "execution_error"
             safe_error = {
+                "22003": "arithmetic",
+                "22012": "arithmetic",
                 "53400": "storage",
                 "54000": "storage",
                 "57014": "time",

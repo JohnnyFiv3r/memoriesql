@@ -40,6 +40,40 @@ class AgentSqlDisclosure(unittest.TestCase):
         self.db = self.r.db
         self.r.fixture.assertion()
 
+    def assert_arithmetic_failure(self, expression: str, left: int, right: int) -> None:
+        run = self.r.start()
+        request = self.request(
+            run,
+            f"SELECT {expression} AS value FROM memory_v1.observations",
+            page_size=5,
+        )
+        request["parameters"] = [
+            {"position": 1, "type": "int8", "value": str(left)},
+            {"position": 2, "type": "int8", "value": str(right)},
+        ]
+        data, reply = self.send(request)
+        self.assertEqual(reply["outcome"], "execution_error", reply)
+        self.assertEqual(reply["error"]["code"], "arithmetic", reply)
+        self.assertNotIn("page", reply)
+        self.assertNotIn("result", reply)
+        self.assertNotIn(b"division by zero", data)
+        self.assertNotIn(b"bigint out of range", data)
+        self.assertEqual(self.unsettled(), 0)
+        _, next_reply = self.send(
+            self.request(
+                run,
+                "SELECT bead_id FROM memory_v1.observations",
+                page_size=5,
+            )
+        )
+        self.assertEqual(next_reply["outcome"], "available", next_reply)
+
+    def test_division_by_zero_has_the_approved_arithmetic_code(self) -> None:
+        self.assert_arithmetic_failure("$1 / $2", 1, 0)
+
+    def test_numeric_overflow_has_the_approved_arithmetic_code(self) -> None:
+        self.assert_arithmetic_failure("$1 + $2", 9223372036854775807, 1)
+
     def request(
         self, run: dict[str, Any], text: str, *, page_size: int, step: str | None = None
     ) -> dict[str, Any]:

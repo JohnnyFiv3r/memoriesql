@@ -77,6 +77,8 @@ _REFUSALS = {
     "transport": ("budget_exhausted", "transport"),
 }
 _STATE_CODES = {
+    "22003": "arithmetic",
+    "22012": "arithmetic",
     "53400": "storage",
     "54000": "storage",
     "57014": "time",

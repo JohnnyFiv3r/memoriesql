@@ -51,3 +51,18 @@ memory exhaustion has been measured. These are focused development regressions,
 not complete installed qualification, privacy timing certification, useful
 workload fit or semantic-quality evidence. Final stack integration and the
 applicable independent review remain required.
+
+## Arithmetic outcome conformance
+
+The approved safe code `arithmetic` now classifies PostgreSQL division by zero
+(`22012`) and numeric overflow (`22003`) in both restricted execution and
+executor database-error translation. This does not expose server messages or
+reclassify every data exception as arithmetic. Existing type, authority and
+unknown database errors retain their classifications.
+
+The two regressions in `tests/runtime/test_agent_sql_disclosure.py` execute
+parameterized division by zero and int8 overflow through the actual query
+service. Both previously returned `execution_error` with code `database`.
+They require the approved arithmetic code, no result/page or raw server error,
+settled delivery, and successful subsequent work in the same run. These are
+development conformance checks, not a change to the approved error vocabulary.
