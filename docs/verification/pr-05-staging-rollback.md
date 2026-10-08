@@ -66,3 +66,21 @@ service. Both previously returned `execution_error` with code `database`.
 They require the approved arithmetic code, no result/page or raw server error,
 settled delivery, and successful subsequent work in the same run. These are
 development conformance checks, not a change to the approved error vocabulary.
+
+### Arithmetic at reservation and result commit (IV-01)
+
+Independent lane-6 fault injection found that the arithmetic safe code still
+selected `budget_exhausted` in the reservation/commit outcome handlers. Both
+now select the existing `execution_error/arithmetic` outcome. No SQLSTATE,
+contract payload, policy or migration changes. Unknown commit acknowledgments
+and connection failures retain `settlement_pending` and the reservation.
+
+Five database-free boundary tests reproduce arithmetic failures at both ports
+(two codes each) and retain storage/uncertain-commit controls. These are handler
+fault injections, not proof arithmetic normally arises inside reservation or
+commit. Real PostgreSQL ErrorResponses will be injected inside those ports in
+the focused disclosure suite; the natural parameterized query arithmetic cases
+remain separate. A real completed commit followed by lost acknowledgment tests
+that recovery retains the immutable result and never dispatches it again.
+Focused installed DB evidence is recorded in the lane handoff, separate from
+full qualification.

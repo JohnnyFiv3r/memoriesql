@@ -15,10 +15,21 @@ from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 from uuid import UUID, uuid4
 
+import psycopg
+
 from memoriesql.application.agent_sql_catalog import SqlCatalog
 from memoriesql.application.agent_sql_results import ref_key
 from memoriesql.infrastructure.postgres.agent_sql_results import (
     PostgresAgentSqlResults,
+)
+from memoriesql.infrastructure.postgres.query_result_commit import (
+    PostgresQueryResultCommit,
+)
+from memoriesql.infrastructure.postgres.relation_projection import (
+    relation_projection_frame,
+)
+from memoriesql.infrastructure.postgres.result_preparation import (
+    PostgresResultPreparation,
 )
 
 if TYPE_CHECKING:
@@ -73,6 +84,116 @@ class AgentSqlDisclosure(unittest.TestCase):
 
     def test_numeric_overflow_has_the_approved_arithmetic_code(self) -> None:
         self.assert_arithmetic_failure("$1 + $2", 9223372036854775807, 1)
+
+    def assert_arithmetic_boundary(self, boundary: str, expression: str) -> None:
+        """Real server SQLSTATE injected at a port, not natural port reachability."""
+        run = self.r.start()
+        request = self.request(
+            run, "SELECT bead_id FROM memory_v1.observations", page_size=5
+        )
+        port_type = (
+            PostgresResultPreparation
+            if boundary == "reserve"
+            else PostgresQueryResultCommit
+        )
+
+        def reject(port: Any, *args: Any, **kwargs: Any) -> Any:
+            connection = port._connection if boundary == "reserve" else port.connection
+            credential = port._credential if boundary == "reserve" else port.credential
+            workspace = port._workspace if boundary == "reserve" else port.workspace
+            with relation_projection_frame(
+                connection, credential_sha256=credential, workspace_id=workspace
+            ) as frame:
+                frame.execute("SELECT " + expression)
+            raise AssertionError("fictional arithmetic ErrorResponse expected")
+
+        with patch.object(port_type, boundary, reject):
+            data, reply = self.send(request)
+        self.assertEqual(reply["outcome"], "execution_error", reply)
+        self.assertEqual(reply["error"]["code"], "arithmetic", reply)
+        self.assertNotIn("result", reply)
+        self.assertNotIn("page", reply)
+        self.assertNotIn(b"division by zero", data)
+        self.assertNotIn(b"bigint out of range", data)
+        self.assertEqual(self.unsettled(), 0)
+        self.assertEqual(
+            self.r.h.scalar(
+                "SELECT count(*) FROM memoriesql.result_preparation_operations WHERE state<>'discarded'"
+            ),
+            0,
+        )
+        self.assertEqual(
+            self.r.h.scalar("SELECT count(*) FROM memoriesql.query_result_creations"), 0
+        )
+        if boundary == "reserve":
+            self.assertEqual(
+                self.r.h.scalar("SELECT count(*) FROM memoriesql_query.invocations"), 0
+            )
+        else:
+            self.assertEqual(
+                self.r.h.scalar(
+                    "SELECT count(*) FROM memoriesql_query.invocations WHERE state<>'settled'"
+                ),
+                0,
+            )
+        _, following = self.send(
+            self.request(run, "SELECT bead_id FROM memory_v1.observations", page_size=5)
+        )
+        self.assertEqual(following["outcome"], "available", following)
+
+    def test_division_at_reservation_is_an_execution_error(self) -> None:
+        self.assert_arithmetic_boundary("reserve", "1::bigint / 0::bigint")
+
+    def test_overflow_at_reservation_is_an_execution_error(self) -> None:
+        self.assert_arithmetic_boundary(
+            "reserve", "9223372036854775807::bigint + 1::bigint"
+        )
+
+    def test_division_at_commit_is_an_execution_error(self) -> None:
+        self.assert_arithmetic_boundary("commit", "1::bigint / 0::bigint")
+
+    def test_overflow_at_commit_is_an_execution_error(self) -> None:
+        self.assert_arithmetic_boundary(
+            "commit", "9223372036854775807::bigint + 1::bigint"
+        )
+
+    def test_lost_commit_acknowledgment_retains_recovery_ownership(self) -> None:
+        run = self.r.start()
+        request = self.request(
+            run, "SELECT bead_id FROM memory_v1.observations", page_size=5
+        )
+        original = PostgresQueryResultCommit.commit
+        committed = False
+
+        def lost_ack(port: Any, *args: Any, **kwargs: Any) -> Any:
+            nonlocal committed
+            original(port, *args, **kwargs)
+            committed = True
+            raise psycopg.OperationalError("fictional lost commit acknowledgment")
+
+        with patch.object(PostgresQueryResultCommit, "commit", lost_ack):
+            data, reply = self.send(request)
+        self.assertTrue(committed)
+        self.assertEqual(reply["outcome"], "settlement_pending", reply)
+        self.assertNotIn("result", reply)
+        self.assertNotIn("page", reply)
+        self.assertNotIn(b"fictional lost", data)
+        self.assertEqual(self.unsettled(), 1)
+        self.assertEqual(
+            self.r.h.scalar(
+                "SELECT count(*) FROM memoriesql.result_preparation_operations WHERE state='sealed'"
+            ),
+            1,
+        )
+        self.assertEqual(
+            self.r.h.scalar("SELECT count(*) FROM memoriesql.query_result_creations"), 1
+        )
+        _, recovered = self.send(request)
+        self.assertEqual(recovered["outcome"], "available", recovered)
+        self.assertEqual(self.unsettled(), 0)
+        self.assertEqual(
+            self.r.h.scalar("SELECT count(*) FROM memoriesql.query_result_creations"), 1
+        )
 
     def request(
         self, run: dict[str, Any], text: str, *, page_size: int, step: str | None = None

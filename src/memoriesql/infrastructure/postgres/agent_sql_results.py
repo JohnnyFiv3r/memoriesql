@@ -516,6 +516,8 @@ class PostgresAgentSqlResults:
                     if code == "idempotency"
                     else "unavailable"
                     if code == "unavailable"
+                    else "execution_error"
+                    if code == "arithmetic"
                     else "budget_exhausted",
                     code,
                 ) from None
@@ -628,6 +630,8 @@ class PostgresAgentSqlResults:
                             raise _Failure(
                                 "unavailable"
                                 if known == "unavailable"
+                                else "execution_error"
+                                if known == "arithmetic"
                                 else "budget_exhausted",
                                 known,
                             ) from None
