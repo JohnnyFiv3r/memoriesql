@@ -77,7 +77,10 @@ current target membership and pairing authority.
 
 Each command accepts `--json`. Read commands serialize the same typed core
 result for human and JSON use. Source authority commands return an `available`
-envelope with their typed receipt, or an `unavailable`/`failed` reason. JSON is
+envelope with their typed receipt, or an `unavailable`/`failed` reason. A source
+authority command stopped by a lock timeout or a cancelled statement reports
+`failed` with reason `source_authority_busy`: nothing was written, and the
+identical request may be retried. JSON is
 compact and contains no branding. Exit status is 0 for `available`, 2 for
 `unavailable` and 3 for failure, exhausted work or an unverified database
 check. An unavailable operation
@@ -177,7 +180,9 @@ use to read broader credentials. `clients revoke` takes the pairing grant,
 expected revision, capabilities and scopes from the pairing receipt and records a
 terminal revision; a changed revision is a conflict, not a success. A
 revocation that reports `revocation_outcome_unknown` may have applied; retrying
-it reports `pairing_revision_conflict` once it has.
+it reports `pairing_revision_conflict` once it has. A revoked grant accepts no
+further revision: revoking it again at its new revision reports
+`resource_unavailable`, and nothing can reactivate it.
 `query` and `result` speak `memoriesql.agent-sql-results.v1` through a trusted
 executor that alone holds the control login and the restricted reader login.
 `query --file` reads at most 32 KiB of SQL; `--parameters-file` holds the typed
