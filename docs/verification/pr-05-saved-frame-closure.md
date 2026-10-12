@@ -1,0 +1,120 @@
+# PR-05 retained saved-frame closure — development candidate
+
+Canonical late relation-history commits have been reproduced on exact installed
+`de328bb5afe8d94431c1b814432ccf416625c4f3` / schema 43 on Python 3.13 and
+3.14. Four cases refuse saved redelivery/reuse despite unchanged authority and
+content/witness/dependency bytes: hidden confirm, retract and supersede, and an
+owner-visible retraction. Unchanged, rolled-back and original-source-revocation
+controls behaved as required. This is development evidence, not qualification.
+
+The approved temporal contract says `known_at` does not prove a closed set of
+commits; the actual retained revisions, frame and manifest pin the snapshot.
+Migration 0044 replaces only closure v2's fresh-population subset comparison.
+The existing owner binding, expiry, operation, partition checksums, content
+identity, canonical manifest and witness checks remain byte exact. Private
+helpers check the saved canonical leaf records and current authority, original
+assertions, original events, correction paths, evidence and task populations.
+They do not select a new lifecycle state, replacement closure or root population.
+An original replacement must remain in the retained assertion dependencies;
+a later replacement cannot add facts to a saved result. Unknown/missing/changed
+records refuse the whole result. No new privilege is granted.
+
+Fresh query preparation, lifecycle projection, inspection and discovery are
+unchanged. Independent lane6 review reconciled the approved packet, lifecycle L4
+and AM-5 with the original recorded replies. Fresh qualified/1→indeterminate/null
+is correct for withdrawal and the fixture's B2→C replacement: B2 is a different
+source bead, so it does not close B's derivation gap. The original probe's universal
+fresh-invariance assertion is an oracle mismatch, masked by its earlier real
+saved-frame refusal. Preserve that script and failed evidence byte-for-byte;
+do not freeze fresh roots to make it pass. Only unchanged complete visible values
+and authorized metadata require equal visible digests.
+
+The additive tests score original saved pins separately from these qualified fresh
+oracles. They add a same-source-bead B→D replacement, actual ungranted lifecycle
+material evidence, changes within an already unreadable material family, revoked
+original lifecycle evidence and a revoked original nonendpoint derivation root.
+The negative controls check all nine relation tables, total rows, coverage/digests,
+protected identifier absence, applicable owner targeted refusal and whole saved
+refusal; measured charges stay unnormalized. These controls are prepared, not
+executed. A new late protected replacement and an original dependency revocation
+are distinct conditions. TG01–08 and their exact contract pins are recorded in
+lane-owned coordinator evidence; no policy or timestamp interpretation changes.
+
+Public disclosure/reuse routes through `query_result_access_v1` to the existing
+`check_query_result_closure_v2`; no Python executor change or new sealed-result
+format is needed for this candidate. Old population-revision-2 artifacts with
+complete recorded dependencies are expected to work without rewriting bytes;
+missing mandatory dependencies refuse. The schema-35 private standalone v1
+checker has a different artifact format and is preserved, not routed to v2 or
+claimed repaired. Its old-format temporal behavior remains a separate scope.
+All migrations 0001–0043 and public contracts/catalogs are preserved byte exact.
+
+CPU validation: 135 unit tests on each Python 3.13.5 and 3.14.0, strict typing
+over 200 files, Ruff lint, migration/catalog/boundary checks and local wheel build
+pass. Repository-wide formatting has pre-existing differences; new test files
+pass formatting. These checks do not execute PostgreSQL.
+
+Database validation pending: real PostgreSQL parsing, schema-43 artifact upgrade
+compatibility, positive unchanged-frame coverage,
+all four reproduced saved failures, original source and newly revoked nonendpoint
+task-candidate authority, protected new replacements, storage corruption and
+canonical-statement corruption, corrected fresh conservative semantics and genuine
+material-closure controls. Database runs require a new coordinator slot.
+Source-only checks and skipped DB tests are not installed database proof. No
+constant-time, resource-policy, full qualification, release or custody claim.
+
+## Installed discovery preflight repair
+
+The coordinator-granted071c88d slot stopped before any test/migration execution:
+packaged migration discovery still expected43 resources at both runtime count
+guards despite the44-resource wheel. The isolated server reached external TCP
+readiness, then the runner refused before loading fixtures. Container stop was
+verified; no retry or temporal pass was inferred. Original failure evidence and
+071c88d artifacts are retained.
+
+The follow-up advances only those two runtime resource counts43→44, retaining
+all inventory format/name/hash/duplicate/ownership/default-deny checks. A new
+installed CPU test discovers the complete reviewed44-resource stream without a
+DB connection and checks each resource digest. It reproduces the preflight error
+on the unchanged071c88d wheel. No query executor Python, contract/catalog or
+historical SQL is changed by this follow-up. A new exact-head DB grant is required.
+
+## First installed test stop: fixture identifier syntax
+
+The granted a103e7e r2 run successfully discovers/applies the44-resource stream,
+then fails the first additive method before any temporal mutation/assertion.
+Five initial denied-family queries return available with zero rows; the sixth,
+relation_types, returns execution_error/database. The retained PostgreSQL log
+shows syntax error at bare `symmetric` in the additive fixture SELECT list.
+This is not evidence of a saved-frame closure failure or pass. The fail-fast
+wrapper stops after one failed method; no original probes, remaining methods,
+guards or3.14 run. The isolated container stops, with exact failure retained.
+
+The fixture-only correction quotes every catalog column identifier; requested
+columns and all privacy/temporal/settlement assertions stay unchanged. Product
+SQL/Python, historical inventory and all original seven probes remain exact.
+CPU admission/witness compilation of all nine quoted queries is separate from
+PostgreSQL runtime validation. A fresh exact-head coordinator grant is needed;
+no retry under the consumed assignment.
+
+## First nonempty retained-closure runtime stop
+
+On installed adba38c/schema44, the corrected already-ungranted-material case
+passes on3.13: all nine family tables remain absent before/after a new protected
+material event; visible coverage/digests and the independent observation result's
+original partitions/redelivery/reuse remain unchanged. This is one narrow case,
+not a completed matrix. The next method fails on INITIAL result disclosure
+before applying its canonical-statement storage fault. PostgreSQL reports record
+`p` has no field statement_id in query_saved_records_authorized_v1: its declared
+PL/pgSQL record shadows the statement-bag SQL alias. Stop after one pass/one fail;
+no further method/original/guard/3.14 executes; owned container stops.
+
+The unpublished0044 repair renames only that private PL/pgSQL record and its
+references to retained_pin, leaving SQL aliases/queries and closure predicates
+unchanged. This also avoids the same declared name shadowing recursive-path and
+pair-disposition aliases. The migration inventory checksum is refreshed. Existing
+closure-v2 integrity/authority restatement and canonical event gates remain exact;
+no conflict-resolution compiler option, privilege, contract, temporal oracle or
+fixture change. A narrow source regression reproduces the declared-record/alias
+collision on old SQL and passes after renaming; it does not execute PostgreSQL.
+New installed runtime evidence still requires a fresh exact-head grant.

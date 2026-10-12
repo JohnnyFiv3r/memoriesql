@@ -1,0 +1,255 @@
+{
+  "algorithm": "sha256",
+  "am5_separation": "ea-5 and ea-5-link-1 remain unchanged for their AM-5 authority and M0039 branch. PR #79 is pinned here on schema 38. No combined AM-5/#79 head, migration-39 composition or later merge is implicitly linked or qualified.",
+  "approved_interface_record": {
+    "amendments": [
+      {
+        "amendment_ref": "https://github.com/JohnnyFiv3r/memoriesql/pull/48#issuecomment-5851120561",
+        "supersedes": {
+          "algorithm": "sha256",
+          "dependencies": [
+            {
+              "commit": "2baffc688291dbfdeccaa46f7ca05f6e9ef0e12c",
+              "path": "docs/relation-assessment.md",
+              "sha256": "69a0d985466c6610a3a2abc73bcef9242749ff9535cb709e32867c7e06414d2a"
+            }
+          ],
+          "packet_commit": "2baffc688291dbfdeccaa46f7ca05f6e9ef0e12c",
+          "packet_path": "docs/agent-sql-results-v1.md",
+          "packet_sha256": "ba9e94b75b581949ff55e9b06b7271e2d4d0c79d6423e1dc6184d72245c585bb"
+        }
+      }
+    ],
+    "approval_ref": "https://github.com/JohnnyFiv3r/memoriesql/pull/49#issuecomment-5851352880",
+    "interface": {
+      "algorithm": "sha256",
+      "dependencies": [
+        {
+          "commit": "b3865f307b50bd94681b387ad0f3b16fbb20213a",
+          "path": "docs/relation-assessment.md",
+          "sha256": "69a0d985466c6610a3a2abc73bcef9242749ff9535cb709e32867c7e06414d2a"
+        }
+      ],
+      "packet_commit": "b3865f307b50bd94681b387ad0f3b16fbb20213a",
+      "packet_path": "docs/agent-sql-results-v1.md",
+      "packet_sha256": "78bbc04eaeffd0fd47b0576e270f25eaa30e07a90b42e53d27e64308dfd8269e"
+    },
+    "version": 2
+  },
+  "catalog_hash_unchanged": "67a6e8de76a95b35f9f51662ad8e94f7f15f2e1dd597200258aa880e7b3dd166",
+  "commits_after_previous_link": [
+    "67b0347a57fa833cec2c2e2ebc1f8984b0bca4d6",
+    "6c91bb4df662095b2065b700416fcda529febb10",
+    "6f3f79b6787c7a633e2bdd60241896c76f4e812a",
+    "622884f61b2d18f6b12b550ba8a388146bbdb5df",
+    "939a0ca3d73ad37d726ec6cb27ad721241e313bc",
+    "db850f1015a1ba1a93fac0e769c3ed136e954f87",
+    "98d79039c518db2983fb03a4176ce8360d4043c6"
+  ],
+  "custodian": {
+    "role": "independent PR-04 evaluation custodian",
+    "task_id": "01a0d40a-b91a-73a0-b5b3-8067f150c880"
+  },
+  "custody_block": "05",
+  "determination": "PR #79 requires a new implementation link under ea-4 plus an explicit outcome/grading compatibility reconciliation, supplied together in this record. The corrected failures and admitted membership execution are observable changes; ea-4-link-2 wording about unchanged failure grading must not be read as unchanged runtime outcomes. No new authority/evidence-semantic amendment, replacement freeze or numerical-policy approval is required for the supplied delta.",
+  "final_implementation_commit": "98d79039c518db2983fb03a4176ce8360d4043c6",
+  "format": "pr04-independent-custody-implementation-link-v1",
+  "frozen_at": "2026-09-26T22:01:04Z",
+  "frozen_revisions": {
+    "approved_policy": {
+      "revision": "pr05-evaluation-preregistration-v3",
+      "sha256": "6bdf6b0e790cb7b0ef71337de5b494f03913ec5c47cb3c1d746686594bc545db"
+    },
+    "pack": {
+      "digest_scope": "frozen inventory of exact constituent bytes",
+      "revision": "ef-1",
+      "sha256": "e6e7844592ae4694266b9890f328e90f19f2795eeb1c38f7b28d786ba46fabdd"
+    },
+    "preregistration": {
+      "revision": "er-1",
+      "sha256": "21d6ce7a08eaa084a779db175f0e68fabffa9e42c0f1961c2b25495bb70ce9a9"
+    },
+    "profiles": {
+      "revision": "ep-1",
+      "sha256": "1b7086621dcb6a508114cb5bf4bcbbe6380d0e594b9da4827ca51be7e47125c6"
+    },
+    "supplemental_approval": {
+      "revision": "pr04-custody-policy-approval-v1",
+      "sha256": "3b0170773413c9e772abb93c3f93de92cdeb9d7fe6cd59894eab8891eac47a00"
+    },
+    "thresholds": {
+      "revision": "et-1",
+      "sha256": "cb8d09abf5cd4eaf632eb142c88a7a0cdc12dbfd88c67b63d32d788dc227a236"
+    }
+  },
+  "historical_records_preserved": [
+    {
+      "bytes": 7373,
+      "original_bytes_preserved": true,
+      "revision": "ea-2",
+      "sha256": "501ee401c88f4926431f8eb5f2e27b78082649a2949de7005bca17ce54b53711"
+    },
+    {
+      "bytes": 12916,
+      "original_bytes_preserved": true,
+      "revision": "ea-3",
+      "sha256": "12e802be3664a2c971ae144f692e993e43344e9d68dfff569cfc16f77547e60b"
+    },
+    {
+      "bytes": 2501,
+      "original_bytes_preserved": true,
+      "revision": "ea-4-link-1",
+      "sha256": "20447b37135ff4ae4bd09f3d5490fe610372c770aaa2a27c53742aec2c8b9252"
+    },
+    {
+      "bytes": 18783,
+      "original_bytes_preserved": true,
+      "revision": "ea-5",
+      "sha256": "be36131e51989b860d726b764cb96f6c027215c6b6a8ceac391446cb18eaa017"
+    },
+    {
+      "bytes": 7752,
+      "original_bytes_preserved": true,
+      "revision": "ea-5-link-1",
+      "sha256": "f1ea1a28162812d205af3e42eeca01ccb3944651672e8e8cc2e5c3fe1557ae1b"
+    }
+  ],
+  "live_pr_observation": {
+    "base": "33e1c4281dca0845daea374dbf3f457160ec6e9a",
+    "head": "98d79039c518db2983fb03a4176ce8360d4043c6",
+    "head_verified_via_github_this_turn": true,
+    "number": 79,
+    "state": "OPEN"
+  },
+  "migrations": {
+    "0001_through_0038_byte_identical_to_previous_head": true,
+    "0037_sha256": "f8e2d46829258da4c49d011c6766711d55cb48940b3476681d8ad9dffcad1d1b",
+    "0038_sha256": "eabebb7fe2a03cb79942e9b86b8a7f71dfcf4be72e12596282728d41a253ac4f"
+  },
+  "outcome_compatibility_reconciliation": {
+    "approved_mapping": "The unchanged packet prescribes budget_exhausted for timeout/storage/work limits; unsupported_query for missing features/provenance shapes; invalid_request for safe syntax/type/binding errors; indistinguishable unavailable for protected/missing IDs; settlement_pending for uncertain commit/cleanup ownership.",
+    "busy_database": "Before ownership is established, the named busy/limit/unsettled-work paths map to budget_exhausted with time, storage or settlement as supplied. Settled budget failure is F1. An error label alone never proves settlement; genuinely uncertain execution/accounting remains F2.",
+    "disclosure_and_scoring": "Committed state and settlement_pending are not successful receipted disclosure. Grade the eventual authoritative sealed result/status against frozen obligations, retaining earlier raw outcomes, charges, latency, faults and missing outputs. Expected refusal/recovery scenarios earn only their predeclared credit. Required undelivered evidence fails. A safe refusal cannot count as completed retrieval, hydration, exact-source evidence or exhaustive absence.",
+    "fault_classes": "F0 remains optional reporting only. Safely settled failure is F1 and stays in the scheduled denominator. Unknown ownership/accounting is F2 and blocks the affected dispatch/disclosure/claim while safely isolated independent work may continue. A privacy, authorization or evidence-integrity breach remains F3; it is not downgraded by a different error label.",
+    "matched_comparison": "Both peers receive identical upgraded implementation/closure and capabilities, principals, authorization, representations, budgets and opportunities. Do not pool pre-change and post-change primary runs as a matched comparison or choose an architecture from changed availability, generated answers or mechanical tests. Seen regression and unseen results remain separate.",
+    "membership_and_tokenization": "Punctuation-adjacent bound parameters are admitted and membership of nine through 64 values can execute with the reviewed support functions. Dollar-quoted strings remain refused. Successful execution earns credit only through the existing exact evidence, receipts and status obligations; admission or syntax correctness alone earns none.",
+    "operator_and_parser_refusal": "unreviewed_operator, comparison_grouping and correction_recursion refusals occur before owned query work, rather than executing with an unsupported/different meaning or failing after dispatch. NOT LIKE/NOT ILIKE receive the inventoried unsupported classification. This does not approve a narrower final interface: unavailable required patterns or correction recursion remain unmet acceptance, never new deferrals or automatic passes.",
+    "policy_status": "Only the implementation reference and explicit mapping of observable outcomes to existing frozen rules are reconciled. Conditions, profiles, metrics, quality floors, safety gates, repetitions, grading rubric and exclusions remain frozen; no new consequential owner choice is introduced.",
+    "reruns_and_uncertainty": "Exact redelivery resolves the same owned work and is not a fresh semantic attempt. Existing schedule, access/work/transport limits, the conclusively settled retry rule, stop rules and separate authorization for diagnostic reruns still apply. Unresolved outputs prevent a complete paired claim. No observed failure, gold, threshold, denominator or historical report is silently rewritten.",
+    "type_and_identity": "A located invalid_request/type with feature reference_type explains a structurally incompatible identifier binding, without establishing visibility. Protected/missing/unseen identifiers share exactly error {code:unavailable}; internal parameter_anchor does not leak. No hidden values, presence counts or authority distinctions may be inferred from diagnostics.",
+    "uncertain_commit": "A failed probe/recovery, lost acknowledgement, failed owner lock/abandonment/settlement confirmation or failed first disclosure with uncertain ownership remains settlement_pending until authoritative reconciliation. Keep the original step/result and exact redelivery identity; do not start a fresh computation, silently repeat model work, assume failure or refund/reset budgets. A conclusively failed precommit step may discard its reservation under existing accounting. Required reported charges remain truthful."
+  },
+  "owner_reported_proofs": {
+    "classification": "Fictional mechanical evidence; neither semantic-quality nor workload certification.",
+    "development_tests_at_final_tree": 122,
+    "independently_rerun_or_receipts_archives_verified": false,
+    "installed_python": [
+      "3.13.5",
+      "3.14.0"
+    ],
+    "package_checks_passed": 33,
+    "passed_per_python": 666,
+    "qualification_head": "98d79039c518db2983fb03a4176ce8360d4043c6",
+    "receipt_sha256_3_13": "8318714c83acb590e98c67a3104abb4a6716c09a1e6308283f66aebbbca568fe",
+    "receipt_sha256_3_14": "ffb723951345a6394040008f1a7ee799a0f5e9900c632fb165702576839c65e3",
+    "reported_date": "2026-10-01",
+    "sdist_sha256": "495c19e250a04718163e0f9f46cdcff6d832b6492d647def660fb406b7a8e34b",
+    "skipped_per_python": 0,
+    "two_byte_identical_builds": true,
+    "wheel_sha256": "548696e7e288a07e9bd478d33f79d6e3f2bc534a3821e8847b3a7d6d771e515f"
+  },
+  "owner_request": {
+    "at": "2026-10-06T01:00:03.908Z",
+    "message_id": "msg_01a10eb9-8dc4-7dd0-8396-b9354e044c3f",
+    "request_excerpt": "I need custody blocks 01 and 05 confirmation",
+    "task_id": "01a0d40a-b91a-73a0-b5b3-8067f150c880",
+    "user_message_sha256": "2273b02a7cc585d9fe15311afddf22d29f483e3a9721705aeb7536ca9e51f0ab"
+  },
+  "owner_supplied_notice": {
+    "bytes": 12657,
+    "scope": "Exact bytes of the two attached content-free notices, retained separately; no private access path is disclosed.",
+    "sha256": "eda42461f9d5aa152883a886c0f45283f45952cdc6ab8f5db5ffd0da93b11496"
+  },
+  "parent_attestation": {
+    "bytes": 12447,
+    "original_bytes_preserved": true,
+    "revision": "ea-4",
+    "sha256": "d118ded2578e7672d404b33c7c521f630bf4444e61cf57ca7e10cf6e2cea91f9"
+  },
+  "preservation": {
+    "access_separation": "Original custody separation and owner-only read-only modes retained; no distinct OS-principal isolation is claimed for agents sharing an account.",
+    "all_prior_custody_bytes_preserved": true,
+    "evaluation_profile_change": false,
+    "exposure_incidents": [],
+    "frozen_inventory_and_policy_hashes_verified": true,
+    "new_deferrals_or_exclusions": false,
+    "numeric_policy_change": false,
+    "questions_gold_and_source_content_inspected": false,
+    "replacement_freeze_required": false,
+    "unseen_content_disclosed": false
+  },
+  "previous_implementation_commit": "33e1c4281dca0845daea374dbf3f457160ec6e9a",
+  "previous_linkage": {
+    "bytes": 11678,
+    "original_bytes_preserved": true,
+    "revision": "ea-4-link-3",
+    "sha256": "f4b1fddc3b9f1cd841260f15cade10b4a7751477365ea1237fd85ed9b18ac25d"
+  },
+  "reader_closure": {
+    "exact_added_signatures": [
+      "hash_numeric(numeric)",
+      "hashbool(boolean)",
+      "hashint8(bigint)",
+      "hashtext(text)",
+      "timestamptz_hash(timestamptz)",
+      "uuid_hash(uuid)"
+    ],
+    "final_source": {
+      "bytes": 8197,
+      "commit": "98d79039c518db2983fb03a4176ce8360d4043c6",
+      "path": "src/memoriesql/infrastructure/postgres/query_reader_provisioning.py",
+      "sha256": "ee90c7720aef226decd5eb1c2557dc6d6977e05574ef306f88084b27d2795fe1"
+    },
+    "owner_decision_provenance": "The owner-supplied notice and signed-off commit 939a0ca3d73ad37d726ec6cb27ad721241e313bc attribute approval of exactly these six functions to the owner. No separate original approval-message timestamp is invented.",
+    "pin_boundary": "The approved packet and retained custody records pin the governed inventoried-builtin rule, not a fixed exact reviewed procedure set. This record pins the changed provisioning source. The instance-specific effective reader profile still must be rebuilt/re-pinned and qualified on the actual database; no instance profile digest is fabricated here.",
+    "previous_source": {
+      "bytes": 7143,
+      "commit": "33e1c4281dca0845daea374dbf3f457160ec6e9a",
+      "path": "src/memoriesql/infrastructure/postgres/query_reader_provisioning.py",
+      "sha256": "acac36999b6eddbdaa4af40a4de1135a34993a1b09d6f55f08104534533bfc86"
+    },
+    "reason": "PostgreSQL 18.4 invokes the default type hash procedures for the already approved bounded IN/=ANY membership path. The packet already admits up to 64 bound values. These implementation functions are not added as arbitrary callable SQL functions or as new row/source authority.",
+    "removed_signatures": [],
+    "static_inventory_delta_verified": true,
+    "unchanged_boundaries": "No table/source grants, canonical writes, role elevation, raw-source access, owner inspection access, credentials or wider public language authority follow from the six procedure additions. Preserve current full-closure reauthorization and all negative-boundary obligations.",
+    "upgrade_requirement": "For both evaluation conditions, use the same implementation, pinned server and exactly reviewed effective closure. Upgrade the package, grant the reviewed six functions through the owner/admin path, rebuild or re-pin the reader profile, then qualify before the first query. Missing or extra executable privileges must not be bypassed; a missing reviewed function makes provisioning unavailable. This custody record executes or authorizes no grants."
+  },
+  "record_ref": "ea-4-link-4",
+  "recorded_at": "2026-10-06T01:03:56Z",
+  "repository": "JohnnyFiv3r/memoriesql",
+  "scope": "Content-free custody implementation linkage and compatibility determination only. Named qualification results remain owner-reported proof provenance; no tests, database/checkpoints, live evaluation or models were run. No runtime/security/workload/semantic-quality certification, release readiness, merge, publication, deployment, spending, grants or messages to other tasks are authorized.",
+  "serialization": {
+    "encoding": "UTF-8 without BOM",
+    "final_newline": true,
+    "hash_scope": "Exact complete JSON document bytes; detached SHA-256 is not embedded in this document.",
+    "json": "Python json.dumps ensure_ascii=False, sort_keys=True, indent=2",
+    "line_endings": "LF"
+  },
+  "status": "issued_implementation_linkage_and_outcome_compatibility_confirmed",
+  "unchanged_packet_authority_and_record_hashes": {
+    "docs/agent-sql-results-v1.md": "78bbc04eaeffd0fd47b0576e270f25eaa30e07a90b42e53d27e64308dfd8269e",
+    "docs/approvals/pr-05-agent-source-text.md": "63ecbb4c9b270e4e79af18c3c2cc00e077c8b5e2d98b88fe2200235c31c15697",
+    "docs/approvals/pr-05-custody-ea-3.json": "12e802be3664a2c971ae144f692e993e43344e9d68dfff569cfc16f77547e60b",
+    "docs/approvals/pr-05-custody-ea-4-link-1.json": "20447b37135ff4ae4bd09f3d5490fe610372c770aaa2a27c53742aec2c8b9252",
+    "docs/approvals/pr-05-custody-ea-4-link-2.json": "4e2e350baf2daff2ec9825a3c5281381133b832c0db301321fa7a080bf791ae2",
+    "docs/approvals/pr-05-custody-ea-4.json": "d118ded2578e7672d404b33c7c521f630bf4444e61cf57ca7e10cf6e2cea91f9",
+    "docs/relation-assessment.md": "69a0d985466c6610a3a2abc73bcef9242749ff9535cb709e32867c7e06414d2a"
+  },
+  "verification_basis": "Exact Git objects, ancestry, migration and packet/authority/catalog preservation, provisioning builtin inventory, relevant source changes and frozen F0-F3 grading rules examined. GitHub confirms the supplied PR head. This bounded custody determination is not another runtime review or qualification.",
+  "verification_document": {
+    "bytes": 46521,
+    "commit": "98d79039c518db2983fb03a4176ce8360d4043c6",
+    "path": "docs/verification/pr-05-public-results.md",
+    "sha256": "71ba31544e22932bffb1da83d5f64f75f520fe133d6dd95ecf339c2688b170e3"
+  }
+}

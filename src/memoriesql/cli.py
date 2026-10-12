@@ -66,6 +66,7 @@ from memoriesql.infrastructure.postgres.personal_local_initialization import (
 )
 from memoriesql.infrastructure.postgres.source_enrollment import (
     PostgresSourceEnrollment,
+    SourceAuthorityBusy,
 )
 from memoriesql.infrastructure.results_broker import PROTOCOL_VERSION
 from memoriesql.infrastructure.results_broker.client import BrokerTransport
@@ -386,6 +387,10 @@ def _source_authority(
         NoDataFound,
     ):
         return {"outcome": "unavailable", "reason": "resource_unavailable"}
+    except SourceAuthorityBusy:
+        # A lock timeout or a cancelled statement: nothing was written, so the
+        # identical request may be retried.
+        return {"outcome": "failed", "reason": "source_authority_busy"}
     except Exception:
         # Never echo source identity, credentials, connection or SQL diagnostics.
         return {"outcome": "failed", "reason": "source_authority_failed"}

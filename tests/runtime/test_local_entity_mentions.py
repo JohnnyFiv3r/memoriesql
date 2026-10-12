@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import re
 import unittest
 import uuid
 from typing import TYPE_CHECKING, Any, cast
@@ -368,6 +370,47 @@ class LocalMentions(fixtures.SourceRevisiting):
                 "INSERT INTO memoriesql.entity_mentions SELECT tenant_id,workspace_id,access_scope_id,%s,bead_version_id,bead_id,event_id,source_unit_id,surface_text,start_offset,end_offset,recorded_by_principal_id,recorded_at,local_identity_state,local_identity_reason FROM memoriesql.entity_mentions",
                 (uuid.uuid4(),),
             )
+
+    def test_a_correction_statement_loses_the_note_at_revision_4(self) -> None:
+        # Revision 4's response schema offers the statement kind `correction`,
+        # but no authoring path accepts it for a new note: the output is
+        # invalid, the unit's one attempt is spent and the note is lost.
+        # Revision 7 (migration 0041) no longer offers it.
+        self.setup_mentions()
+        offered: list[list[str]] = []
+
+        def author(messages: Any, info: Any) -> Any:
+            schema = json.dumps(info.output_tools[0].parameters_json_schema)
+            offered.append(
+                sorted(
+                    set(
+                        re.findall(
+                            r'"(observation|context|qualification|correction)"', schema
+                        )
+                    )
+                )
+            )
+            response = self.response(messages, info)
+            part = cast(ToolCallPart, response.parts[0])
+            data = part.args_as_dict()
+            if data.get("typed_output") is not None:
+                statements = data["typed_output"]["annotations"][0]["statements"]
+                statements[0]["statement_kind"] = "correction"
+            part.args = data
+            return response
+
+        result = asyncio.run(self.worker(author).run_once())
+        self.assertIn(
+            ["context", "correction", "observation", "qualification"], offered
+        )
+        self.assertNotEqual(result.task_status, "succeeded", result)
+        self.assertEqual(
+            self.row(
+                "SELECT status, error_code FROM memoriesql.semantic_task_attempts"
+            ),
+            ("terminal_failure", "runtime.invalid_output"),
+        )
+        self.assert_no_meaning()
 
 
 def load_tests(loader: Any, standard_tests: Any, pattern: Any) -> Any:

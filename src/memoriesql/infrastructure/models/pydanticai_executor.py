@@ -67,6 +67,8 @@ from memoriesql.application.complete_input_execution import (
     InspectionCheckpoint,
 )
 from memoriesql.application.local_entity_mentions import (
+    AuthoredMentionInput,
+    AuthoredMentionStep,
     MentionAuthorStep,
     MentionExecutionInput,
 )
@@ -2125,6 +2127,8 @@ class PydanticAISemanticExecutor:
                             if isinstance(state.task.task_input, RelatedExecutionInput)
                             else MentionAuthorStep
                             if isinstance(state.task.task_input, MentionExecutionInput)
+                            else AuthoredMentionStep
+                            if isinstance(state.task.task_input, AuthoredMentionInput)
                             else SourceAuthorStep
                         )
                         result = await invoke(current_prompt, step_type)
