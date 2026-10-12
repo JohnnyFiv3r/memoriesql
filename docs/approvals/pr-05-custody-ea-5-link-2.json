@@ -1,0 +1,260 @@
+{
+  "algorithm": "sha256",
+  "approved_interface_record": {
+    "amendments": [
+      {
+        "amendment_ref": "https://github.com/JohnnyFiv3r/memoriesql/pull/48#issuecomment-5851120561",
+        "supersedes": {
+          "algorithm": "sha256",
+          "dependencies": [
+            {
+              "commit": "2baffc688291dbfdeccaa46f7ca05f6e9ef0e12c",
+              "path": "docs/relation-assessment.md",
+              "sha256": "69a0d985466c6610a3a2abc73bcef9242749ff9535cb709e32867c7e06414d2a"
+            }
+          ],
+          "packet_commit": "2baffc688291dbfdeccaa46f7ca05f6e9ef0e12c",
+          "packet_path": "docs/agent-sql-results-v1.md",
+          "packet_sha256": "ba9e94b75b581949ff55e9b06b7271e2d4d0c79d6423e1dc6184d72245c585bb"
+        }
+      }
+    ],
+    "approval_ref": "https://github.com/JohnnyFiv3r/memoriesql/pull/49#issuecomment-5851352880",
+    "interface": {
+      "algorithm": "sha256",
+      "dependencies": [
+        {
+          "commit": "b3865f307b50bd94681b387ad0f3b16fbb20213a",
+          "path": "docs/relation-assessment.md",
+          "sha256": "69a0d985466c6610a3a2abc73bcef9242749ff9535cb709e32867c7e06414d2a"
+        }
+      ],
+      "packet_commit": "b3865f307b50bd94681b387ad0f3b16fbb20213a",
+      "packet_path": "docs/agent-sql-results-v1.md",
+      "packet_sha256": "78bbc04eaeffd0fd47b0576e270f25eaa30e07a90b42e53d27e64308dfd8269e"
+    },
+    "version": 2
+  },
+  "authority_record": {
+    "bytes": 4763,
+    "commit": "e9d7d642da87d5fa3993720fe287a188636ef317",
+    "path": "docs/approvals/pr-05-agent-relation-reads.md",
+    "repository": "JohnnyFiv3r/memoriesql",
+    "sha256": "4491ca295d761955d4662dad43cb3e70840ef1bc199d8a1408c46b3bfe9530e3"
+  },
+  "base_commit": "33e1c4281dca0845daea374dbf3f457160ec6e9a",
+  "custodian": {
+    "role": "independent PR-04 evaluation custodian",
+    "task_id": "01a0d40a-b91a-73a0-b5b3-8067f150c880"
+  },
+  "determination": "The requested next link after ea-5-link-1 is issued. AM-5 is governed by the unchanged ea-5 record together with the explicit decision 12(a) clarification in ea-6. This link advances the implementation to the exact repaired PR #78 head; ea-6 already supplies the necessary semantic reconciliation, so no additional authority amendment or freeze is required.",
+  "evaluation_conditions": [
+    {
+      "name": "fixed PostgreSQL FTS/pg_trgm",
+      "profile_id": "fts-trgm-v1",
+      "profile_manifest_revision": "ep-1",
+      "profile_manifest_sha256": "1b7086621dcb6a508114cb5bf4bcbbe6380d0e594b9da4827ca51be7e47125c6",
+      "role": "evaluation-only lexical peer"
+    },
+    {
+      "name": "optional in-Postgres vector condition",
+      "profile_id": "fts-trgm-vector-v1",
+      "profile_manifest_revision": "ep-1",
+      "profile_manifest_sha256": "1b7086621dcb6a508114cb5bf4bcbbe6380d0e594b9da4827ca51be7e47125c6",
+      "role": "evaluation-only lexical-plus-exact-vector peer"
+    }
+  ],
+  "final_implementation_commit": "9f3aa77f9f37f0db087b78de00f308b01d7936d2",
+  "format": "pr04-independent-custody-implementation-link-v1",
+  "frozen_revisions": {
+    "approved_policy": {
+      "revision": "pr05-evaluation-preregistration-v3",
+      "sha256": "6bdf6b0e790cb7b0ef71337de5b494f03913ec5c47cb3c1d746686594bc545db"
+    },
+    "pack": {
+      "digest_scope": "frozen inventory of exact constituent bytes",
+      "revision": "ef-1",
+      "sha256": "e6e7844592ae4694266b9890f328e90f19f2795eeb1c38f7b28d786ba46fabdd"
+    },
+    "preregistration": {
+      "revision": "er-1",
+      "sha256": "21d6ce7a08eaa084a779db175f0e68fabffa9e42c0f1961c2b25495bb70ce9a9"
+    },
+    "profiles": {
+      "revision": "ep-1",
+      "sha256": "1b7086621dcb6a508114cb5bf4bcbbe6380d0e594b9da4827ca51be7e47125c6"
+    },
+    "supplemental_approval": {
+      "revision": "pr04-custody-policy-approval-v1",
+      "sha256": "3b0170773413c9e772abb93c3f93de92cdeb9d7fe6cd59894eab8891eac47a00"
+    },
+    "thresholds": {
+      "revision": "et-1",
+      "sha256": "cb8d09abf5cd4eaf632eb142c88a7a0cdc12dbfd88c67b63d32d788dc227a236"
+    }
+  },
+  "governing_scope_reconciliation": {
+    "bytes": 29178,
+    "original_record_preserved": true,
+    "revision": "ea-6",
+    "sha256": "74221b6fbc5674868590e548f1996cb3356a5404f26e23e8de1ba2af56a03c00"
+  },
+  "grading": "The clarified authority scope and withholding are already reconciled by ea-6. Apply unchanged frozen status/evidence obligations, matched opportunities and budgets. A missing required relation, history, source binding or hydration remains unmet; no newly invented pass, deferral or exclusion. Earlier observed implementation failures and all raw evidence remain historical.",
+  "historical_records_preserved": [
+    {
+      "bytes": 7373,
+      "original_record_preserved": true,
+      "revision": "ea-2",
+      "sha256": "501ee401c88f4926431f8eb5f2e27b78082649a2949de7005bca17ce54b53711"
+    },
+    {
+      "bytes": 12916,
+      "original_record_preserved": true,
+      "revision": "ea-3",
+      "sha256": "12e802be3664a2c971ae144f692e993e43344e9d68dfff569cfc16f77547e60b"
+    },
+    {
+      "bytes": 12447,
+      "original_record_preserved": true,
+      "revision": "ea-4",
+      "sha256": "d118ded2578e7672d404b33c7c521f630bf4444e61cf57ca7e10cf6e2cea91f9"
+    },
+    {
+      "bytes": 2501,
+      "original_record_preserved": true,
+      "revision": "ea-4-link-1",
+      "sha256": "20447b37135ff4ae4bd09f3d5490fe610372c770aaa2a27c53742aec2c8b9252"
+    },
+    {
+      "bytes": 2919,
+      "original_record_preserved": true,
+      "revision": "ea-4-link-2",
+      "sha256": "4e2e350baf2daff2ec9825a3c5281381133b832c0db301321fa7a080bf791ae2"
+    },
+    {
+      "bytes": 11678,
+      "original_record_preserved": true,
+      "revision": "ea-4-link-3",
+      "sha256": "f4b1fddc3b9f1cd841260f15cade10b4a7751477365ea1237fd85ed9b18ac25d"
+    },
+    {
+      "bytes": 17333,
+      "original_record_preserved": true,
+      "revision": "ea-4-link-4",
+      "sha256": "04a6365a3387f4489ce8e3dad5c7b0ed1834cf7df747e04f99ba70fc97e19b09"
+    }
+  ],
+  "implementation_commits": [
+    "f560fce1bbff9169caffaefa5a0a9f720239c97b",
+    "9f3aa77f9f37f0db087b78de00f308b01d7936d2"
+  ],
+  "implementation_scope": {
+    "gap_semantics": "Apply ea-6: schema-39 callers outside AM-5 without raw authority retain relation_tables/source_raw_read_required. Agent-mode callers missing source.read get relation_tables/source_read_required. Agent history/pair reads retain relation_history/owner_only. No mode or withheld counts are disclosed.",
+    "relation_closure": "In agent mode, whole relation families naming a withheld assessed relation through replacement chains or derived_from root lineage are withheld until the disclosed set is stable. Owner mode and the PR-03 lifecycle projection remain unchanged.",
+    "remaining_boundaries": "The six approved relation tables remain whole-row, current-whole-closure-authorized disclosures. Raw provenance, lifecycle writes, activation and relations inspection retain their existing authority. Readability earns no hydration or exact-source credit; no grants or reader objects are added.",
+    "selection": "The existing raw-read-holder path remains; the source.read agent mode requires an agent principal with a pairing grant. Other callers retain the earlier raw-read gate."
+  },
+  "live_pr_observation": {
+    "base": "33e1c4281dca0845daea374dbf3f457160ec6e9a",
+    "head": "9f3aa77f9f37f0db087b78de00f308b01d7936d2",
+    "number": 78,
+    "state": "OPEN",
+    "verified_via_github_this_turn": true
+  },
+  "migration_0039": {
+    "bytes": 71891,
+    "commit": "9f3aa77f9f37f0db087b78de00f308b01d7936d2",
+    "path": "migrations/0039_agent_relation_reads.sql",
+    "repository": "JohnnyFiv3r/memoriesql",
+    "sha256": "ee846ac79f14ae79ed83389e8f640ae9b375205705ee8fbb051b659eaaf7c882"
+  },
+  "migration_inventory": {
+    "bytes": 6064,
+    "commit": "9f3aa77f9f37f0db087b78de00f308b01d7936d2",
+    "path": "contracts/migration-inventory.json",
+    "repository": "JohnnyFiv3r/memoriesql",
+    "sha256": "e9921d31a95dc9fca6bfd1a5f110de57bed87e2457f3cfcbf3b5911df7eef532"
+  },
+  "original_am5_attestation": {
+    "bytes": 18783,
+    "original_record_preserved": true,
+    "revision": "ea-5",
+    "sha256": "be36131e51989b860d726b764cb96f6c027215c6b6a8ceac391446cb18eaa017"
+  },
+  "original_frozen_at": "2026-09-26T22:01:04Z",
+  "owner_notice": {
+    "bytes": 13565,
+    "scope": "Exact attached content-free notices, retained separately; no private access path is disclosed.",
+    "sha256": "27a5401b070efe2790a6ed0476c1e7d53daaff719dfe76e6d59aea67a2297fa0"
+  },
+  "owner_reported_proofs": {
+    "classification": "Fictional mechanical integration only; owner-supplied provenance, not independently rerun or elevated by custody.",
+    "date_as_reported": "2026-10-01",
+    "installed_python": [
+      "3.13.5",
+      "3.14.0"
+    ],
+    "package_checks_passed": 33,
+    "passed_per_python": 655,
+    "qualification_receipts_or_built_archives_independently_verified": false,
+    "qualified_head": "9f3aa77f9f37f0db087b78de00f308b01d7936d2",
+    "receipt_sha256_3_13": "d0782e7b161429d02bcc8afe0fa477514584960bb6d2bc520766a9701673e47e",
+    "receipt_sha256_3_14": "77d89435b3533cc05a0d8201143fdacca0a26e81cabb567470ac15cec3e33586",
+    "sdist_sha256": "8634c6eb35ff183aed047373d7f1b08fa021170e46465d8c0bbd5a4b890f4bd8",
+    "skipped_per_python": 0,
+    "two_byte_identical_builds": true,
+    "wheel_sha256": "b52b5e9fc3cca955c42495284b4029ceb34f5b087aac9f3f1b51c7c96b177533"
+  },
+  "owner_request": {
+    "at": "2026-10-06T01:40:12.939Z",
+    "message_id": "msg_01a10ede-500b-7fc0-b039-1d04b1723be2",
+    "message_text_sha256": "24e7cf00d418efe322fc03eff1dfcb1f576c9591d49c81b24618b9c5562122dc",
+    "scope": "User supplies the attached text as their custody implementation-link and determination request.",
+    "task_id": "01a0d40a-b91a-73a0-b5b3-8067f150c880"
+  },
+  "preservation": {
+    "all_previous_custody_bytes_preserved": true,
+    "exposure_incidents": [],
+    "frozen_inventory_and_policy_hashes_verified": true,
+    "new_authority_or_evidence_semantic_reconciliation_required": false,
+    "profile_or_numeric_policy_change": false,
+    "replacement_freeze_required": false,
+    "thresholds_budgets_grading_denominators_exclusions_and_rerun_rules_unchanged": true,
+    "unseen_content_disclosed": false,
+    "unseen_content_inspected": false
+  },
+  "previous_0039_sha256": "ed951d1ab83891ff7ec66ef3c28358a4dc4582d3f9540a41f3a8f9c88ccb83b9",
+  "previous_implementation_commit": "f560fce1bbff9169caffaefa5a0a9f720239c97b",
+  "previous_linkage": {
+    "bytes": 7752,
+    "original_record_preserved": true,
+    "revision": "ea-5-link-1",
+    "sha256": "f1ea1a28162812d205af3e42eeca01ccb3944651672e8e8cc2e5c3fe1557ae1b"
+  },
+  "previous_linked_head": "7f8e4a87462e54e5f146a2b3ae00ed44c9401c41",
+  "recorded_at": "2026-10-06T01:43:07Z",
+  "repository": "JohnnyFiv3r/memoriesql",
+  "revision": "ea-5-link-2",
+  "scope": "Content-free custody implementation-reference linkage only. Exact source artifacts and existing decisions were checked; qualification results remain attributed to the owner notice. No runtime/security/workload/semantic-quality certification, release readiness, database or checkpoint execution, test rerun, evaluation, model/provider calls, spending, grant, repository edit, merge, publication, deployment or external message is authorized.",
+  "serialization": {
+    "encoding": "UTF-8 without BOM",
+    "final_newline": true,
+    "hash_scope": "Exact complete JSON document bytes; detached SHA-256 is not embedded in this document.",
+    "json": "Python json.dumps ensure_ascii=False, sort_keys=True, indent=2",
+    "line_endings": "LF"
+  },
+  "status": "issued_exact_implementation_link",
+  "unchanged_migrations": {
+    "0001_through_0038_byte_identical_to_base": true,
+    "0037_sha256": "f8e2d46829258da4c49d011c6766711d55cb48940b3476681d8ad9dffcad1d1b",
+    "0038_sha256": "eabebb7fe2a03cb79942e9b86b8a7f71dfcf4be72e12596282728d41a253ac4f"
+  },
+  "verification_basis": "Exact Git ancestry and source/migration/verification-document hashes, ea-5 and ea-6 bindings, and live PR head checked. No named qualification was rerun. The earlier test-only changes are preserved, and no other branch is implicitly combined.",
+  "verification_document": {
+    "bytes": 37235,
+    "commit": "9f3aa77f9f37f0db087b78de00f308b01d7936d2",
+    "path": "docs/verification/pr-05-public-results.md",
+    "repository": "JohnnyFiv3r/memoriesql",
+    "sha256": "35fabf31b4aadfae830ff3907fb11bb433d0f7b51ff0cc2d62a1fe07830ec524"
+  }
+}
