@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -12,16 +13,35 @@ from memoriesql.infrastructure.postgres import migration_runner as runner
 
 
 class MigrationStreamTests(unittest.TestCase):
-    def test_packaged_stream_discovers_all_reviewed_resources_without_a_database(
-        self,
-    ) -> None:
-        stream = runner.discover_migrations()
-        self.assertEqual([m.version for m in stream], list(range(1, 45)))
-        for migration in stream:
-            self.assertEqual(
-                hashlib.sha256(migration.path.read_bytes()).hexdigest(),
-                migration.sha256,
+    def test_packaged_fixture_validates_44_resource_inventory(self) -> None:
+        # Source checkouts intentionally lack build-generated package resources.
+        # Exercise the packaged loader with a fictional distribution fixture;
+        # real resource discovery remains mandatory in installed acceptance.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            stream_root = root / "_migrations"
+            stream_root.mkdir()
+            rows = []
+            for version in range(1, 45):
+                name = f"{version:04d}_fictional.sql"
+                data = f"SELECT {version};\n".encode()
+                (stream_root / name).write_bytes(data)
+                rows.append(
+                    {"filename": name, "sha256": hashlib.sha256(data).hexdigest()}
+                )
+            (root / "_migration_inventory.json").write_text(
+                json.dumps(
+                    {"contract_version": 1, "default_policy": "deny", "migrations": rows}
+                )
             )
+            with patch.object(runner, "files", return_value=root):
+                stream = runner.discover_migrations()
+            self.assertEqual([m.version for m in stream], list(range(1, 45)))
+            for migration in stream:
+                self.assertEqual(
+                    hashlib.sha256(migration.path.read_bytes()).hexdigest(),
+                    migration.sha256,
+                )
 
     def test_explicit_stream_rejects_invalid_entries(self) -> None:
         for name, data in [
