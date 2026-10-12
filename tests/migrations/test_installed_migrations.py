@@ -29,6 +29,19 @@ else:
     from test_postgres_runtime import migrate as locked_migrate
 
 
+class InstalledMigrationResources(unittest.TestCase):
+    def test_packaged_stream_discovers_all_reviewed_resources_without_a_database(
+        self,
+    ) -> None:
+        stream = runner.discover_migrations()
+        self.assertEqual([m.version for m in stream], list(range(1, 45)))
+        for migration in stream:
+            self.assertEqual(
+                hashlib.sha256(migration.path.read_bytes()).hexdigest(),
+                migration.sha256,
+            )
+
+
 class InstalledMigrations(unittest.TestCase):
     def setUp(self) -> None:
         self.admin_url = os.environ["N1_TEST_DATABASE_URL"]
