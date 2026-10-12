@@ -29,6 +29,19 @@ else:
     from test_postgres_runtime import migrate as locked_migrate
 
 
+class InstalledMigrationResources(unittest.TestCase):
+    def test_packaged_stream_discovers_all_reviewed_resources_without_a_database(
+        self,
+    ) -> None:
+        stream = runner.discover_migrations()
+        self.assertEqual([m.version for m in stream], list(range(1, 45)))
+        for migration in stream:
+            self.assertEqual(
+                hashlib.sha256(migration.path.read_bytes()).hexdigest(),
+                migration.sha256,
+            )
+
+
 class InstalledMigrations(unittest.TestCase):
     def setUp(self) -> None:
         self.admin_url = os.environ["N1_TEST_DATABASE_URL"]
@@ -69,7 +82,7 @@ class InstalledMigrations(unittest.TestCase):
         }
         self.assertIn(Path(runner.__file__).resolve(), owned)
         stream = runner.discover_migrations()
-        self.assertEqual(len(stream), 42)
+        self.assertEqual(len(stream), 44)
         for migration in stream:
             self.assertIn(Path(str(migration.path)).resolve(), owned)
             self.assertEqual(
@@ -144,7 +157,7 @@ class InstalledMigrations(unittest.TestCase):
     def test_wrong_bound_downgrade_and_out_of_range_are_atomic(self) -> None:
         self.migrate(0, 14)
         before = self.history()
-        for start, end in ((13, 14), (14, 13), (14, 43), (14, -1)):
+        for start, end in ((13, 14), (14, 13), (14, 44), (14, -1)):
             with (
                 self.subTest(start=start, end=end),
                 self.assertRaises(runner.MigrationError),

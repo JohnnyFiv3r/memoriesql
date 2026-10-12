@@ -25,6 +25,7 @@ from memoriesql.application.authored_relations import (
 from memoriesql.application.canonical_transactions import SourceType
 from memoriesql.application.evidence_packages import NativeFacts
 from memoriesql.application.logical_unit_materialization import LogicalEventDeclaration
+from memoriesql.application.relation_inspection import InspectBeadRelationsV2
 from memoriesql.application.relation_lifecycle import (
     DecideRelationType,
     InspectBeadRelations,
@@ -33,6 +34,9 @@ from memoriesql.application.relation_lifecycle import (
     RecordClaimEvent,
     RecordRelationEvent,
     RelationAction,
+)
+from memoriesql.infrastructure.postgres.relation_assessment import (
+    PostgresRelationAssessments,
 )
 from memoriesql.infrastructure.postgres.relation_lifecycle import (
     PostgresRelationLifecycle,
@@ -1089,6 +1093,84 @@ class AuthoredRelations(fixtures.LocalMentions):
                 reason="No such claim.",
             ))
         self.assertEqual(self.claim_state(a), [("A", "current", set(), set())])
+
+    def test_an_authored_relation_needs_every_candidate_its_author_was_supplied(
+        self,
+    ) -> None:
+        # Owner decision 7, extended by the owner on 2026-10-07 to revision-6
+        # authored relations. The author is shown every candidate supplied to
+        # it, so its relation's rationale may quote any of them. Disclosure needs
+        # current authorization to every one; otherwise the whole relation is
+        # withheld, and the read is exactly a read of missing data. Inspecting
+        # the relation's target used to show the text once a candidate other
+        # than its endpoints became unreadable. The withholding reason goes only
+        # to the server log, for operators: never to the caller's connection.
+        hidden_text = "Fictional hidden candidate: the west orchard flooded on day nine."
+        hidden_source = self.add_source("hidden-candidate")
+        target = self.author("Fictional target: the orchard audit passed.", "target")
+        hidden = self.author(hidden_text, "hidden", source=hidden_source)
+
+        def plan(extras: dict[str, Any], bead: dict[str, Any], candidates: list[Any]) -> None:
+            (pinned,) = [c for c in candidates if c["bead_id"] == str(target)]
+            self.relate(extras, bead, pinned, "caused_by")
+            extras["relations"][0]["rationale"] = "Unless " + hidden_text
+
+        authoring = self.author(
+            "Fictional source: the orchard ledger balanced.",
+            "authoring",
+            candidates=(target, hidden),
+            plan=plan,
+        )
+        migrate(self.db, expected_current_version=27, target_version=43)
+        reader = PostgresRelationAssessments(
+            self.db, credential_sha256=self.secret_hash, workspace_id=self.workspace
+        )
+
+        def both(bead: uuid.UUID) -> tuple[Any, Any]:
+            return (
+                reader.inspect_relations(InspectBeadRelationsV2(bead_id=bead)),
+                self.inspect(bead),
+            )
+
+        # Fully authorized, both endpoints show the relation with its text.
+        for bead in (authoring, target):
+            current, legacy = both(bead)
+            self.assertEqual((current.outcome, legacy.outcome), ("available", "available"))
+            self.assertIn(hidden_text, current.model_dump_json())
+        # A candidate that is neither endpoint loses its source's authorization.
+        self.db.execute(
+            "UPDATE memoriesql.protected_resources SET status='revoked',"
+            "revoked_at=clock_timestamp() WHERE resource_id=%s",
+            (hidden_source,),
+        )
+        # A caller's connection that asks for server log messages hears nothing.
+        notices: list[str] = []
+
+        def heard(notice: psycopg.errors.Diagnostic) -> None:
+            notices.append(str(notice.message_primary))
+
+        self.db.add_notice_handler(heard)
+        self.db.execute("SET client_min_messages=log")
+        audit = "SELECT count(*) FROM memoriesql.authorization_audit_events"
+        try:
+            before = self.row(audit)[0]
+            missing = both(uuid.uuid4())
+            missing_rows = self.row(audit)[0] - before
+            for bead in (authoring, target):
+                before = self.row(audit)[0]
+                self.assertEqual(both(bead), missing)
+                self.assertEqual(self.row(audit)[0] - before, missing_rows)
+        finally:
+            self.db.execute("RESET client_min_messages")
+            self.db.remove_notice_handler(heard)
+        # Nothing the caller heard names the withholding, the relation or the
+        # unreadable candidate.
+        relation = self.row(
+            "SELECT relation_id FROM memoriesql.bead_relations WHERE authoring_bead_id=%s",
+            (authoring,),
+        )[0]
+        named = ("memoriesql relation inspection", "withheld", str(relation), str(hidden))
+        self.assertFalse([n for n in notices if any(i in n for i in named)], notices)
 
     # -- tenant evidence (ADR-0011 RAA-02) ------------------------------
 

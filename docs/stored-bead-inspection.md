@@ -29,7 +29,13 @@ resolution is never substituted. No partial candidate set is returned.
 The application adapter owns a fresh transaction and current authorization context
 per request. Source, statement, context and classification dependencies are checked;
 the contribution is withheld as part of the whole bead if a prerequisite is
-unavailable. All pinned optional authoring context is conservatively checked for every accepted
+unavailable. A context source is authorized through its unit's event's source
+object, as evidence is. Since migration 0043, inspection withholds what the query
+population withholds: an accepted bead and every supersession neighbour of its
+accepted version must pass the population's own record reads at the time of the
+request, or the bead is `unavailable`, exactly as a missing bead. The evidence
+reader inspects the bead before and after each page, so it withholds alike.
+All pinned optional authoring context is conservatively checked for every accepted
 execution revision, including results without classification,
 even when it was not used as supporting evidence. It is never displayed as support.
 Revoking producer/dispatch permission does not itself revoke a human's permission
@@ -53,12 +59,16 @@ normalized characters or 32768 raw bytes per page, with offsets at most 262143.
 Candidate cardinality is checked with a 65-row sentinel before candidate
 authorization; oversized global decisions stay unavailable without disclosing
 protected existence or counts. Larger stored statement/mention aggregates yield
-`budget_exhausted` without truncation. The adapter sets a 2.5-second statement and
+`budget_exhausted` without truncation. Every check that can make the bead
+unavailable runs before the first budget, so only a reader of the whole bead
+learns that it is over budget. A raw page over the reader's chunk work bound also
+yields `budget_exhausted`. The adapter sets a 2.5-second statement and
 500ms lock timeout; timeout/lock exhaustion yields the same explicit bounded
 outcome. Missing and protected resources return identical `unavailable` shapes.
-Invalid selection shapes fail validation. Each read may create existing
-authorization audit records, but never tasks, authored content, usage or author
-exposure receipts.
+Invalid selection shapes fail validation. A read that succeeds may create existing
+authorization audit records. A read that reports `unavailable` or
+`budget_exhausted` leaves none, as a read of a missing bead leaves none. No read
+creates tasks, authored content, usage or author exposure receipts.
 
 Fictional installed-wheel tests cover accepted/empty/legacy/pending/failed states,
 meaning qualifiers, diagnostic confidence, independent dispatch revocation,

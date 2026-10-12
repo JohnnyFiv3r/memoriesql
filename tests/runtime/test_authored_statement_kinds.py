@@ -46,7 +46,7 @@ KINDS = re.compile(r'"(observation|context|qualification|correction)"')
 class AuthoredStatementKinds(fixtures.LocalMentions):
     def setUp(self) -> None:
         super().setUp()
-        migrate(self.db, expected_current_version=22, target_version=41)
+        migrate(self.db, expected_current_version=22, target_version=43)
         self.revision_four_policy = self.dispatch_policy
         self.dispatch_policy = uuid.uuid4()
         self.db.execute(
@@ -194,6 +194,69 @@ class AuthoredStatementKinds(fixtures.LocalMentions):
             ("terminal_failure", "runtime.invalid_output"),
         )
         self.assert_no_meaning()
+
+    def test_a_note_with_a_context_source_is_inspectable(self) -> None:
+        # A context source is a unit of the statement's own evidence. Inspection
+        # authorizes it through its event's source object, as it does evidence.
+        # Before, it read the unit ID as a source object, and every such note
+        # inspected as unavailable (revisions 4 and 7 alike).
+        self.setup_mentions()
+        named: list[str] = []
+
+        def author(messages: Any, info: Any) -> Any:
+            response = self.response(messages, info)
+            part = cast(ToolCallPart, response.parts[0])
+            data = part.args_as_dict()
+            if data.get("typed_output") is not None:
+                annotation = data["typed_output"]["annotations"][0]
+                now = annotation["statements"][0]
+                unit = now["evidence"][0]["source_unit_id"]
+                named.append(unit)
+                context = dict(
+                    now,
+                    statement_id=str(uuid.uuid4()),
+                    statement_kind="context",
+                    statement_text="Alex had first counted four fictional trees.",
+                    context_source_ids=[unit],
+                )
+                annotation["statements"].append(context)
+                annotation["render"]["summary"].append(
+                    {
+                        "text": "Earlier, four.",
+                        "statement_ids": [context["statement_id"]],
+                    }
+                )
+            part.args = data
+            return response
+
+        result = asyncio.run(self.worker(author).run_once())
+        self.assertEqual(result.task_status, "succeeded", result)
+        bead = self.row("SELECT bead_id FROM memoriesql.bead_versions")[0]
+        reader = PostgresStoredBeadInspection(
+            self.db, credential_sha256=self.secret_hash, workspace_id=self.workspace
+        )
+        read = reader.inspect(InspectStoredBead(bead_id=bead))
+        assert read.bead and read.bead.meaning
+        self.assertEqual(
+            sorted(s.kind for s in read.bead.meaning.statements),
+            ["context", "observation"],
+        )
+        # Unreadable, the note reads exactly as one that does not exist.
+        source = self.row(
+            "SELECT e.source_object_id FROM memoriesql.source_units u"
+            " JOIN memoriesql.source_events e ON e.tenant_id=u.tenant_id AND e.event_id=u.event_id"
+            " WHERE u.source_unit_id=%s",
+            (named[0],),
+        )[0]
+        self.db.execute(
+            "UPDATE memoriesql.protected_resources SET status='revoked',"
+            "revoked_at=clock_timestamp() WHERE resource_id=%s",
+            (source,),
+        )
+        hidden = reader.inspect(InspectStoredBead(bead_id=bead))
+        missing = reader.inspect(InspectStoredBead(bead_id=uuid.uuid4()))
+        self.assertEqual(hidden, missing)
+        self.assertIsNone(hidden.bead)
 
     def test_revision_4_still_authors_at_schema_41(self) -> None:
         # Migration 0041 restates revision 4's functions with revision 7 added
