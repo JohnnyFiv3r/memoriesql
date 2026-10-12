@@ -109,6 +109,15 @@ def provision_fictional_reader(
         "numeric(bigint)",
         "int8(numeric)",
         "text(boolean)",
+        # From nine bound values PostgreSQL probes `= ANY` and `IN` through a hash
+        # table, which calls the type's default hash function. These are the six
+        # types a public relation produces; float8's stays out with its comparisons.
+        "hashtext(text)",
+        "uuid_hash(uuid)",
+        "hashint8(bigint)",
+        "hash_numeric(numeric)",
+        "timestamptz_hash(timestamptz)",
+        "hashbool(boolean)",
     )
     proc_oids = [
         scalar("SELECT %s::regprocedure::oid", ("pg_catalog." + signature,))
