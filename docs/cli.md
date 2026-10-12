@@ -200,6 +200,49 @@ personal-local owner holds. `--known-at` takes an ISO 8601 timestamp with a UTC
 offset and is sent as UTC with a literal `Z`; without it the run's default
 cutoff applies.
 
+### Using schema, query and retained results
+
+Start with `memoriesql schema --json`. It contacts no database, starts no run and
+consumes no access. Use its `logical_catalog` for relation names, columns and
+types, `relation_status` to select prepared relations, and `admission_rules` for
+the supported syntax. Bind identifier values using the column's
+`reference_kind`; the catalog describes logical relations, not physical tables.
+The authority and run sections state the required grants and current limits.
+
+Compose your own SQL and typed parameters. `--view resolved` follows recorded
+corrections, withholding superseded predecessors while preserving unresolved
+successor branches. `--view historical` includes accepted predecessors known at
+the chosen frame. `--known-at` selects the recorded-knowledge cutoff; otherwise
+the run's default cutoff applies. The cutoff does not prove that every earlier
+timestamped transaction has committed. The snapshot/dependency digest identifies
+the visible frame, so two fresh reads with the same cutoff can have different
+manifests. Per-source capture watermarks are not computed in this cut:
+`source_watermarks` is empty and `source_capture` is `unknown`, so neither the
+cutoff nor the digest proves source completeness. A retained result keeps its
+original frame and bytes under current authority; paging its pin does not refresh it.
+This cut executes `discover` and `enumerate` with the same
+query behavior. Saved inputs, refinement, expansion, refresh, candidate profiles
+and source scopes are approved contract capabilities awaiting implementation
+qualification; the executor currently refuses them as `unsupported_query`.
+
+Each admitted query or retained-result page uses one of the run's 128 accesses,
+including an admitted operation that returns a refusal. Pre-admission refusals
+write no delivery and consume no access. The run also bounds database work to
+300 seconds and transport to 16 MiB; read `remaining` in each reply. On
+`budget_exhausted`, stop: the CLI does not retry or increase an allowance. Starting
+a new run does not reset the workspace's cumulative 24-hour accounting.
+
+Keep the returned result ID and content digest together. `result` with that pin
+and `next_cursor` reads the next immutable page under current authority without
+rerunning the original SQL. Pages default to 20 rows and have a maximum of 50.
+One page's completion is not the source population's exhaustion. Zero matches,
+coverage gaps and unsupported operations cannot establish absence; a result pin
+alone is also insufficient support for a grounded answer without its delivered
+evidence. Inspect exact source using the installed authorized readers when a
+claim depends on source content.
+
+### Source text and supported operators
+
 `memory_v1.source_units.search_text` is the normalized text of an authorized
 source unit. For a materialized unit it is the pinned package's normalized
 projection when every part is producer-normalized; otherwise `text_state` is
@@ -237,9 +280,9 @@ lists the admission rules agents follow:
   chains `a = b = $1`, so both reply `unsupported_query` with
   `{"code": "feature", "feature": "comparison_grouping", "position": N}` at the
   comparison's first operand; `(x = y) IS NULL` runs as written.
-- Recursion may expand over relation endpoints. Recursion over correction edges
-  replies `unsupported_query` with
-  `{"code": "feature", "feature": "correction_recursion"}`, without a position.
+- `memoriesql query` sends no recursion declaration in this release, so a query
+  using `WITH RECURSIVE` never runs through it: it replies `invalid_request` with
+  `{"code": "binding"}`, without a feature or a position.
 - `position` is the 0-based character offset, in the SQL as sent, of the first
   operand of the refused operator, or of the `$` of a parameter.
 - Parameters may be written without spaces, as in `IN ($1,$2)`.

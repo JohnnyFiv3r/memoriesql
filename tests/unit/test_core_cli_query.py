@@ -12,10 +12,30 @@ from pathlib import Path
 from unittest.mock import patch
 from uuid import UUID
 
+from memoriesql.application.agent_sql_admission import admit_query
+from memoriesql.application.agent_sql_catalog import SqlAdmissionError, SqlParameter
 from memoriesql.cli import main
-from memoriesql.query_client import ADMISSION_RULES, schema_description
+from memoriesql.infrastructure.postgres.agent_sql_results import _admission_error
+from memoriesql.query_client import ADMISSION_RULES, query_request, schema_description
 
 OVERDUE = b'{"contract_version":1,"error":{"code":"settlement"},"outcome":"budget_exhausted"}'
+ANCHOR = "11111111-1111-4111-8111-111111111111"
+# A bounded walk over relation endpoints, as the results contract would admit it
+# with a recursion declaration.
+RECURSIVE_SQL = """WITH RECURSIVE walk(node, depth) AS (
+  SELECT o.bead_id, 0 FROM memory_v1.observations o WHERE o.bead_id = $1
+  UNION ALL
+  SELECT r.target_bead_id, w.depth + 1
+  FROM walk w JOIN memory_v1.assessed_relations r ON r.source_bead_id = w.node
+  WHERE w.depth < 3
+) CYCLE node SET is_cycle USING path
+SELECT node, depth, is_cycle FROM walk"""
+NO_RECURSION = (
+    "`memoriesql query` sends no recursion declaration in this release, so a "
+    "query using `WITH RECURSIVE` never runs through it: it replies "
+    'invalid_request with error {"code": "binding"}, without a feature or a '
+    "position."
+)
 
 
 class RefusingHost:
@@ -89,11 +109,53 @@ class QueryCliTests(unittest.TestCase):
             "`IN ($1,$2)`",
             "NOT LIKE and NOT ILIKE",
             '"feature": "comparison_grouping"',
-            '"feature": "correction_recursion"',
         ):
             self.assertIn(fact, rules)
         self.assertNotIn("Text inequality", rules)
         self.assertNotIn("nine or more values", rules)
+
+    def test_schema_advertises_no_recursion_the_cli_cannot_send(self) -> None:
+        # The CLI's request carries no recursion declaration, so the schema must
+        # not offer recursive queries; it says what such a query replies.
+        rules = schema_description()["admission_rules"]
+        self.assertIn(NO_RECURSION, rules)
+        joined = " ".join(rules)
+        for advertised in (
+            "may expand over relation endpoints",
+            "declared recursion object",
+            "correction_recursion",
+        ):
+            self.assertNotIn(advertised, joined)
+        run = {
+            "run_ref": str(UUID(int=1)),
+            "default_known_at": "2026-10-07T00:00:00.000000Z",
+        }
+        request = json.loads(
+            query_request(
+                run,
+                sql=RECURSIVE_SQL,
+                parameters=[],
+                intent="discover",
+                view="resolved",
+                known_at=None,
+                page_size=20,
+            )
+        )
+        self.assertNotIn("recursion", request)
+        # Without the declaration the reviewed admission refuses the walk, and
+        # the executor's reply is the one the rule states.
+        with self.assertRaises(SqlAdmissionError) as refused:
+            admit_query(
+                RECURSIVE_SQL,
+                (SqlParameter(1, "bead_ref", ANCHOR),),
+                admitted_anchors=frozenset({("bead_ref", ANCHOR)}),
+            )
+        self.assertEqual(refused.exception.code, "invalid_request")
+        self.assertIsNone(refused.exception.position)
+        self.assertEqual(
+            _admission_error("invalid_request", refused.exception.construct),
+            ("binding", None),
+        )
 
 
 if __name__ == "__main__":
