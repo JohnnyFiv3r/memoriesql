@@ -13,7 +13,9 @@ from uuid import UUID, uuid4
 
 from memoriesql.query_client import (
     RUN_ROTATION_MARGIN,
+    UNAVAILABLE_REPLY,
     RunStore,
+    TrustedHostTransport,
     coverage_gaps,
     query_request,
     schema_description,
@@ -175,6 +177,40 @@ class WireFormatTests(unittest.TestCase):
         self.assertIn(
             "memory_v1.assessed_relations", authority["relation_tables"]["relations"]
         )
+
+
+class LostConnectionExecutor:
+    """A composed executor whose control connection fails after admission."""
+
+    def start_run(self) -> bytes:
+        import psycopg
+
+        raise psycopg.OperationalError("server closed the connection unexpectedly")
+
+    def handle(self, request: bytes) -> bytes:
+        import psycopg
+
+        raise psycopg.OperationalError("server closed the connection unexpectedly")
+
+
+class LostConnectionHost(TrustedHostTransport):
+    def _service(self) -> Any:
+        return LostConnectionExecutor()
+
+
+class TrustedHostTransportTests(unittest.TestCase):
+    def test_executor_call_failures_are_the_canonical_unavailable_reply(self) -> None:
+        transport = LostConnectionHost(
+            control_url="postgresql:///unused",
+            reader_url="postgresql:///unused",
+            reader_role="unused",
+            pinned_profile_sha256=None,
+            credential_sha256="a" * 64,
+            workspace_id=UUID(int=7),
+        )
+        # Never a traceback or a connection detail: the closed reply only.
+        self.assertEqual(transport.start_run(), UNAVAILABLE_REPLY)
+        self.assertEqual(transport.handle(b"{}"), UNAVAILABLE_REPLY)
 
 
 class PortableImportTests(unittest.TestCase):

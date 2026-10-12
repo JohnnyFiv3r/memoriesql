@@ -86,11 +86,13 @@ class CliDoctorDatabase(unittest.TestCase):
 
     def test_member_is_ready_and_noinherit_member_is_named_not_ready(self) -> None:
         status, superuser = self.doctor(self.url)
-        self.assertEqual(status, 0, superuser)
+        self.assertEqual((status, superuser["outcome"]), (0, "available"), superuser)
         self.assertTrue(superuser["database"]["schema_compatible"])
         self.assertTrue(superuser["database"]["login"]["superuser"])
         status, member = self.doctor(self.login("member"))
-        self.assertEqual(status, 0, member)
+        # Ready to use, but unverified is its own outcome and a non-zero exit.
+        self.assertEqual((status, member["outcome"]), (3, "unverified"), member)
+        self.assertNotIn("reason", member)
         self.assertTrue(member["database"]["login"]["application_ready"])
         # The migration history is owner-only, so a member cannot verify it.
         self.assertTrue(member["database"]["schema_present"])

@@ -145,18 +145,18 @@ class TrustedHostTransport:
 
     def start_run(self) -> bytes:
         try:
-            service = self._service()
+            return bytes(self._service().start_run())
         except Exception:
-            # Configuration and drift failures disclose no connection detail.
+            # Configuration, drift and lost-connection failures disclose no
+            # connection detail. A delivery admitted before its connection
+            # failed is settled as abandoned when an executor next starts.
             return UNAVAILABLE_REPLY
-        return bytes(service.start_run())
 
     def handle(self, request: bytes) -> bytes:
         try:
-            service = self._service()
+            return bytes(self._service().handle(request))
         except Exception:
             return UNAVAILABLE_REPLY
-        return bytes(service.handle(request))
 
 
 class RunStore:
