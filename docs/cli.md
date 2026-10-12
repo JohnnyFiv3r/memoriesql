@@ -214,10 +214,12 @@ corrections, withholding superseded predecessors while preserving unresolved
 successor branches. `--view historical` includes accepted predecessors known at
 the chosen frame. `--known-at` selects the recorded-knowledge cutoff; otherwise
 the run's default cutoff applies. The cutoff does not prove that every earlier
-timestamped transaction has committed. The actual visible revisions, snapshot
-digest and per-source watermarks identify the frame, so two fresh reads with the
-same cutoff can have different manifests. A retained result keeps its original
-frame and bytes under current authority; paging its pin does not refresh it.
+timestamped transaction has committed. The snapshot/dependency digest identifies
+the visible frame, so two fresh reads with the same cutoff can have different
+manifests. Per-source capture watermarks are not computed in this cut:
+`source_watermarks` is empty and `source_capture` is `unknown`, so neither the
+cutoff nor the digest proves source completeness. A retained result keeps its
+original frame and bytes under current authority; paging its pin does not refresh it.
 This cut executes `discover` and `enumerate` with the same
 query behavior. Saved inputs, refinement, expansion, refresh, candidate profiles
 and source scopes are approved contract capabilities awaiting implementation
