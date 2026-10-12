@@ -220,6 +220,23 @@ class PairDisposition(FrozenContractModel):
     abstention: Abstention | None = None
     reason: str | None = Field(default=None, min_length=1, max_length=1024)
 
+    @model_validator(mode="before")
+    @classmethod
+    def canonical_pair(cls, data: object) -> object:
+        # The pair is unordered, so either order names it; it is kept in the
+        # canonical order required_pairs lists. Revalidation passes an instance's
+        # own field values here, so a swap returns a new mapping.
+        if not isinstance(data, dict):
+            return data
+        first, second = data.get("first_bead_id"), data.get("second_bead_id")
+        try:
+            reversed_pair = str(UUID(str(first))) > str(UUID(str(second)))
+        except ValueError:
+            return data  # the field validators report it
+        if not reversed_pair:
+            return data
+        return {**data, "first_bead_id": second, "second_bead_id": first}
+
     @model_validator(mode="after")
     def shape(self) -> PairDisposition:
         _nonblank(self.reason, "disposition reason")

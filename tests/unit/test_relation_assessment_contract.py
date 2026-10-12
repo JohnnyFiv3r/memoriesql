@@ -117,8 +117,6 @@ class RelationAssessmentContract(unittest.TestCase):
             ra.RelationAuthorOutput.model_validate({"proposals": [item], "dispositions": dispositions(False)})
         with self.assertRaisesRegex(ValidationError, "related disposition"):
             ra.RelationAuthorOutput.model_validate({"proposals": [], "dispositions": dispositions()})
-        with self.assertRaisesRegex(ValidationError, "canonical order"):
-            ra.PairDisposition(first_bead_id=OTHER, second_bead_id=SUBJECT, disposition="not_related")
         with self.assertRaisesRegex(ValidationError, "abstention"):
             ra.PairDisposition(first_bead_id=SUBJECT, second_bead_id=OTHER, disposition="abstained")
         with self.assertRaisesRegex(ValidationError, "reason"):
@@ -128,6 +126,40 @@ class RelationAssessmentContract(unittest.TestCase):
         beads = tuple(ra.PinnedBead.model_construct(bead_id=b) for b in (OTHER, SUBJECT))
         self.assertEqual(ra.required_pairs(beads),
                          frozenset({(SUBJECT, SUBJECT), (SUBJECT, OTHER), (OTHER, OTHER)}))
+
+    def test_a_pair_named_in_either_order_is_kept_in_canonical_order(self) -> None:
+        # A pair is unordered: its reversed spelling names the same pair.
+        for first, second in ((OTHER, SUBJECT), (str(OTHER).upper(), str(SUBJECT))):
+            with self.subTest(first=first):
+                pair = ra.PairDisposition.model_validate(
+                    {"first_bead_id": first, "second_bead_id": second, "disposition": "not_related"})
+                self.assertEqual((pair.first_bead_id, pair.second_bead_id), (SUBJECT, OTHER))
+        same = ra.PairDisposition(first_bead_id=OTHER, second_bead_id=OTHER, disposition="not_related")
+        self.assertEqual((same.first_bead_id, same.second_bead_id), (OTHER, OTHER))
+        # Every pair reversed, with a proposal whose endpoints run the other way:
+        # the dispositions are canonical and the proposal keeps its direction.
+        backwards = proposal(source=endpoint(OTHER, str(uuid.uuid4())),
+                             target=endpoint(SUBJECT, str(uuid.uuid4())))
+        reversed_rows = [row | {"first_bead_id": row["second_bead_id"],
+                                "second_bead_id": row["first_bead_id"]} for row in dispositions()]
+        output = ra.RelationAuthorOutput.model_validate(
+            {"proposals": [backwards], "dispositions": reversed_rows})
+        self.assertEqual(
+            [(d.first_bead_id, d.second_bead_id, d.disposition) for d in output.dispositions],
+            [(SUBJECT, SUBJECT, "not_related"), (SUBJECT, OTHER, "related"),
+             (OTHER, OTHER, "not_related")],
+        )
+        (kept,) = output.proposals
+        self.assertEqual((kept.source.bead_id, kept.target.bead_id), (OTHER, SUBJECT))
+        self.assertEqual(ra.RelationAssessmentOutput.model_validate(
+            {"proposals": [backwards], "dispositions": reversed_rows,
+             "specialist_contributions": [contribution([backwards])]}).dispositions,
+            output.dispositions)
+        # The same pair in both orders is still two dispositions of one pair.
+        twice = [*dispositions(False), dispositions(False)[1] | {
+            "first_bead_id": str(OTHER), "second_bead_id": str(SUBJECT)}]
+        with self.assertRaisesRegex(ValidationError, "one disposition per pinned pair"):
+            ra.RelationAuthorOutput.model_validate({"proposals": [], "dispositions": twice})
 
     def test_agreement_is_on_the_exact_assertion_and_direction(self) -> None:
         item = ra.RelationProposal.model_validate(proposal())
