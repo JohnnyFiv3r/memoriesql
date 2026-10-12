@@ -273,6 +273,7 @@ class PostgresRestrictedQuery:
         cancel_started: list[int] = []
         cancel_failed = threading.Event()
         worker: threading.Thread | None = None
+        worker_started = False
         reader: Connection[Any] | None = None
         control: Connection[Any] | None = None
         query = None
@@ -472,6 +473,7 @@ class PostgresRestrictedQuery:
                 target=supervise, name="memoriesql-query-supervisor", daemon=False
             )
             worker.start()
+            worker_started = True
             if plan and plan.semantic_check:
                 # Planning only: preserve original PostgreSQL group/order errors.
                 # Estimates are neither read nor used as an authority/work fence.
@@ -621,7 +623,7 @@ class PostgresRestrictedQuery:
                     reader.close()
             # At most the monitor's bounded owned statement is in flight; if its
             # client is still uncertain, do not abandon it or report settlement.
-            if worker is not None:
+            if worker is not None and worker_started:
                 worker.join(timeout=1)
                 if worker.is_alive():
                     outcome = "settlement_pending"

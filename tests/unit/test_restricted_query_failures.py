@@ -20,6 +20,11 @@ from memoriesql.infrastructure.postgres.relation_sql_population import (
 )
 
 
+class UnstartedSupervisor(threading.Thread):
+    def start(self) -> None:
+        raise RuntimeError("fictional supervisor start failure")
+
+
 class RestrictedQueryFailures(unittest.TestCase):
     def execute_fault(
         self, fault: str
@@ -100,8 +105,12 @@ class RestrictedQueryFailures(unittest.TestCase):
         owned = MagicMock(side_effect=owned_call)
         # Model a supervisor not scheduled before final validation. The explicit
         # event must still be observed by the query thread itself.
-        delayed_supervisor = MagicMock()
-        delayed_supervisor.is_alive.return_value = False
+        delayed_supervisor: threading.Thread | MagicMock
+        if fault == "start":
+            delayed_supervisor = UnstartedSupervisor()
+        else:
+            delayed_supervisor = MagicMock()
+            delayed_supervisor.is_alive.return_value = fault == "running"
         profile = MagicMock()
         profile.views = ()
         authority = MagicMock()
@@ -174,6 +183,32 @@ class RestrictedQueryFailures(unittest.TestCase):
         self.assertEqual(result.rows, ())
         self.assertEqual(result.columns, ())
         self.assertIsNone(result.query_metadata)
+
+    def test_supervisor_start_failure_still_settles_the_owned_invocation(self) -> None:
+        result, owned = self.execute_fault("start")
+        self.assertEqual(result.outcome, "execution_error")
+        self.assertEqual(result.error, "database")
+        self.assertEqual(result.rows, ())
+        self.assertEqual(result.columns, ())
+        self.assertIsNone(result.query_metadata)
+        self.assertEqual(result.settlement_state, "settled")
+        settlements = [
+            call for call in owned.call_args_list if "settle_relation_query" in call.args[1]
+        ]
+        self.assertEqual(len(settlements), 1)
+        self.assertEqual(settlements[0].args[2][2], "execution_error")
+
+    def test_started_supervisor_uncertainty_stays_recovery_owned(self) -> None:
+        result, owned = self.execute_fault("running")
+        self.assertEqual(result.outcome, "settlement_pending")
+        self.assertEqual(result.rows, ())
+        self.assertEqual(result.columns, ())
+        self.assertIsNone(result.query_metadata)
+        settlements = [
+            call for call in owned.call_args_list if "settle_relation_query" in call.args[1]
+        ]
+        self.assertEqual(len(settlements), 1)
+        self.assertEqual(settlements[0].args[2][2], "execution_error")
 
     def test_unmodified_success_path_still_completes(self) -> None:
         result, _ = self.execute_fault("none")
