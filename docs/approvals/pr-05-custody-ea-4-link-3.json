@@ -1,0 +1,233 @@
+{
+  "algorithm": "sha256",
+  "approved_interface_record": {
+    "amendments": [
+      {
+        "amendment_ref": "https://github.com/JohnnyFiv3r/memoriesql/pull/48#issuecomment-5851120561",
+        "supersedes": {
+          "algorithm": "sha256",
+          "dependencies": [
+            {
+              "commit": "2baffc688291dbfdeccaa46f7ca05f6e9ef0e12c",
+              "path": "docs/relation-assessment.md",
+              "sha256": "69a0d985466c6610a3a2abc73bcef9242749ff9535cb709e32867c7e06414d2a"
+            }
+          ],
+          "packet_commit": "2baffc688291dbfdeccaa46f7ca05f6e9ef0e12c",
+          "packet_path": "docs/agent-sql-results-v1.md",
+          "packet_sha256": "ba9e94b75b581949ff55e9b06b7271e2d4d0c79d6423e1dc6184d72245c585bb"
+        }
+      }
+    ],
+    "approval_ref": "https://github.com/JohnnyFiv3r/memoriesql/pull/49#issuecomment-5851352880",
+    "interface": {
+      "algorithm": "sha256",
+      "dependencies": [
+        {
+          "commit": "b3865f307b50bd94681b387ad0f3b16fbb20213a",
+          "path": "docs/relation-assessment.md",
+          "sha256": "69a0d985466c6610a3a2abc73bcef9242749ff9535cb709e32867c7e06414d2a"
+        }
+      ],
+      "packet_commit": "b3865f307b50bd94681b387ad0f3b16fbb20213a",
+      "packet_path": "docs/agent-sql-results-v1.md",
+      "packet_sha256": "78bbc04eaeffd0fd47b0576e270f25eaa30e07a90b42e53d27e64308dfd8269e"
+    },
+    "version": 2
+  },
+  "custodian": {
+    "role": "independent PR-04 evaluation custodian",
+    "task_id": "01a0d40a-b91a-73a0-b5b3-8067f150c880"
+  },
+  "custody_block": "01",
+  "delta_and_grading": {
+    "cleanup": "Retention cleanup mechanics change; original expiry, holds, charges, authority and grading obligations are not relaxed.",
+    "grading": "Apply the unchanged frozen obligations to actual sealed outcomes. Required undelivered evidence remains unmet; correct expected refusal is credited only where preregistered. Committed results and settlement_pending earn no disclosure credit by themselves. Retain all failures, denominators, work/transport charges and uncertainty; no new retries, budget reset, exclusion or threshold change.",
+    "merged_baseline": "The signed-off merge brings the named pairing/initialization changes and runtime inventory integration. This link identifies that baseline; it does not independently certify the added pairing/initialization features or authorize additional agent capabilities.",
+    "transport": "An oversized undeliverable row now produces budget_exhausted/transport instead of an available empty self-pointing page. This is an observable outcome correction, not identical behavior. It is no evidence of an empty population, successful disclosure or completed retrieval."
+  },
+  "determination": "An implementation-reference update is required and is recorded. The final PR #76 head remains compatible with ea-4 authority/evidence rules and the frozen grading policy. No new authority amendment or replacement freeze is required.",
+  "final_implementation_commit": "33e1c4281dca0845daea374dbf3f457160ec6e9a",
+  "first_parent_commits_after_previous_link": [
+    "c91973c60736983257f694b68edbc4bdebf8c909",
+    "dd25c034e4316f0a975cafce11a609fede4569f6",
+    "7aa767b713aa040a9c23de8796a397f0b690def4",
+    "33e1c4281dca0845daea374dbf3f457160ec6e9a"
+  ],
+  "format": "pr04-independent-custody-implementation-link-v1",
+  "frozen_at": "2026-09-26T22:01:04Z",
+  "frozen_revisions": {
+    "approved_policy": {
+      "revision": "pr05-evaluation-preregistration-v3",
+      "sha256": "6bdf6b0e790cb7b0ef71337de5b494f03913ec5c47cb3c1d746686594bc545db"
+    },
+    "pack": {
+      "digest_scope": "frozen inventory of exact constituent bytes",
+      "revision": "ef-1",
+      "sha256": "e6e7844592ae4694266b9890f328e90f19f2795eeb1c38f7b28d786ba46fabdd"
+    },
+    "preregistration": {
+      "revision": "er-1",
+      "sha256": "21d6ce7a08eaa084a779db175f0e68fabffa9e42c0f1961c2b25495bb70ce9a9"
+    },
+    "profiles": {
+      "revision": "ep-1",
+      "sha256": "1b7086621dcb6a508114cb5bf4bcbbe6380d0e594b9da4827ca51be7e47125c6"
+    },
+    "supplemental_approval": {
+      "revision": "pr04-custody-policy-approval-v1",
+      "sha256": "3b0170773413c9e772abb93c3f93de92cdeb9d7fe6cd59894eab8891eac47a00"
+    },
+    "thresholds": {
+      "revision": "et-1",
+      "sha256": "cb8d09abf5cd4eaf632eb142c88a7a0cdc12dbfd88c67b63d32d788dc227a236"
+    }
+  },
+  "historical_records_preserved": [
+    {
+      "bytes": 7373,
+      "original_bytes_preserved": true,
+      "revision": "ea-2",
+      "sha256": "501ee401c88f4926431f8eb5f2e27b78082649a2949de7005bca17ce54b53711"
+    },
+    {
+      "bytes": 12916,
+      "original_bytes_preserved": true,
+      "revision": "ea-3",
+      "sha256": "12e802be3664a2c971ae144f692e993e43344e9d68dfff569cfc16f77547e60b"
+    },
+    {
+      "bytes": 2501,
+      "original_bytes_preserved": true,
+      "revision": "ea-4-link-1",
+      "sha256": "20447b37135ff4ae4bd09f3d5490fe610372c770aaa2a27c53742aec2c8b9252"
+    },
+    {
+      "bytes": 18783,
+      "original_bytes_preserved": true,
+      "revision": "ea-5",
+      "sha256": "be36131e51989b860d726b764cb96f6c027215c6b6a8ceac391446cb18eaa017"
+    },
+    {
+      "bytes": 7752,
+      "original_bytes_preserved": true,
+      "revision": "ea-5-link-1",
+      "sha256": "f1ea1a28162812d205af3e42eeca01ccb3944651672e8e8cc2e5c3fe1557ae1b"
+    }
+  ],
+  "live_pr_observation": {
+    "base": "76c6d716b47a62d97bcb32c5274d71e5e3f03c81",
+    "head": "33e1c4281dca0845daea374dbf3f457160ec6e9a",
+    "head_verified_via_github_this_turn": true,
+    "number": 76,
+    "state": "OPEN"
+  },
+  "logical_catalog": {
+    "delta": "Stage text and recall note identify trusted-executor query/reuse_result preview; inspect, hydrate_source and checkpoints remain undelivered. No contract delivery or release claim.",
+    "final_hash": "67a6e8de76a95b35f9f51662ad8e94f7f15f2e1dd597200258aa880e7b3dd166",
+    "hashes_recomputed_with_installed_catalog_serialization": true,
+    "path": "src/memoriesql/contracts/_catalogs/sql-recall-operations.json",
+    "previous_hash": "8d30416c13253e91f2356e7abb453a770bef50adc9d5b5d0334adc7e6b29fedf"
+  },
+  "migrations": {
+    "0001_through_0037_byte_identical": true,
+    "0037": {
+      "bytes": 42551,
+      "commit": "33e1c4281dca0845daea374dbf3f457160ec6e9a",
+      "path": "migrations/0037_observation_sql_population.sql",
+      "sha256": "f8e2d46829258da4c49d011c6766711d55cb48940b3476681d8ad9dffcad1d1b"
+    },
+    "0038": {
+      "bytes": 65340,
+      "commit": "33e1c4281dca0845daea374dbf3f457160ec6e9a",
+      "path": "migrations/0038_query_result_access.sql",
+      "sha256": "eabebb7fe2a03cb79942e9b86b8a7f71dfcf4be72e12596282728d41a253ac4f"
+    },
+    "only_0038_delta": "Cleanup pass counts purged subjects toward its item bound, skipping pending/held/failing subjects within the existing time budget.",
+    "previous_0038_sha256": "8835d25eff00d30e88a167813259cb68c19a1b4770d15727d793f6242246c03c"
+  },
+  "owner_reported_proofs": {
+    "all_steps_exit_zero": true,
+    "independently_rerun_or_receipts_archives_verified": false,
+    "installed_python": [
+      "3.13.5",
+      "3.14.0"
+    ],
+    "package_checks_passed": 33,
+    "passed_per_python": 648,
+    "qualification_head": "33e1c4281dca0845daea374dbf3f457160ec6e9a",
+    "receipt_sha256_3_13": "2069fa9db226db7d7af0264fa13fa0df60f82c28f7cc92c93f54ece718eca9ed",
+    "receipt_sha256_3_14": "1390f4d1a8a7fdf6dd1613aa1db6fe6effabed00cd7fce6148d9e7e2d612e108",
+    "reported_window": "2026-09-28 23:23 to 2026-09-29 00:29 CDT",
+    "sdist_rebuilt_wheel_byte_equal": true,
+    "sdist_sha256": "c60bfc9bee21423c69c918ead1280debf159bc8940b7bcb85f733720ef3d7eea",
+    "skipped_per_python": 0,
+    "two_byte_identical_builds": true,
+    "wheel_sha256": "117446c82e5f215692f711de788e26b443a6267d1f2d649fa9d040b746a97c2f"
+  },
+  "owner_request": {
+    "at": "2026-10-06T01:00:03.908Z",
+    "message_id": "msg_01a10eb9-8dc4-7dd0-8396-b9354e044c3f",
+    "request_excerpt": "I need custody blocks 01 and 05 confirmation",
+    "task_id": "01a0d40a-b91a-73a0-b5b3-8067f150c880",
+    "user_message_sha256": "2273b02a7cc585d9fe15311afddf22d29f483e3a9721705aeb7536ca9e51f0ab"
+  },
+  "owner_supplied_notice": {
+    "bytes": 12657,
+    "scope": "Exact bytes of the two attached content-free notices, retained separately; no private access path is disclosed.",
+    "sha256": "eda42461f9d5aa152883a886c0f45283f45952cdc6ab8f5db5ffd0da93b11496"
+  },
+  "parent_attestation": {
+    "bytes": 12447,
+    "original_bytes_preserved": true,
+    "revision": "ea-4",
+    "sha256": "d118ded2578e7672d404b33c7c521f630bf4444e61cf57ca7e10cf6e2cea91f9"
+  },
+  "preservation": {
+    "access_separation": "Original custody separation and owner-only read-only modes retained; no distinct OS-principal isolation is claimed for agents sharing an account.",
+    "all_prior_custody_bytes_preserved": true,
+    "evaluation_profile_change": false,
+    "exposure_incidents": [],
+    "frozen_inventory_and_policy_hashes_verified": true,
+    "new_deferrals_or_exclusions": false,
+    "numeric_policy_change": false,
+    "questions_gold_and_source_content_inspected": false,
+    "replacement_freeze_required": false,
+    "unseen_content_disclosed": false
+  },
+  "previous_implementation_commit": "f6b1de2a7ce041d7e86559031f0c9e36f809177d",
+  "previous_linkage": {
+    "bytes": 2919,
+    "original_bytes_preserved": true,
+    "revision": "ea-4-link-2",
+    "sha256": "4e2e350baf2daff2ec9825a3c5281381133b832c0db301321fa7a080bf791ae2"
+  },
+  "record_ref": "ea-4-link-3",
+  "recorded_at": "2026-10-06T01:03:56Z",
+  "repository": "JohnnyFiv3r/memoriesql",
+  "scope": "Content-free custody implementation linkage and compatibility determination only. Named qualification results remain owner-reported proof provenance; no tests, database/checkpoints, live evaluation or models were run. No runtime/security/workload/semantic-quality certification, release readiness, merge, publication, deployment, spending, grants or messages to other tasks are authorized.",
+  "serialization": {
+    "encoding": "UTF-8 without BOM",
+    "final_newline": true,
+    "hash_scope": "Exact complete JSON document bytes; detached SHA-256 is not embedded in this document.",
+    "json": "Python json.dumps ensure_ascii=False, sort_keys=True, indent=2",
+    "line_endings": "LF"
+  },
+  "status": "issued_implementation_linkage_confirmed",
+  "unchanged_packet_authority_and_record_hashes": {
+    "docs/agent-sql-results-v1.md": "78bbc04eaeffd0fd47b0576e270f25eaa30e07a90b42e53d27e64308dfd8269e",
+    "docs/approvals/pr-05-agent-source-text.md": "63ecbb4c9b270e4e79af18c3c2cc00e077c8b5e2d98b88fe2200235c31c15697",
+    "docs/approvals/pr-05-custody-ea-3.json": "12e802be3664a2c971ae144f692e993e43344e9d68dfff569cfc16f77547e60b",
+    "docs/approvals/pr-05-custody-ea-4-link-1.json": "20447b37135ff4ae4bd09f3d5490fe610372c770aaa2a27c53742aec2c8b9252",
+    "docs/approvals/pr-05-custody-ea-4-link-2.json": "4e2e350baf2daff2ec9825a3c5281381133b832c0db301321fa7a080bf791ae2",
+    "docs/approvals/pr-05-custody-ea-4.json": "d118ded2578e7672d404b33c7c521f630bf4444e61cf57ca7e10cf6e2cea91f9",
+    "docs/relation-assessment.md": "69a0d985466c6610a3a2abc73bcef9242749ff9535cb709e32867c7e06414d2a"
+  },
+  "verification_basis": "Exact Git hashes and ancestry, relevant migration/executor/catalog diffs, parent records and frozen policy examined. GitHub confirms the supplied PR head. No unchanged full suite was rerun.",
+  "verification_document": {
+    "bytes": 30622,
+    "commit": "33e1c4281dca0845daea374dbf3f457160ec6e9a",
+    "path": "docs/verification/pr-05-public-results.md",
+    "sha256": "02232b6c43541def6af9440e5f80628448956f50310586981884c2935fadd2ff"
+  }
+}
