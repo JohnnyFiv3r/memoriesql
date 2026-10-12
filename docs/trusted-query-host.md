@@ -63,7 +63,7 @@ impostor socket cannot harvest credentials.
 | `…/venv` | `root:wheel` | 0755/0644 | Code: a root-owned venv on a root-owned interpreter |
 | `…/config` | `_memoriesql:_memoriesql` | 0700 | `broker.json` (0600): both logins, workspace, client uid, profile pin |
 | `…/state` | `_memoriesql:_memoriesql` | 0700 | Run registry (for operator close) and last cleanup record |
-| `…/log` | `_memoriesql:_memoriesql` | 0700 | Host log (no credentials, digests or content) |
+| `…/log` | `_memoriesql:_memoriesql` | 0700 | Host log (no credentials, digests or content; each request line carries its operation, outcome, run and access-receipt identifiers) |
 | `…/run` | `_memoriesql:<client group>` | 0750 | `broker.sock` (0660) |
 | `/Library/LaunchDaemons/local.memoriesql.query-host.plist` | `root:wheel` | 0644 | Service definition |
 
@@ -175,6 +175,7 @@ not restarted.
 | List host-started runs | `sudo -H -u _memoriesql <cli> broker runs --config <config>` (no credential digests are printed) |
 | Close a run early | `sudo -H -u _memoriesql <cli> broker close-run --config <config> --run-ref <uuid>`: PR-05's owner close for the run's own principal. Refused while any of its work is unsettled; refunds nothing; the run never reopens. |
 | Rotate both logins | `sudo -H -u _memoriesql <cli> broker provision --config <config> --rotate`, then restart. The new secrets are durable in the configuration before the roles change. |
+| Provisioning reported `provisioning_outcome_unknown` | The database connection was lost while the role changes committed, and the run could not settle the outcome: the database was unreachable, or the transaction that sent the changes was still in progress after 30 seconds. The new secrets are kept in the file the report names, with that transaction's ID beside it. Follow the report's `next` step: once the database is reachable, or once that transaction has ended, run the same `broker provision` command again (with `--rotate` if it was a rotation). It settles the kept file before changing anything: the file becomes the configuration if the database requires its secrets, and is removed only after its recorded transaction ended without them. A kept file without a transaction record is never removed automatically: when the report says the database does not require its secrets, remove it once no provisioning run is in progress, and provision again. |
 | Revoke an agent | Revoke its pairing grant (`memoriesql clients revoke`, an owner operation). The next request is refused. |
 | Run expiry cleanup now | `sudo -H -u _memoriesql <cli> broker cleanup --config <config>` |
 | Logs | `sudo cat /usr/local/var/memoriesql-broker/log/host.log` |

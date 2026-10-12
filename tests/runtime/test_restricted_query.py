@@ -8,7 +8,7 @@ import unittest
 from dataclasses import replace
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import psycopg
@@ -349,6 +349,120 @@ class RestrictedQuery(unittest.TestCase):
             ("cancelled", "settled", ()),
             result,
         )
+
+    def test_cancellation_during_final_validation_is_owned_and_confirmed(self) -> None:
+        self.fixture.assertion()
+        owner = self.reserve()
+        cancellation = threading.Event()
+        source = self.db
+        checks = 0
+
+        class CancellingSource:
+            def __getattr__(self, name: str) -> Any:
+                return getattr(source, name)
+
+            def execute(self, statement: str, *args: Any, **kwargs: Any) -> Any:
+                nonlocal checks
+                result = source.execute(statement, *args, **kwargs)
+                if "check_relation_sql_population_authority" in statement:
+                    checks += 1
+                    if checks == 2:
+                        cancellation.set()
+                return result
+
+        # Scheduling may delay the supervisor. Final validation must itself
+        # observe cancellation rather than relying on that thread running.
+        delayed = MagicMock()
+        delayed.is_alive.return_value = False
+        with (
+            self.prepare() as population,
+            patch(
+                "memoriesql.infrastructure.postgres.restricted_query.threading.Thread",
+                return_value=delayed,
+            ),
+        ):
+            result = self.executor.execute(
+                CancellingSource(),  # type: ignore[arg-type]
+                population,
+                owner,
+                "SELECT relation_id FROM memory_v1.assessed_relations",
+                cancellation=cancellation,
+            )
+        self.assertEqual(checks, 2)
+        self.assertEqual(
+            (result.outcome, result.settlement_state, result.rows),
+            ("cancelled", "settled", ()),
+            result,
+        )
+        self.assertEqual(
+            self.scalar("SELECT count(*) FROM memoriesql_query.population_rows"), 0
+        )
+        recovered = self.executor.recover(owner)
+        assert recovered is not None
+        self.assertEqual((recovered.state, recovered.outcome), ("settled", "cancelled"))
+
+    def test_local_fetch_failure_settles_without_disclosing_partial_rows(self) -> None:
+        self.fixture.assertion()
+        owner = self.reserve()
+        fetched = 0
+
+        class FailingCursor(psycopg.ServerCursor[Any]):
+            def fetchmany(self, size: int = 0) -> list[Any]:
+                nonlocal fetched
+                if fetched:
+                    raise RuntimeError("fictional inaccessible callback detail")
+                rows = super().fetchmany(size)
+                fetched += len(rows)
+                return rows
+
+        class FailingReader(psycopg.Connection[Any]):
+            def cursor(self, *args: Any, **kwargs: Any) -> Any:
+                if kwargs.get("name"):
+                    return FailingCursor(self, kwargs["name"])
+                return super().cursor(*args, **kwargs)
+
+        def connect() -> psycopg.Connection[Any]:
+            return FailingReader.connect(
+                make_conninfo(
+                    os.environ["N1_TEST_DATABASE_URL"],
+                    dbname=self.db.info.dbname,
+                    user=self.reader,
+                    password="fictional-only",
+                ),
+                autocommit=True,
+            )
+
+        with (
+            self.prepare() as population,
+            patch.object(self.executor, "_reader_factory", connect),
+        ):
+            result = self.executor.execute(
+                self.db,
+                population,
+                owner,
+                "SELECT relation_id FROM memory_v1.assessed_relations",
+            )
+        self.assertGreater(fetched, 0)
+        self.assertEqual(
+            (result.outcome, result.error, result.settlement_state),
+            ("execution_error", "database", "settled"),
+            result,
+        )
+        self.assertEqual(result.rows, ())
+        self.assertEqual(result.columns, ())
+        self.assertIsNone(result.query_metadata)
+        self.assertEqual(
+            self.scalar("SELECT count(*) FROM memoriesql_query.population_rows"), 0
+        )
+        recovered = self.executor.recover(owner)
+        assert recovered is not None
+        self.assertEqual(
+            (recovered.state, recovered.outcome), ("settled", "execution_error")
+        )
+        discarded = self.store.discard(
+            operation_ref=owner.operation_ref, ownership_ref=owner.ownership_ref
+        )
+        self.assertEqual(discarded.state, "discarded")
 
     def paused_reader(
         self, ready: threading.Event, release: threading.Event, captured: list[Any]

@@ -27,8 +27,11 @@ CREATE TABLE memoriesql.query_runs (
 CREATE INDEX query_runs_workspace_active ON memoriesql.query_runs(tenant_id,workspace_id,expires_at);
 -- An owner may end its own run early (trusted host only). Closing refunds
 -- nothing, keeps every charge in the rolling window and cannot be reopened.
+-- The closure records who closed the run: the owner principal and the
+-- credential it presented, kept as long as the run's own records.
 CREATE TABLE memoriesql.query_run_closures (
  tenant_id uuid NOT NULL, run_ref uuid NOT NULL, closed_at timestamptz NOT NULL,
+ closed_by_principal_id uuid NOT NULL, closed_by_credential_id uuid NOT NULL,
  PRIMARY KEY(tenant_id,run_ref),
  FOREIGN KEY(tenant_id,run_ref) REFERENCES memoriesql.query_runs(tenant_id,run_ref)
 );
@@ -71,7 +74,8 @@ CREATE TABLE memoriesql.query_deliveries (
  reserved_transport integer NOT NULL CHECK(reserved_transport BETWEEN 1 AND 262144),
  charged_transport bigint CHECK(charged_transport IS NULL OR charged_transport>=0),
  outcome text CHECK(outcome IS NULL OR outcome IN ('available','unavailable','unsupported_query',
-  'invalid_request','budget_exhausted','cancelled','execution_error','abandoned')),
+  'invalid_request','idempotency_conflict','budget_exhausted','cancelled','execution_error',
+  'abandoned')),
  response_sha256 text CHECK(response_sha256 IS NULL OR response_sha256 ~ '^[a-f0-9]{64}$'),
  admitted_at timestamptz NOT NULL, deadline timestamptz NOT NULL, settled_at timestamptz,
  PRIMARY KEY(tenant_id,delivery_ref), UNIQUE(tenant_id,run_ref,step_key,delivery_number),
@@ -211,6 +215,28 @@ REVOKE ALL ON FUNCTION memoriesql.query_run_state_v1(memoriesql.query_runs) FROM
 
 -- The trusted host starts a run after authentication. Callers cannot set the
 -- tenant, principal, workspace, allowances or policy; only the pinned baseline.
+-- Starting a run, admission, close and recovery check workspace caps after the
+-- workspace's query-access lock. Their REPEATABLE READ frame takes this same
+-- lock at session level before its snapshot, so the snapshot sees everything
+-- the previous holder committed. The function's own transaction-level lock is
+-- then re-entrant. The caller releases the returned key after its frame.
+CREATE FUNCTION memoriesql.acquire_query_access_lock_v1() RETURNS bigint
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,memoriesql
+ SET row_security=off AS $$
+DECLARE c memoriesql.authorization_contexts%ROWTYPE; key bigint;
+BEGIN
+ SELECT * INTO c FROM memoriesql.current_authorization_context();
+ IF NOT FOUND OR c.context_id IS NULL THEN
+  RAISE EXCEPTION 'query_access_unavailable' USING ERRCODE='42501';
+ END IF;
+ key:=hashtextextended(c.tenant_id::text||':query-access:'||c.workspace_id::text,0);
+ PERFORM pg_advisory_lock(key);
+ RETURN key;
+EXCEPTION WHEN OTHERS THEN IF key IS NOT NULL THEN PERFORM pg_advisory_unlock(key); END IF; RAISE;
+END $$;
+REVOKE ALL ON FUNCTION memoriesql.acquire_query_access_lock_v1() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION memoriesql.acquire_query_access_lock_v1() TO memoriesql_application;
+
 CREATE FUNCTION memoriesql.start_query_run_v1(catalog text,policy text) RETURNS jsonb
 LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,memoriesql
  SET row_security=off SET lock_timeout='500ms' AS $$
@@ -283,7 +309,7 @@ BEGIN
    AND run_ref=run AND state<>'settled') THEN
    RETURN jsonb_build_object('refused','settlement');
   END IF;
-  INSERT INTO memoriesql.query_run_closures VALUES(c.tenant_id,run,clock_timestamp()) RETURNING * INTO k;
+  INSERT INTO memoriesql.query_run_closures VALUES(c.tenant_id,run,clock_timestamp(),c.principal_id,c.credential_id) RETURNING * INTO k;
  END IF;
  RETURN jsonb_build_object('run_ref',run,
   'closed_at',to_char(k.closed_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'));
@@ -390,6 +416,9 @@ GRANT EXECUTE ON FUNCTION memoriesql.admit_query_delivery_v1(uuid,uuid,text,text
 -- Owned settlement is blind to later authority loss, as for M0033 invocations:
 -- a revocation must not trap charges or refund unknown work. `pending` keeps the
 -- full reservation. The first delivery's terminal failure fixes the step outcome.
+-- A conflict with the step's own binding settles only this delivery, at its
+-- observed work, and never writes the step: whatever the step already holds
+-- stays as it is.
 CREATE FUNCTION memoriesql.settle_query_delivery_v1(delivery uuid,terminal text,safe_error text,
  observed_ms bigint,transport_bytes bigint,response_hash text,pending boolean) RETURNS jsonb
 LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,memoriesql
@@ -404,7 +433,7 @@ BEGIN
   RETURN jsonb_build_object('state','settlement_pending');
  END IF;
  IF terminal IS NULL OR terminal NOT IN ('unavailable','unsupported_query','invalid_request',
-   'budget_exhausted','cancelled','execution_error')
+   'idempotency_conflict','budget_exhausted','cancelled','execution_error')
   OR observed_ms IS NULL OR observed_ms<0 OR transport_bytes IS NULL OR transport_bytes<0
   OR (response_hash IS NOT NULL AND response_hash !~ '^[a-f0-9]{64}$') THEN
   RAISE EXCEPTION 'invalid_query_settlement' USING ERRCODE='22023';
@@ -412,6 +441,9 @@ BEGIN
  UPDATE memoriesql.query_deliveries SET state='settled',outcome=terminal,
   charged_db_ms=observed_ms,charged_transport=transport_bytes,response_sha256=response_hash,
   settled_at=clock_timestamp() WHERE delivery_ref=delivery;
+ IF terminal='idempotency_conflict' THEN
+  RETURN jsonb_build_object('state','settled','outcome',terminal);
+ END IF;
  SELECT * INTO s FROM memoriesql.query_steps WHERE tenant_id=d.tenant_id AND run_ref=d.run_ref
   AND step_key=d.step_key FOR UPDATE;
  IF s.state='executing' THEN
@@ -503,8 +535,9 @@ BEGIN
  IF d.state<>'reserved' THEN
   RAISE EXCEPTION 'query_delivery_settled' USING ERRCODE='55000';
  END IF;
+ -- A passed deadline is a work limit, as at disclosure, never missing authority.
  IF clock_timestamp()>=d.deadline THEN
-  RAISE EXCEPTION 'query_delivery_unavailable' USING ERRCODE='42501';
+  RAISE EXCEPTION 'query_delivery_work_exhausted' USING ERRCODE='54000';
  END IF;
  PERFORM memoriesql.check_query_result_closure_v2(result_ref,digest);
  checked:=clock_timestamp();

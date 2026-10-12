@@ -8,11 +8,14 @@ acceptance lives in tests/runtime/query_host_acceptance.py.
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import os
 import pwd
 import shutil
 import socket
+import stat
 import struct
 import tempfile
 import threading
@@ -24,8 +27,10 @@ from typing import Any, cast
 from unittest.mock import patch
 from uuid import UUID, uuid4
 
+import psycopg
 from pydantic import SecretStr
 
+from memoriesql.application.agent_sql_catalog import SqlAdmissionError
 from memoriesql.infrastructure.results_broker import PROTOCOL_VERSION, registry
 from memoriesql.infrastructure.results_broker import admin as broker_admin
 from memoriesql.infrastructure.results_broker.client import BrokerTransport
@@ -38,7 +43,11 @@ from memoriesql.infrastructure.results_broker.config import (
     load_config,
     stage_config,
 )
-from memoriesql.infrastructure.results_broker.server import Server, TrustedHost
+from memoriesql.infrastructure.results_broker.server import (
+    HostRefused,
+    Server,
+    TrustedHost,
+)
 from memoriesql.infrastructure.results_broker.wire import (
     MAX_FRAME_BYTES,
     READ_UNAVAILABLE_REPLY,
@@ -322,6 +331,54 @@ class ServerBoundary(unittest.TestCase):
         self.assertEqual(len(set(host.authenticated)), 1)
         self.assertNotIn(SECRET, "".join(host.authenticated))
 
+    def test_request_log_correlates_by_identifier_never_content(self) -> None:
+        root = short_directory(self)
+        host = StubHost(fictional_config(root))
+        path = self.serve(host)
+        run, receipt = str(uuid4()), str(uuid4())
+        replies = [
+            json.dumps(
+                {
+                    "outcome": "available",
+                    "run_ref": run,
+                    "access_receipt_ref": receipt,
+                    "page": {"rows": [{"values": ["fictional row content"]}]},
+                }
+            ).encode(),
+            json.dumps(
+                {
+                    "outcome": "available",
+                    "run_ref": "fictional non-identifier",
+                    "access_receipt_ref": {"nested": run},
+                }
+            ).encode(),
+        ]
+        log = io.StringIO()
+        with (
+            patch.object(StubExecutor, "handle", lambda _self, _body: replies.pop(0)),
+            contextlib.redirect_stderr(log),
+        ):
+            for _ in range(2):
+                self.transport(path).handle(b"{}")
+            # The host logs each request after replying; wait for both lines.
+            for _ in range(200):
+                if log.getvalue().count('"event": "request"') == 2:
+                    break
+                time.sleep(0.01)
+        events = [
+            json.loads(line)
+            for line in log.getvalue().splitlines()
+            if '"event": "request"' in line
+        ]
+        self.assertEqual(len(events), 2, log.getvalue())
+        self.assertEqual(
+            (events[0]["run_ref"], events[0]["access_receipt_ref"]), (run, receipt)
+        )
+        self.assertNotIn("run_ref", events[1])
+        self.assertNotIn("access_receipt_ref", events[1])
+        self.assertNotIn("fictional row content", log.getvalue())
+        self.assertNotIn("fictional non-identifier", log.getvalue())
+
     def test_reader_bytes_pass_through_unchanged(self) -> None:
         root = short_directory(self)
         host = StubHost(fictional_config(root))
@@ -514,3 +571,347 @@ def _uid_exists(uid: int) -> bool:
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LostCommit:
+    """An administrator connection whose COMMIT reply is lost or refused."""
+
+    def __init__(self, error: psycopg.Error | None = None) -> None:
+        self.error = error or psycopg.OperationalError("connection lost")
+
+    def __enter__(self) -> LostCommit:
+        return self
+
+    def __exit__(self, *_exc: object) -> None:
+        return None
+
+    @contextlib.contextmanager
+    def transaction(self) -> Any:
+        yield
+        raise self.error
+
+
+class Commits(LostCommit):
+    """An administrator connection whose COMMIT succeeds."""
+
+    @contextlib.contextmanager
+    def transaction(self) -> Any:
+        yield
+
+
+class Rows:
+    def __init__(self, rows: list[tuple[Any, ...]]) -> None:
+        self.rows = rows
+
+    def fetchall(self) -> list[tuple[Any, ...]]:
+        return self.rows
+
+
+class SettlingSession:
+    """An administrator session reporting transaction statuses, then verifiers."""
+
+    def __init__(self, statuses: list[str | None], stored: dict[str, str]) -> None:
+        self.statuses, self.stored = statuses, stored
+        self.reads: list[str] = []
+
+    def __enter__(self) -> SettlingSession:
+        return self
+
+    def __exit__(self, *_exc: object) -> None:
+        return None
+
+    def execute(self, query: str, _params: object = None) -> Rows:
+        if "pg_xact_status" in query:
+            self.reads.append("status")
+            status = (
+                self.statuses.pop(0) if len(self.statuses) > 1 else self.statuses[0]
+            )
+            return Rows([(status,)])
+        self.reads.append("verifiers")
+        return Rows(list(self.stored.items()))
+
+
+class ProvisioningOutcome(unittest.TestCase):
+    """A lost connection never discards secrets the database may already require."""
+
+    def setUp(self) -> None:
+        self.root = short_directory(self)
+        (self.root / "config").mkdir(mode=0o700)
+        self.path = self.root / "config" / "broker.json"
+        self.pinned: list[tuple[bool, bool]] = []
+        self.settled: list[str | None] = []
+
+    def pin(
+        self, path: Path, config: BrokerConfig, *, rotated: bool, recovered: bool
+    ) -> int:
+        self.assertEqual(load_config(path), config)
+        self.pinned.append((rotated, recovered))
+        return broker_admin.EXIT_OK
+
+    def provision(
+        self,
+        connection: object,
+        settlement: broker_admin.Settlement,
+        *,
+        apply: BaseException | None = None,
+    ) -> tuple[int, dict[str, Any]]:
+        def settle(_url: str, _config: BrokerConfig, transaction: str | None) -> Any:
+            self.settled.append(transaction)
+            return settlement
+
+        stream = io.StringIO()
+        with (
+            patch.object(psycopg, "connect", return_value=connection),
+            patch.object(broker_admin, "_current_transaction", return_value="4242"),
+            patch.object(broker_admin, "_apply_roles", side_effect=apply),
+            patch.object(broker_admin, "_settlement", side_effect=settle),
+            patch.object(broker_admin, "_pin", side_effect=self.pin),
+            contextlib.redirect_stdout(stream),
+        ):
+            code = broker_admin.provision(
+                self.path,
+                workspace_id=WORKSPACE,
+                client_uid=os.geteuid(),
+                database_host="127.0.0.1",
+                database_port=5432,
+                database_name="fictional",
+                admin_url=lambda: "postgresql://fictional",
+            )
+        lines = stream.getvalue().strip().splitlines()
+        return code, json.loads(lines[-1]) if lines else {}
+
+    def kept(self) -> list[Path]:
+        return list((self.root / "config").glob(".broker.json.*.new"))
+
+    def records(self) -> list[Path]:
+        return list((self.root / "config").glob(".broker.json.*.new.transaction"))
+
+    def test_an_unknown_commit_keeps_the_file_and_a_later_run_settles_it(self) -> None:
+        code, result = self.provision(LostCommit(), "unreadable")
+        self.assertEqual(code, broker_admin.EXIT_FAILED, result)
+        self.assertEqual(result["reason"], "provisioning_outcome_unknown")
+        self.assertIn("once the database is reachable", result["next"])
+        (kept,) = self.kept()
+        self.assertEqual(str(kept), result["kept_configuration"])
+        self.assertEqual(stat.S_IMODE(kept.stat().st_mode), 0o600)
+        # The transaction that sent the role changes is recorded beside it.
+        (record,) = self.records()
+        self.assertEqual(record.read_text(), "4242")
+        self.assertEqual(stat.S_IMODE(record.stat().st_mode), 0o600)
+        self.assertFalse(self.path.exists())
+        staged = load_config(kept)
+        # The database accepted it after all: the rerun settles it against the
+        # recorded transaction, adopts it and pins, changing no role again.
+        code, _ = self.provision(object(), "committed")
+        self.assertEqual(code, broker_admin.EXIT_OK)
+        self.assertEqual(self.settled, ["4242", "4242"])
+        self.assertEqual(self.kept(), [])
+        self.assertEqual(self.records(), [])
+        self.assertEqual(load_config(self.path), staged)
+        self.assertEqual(self.pinned, [(False, True)])
+
+    def test_a_commit_still_in_progress_is_kept_until_it_ends(self) -> None:
+        code, result = self.provision(LostCommit(), "pending")
+        self.assertEqual(code, broker_admin.EXIT_FAILED, result)
+        self.assertEqual(result["reason"], "provisioning_outcome_unknown")
+        self.assertIn("has not ended", result["next"])
+        self.assertNotIn("remove", result["next"])
+        self.assertEqual(len(self.kept()), 1)
+        self.assertEqual([path.read_text() for path in self.records()], ["4242"])
+
+    def test_a_lost_commit_that_took_effect_goes_live(self) -> None:
+        code, _ = self.provision(LostCommit(), "committed")
+        self.assertEqual(code, broker_admin.EXIT_OK)
+        self.assertTrue(self.path.exists())
+        self.assertEqual(self.kept(), [])
+        self.assertEqual(self.records(), [])
+        self.assertEqual(self.pinned, [(False, True)])
+
+    def test_a_commit_that_ended_without_effect_changes_nothing(self) -> None:
+        for error, cause in (
+            (psycopg.OperationalError("lost"), "connection lost during commit"),
+            (psycopg.errors.SerializationFailure("x"), "SQLSTATE 40001 during commit"),
+        ):
+            with self.subTest(cause=cause):
+                code, result = self.provision(LostCommit(error), "absent")
+                self.assertEqual(code, broker_admin.EXIT_REFUSED, result)
+                self.assertIn(cause, result["reason"])
+                self.assertIn("nothing changed", result["reason"])
+                self.assertEqual(self.kept(), [])
+                self.assertEqual(self.records(), [])
+                self.assertFalse(self.path.exists())
+        self.assertEqual(self.pinned, [])
+
+    def test_before_commit_nothing_is_settled_or_kept(self) -> None:
+        # COMMIT was never sent, so no role change can commit: the staged
+        # secrets are discarded without asking the database.
+        for error, cause in (
+            (psycopg.OperationalError("lost"), "connection lost before commit"),
+            (psycopg.errors.DuplicateObject("role exists"), "SQLSTATE 42710"),
+        ):
+            with self.subTest(cause=cause):
+                code, result = self.provision(LostCommit(), "unreadable", apply=error)
+                self.assertEqual(code, broker_admin.EXIT_REFUSED, result)
+                self.assertIn(cause, result["reason"])
+                self.assertIn("nothing changed", result["reason"])
+                self.assertEqual(self.kept(), [])
+                self.assertEqual(self.records(), [])
+        self.assertEqual(self.settled, [])
+        with (
+            patch.object(
+                psycopg, "connect", side_effect=psycopg.OperationalError("unreachable")
+            ),
+            contextlib.redirect_stdout(io.StringIO()) as stream,
+        ):
+            code = broker_admin.provision(
+                self.path,
+                workspace_id=WORKSPACE,
+                client_uid=os.geteuid(),
+                database_host="127.0.0.1",
+                database_port=5432,
+                database_name="fictional",
+                admin_url=lambda: "postgresql://fictional",
+            )
+        self.assertEqual(code, broker_admin.EXIT_REFUSED)
+        self.assertIn("could not connect", stream.getvalue())
+        self.assertEqual(self.kept(), [])
+
+    def test_an_interruption_keeps_the_file_only_once_commit_was_sent(self) -> None:
+        with self.assertRaises(KeyboardInterrupt):
+            self.provision(LostCommit(), "unreadable", apply=KeyboardInterrupt())
+        self.assertEqual((self.kept(), self.records()), ([], []))
+        with self.assertRaises(KeyboardInterrupt):
+            self.provision(LostCommit(cast(Any, KeyboardInterrupt())), "unreadable")
+        self.assertEqual(len(self.kept()), 1)
+        self.assertEqual([path.read_text() for path in self.records()], ["4242"])
+
+    def test_the_record_stays_until_its_file_is_live(self) -> None:
+        # The commit succeeded but making the file live failed: the file and
+        # the record naming its transaction both stay, so a rerun settles it.
+        with (
+            patch.object(broker_admin, "commit_config", side_effect=OSError("disk")),
+            self.assertRaises(OSError),
+        ):
+            self.provision(Commits(), "unreadable")
+        (kept,) = self.kept()
+        self.assertEqual(broker_admin._recorded_transaction(kept), "4242")
+        code, _ = self.provision(object(), "committed")
+        self.assertEqual(code, broker_admin.EXIT_OK)
+        self.assertEqual(self.settled, ["4242"])
+        self.assertEqual((self.kept(), self.records()), ([], []))
+        self.assertEqual(self.pinned, [(False, True)])
+
+    def test_a_kept_file_without_a_record_is_adopted_only_on_proof(self) -> None:
+        # No record names the transaction that wrote it, as with a file kept by
+        # an older release. Only a verifier match settles it.
+        orphan = stage_config(self.path, fictional_config(self.root))
+        unknowns: list[tuple[broker_admin.Settlement, str]] = [
+            ("pending", "does not require this file's secrets"),
+            ("unreadable", "once the database is reachable"),
+        ]
+        for settlement, guidance in unknowns:
+            with self.subTest(settlement=settlement):
+                code, result = self.provision(object(), settlement)
+                self.assertEqual(code, broker_admin.EXIT_FAILED, result)
+                self.assertEqual(result["kept_configuration"], str(orphan))
+                self.assertIn(guidance, result["next"])
+                self.assertEqual(self.kept(), [orphan])
+        self.assertIn("remove the file", self.provision(object(), "pending")[1]["next"])
+        code, _ = self.provision(object(), "committed")
+        self.assertEqual(code, broker_admin.EXIT_OK)
+        self.assertEqual(set(self.settled), {None})
+        self.assertEqual(self.kept(), [])
+        self.assertEqual(load_config(self.path), fictional_config(self.root))
+        self.assertEqual(self.pinned, [(False, True)])
+
+    def test_settlement_trusts_a_mismatch_only_after_the_transaction_ended(
+        self,
+    ) -> None:
+        config = fictional_config(self.root)
+        password = config.control.password.get_secret_value()
+        verifier = broker_admin.scram_sha256_verifier(password, iterations=64)
+        stale = broker_admin.scram_sha256_verifier("fictional-other", iterations=64)
+        matching = {config.control.role: verifier, config.reader.role: verifier}
+        reader = config.reader.model_copy(update={"password": SecretStr(password)})
+        config = config.model_copy(update={"reader": reader})
+        missing = {config.control.role: stale, config.reader.role: stale}
+        cases: list[tuple[list[str | None], dict[str, str], str | None, str]] = [
+            # Still in progress at the deadline: a commit may yet become visible.
+            (["in progress"], missing, "7", "pending"),
+            # A match is final even before the transaction is seen to end.
+            (["in progress"], matching, "7", "committed"),
+            (["in progress", "committed"], matching, "7", "committed"),
+            (["in progress", "aborted"], missing, "7", "absent"),
+            # Too old to be kept: the transaction ended long ago.
+            ([None], missing, "7", "absent"),
+            # Without a recorded transaction a mismatch is never final.
+            (["aborted"], missing, None, "pending"),
+            (["aborted"], matching, None, "committed"),
+        ]
+        for statuses, stored, transaction, expected in cases:
+            with self.subTest(statuses=statuses, transaction=transaction):
+                session = SettlingSession(list(statuses), stored)
+                with (
+                    patch.object(psycopg, "connect", return_value=session),
+                    patch.object(broker_admin, "TRANSACTION_END_SECONDS", 0.5),
+                ):
+                    self.assertEqual(
+                        broker_admin._settlement("fictional", config, transaction),
+                        expected,
+                    )
+                # The verifiers are read only after the transaction's status.
+                self.assertEqual(session.reads[-1], "verifiers")
+                self.assertEqual(session.reads.count("verifiers"), 1)
+        with patch.object(
+            psycopg, "connect", side_effect=psycopg.OperationalError("unreachable")
+        ):
+            self.assertEqual(
+                broker_admin._settlement("fictional", config, "7"), "unreadable"
+            )
+
+    def test_the_transaction_record_reads_back_only_as_written(self) -> None:
+        staged = self.root / "config" / ".broker.json.0011223344556677.new"
+        staged.write_text("{}")
+        self.assertIsNone(broker_admin._recorded_transaction(staged))
+        broker_admin._record_transaction(staged, "123456789012")
+        self.assertEqual(broker_admin._recorded_transaction(staged), "123456789012")
+        record = broker_admin._transaction_record(staged)
+        for damaged in ("", "12x", "-1", "\u0663"):
+            record.write_text(damaged, encoding="utf-8")
+            self.assertIsNone(broker_admin._recorded_transaction(staged), damaged)
+        broker_admin._discard(staged)
+        self.assertFalse(staged.exists())
+        self.assertFalse(record.exists())
+
+    def test_scram_verifier_matches_only_its_own_password(self) -> None:
+        verifier = broker_admin.scram_sha256_verifier("fictional-secret", iterations=64)
+        self.assertTrue(broker_admin.scram_sha256_matches("fictional-secret", verifier))
+        self.assertFalse(broker_admin.scram_sha256_matches("fictional-other", verifier))
+        for broken in (
+            None,
+            "",
+            "md5abc",
+            verifier.replace("SCRAM-SHA-256", "X"),
+            "SCRAM-SHA-256$x",
+        ):
+            self.assertFalse(
+                broker_admin.scram_sha256_matches("fictional-secret", broken)
+            )
+
+    def test_a_pinning_refusal_names_its_cause_without_secrets(self) -> None:
+        causes = {
+            HostRefused("control login must be an INHERIT member"): "INHERIT member",
+            SqlAdmissionError("unavailable", "default_procedure_privileges"): (
+                "reviewed reader authority refused: default_procedure_privileges"
+            ),
+            psycopg.OperationalError("password authentication failed"): (
+                "control login could not connect (unreachable or authentication refused)"
+            ),
+            psycopg.errors.InsufficientPrivilege("denied"): "SQLSTATE 42501",
+            RuntimeError("missing"): "reviewed reader specification unavailable",
+        }
+        for error, expected in causes.items():
+            with self.subTest(error=type(error).__name__):
+                cause = broker_admin._pinning_cause(error)
+                self.assertIn(expected, cause)
+                self.assertNotIn("password authentication failed", cause)

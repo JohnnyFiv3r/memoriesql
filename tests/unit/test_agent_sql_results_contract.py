@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import unittest
 from pathlib import Path
 
@@ -23,6 +24,7 @@ from memoriesql.application.agent_sql_results import (
     wire_frame,
 )
 from memoriesql.application.investigation_contracts import result_json_bytes
+from memoriesql.contracts import load_catalog
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -56,6 +58,30 @@ class AgentSqlResultsContract(unittest.TestCase):
                 "topics",
             },
         )
+
+    def test_installed_stage_says_what_executes_and_claims_no_delivery(self) -> None:
+        # Agents read this text from the installed catalog, so it must match
+        # what executes. The approved packet forbids registering the contract
+        # as delivered, so every "delivered" is negated.
+        catalog = load_catalog("sql-recall-operations")
+        logical = catalog["logical_catalog"]
+        assert isinstance(logical, dict)
+        stage, note = logical["admission_stage"], catalog["note"]
+        assert isinstance(stage, str) and isinstance(note, str)
+        self.assertTrue(stage.startswith("trusted_executor_preview;"))
+        self.assertIn(
+            "query and reuse_result execute through the trusted executor", stage
+        )
+        for text in (stage, note):
+            self.assertIn(
+                "inspect, hydrate_source and checkpoints are not delivered", text
+            )
+            self.assertNotIn("not yet delivered", text)
+            self.assertEqual(
+                re.findall(r"\bdelivered\b", text),
+                re.findall(r"(?<=\bnot )delivered\b", text),
+            )
+            self.assertNotRegex(text, r"(?<!un)released")
 
     def test_order_basis_reports_projected_keys_then_witness_ties(self) -> None:
         tree = sqlglot.parse_one(
