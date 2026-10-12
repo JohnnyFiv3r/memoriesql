@@ -114,6 +114,19 @@ again, to `97e19e2c…`. It changes only two things:
 ea-4-link-3 binds the earlier bytes. The link for this head is the custodian's
 determination, and the request is with the owner.
 
+**Migration 0038 after the executor-conformance approval.** On the owner's
+approval of 2026-10-07, migration 0038, still unreleased, changes in place
+again, to `76810d04…`. It changes only three things:
+- `query_deliveries.outcome` admits `idempotency_conflict`;
+- `settle_query_delivery_v1` settles that outcome on its own delivery and never
+  writes the step;
+- `read_query_result_page_v1` reports a passed delivery deadline as
+  `query_delivery_work_exhausted` (54000), as the disclosure already does,
+  instead of `query_delivery_unavailable` (42501).
+
+No custody link binds these bytes yet. They go into this pull request's next
+link request.
+
 **Implementation linkage: ea-4-link-3 → `33e1c42`** (migration 0038
 `eabebb7f…`). The custodian recorded it at 2026-10-06T01:03:56Z. It is stored
 byte-identical in `../approvals/pr-05-custody-ea-4-link-3.json` (11,678 bytes,
@@ -324,11 +337,23 @@ These remain qualification targets, not measured capacity.
   bytes redeliver the same stored page under a new access receipt, with new
   charges and no query rerun. Different bytes are `idempotency_conflict`. A
   failed step replays its outcome.
+  - An admitted access whose disclosure finds its step already fixed with
+    another result also replies `idempotency_conflict`, with its step key. It
+    settles only its own delivery, once, at its observed work. The step keeps
+    its result or outcome, the access's own committed result is never
+    discarded, and the exact redelivery discloses the step's result. Admission
+    holds one unsettled delivery per workspace, so no request is known to reach
+    this state; the tests construct it.
 - **Disclosure.** Each disclosure runs the revision-2 whole-closure verdict and
   records its receipt in the same fenced transaction, before any byte is
   returned. The receipt binds the response digest, context, page, delivered
   refs and credential. It also stores run visibility and an optional
   owner-bound, immutable cursor.
+  - Delivering a row makes its evidence refs and its own `result_fact` visible.
+    An aggregate's fact makes none of its contributors visible, and a later
+    reuse refuses the whole aggregate once any contributor's authority is lost.
+  - A delivery deadline that passes at the page read or at the disclosure is
+    `budget_exhausted`, never `unavailable`.
 - **Crash recovery.** A session advisory lock proves only that an owner ended.
   Redelivery or the host's `recover_abandoned()` then settles that delivery at
   its full reservation.
@@ -611,6 +636,22 @@ production reader provisioning path. They cover:
 - AM-5 tenancy: a paired agent of a second tenant reads no relation of the
   first, and the first tenant's credential opens nothing in the second.
 
+`test_agent_sql_disclosure` (4 cases) adds the executor-conformance cases of
+2026-10-07:
+
+- a constructed conflicting completion: `idempotency_conflict` with the step
+  key. Only the conflicting delivery settles, once, at its observed work, and
+  every other stored row of the run is unchanged. Its own committed result is
+  kept and nothing stays reserved. The exact redelivery then discloses the
+  step's result with no rerun.
+- a delivery deadline passed at the page read: `budget_exhausted`, reported
+  exactly like a deadline passed at the disclosure
+- an aggregate's delivered fact visible with none of its contributors. Reuse and
+  the exact redelivery list it as previously visible, and losing a
+  contributor's authority refuses the whole aggregate.
+- every delivered row's fact visible beside its own evidence refs, and an
+  undelivered row's fact only once its page is delivered
+
 Database-free contract tests pin the policy hash, the prepared set, the order
 basis, evidence refs and reply sizing. A structural test holds migration 0039
 to these properties:
@@ -679,6 +720,14 @@ Development failures retained:
   observation families reused PR-03's provenance records, which require
   `source.raw.read`, a capability the `paired_agent` role can never hold. The
   regression test fails on that code and passes on the query-level records.
+- **The refinement review of 2026-10-07 found three conformance defects.** All
+  four `test_agent_sql_disclosure` cases fail on the previous code (`bfcbe61`):
+  - When a disclosure found its step completed with another result,
+    settlement rejected `idempotency_conflict`. `handle()` raised instead of
+    replying, and the delivery stayed reserved.
+  - A deadline passed at the page read replied `unavailable`.
+  - No delivered fact ever became visible, so an aggregate's fact could not
+    serve as evidence.
 
 Exact-head installed 3.13/3.14 qualification and CI belong on the PR.
 
