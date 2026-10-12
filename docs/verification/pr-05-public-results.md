@@ -105,23 +105,54 @@ only:
 None of it touches populations, source authority, search candidates or evidence
 availability. Migration 0037 (`f8e2d468…`) is unchanged.
 
-**Implementation linkage: ea-4-link-2 → `f6b1de2`** (migration 0038
-`8835d25e…`). The custodian recorded it at 2026-09-29T01:53:32Z. It is stored
-byte-identical in `../approvals/pr-05-custody-ea-4-link-2.json` (2,919 bytes,
-SHA-256 `4e2e350b…`) and names change `92f7ccf` and migration 0037 `f8e2d468…`.
+**Migration 0038 after the close_run approval.** On the owner's close_run
+approval of 2026-10-06, migration 0038, still unreleased, changes in place
+again, to `97e19e2c…`. It changes only two things:
+- the closure's attribution columns;
+- `acquire_query_access_lock_v1`.
 
-- **Supersedes ea-4-link-1 → `6aca830`,** also stored byte-identical in
+ea-4-link-3 binds the earlier bytes. The link for this head is the custodian's
+determination, and the request is with the owner.
+
+**Migration 0038 after the executor-conformance approval.** On the owner's
+approval of 2026-10-07, migration 0038, still unreleased, changes in place
+again, to `76810d04…`. It changes only three things:
+- `query_deliveries.outcome` admits `idempotency_conflict`;
+- `settle_query_delivery_v1` settles that outcome on its own delivery and never
+  writes the step;
+- `read_query_result_page_v1` reports a passed delivery deadline as
+  `query_delivery_work_exhausted` (54000), as the disclosure already does,
+  instead of `query_delivery_unavailable` (42501).
+
+No custody link binds these bytes yet. They go into this pull request's next
+link request.
+
+**Implementation linkage: ea-4-link-3 → `33e1c42`** (migration 0038
+`eabebb7f…`). The custodian recorded it at 2026-10-06T01:03:56Z. It is stored
+byte-identical in `../approvals/pr-05-custody-ea-4-link-3.json` (11,678 bytes,
+SHA-256 `f4b1fddc…`). It names migration 0037 `f8e2d468…` unchanged, and the
+review fix to the cleanup pass as migration 0038's only change since link-2.
+
+- **Supersedes ea-4-link-2 → `f6b1de2`** (migration 0038 `8835d25e…`), stored
+  byte-identical in `../approvals/pr-05-custody-ea-4-link-2.json` (2,919 bytes,
+  SHA-256 `4e2e350b…`). That link superseded ea-4-link-1 → `6aca830`, stored in
   `../approvals/pr-05-custody-ea-4-link-1.json` (2,501 bytes, SHA-256
   `20447b37…`).
 - **Semantics only.** The linkage is not a statement of runtime correctness or
-  release readiness. It records a linkage update only, with no new authority or
-  evidence-semantic reconciliation and no replacement freeze.
-- **Its grading note:** a committed result or `settlement_pending` response is
-  not successful receipted disclosure.
-- **This head's migration 0038** (`eabebb7f…`) differs from link-2's `8835d25e…`
-  only by the review fix to the cleanup pass. The linkage state is **ea-4-link-2
-  → `f6b1de2`; link-3 for this head has been requested** from the custodian. No
-  coverage is claimed beyond that.
+  release readiness. It records an implementation-reference update. This head
+  stays compatible with ea-4's authority and evidence rules and the frozen
+  grading policy, with no new authority amendment and no replacement freeze.
+- **The merged baseline.** The link identifies this head's merged pairing,
+  initialization and runtime-inventory changes as its baseline. It does not
+  certify those features or authorize more agent capabilities.
+- **Its grading notes:**
+  - a committed result or `settlement_pending` response is not successful
+    receipted disclosure;
+  - an oversized undeliverable row is now `budget_exhausted`/`transport`. That
+    is an observable outcome correction, and no evidence of an empty
+    population, a successful disclosure or a completed retrieval;
+  - cleanup mechanics changed, but expiry, holds, charges, authority and
+    grading obligations are not relaxed.
 
 The PR-05 part of the rules the custodian named:
 
@@ -193,11 +224,23 @@ These remain qualification targets, not measured capacity.
   bytes redeliver the same stored page under a new access receipt, with new
   charges and no query rerun. Different bytes are `idempotency_conflict`. A
   failed step replays its outcome.
+  - An admitted access whose disclosure finds its step already fixed with
+    another result also replies `idempotency_conflict`, with its step key. It
+    settles only its own delivery, once, at its observed work. The step keeps
+    its result or outcome, the access's own committed result is never
+    discarded, and the exact redelivery discloses the step's result. Admission
+    holds one unsettled delivery per workspace, so no request is known to reach
+    this state; the tests construct it.
 - **Disclosure.** Each disclosure runs the revision-2 whole-closure verdict and
   records its receipt in the same fenced transaction, before any byte is
   returned. The receipt binds the response digest, context, page, delivered
   refs and credential. It also stores run visibility and an optional
   owner-bound, immutable cursor.
+  - Delivering a row makes its evidence refs and its own `result_fact` visible.
+    An aggregate's fact makes none of its contributors visible, and a later
+    reuse refuses the whole aggregate once any contributor's authority is lost.
+  - A delivery deadline that passes at the page read or at the disclosure is
+    `budget_exhausted`, never `unavailable`.
 - **Crash recovery.** A session advisory lock proves only that an owner ended.
   Redelivery or the host's `recover_abandoned()` then settles that delivery at
   its full reservation.
@@ -249,12 +292,30 @@ These remain qualification targets, not measured capacity.
   - Rows are deleted logically. PostgreSQL vacuum reclaims their space, and WAL
     and backups follow their own storage lifecycle.
 
-**Extension outside the approved packet (owner decision #11):**
-`close_run(run_ref)` is a trusted-host, owner-only early close, never an agent
-wire action. It is refused while any of the run's deliveries is unsettled,
-refunds nothing, keeps charges in the rolling window and cannot be reopened.
-"Active" means neither expired nor closed; the two-run cap and 30-minute
-maximum are unchanged.
+**close_run, a trusted-host extension outside the approved packet.** It is
+governed by its own owner-approved contract,
+`../approvals/pr-05-close-run-contract.md` (SHA-256 `965fb398…`). The approval
+of 2026-10-06 is recorded in `../approvals/pr-05-close-run-approval.md`: the
+contract and proof scope, which is not a release approval.
+- **Host only, owner only.** `close_run(run_ref)` is never an agent wire action.
+  Every call starts a fresh authorization context. Only the run's owner may
+  close it. Anyone else, and any unknown run, gets the same `unavailable`.
+- **Not stopping, completing or billing.** Close is refused while any of the
+  run's work is unsettled. It refunds nothing, keeps charges in the rolling
+  window, changes no step, result or cursor, and cannot be reopened.
+- **Attributed.** The closure records the closing principal, its credential and
+  the time.
+- **"Active" means neither expired nor closed.** The two-run cap and the
+  30-minute maximum are unchanged.
+- **Concurrency.** Starting a run, admission, close and recovery take the
+  workspace's query-access lock at session level, before their REPEATABLE READ
+  snapshot (`acquire_query_access_lock_v1`). A cap check therefore sees
+  everything the previous holder committed.
+  - Before this, four races were reproduced on `913be9d`: a third active run,
+    two admitted operations, a close beside unsettled work, and a second close
+    failing instead of returning the first close's reply.
+  - The installed proof tests in `test_agent_sql_results` reproduce each of them
+    and pass with the fix.
 
 ## Measured preview range (Decision 1, items 1 and 2)
 
@@ -418,6 +479,22 @@ production reader provisioning path. They cover:
 - group, window, set, EXISTS and relation-join shapes, with frame lifecycle
   fields and coverage gaps
 
+`test_agent_sql_disclosure` (4 cases) adds the executor-conformance cases of
+2026-10-07:
+
+- a constructed conflicting completion: `idempotency_conflict` with the step
+  key. Only the conflicting delivery settles, once, at its observed work, and
+  every other stored row of the run is unchanged. Its own committed result is
+  kept and nothing stays reserved. The exact redelivery then discloses the
+  step's result with no rerun.
+- a delivery deadline passed at the page read: `budget_exhausted`, reported
+  exactly like a deadline passed at the disclosure
+- an aggregate's delivered fact visible with none of its contributors. Reuse and
+  the exact redelivery list it as previously visible, and losing a
+  contributor's authority refuses the whole aggregate.
+- every delivered row's fact visible beside its own evidence refs, and an
+  undelivered row's fact only once its page is delivered
+
 Database-free contract tests pin the policy hash, the prepared set, the order
 basis, evidence refs and reply sizing.
 
@@ -467,6 +544,14 @@ Development failures retained:
   observation families reused PR-03's provenance records, which require
   `source.raw.read`, a capability the `paired_agent` role can never hold. The
   regression test fails on that code and passes on the query-level records.
+- **The refinement review of 2026-10-07 found three conformance defects.** All
+  four `test_agent_sql_disclosure` cases fail on the previous code (`bfcbe61`):
+  - When a disclosure found its step completed with another result,
+    settlement rejected `idempotency_conflict`. `handle()` raised instead of
+    replying, and the delivery stayed reserved.
+  - A deadline passed at the page read replied `unavailable`.
+  - No delivered fact ever became visible, so an aggregate's fact could not
+    serve as evidence.
 
 Exact-head installed 3.13/3.14 qualification and CI belong on the PR.
 
