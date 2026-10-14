@@ -34,6 +34,9 @@ from memoriesql.infrastructure.postgres.relation_assessment import (
 from memoriesql.infrastructure.postgres.relation_lifecycle import (
     PostgresRelationLifecycle,
 )
+from memoriesql.infrastructure.postgres.relation_projection import (
+    relation_projection_frame,
+)
 from memoriesql.infrastructure.postgres.source_range import (
     PostgresAuthorizedSourceRangeSession,
 )
@@ -181,6 +184,93 @@ class NoninheritingAuthoredRelations(authored_tests.AuthoredRelations):
     def connection(self) -> Any:
         return psycopg.connect(self.member_url, autocommit=True)
 
+    def test_query_access_frame_releases_both_fences(self) -> None:
+        keys = self.db.execute(
+            "SELECT pg_catalog.hashtextextended(%s,0), "
+            "pg_catalog.hashtextextended(%s,0), "
+            "(SELECT oid FROM pg_catalog.pg_database "
+            "WHERE datname=current_database())",
+            (
+                f"{self.tenant}:semantic_outcome_authority:",
+                f"{self.tenant}:query-access:{self.workspace}",
+            ),
+        ).fetchone()
+        assert keys is not None
+        shared, exclusive, database_oid = keys
+        self.assertNotEqual(shared, exclusive)
+        expected = {
+            (mode, (key >> 32) & 0xFFFFFFFF, key & 0xFFFFFFFF, 1)
+            for mode, key in (("ShareLock", shared), ("ExclusiveLock", exclusive))
+        }
+        shared_identity = (
+            "ShareLock", (shared >> 32) & 0xFFFFFFFF, shared & 0xFFFFFFFF, 1
+        )
+
+        def locks(pid: int) -> set[tuple[str, int, int, int]]:
+            return set(
+                self.db.execute(
+                    "SELECT mode,classid::bigint,objid::bigint,objsubid "
+                    "FROM pg_catalog.pg_locks WHERE locktype='advisory' "
+                    "AND database=%s AND pid=%s AND granted",
+                    (database_oid, pid),
+                ).fetchall()
+            )
+
+        class Sentinel(Exception):
+            pass
+
+        # Keep the same shared key on a different backend throughout: it must
+        # never satisfy the member's acquisition or hide a missing release.
+        self.db.execute("SELECT pg_catalog.pg_advisory_lock_shared(%s)", (shared,))
+        try:
+            with self.connection() as member:
+                pid = member.info.backend_pid
+                self.assertNotEqual(pid, self.db.info.backend_pid)
+                login = member.info.user
+                shape = self.db.execute(
+                    "SELECT rolinherit,rolsuper, "
+                    "pg_catalog.pg_has_role(%s,'memoriesql_application','USAGE'), "
+                    "pg_catalog.pg_has_role(%s,'memoriesql_application','SET') "
+                    "FROM pg_catalog.pg_roles WHERE rolname=%s",
+                    (login, login, login),
+                ).fetchone()
+                self.assertEqual(shape, (False, False, False, True))
+
+                def exercise(raised: bool) -> None:
+                    with relation_projection_frame(
+                        member,
+                        credential_sha256=self.secret_hash,
+                        workspace_id=self.workspace,
+                        query_access=True,
+                    ) as frame:
+                        role = frame.execute(
+                            "SELECT current_user,session_user"
+                        ).fetchone()
+                        self.assertEqual(role, ("memoriesql_application", login))
+                        self.assertEqual(locks(pid), expected)
+                        if raised:
+                            raise Sentinel("fictional frame exit")
+
+                for raised in (False, True):
+                    with self.subTest(raised=raised):
+                        self.assertEqual(locks(pid), set())
+                        self.assertIn(shared_identity, locks(self.db.info.backend_pid))
+                        if raised:
+                            with self.assertRaises(Sentinel):
+                                exercise(True)
+                        else:
+                            exercise(False)
+                        # Check while the member connection is still open;
+                        # closing a session must not mask leaked session locks.
+                        self.assertFalse(member.closed)
+                        self.assertEqual(locks(pid), set())
+                        self.assertIn(shared_identity, locks(self.db.info.backend_pid))
+        finally:
+            released = self.db.execute(
+                "SELECT pg_catalog.pg_advisory_unlock_shared(%s)", (shared,)
+            ).fetchone()
+            self.assertEqual(released, (True,))
+
 
 class NoninheritingRelationAssessment(assessment_tests.RelationAssessment):
     def setUp(self) -> None:
@@ -208,6 +298,9 @@ def load_tests(
             ),
             NoninheritingAuthoredRelations(
                 "test_governed_relation_lifecycle_is_append_only_and_derived"
+            ),
+            NoninheritingAuthoredRelations(
+                "test_query_access_frame_releases_both_fences"
             ),
             NoninheritingRelationAssessment(
                 "test_same_bead_endpoints_with_a_separate_basis_are_accepted_on_agreement"
