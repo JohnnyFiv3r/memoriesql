@@ -47,18 +47,20 @@ def main() -> None:
         request, _ = case.request_only(
             run, "SELECT bead_id,title FROM memory_v1.observations ORDER BY bead_id"
         )
-        SESSION.write_text(
-            json.dumps(
+        descriptor = os.open(SESSION, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(descriptor, "w") as session:
+            json.dump(
                 {
                     "database": case.db.info.dbname,
                     "reader": case.reader,
+                    "inner_reader": case.h.runtime.reader,
                     "reader_password": READER_PASSWORD,
                     "credential_sha256": case.fixture.secret_hash,
                     "workspace_id": str(case.fixture.workspace),
                     "request": request,
-                }
+                },
+                session,
             )
-        )
 
         def die(*args: Any, **kwargs: Any) -> bytes:
             # Committed, not yet disclosed: the whole process ends abruptly,
@@ -138,19 +140,19 @@ def main() -> None:
         return
     if mode == "cleanup":
         context = json.loads(SESSION.read_text())
+        readers = (context["reader"], context["inner_reader"])
         with psycopg.connect(os.environ["N1_TEST_DATABASE_URL"], autocommit=True) as db:
             db.execute(
                 sql.SQL("DROP DATABASE {} WITH (FORCE)").format(
                     sql.Identifier(context["database"])
                 )
             )
-            db.execute(
-                sql.SQL("DROP ROLE IF EXISTS {}").format(
-                    sql.Identifier(context["reader"])
+            for reader in readers:
+                db.execute(
+                    sql.SQL("DROP ROLE IF EXISTS {}").format(sql.Identifier(reader))
                 )
-            )
         SESSION.unlink()
-        print("task-owned fictional query-restart database and reader removed")
+        print("task-owned fictional query-restart database and both readers removed")
         return
     raise SystemExit("mode must be prepare, recover or cleanup")
 
