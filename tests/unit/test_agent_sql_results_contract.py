@@ -11,9 +11,12 @@ import sqlglot
 
 from memoriesql.application.agent_sql_catalog import SqlCatalog
 from memoriesql.application.agent_sql_results import (
+    AGENT_RELATION_TABLES,
     OBSERVATION_TABLES,
     POLICY_HASH,
     PREPARED_RELATIONS,
+    RELATION_HISTORY_FACET,
+    RELATION_HISTORY_TABLES,
     RELATION_TABLES,
     EvidenceIndex,
     order_basis,
@@ -168,6 +171,76 @@ class AgentSqlResultsContract(unittest.TestCase):
                 limited=False,
                 recursion=False,
                 relation_raw_authority=False,
+            )["gaps"],
+            [],
+        )
+
+    def test_agent_relation_reads_follow_am5(self) -> None:
+        # Six relation tables are readable under AM-5; history and pair
+        # coverage stay owner-only.
+        self.assertEqual(
+            RELATION_HISTORY_TABLES,
+            {
+                "memory_v1.relation_events",
+                "memory_v1.relation_event_evidence",
+                "memory_v1.relation_pairs",
+            },
+        )
+        self.assertEqual(len(AGENT_RELATION_TABLES), 6)
+        self.assertEqual(
+            AGENT_RELATION_TABLES | RELATION_HISTORY_TABLES, RELATION_TABLES
+        )
+        self.assertFalse(AGENT_RELATION_TABLES & RELATION_HISTORY_TABLES)
+
+        def gaps(
+            relations: list[str],
+            relation_read_mode: str | None = None,
+            source_read_authority: bool = True,
+        ) -> list[dict[str, str]]:
+            coverage = wire_coverage(
+                relations=relations,
+                limited=False,
+                recursion=False,
+                relation_raw_authority=False,
+                source_read_authority=source_read_authority,
+                relation_read_mode=relation_read_mode,
+            )
+            return list(coverage["gaps"])
+
+        readable = ["memory_v1.assessed_relations", "memory_v1.relation_statements"]
+        history = ["memory_v1.assessed_relations", "memory_v1.relation_events"]
+        owner_only = {"facet": RELATION_HISTORY_FACET, "reason": "owner_only"}
+        # An authorized agent: readable tables carry no gap; history is owner-only.
+        self.assertEqual(gaps(readable, relation_read_mode="agent"), [])
+        self.assertEqual(gaps(history, relation_read_mode="agent"), [owner_only])
+        self.assertEqual(
+            gaps(["memory_v1.relation_pairs"], relation_read_mode="agent"), [owner_only]
+        )
+        # Without source.read every relation table is withheld and says so;
+        # history stays owner-only either way (source.read would not reveal it).
+        self.assertEqual(
+            gaps(readable, relation_read_mode="agent", source_read_authority=False),
+            [{"facet": "relation_tables", "reason": "source_read_required"}],
+        )
+        self.assertEqual(
+            gaps(history, relation_read_mode="agent", source_read_authority=False),
+            [
+                {"facet": "relation_tables", "reason": "source_read_required"},
+                owner_only,
+            ],
+        )
+        # The raw-authority gap survives only for frames without a read mode.
+        self.assertEqual(
+            gaps(readable),
+            [{"facet": "relation_tables", "reason": "source_raw_read_required"}],
+        )
+        # Owner mode discloses no relation gap.
+        self.assertEqual(
+            wire_coverage(
+                relations=history,
+                limited=False,
+                recursion=False,
+                relation_read_mode="owner",
             )["gaps"],
             [],
         )
