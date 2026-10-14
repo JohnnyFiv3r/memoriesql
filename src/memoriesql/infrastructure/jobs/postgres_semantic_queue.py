@@ -21,7 +21,10 @@ from memoriesql.application.complete_input_execution import (
     CompleteEvidenceBatch,
     ReadCompleteEvidence,
 )
-from memoriesql.application.local_entity_mentions import ApplyLocalMentions
+from memoriesql.application.local_entity_mentions import (
+    ApplyAuthoredMentions,
+    ApplyLocalMentions,
+)
 from memoriesql.application.observation_commands import (
     AuthorInitialObservationsCommand,
     CorrectObservationCommand,
@@ -717,10 +720,12 @@ class PostgresSemanticTaskQueue:
             )
         elif (
             result.task_kind == "memory.semantic.author-complete-unit"
-            and result.contract_revision in (3, 4, 5, 6)
+            and result.contract_revision in (3, 4, 5, 6, 7)
         ):
             revisiting_command = (
-                ApplyRelatedAuthorship.model_validate(command_data)
+                ApplyAuthoredMentions.model_validate(command_data)
+                if result.contract_revision == 7
+                else ApplyRelatedAuthorship.model_validate(command_data)
                 if result.contract_revision == 6
                 else ApplyClassifiedAuthorship.model_validate(command_data)
                 if result.contract_revision == 5 else ApplyLocalMentions.model_validate(command_data)

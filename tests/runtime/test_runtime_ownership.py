@@ -29,7 +29,7 @@ class RuntimeOwnership(unittest.TestCase):
             assert module.__file__ is not None
             origin = Path(module.__file__).resolve()
             self.assertIn(origin, owned)
-        self.assertEqual(len(rows), 81)
+        self.assertEqual(len(rows), 82)
         self.assertEqual(
             distribution.requires,
             [
