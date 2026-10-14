@@ -74,6 +74,7 @@ def relation_projection_frame(
     finally:
         if access is not None and not connection.closed:
             with connection.transaction():
+                connection.execute("SET LOCAL ROLE memoriesql_application")
                 connection.execute("SELECT pg_advisory_unlock(%s)", (access,))
         if key is not None and not connection.closed:
             with connection.transaction():
