@@ -1,5 +1,7 @@
 # PR-05 standalone query and result reuse (preview cut)
 
+This local landing composition preserves the historical head-specific evidence below. No existing custody record or test run attests the newly composed head.
+
 Primary acceptance claim: **an authorized principal, through the trusted
 executor, can run admitted SELECTs over fourteen prepared logical relations,
 receive an immutable result pin, page it with disclosure receipts and
