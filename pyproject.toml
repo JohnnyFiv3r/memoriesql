@@ -38,7 +38,7 @@ memoriesql = "memoriesql.cli:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
-packages = ["memoriesql", "memoriesql.contracts", "memoriesql.infrastructure", "memoriesql.infrastructure.postgres", "memoriesql.application", "memoriesql.application.capture", "memoriesql.domain", "memoriesql.infrastructure.jobs", "memoriesql.infrastructure.models"]
+packages = ["memoriesql", "memoriesql.contracts", "memoriesql.infrastructure", "memoriesql.infrastructure.postgres", "memoriesql.application", "memoriesql.application.capture", "memoriesql.domain", "memoriesql.infrastructure.jobs", "memoriesql.infrastructure.models", "memoriesql.infrastructure.results_broker"]
 include-package-data = false
 
 [tool.setuptools.package-data]

@@ -6,7 +6,12 @@ from typing import Any
 from uuid import UUID
 
 from psycopg import Connection
-from psycopg.errors import ForeignKeyViolation, InsufficientPrivilege
+from psycopg.errors import (
+    ForeignKeyViolation,
+    InsufficientPrivilege,
+    LockNotAvailable,
+    QueryCanceled,
+)
 from psycopg.pq import TransactionStatus
 
 from memoriesql.application.source_enrollment import (
@@ -18,6 +23,15 @@ from memoriesql.application.source_enrollment import (
     RevokeExactSource,
 )
 from memoriesql.infrastructure.postgres.authorization import PostgresAuthorizationPort
+
+
+class SourceAuthorityBusy(RuntimeError):
+    """A lock timeout or a cancelled statement stopped the command.
+
+    Nothing was written, and the request UUID makes an identical retry
+    idempotent. The psycopg error is always the `__cause__`, so callers can
+    still read its SQLSTATE (55P03 or 57014).
+    """
 
 
 class PostgresSourceEnrollment:
@@ -73,6 +87,8 @@ class PostgresSourceEnrollment:
                 )
         except InsufficientPrivilege as error:
             raise PermissionError("source enrollment is unavailable") from error
+        except (QueryCanceled, LockNotAvailable) as error:
+            raise SourceAuthorityBusy("source enrollment timed out") from error
 
     def grant(self, request: GrantExactSource) -> ExactSourceGrant:
         self._require_idle()
@@ -96,6 +112,8 @@ class PostgresSourceEnrollment:
                 return ExactSourceGrant(grant_id=row[0], replayed=row[1])
         except (InsufficientPrivilege, ForeignKeyViolation) as error:
             raise PermissionError("source grant is unavailable") from error
+        except (QueryCanceled, LockNotAvailable) as error:
+            raise SourceAuthorityBusy("source grant timed out") from error
 
     def revoke(self, request: RevokeExactSource) -> ExactSourceRevocation:
         self._require_idle()
@@ -117,3 +135,5 @@ class PostgresSourceEnrollment:
                 )
         except InsufficientPrivilege as error:
             raise PermissionError("source revocation is unavailable") from error
+        except (QueryCanceled, LockNotAvailable) as error:
+            raise SourceAuthorityBusy("source revocation timed out") from error

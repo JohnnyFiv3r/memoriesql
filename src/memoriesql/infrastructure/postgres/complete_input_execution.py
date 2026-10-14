@@ -30,7 +30,9 @@ from memoriesql.application.complete_input_execution import (
     ReadCompleteEvidence,
 )
 from memoriesql.application.local_entity_mentions import (
+    ActivateAuthoredMentions,
     ActivateMentionAuthorship,
+    AuthoredMentionActivationReceipt,
     MentionActivationReceipt,
 )
 from memoriesql.application.semantic_task_contracts import canonical_json_bytes
@@ -78,6 +80,20 @@ class PostgresCompleteInput:
         return MentionActivationReceipt.model_validate(
             self._call(
                 "SELECT memoriesql.activate_complete_input_v3(%s)",
+                (Jsonb(request.model_dump(mode="json")),),
+                role="memoriesql_application",
+            )
+        )
+
+    def activate_authored_mentions(
+        self, request: ActivateAuthoredMentions
+    ) -> AuthoredMentionActivationReceipt:
+        request = ActivateAuthoredMentions.model_validate(
+            request.model_dump(mode="json")
+        )
+        return AuthoredMentionActivationReceipt.model_validate(
+            self._call(
+                "SELECT memoriesql.activate_complete_input_v6(%s)",
                 (Jsonb(request.model_dump(mode="json")),),
                 role="memoriesql_application",
             )
