@@ -34,20 +34,24 @@ def invoke(environment: dict[str, str], connection: Any) -> tuple[int, dict[str,
 
 
 def connection(
-    login: tuple[Any, ...] | Exception,
+    login: tuple[Any, ...] | Exception | list[tuple[Any, ...] | Exception],
     schema: int | None | Exception,
     *,
     present: bool = True,
 ) -> MagicMock:
+    """A fake database; a list of logins answers the direct probe, then the one
+    made after SET LOCAL ROLE."""
     db = MagicMock()
     db.__enter__.return_value = db
+    probes = list(login) if isinstance(login, list) else [login, login]
 
     def execute(statement: str, *_: Any) -> MagicMock:
         cursor = MagicMock()
         if "pg_has_role" in statement:
-            if isinstance(login, Exception):
-                raise login
-            cursor.fetchone.return_value = login
+            answer = probes.pop(0)
+            if isinstance(answer, Exception):
+                raise answer
+            cursor.fetchone.return_value = answer
         elif "to_regclass" in statement:
             cursor.fetchone.return_value = (present,)
         elif "schema_migrations" in statement:
@@ -81,7 +85,7 @@ class DoctorDatabaseTests(unittest.TestCase):
         self.assertNotIn("secret", json.dumps(down))
 
     def test_ready_member_login_and_schema_compatibility(self) -> None:
-        ready = (False, True, True, True, True, True, 180004)
+        ready = (False, True, True, True, True, 180004)
         status, report = invoke(DATABASE, connection(ready, INSTALLED))
         self.assertEqual(status, 0, report)
         self.assertTrue(report["database"]["login"]["application_ready"])
@@ -105,7 +109,7 @@ class DoctorDatabaseTests(unittest.TestCase):
         self.assertIn("migration administrator", member["notice"])
 
     def test_unreadable_version_never_reports_compatible(self) -> None:
-        ready = (False, True, True, True, True, True, 180004)
+        ready = (False, True, True, True, True, 180004)
         for error in (InsufficientPrivilege("owner only"), OperationalError("gone")):
             with self.subTest(error=type(error).__name__):
                 status, report = invoke(DATABASE, connection(ready, error))
@@ -118,7 +122,7 @@ class DoctorDatabaseTests(unittest.TestCase):
         self.assertEqual(verified["database_check"], "passed")
 
     def test_only_a_verified_match_exits_zero(self) -> None:
-        ready = (False, True, True, True, True, True, 180004)
+        ready = (False, True, True, True, True, 180004)
         status, verified = invoke(DATABASE, connection(ready, INSTALLED))
         self.assertEqual((status, verified["outcome"]), (0, "available"), verified)
         self.assertEqual(verified["database_check"], "passed")
@@ -150,14 +154,32 @@ class DoctorDatabaseTests(unittest.TestCase):
         self.assertEqual(json.loads(output.getvalue())["outcome"], "unverified")
         self.assertIn("notice: schema compatibility is unverified", errors.getvalue())
 
-    def test_builtin_denied_or_noinherit_login_is_not_ready(self) -> None:
-        status, denied = invoke(
+    def test_switching_role_not_inheritance_decides_readiness(self) -> None:
+        # Denied directly and after SET LOCAL ROLE: no member that may switch.
+        status, outsider = invoke(
             DATABASE, connection(InsufficientPrivilege("denied"), INSTALLED)
         )
-        self.assertEqual((status, denied["reason"]), (3, "login_role_not_ready"))
-        self.assertFalse(denied["database"]["login"]["prologue_builtins_executable"])
-        noinherit = (False, True, True, False, False, False, 180004)
-        status, report = invoke(DATABASE, connection(noinherit, INSTALLED))
+        self.assertEqual((status, outsider["reason"]), (3, "login_role_not_ready"))
+        self.assertFalse(outsider["database"]["login"]["application_ready"])
+        self.assertIsNone(outsider["database"]["schema_present"])
+        # A non-inheriting member executes no catalog function until it switches
+        # role, as every adapter does first; probed that way, it is ready.
+        noinherit = (False, True, False, True, False, 180004)
+        status, member = invoke(
+            DATABASE,
+            connection(
+                [InsufficientPrivilege("denied"), noinherit],
+                InsufficientPrivilege("owner only"),
+            ),
+        )
+        self.assertEqual((status, member["outcome"]), (3, "unverified"), member)
+        login = member["database"]["login"]
+        self.assertTrue(login["application_ready"])
+        self.assertFalse(login["application_role_inherited"])
+        self.assertTrue(member["database"]["schema_present"])
+        # Without the SET option a member cannot switch, inheriting or not.
+        unsettable = (False, False, True, False, True, 180004)
+        status, report = invoke(DATABASE, connection(unsettable, INSTALLED))
         self.assertEqual((status, report["reason"]), (3, "login_role_not_ready"))
 
 
