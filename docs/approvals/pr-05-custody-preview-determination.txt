@@ -1,0 +1,17 @@
+Content-free custody determination — option 1.
+
+EA-3 REMAINS the custody attestation for the unchanged approved interface alongside the owner-approved preview amendment record. No replacement freeze or new attestation is needed for this scoped preview notice. EA-3 is not an attestation that the preview satisfies the full interface or the frozen evaluation acceptance requirements.
+
+Verified exact records:
+- Preview amendment: JohnnyFiv3r/memoriesql commit 684bf8a9c8ebce99de86a2bd6e211bcbeae343b8, docs/approvals/pr-05-preview-amendments-v1.json; 3640 bytes; SHA-256 22e19e02f085f50c5cf2f57e1e003b81c7749498cf8639253e137874efb640c1. Commit independently confirmed through GitHub.
+- Base approved record: SHA-256 bcc4398a2f3bba618ae9eb85ee331fb0bf94ac9108bd42f161e5cc07d3a7a478. Its parsed complete record exactly equals ea-3's approved_interface_record; the different byte hash from earlier canonical serialization is not a semantic change.
+- EA-3: 12916 bytes; SHA-256 12e802be3664a2c971ae144f692e993e43344e9d68dfff569cfc16f77547e60b. Repository copy equals the original retained record byte-for-byte.
+- The packet and entire lifecycle dependency match their approved exact Git blobs. All frozen constituent hashes, profiles, thresholds, preregistration, corpus linkage and historical evidence remain unchanged. Original frozen_at remains 2026-09-26T22:01:04Z.
+
+Approval attribution: the record's stated coordinator relay and time bound are preserved; I also verified John's exact-record custody relay in this Scrum Master task, user message msg_01a0e9fe-6b42-7173-97f8-28785e3050e4 at 2026-09-28T21:49:20.066Z. I do not turn the earlier relay receipt bound into a precise original approval time.
+
+Scope limits remain decisive: measured small-workspace qualification cannot be extrapolated to full W1-W7 capacity; logical allocation plus before/after database growth is not conservative physical-storage qualification or a 512 MiB disk guarantee; revocation/regrant is not erasure. Required expired-result deletion/qualification remains item 3, not an exception. Agent-identity regression and actual credential/trust-boundary gates remain in force.
+
+The preview exceptions do NOT alter frozen gold, required-operation grading, condition budgets, denominators, thresholds or exclusion rules. If a required capability is unavailable in a later authorized evaluation, it cannot be marked passed or silently excluded; incomplete evidence cannot select a retrieval architecture. Any proposal to change those evaluation rules would require a separate explicit decision, not reinterpretation of this notice.
+
+No unseen content, hints or access paths were disclosed; no pack/policy files changed, new freeze was created, evaluation/model calls were run, or publication/release/deployment authority was added. Please relay this complete content-free determination to the active Claude PR-05 implementer; I have not reactivated the stopped Codex writer.

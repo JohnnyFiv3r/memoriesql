@@ -145,6 +145,38 @@
     {
       "filename": "0036_exact_source_enrollment.sql",
       "sha256": "73d86b8b9b1a7f280bf40f267a384eb280d797adf95c01e7f1839540d5688505"
+    },
+    {
+      "filename": "0037_observation_sql_population.sql",
+      "sha256": "f8e2d46829258da4c49d011c6766711d55cb48940b3476681d8ad9dffcad1d1b"
+    },
+    {
+      "filename": "0038_query_result_access.sql",
+      "sha256": "76810d04d475f7b6fadde46f81f979a26b16331ef2efc3a06be7e06b0de8c2a5"
+    },
+    {
+      "filename": "0039_agent_relation_reads.sql",
+      "sha256": "74fb8e5c1c9b297cc5e70c7e694ef1d8ba77e6f4a2daeb072cbeaedb4621d117"
+    },
+    {
+      "filename": "0040_authorization_context_cleanup.sql",
+      "sha256": "09ce9ead7d3de5c1f68f7ae72b357c02e47f9bc48bb4aef114bf86919a50a3b2"
+    },
+    {
+      "filename": "0041_authored_statement_kinds.sql",
+      "sha256": "3a7c5eca413aa8c573f62a446c957d2b048fc066d8bce1c1f8af2cff72fd623a"
+    },
+    {
+      "filename": "0042_terminal_pairing_revocation.sql",
+      "sha256": "4fa68c3e003a75fd12925c1e24900fb5a3aff434b1105374343e6ac34e8280dd"
+    },
+    {
+      "filename": "0043_inspection_withholding.sql",
+      "sha256": "82da31c4a8e0afdf45e62c4ef40102629e59bd0db013285384765d6ef42a3ccc"
+    },
+    {
+      "filename": "0044_saved_query_frame_closure.sql",
+      "sha256": "6a1af5c57deea37ccc1285162fcb5021940a7d5591311b42b7c059af2c3e29a9"
     }
   ]
 }
