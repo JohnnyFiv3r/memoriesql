@@ -1620,6 +1620,72 @@ class AgentSqlResults(unittest.TestCase):
             [(retiring_task, second, retirement_reason)],
         )
 
+        # Observe A's own dependencies before aggregate deduplication can hide
+        # a missing retiring-task call behind B or owner pair coverage. This
+        # fictional observation changes only the final return, on this same
+        # connection, and MUST roll back before any canonical query or reuse.
+        function_state_sql = (
+            "SELECT pg_get_functiondef(oid),proowner,prosecdef,proconfig,proacl "
+            "FROM pg_proc WHERE oid='memoriesql.prepare_relation_sql_population_v2"
+            "(timestamp with time zone,integer,text)'::regprocedure"
+        )
+        installed = db.execute(function_state_sql).fetchone()
+        assert installed is not None
+        definition = installed[0]
+        marker = "    RETURN result;\n"
+        self.assertEqual(definition.count(marker), 1)
+        observed_definition = definition.replace(
+            marker,
+            "    RETURN result || jsonb_build_object("
+            "'__fictional_test_families',families);\n",
+            1,
+        )
+        extra_pin = db.execute(
+            "SELECT p.pin FROM memoriesql.relation_assessments a "
+            "CROSS JOIN LATERAL jsonb_array_elements(a.beads) AS p(pin) "
+            "WHERE a.task_id=%s AND p.pin->>'bead_id'=%s",
+            (retiring_task, str(extra)),
+        ).fetchone()
+        assert extra_pin is not None
+        try:
+            with db.transaction(force_rollback=True):
+                db.execute(observed_definition)
+                replaced = db.execute(function_state_sql).fetchone()
+                assert replaced is not None
+                self.assertEqual(replaced[1:], installed[1:])
+                db.execute("SET LOCAL ROLE memoriesql_application")
+                PostgresAuthorizationPort(db).begin_context(
+                    credential_sha256=reader,
+                    requested_workspace_id=fixture.workspace,
+                )
+                observed = db.execute(
+                    "SELECT memoriesql.prepare_relation_sql_population_v1(NULL,%s)",
+                    (64 * 1024 * 1024,),
+                ).fetchone()
+                assert observed is not None
+                own_family = [
+                    family
+                    for family in observed[0]["__fictional_test_families"]
+                    if family["relation_id"] == str(first)
+                ]
+                self.assertEqual(len(own_family), 1)
+                own_deps = own_family[0]["deps"]
+                self.assertTrue(
+                    any(d["kind"] == "bead" and d["id"] == str(extra) for d in own_deps)
+                )
+                self.assertTrue(
+                    any(
+                        d["kind"] == "accepted_bead"
+                        and d["id"] == extra_pin[0]["bead_version_id"]
+                        and d["row"]["bead_id"] == str(extra)
+                        for d in own_deps
+                    )
+                )
+        finally:
+            # Runs after success AND assertion/SQL error: byte-identical body,
+            # signature, owner, definer/config and ACL, not compensating DDL.
+            self.assertEqual(db.execute(function_state_sql).fetchone(), installed)
+
         # Positive owner-mode oracle after retirement, before losing authority:
         # both relations, supersession and the retiring author's text are public
         # to this caller. Save and reuse this exact post-retirement frame.
