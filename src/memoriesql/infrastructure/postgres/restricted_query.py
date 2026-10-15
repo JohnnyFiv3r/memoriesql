@@ -75,6 +75,8 @@ class NativeQueryExecution:
     cancellation_request_failed: bool = False
     error: str | None = None
     witnesses: NativeWitnesses | None = None
+    # Safe source offset of an admission refusal (never query text or values).
+    error_position: int | None = None
     query_metadata: bytes | None = None
     authority_profile_sha256: str | None = None
     deadline_monotonic: float | None = None
@@ -93,8 +95,10 @@ class InvocationSettlement:
 
 
 class _StopQuery(Exception):
-    def __init__(self, outcome: str) -> None:
+    def __init__(self, outcome: str, code: str | None = None) -> None:
         self.outcome = outcome
+        # Safe classification: which declared bound stopped the work.
+        self.code = code
 
 
 def backend_transaction(inspector: Connection[Any], pid: int) -> BackendTransaction:
@@ -255,15 +259,19 @@ class PostgresRestrictedQuery:
         rows: list[tuple[Any, ...]] = []
         encoded = 8192
         outcome, safe_error = "complete", None
+        error_position: int | None = None
         stop = threading.Event()
         cancel_started: list[int] = []
         cancel_failed = threading.Event()
         worker: threading.Thread | None = None
+        worker_started = False
         reader: Connection[Any] | None = None
         control: Connection[Any] | None = None
         query = None
         stage_started = False
+        stage_body_complete = False
         stage_confirmed = False
+        stage_rolled_back = False
         witness_builder: NativeWitnessBuilder | None = None
         witnesses: NativeWitnesses | None = None
         frame_ref = uuid4()
@@ -292,7 +300,7 @@ class PostgresRestrictedQuery:
 
                 def check_witness_work() -> None:
                     if time.monotonic() >= deadline:
-                        raise _StopQuery("budget_exhausted")
+                        raise _StopQuery("budget_exhausted", "time")
                     if cancellation is not None and cancellation.is_set():
                         raise _StopQuery("cancelled")
 
@@ -321,7 +329,7 @@ class PostgresRestrictedQuery:
             )
             encoded += len(result_json_bytes(query.derivation_program))
             if encoded > max_output_bytes:
-                raise _StopQuery("budget_exhausted")
+                raise _StopQuery("budget_exhausted", "storage")
             source.execute(
                 "SELECT memoriesql.check_relation_sql_population_authority_v1()"
             )
@@ -359,7 +367,8 @@ class PostgresRestrictedQuery:
                 raise _StopQuery(
                     "cancelled"
                     if cancellation is not None and cancellation.is_set()
-                    else "budget_exhausted"
+                    else "budget_exhausted",
+                    "time",
                 )
             _configure_reader(reader, remaining)
             target = backend_transaction(control, reader.info.backend_pid)
@@ -399,22 +408,35 @@ class PostgresRestrictedQuery:
                 "issuer_context": json.loads(population.source_context),
             }
             if time.monotonic() >= deadline:
-                raise _StopQuery("budget_exhausted")
+                raise _StopQuery("budget_exhausted", "time")
             stage_started = True
             with relation_projection_frame(
                 control,
                 credential_sha256=self._credential,
                 workspace_id=self._workspace,
+                # Revision 2 stages larger populations inside the admitted
+                # operation deadline; revision 1 keeps the canonical 2.5 s.
+                statement_timeout_ms=(
+                    max(1, min(30000, math.floor((deadline - time.monotonic()) * 1000)))
+                    if population.revision == 2
+                    else 2500
+                ),
             ) as stage:
+                # Revision 2 stages all fourteen prepared relations; revision 1
+                # keeps the original nine-relation staging function unchanged.
                 response = stage.execute(
-                    "SELECT memoriesql.stage_relation_query_v1(%s)", (Jsonb(request),)
+                    "SELECT memoriesql.stage_query_population_v2(%s)"
+                    if population.revision == 2
+                    else "SELECT memoriesql.stage_relation_query_v1(%s)",
+                    (Jsonb(request),),
                 ).fetchone()
                 if response is None:
                     raise SqlAdmissionError("unavailable", "invocation")
                 ref = UUID(response[0]["invocation_ref"])
+                stage_body_complete = True
             stage_confirmed = True
             if time.monotonic() >= deadline:
-                raise _StopQuery("budget_exhausted")
+                raise _StopQuery("budget_exhausted", "time")
 
             def supervise() -> None:
                 # Independent of statement_timeout, query thread and client GUCs.
@@ -440,6 +462,7 @@ class PostgresRestrictedQuery:
                 target=supervise, name="memoriesql-query-supervisor", daemon=False
             )
             worker.start()
+            worker_started = True
             if plan and plan.semantic_check:
                 # Planning only: preserve original PostgreSQL group/order errors.
                 # Estimates are neither read nor used as an authority/work fence.
@@ -468,7 +491,7 @@ class PostgresRestrictedQuery:
                             witness_builder.add(row[-1][1], published=False)
                             encoded += witness_builder.encoded_bytes - before
                             if encoded > max_output_bytes:
-                                raise _StopQuery("budget_exhausted")
+                                raise _StopQuery("budget_exhausted", "storage")
                             continue
                         native = row[:-1] if plan else row
                         encoded += (
@@ -484,17 +507,17 @@ class PostgresRestrictedQuery:
                             witness_builder.add(row[-1])
                             encoded += witness_builder.encoded_bytes - before
                         if encoded > max_output_bytes:
-                            raise _StopQuery("budget_exhausted")
+                            raise _StopQuery("budget_exhausted", "storage")
                         rows.append(tuple(native))
                     if time.monotonic() >= deadline:
-                        raise _StopQuery("budget_exhausted")
+                        raise _StopQuery("budget_exhausted", "time")
                     if cancellation is not None and cancellation.is_set():
                         raise _StopQuery("cancelled")
             if witness_builder is not None:
                 witnesses = witness_builder.seal()
                 encoded += max(0, len(witnesses.bytes) - witness_builder.encoded_bytes)
                 if encoded > max_output_bytes:
-                    raise _StopQuery("budget_exhausted")
+                    raise _StopQuery("budget_exhausted", "storage")
             source.execute(
                 "SELECT memoriesql.check_relation_sql_population_authority_v1()"
             )
@@ -513,19 +536,40 @@ class PostgresRestrictedQuery:
                 )
             ):
                 raise SqlAdmissionError("unavailable", "invocation_epoch")
-            if cancel_started or time.monotonic() >= deadline:
+            if (
+                cancel_started
+                or time.monotonic() >= deadline
+                or (cancellation is not None and cancellation.is_set())
+            ):
                 raise _StopQuery(
                     "cancelled"
                     if cancellation is not None and cancellation.is_set()
-                    else "budget_exhausted"
+                    else "budget_exhausted",
+                    "time",
                 )
         except _StopQuery as error:
-            outcome = error.outcome
+            outcome, safe_error = error.outcome, error.code
         except SqlAdmissionError as error:
             outcome = "unsupported_query" if error.code == "unsupported" else error.code
             safe_error = error.construct
+            error_position = error.position
         except Error as error:
             code = error.sqlstate
+            # A server refusal before the staging body completes cannot have
+            # committed an invocation if the owned frame rolled back to IDLE.
+            # Preserve its typed outcome so the caller can discard preparation
+            # and settle this delivery. A lost connection, failed rollback or
+            # error during/after commit remains uncertain and recovery-owned.
+            stage_rolled_back = (
+                stage_started
+                and not stage_confirmed
+                and not stage_body_complete
+                and code is not None
+                and not code.startswith("08")
+                and control is not None
+                and not control.closed
+                and control.info.transaction_status == TransactionStatus.IDLE
+            )
             if code in {"57014", "55P03", "54000", "53400"}:
                 outcome = (
                     "cancelled"
@@ -538,9 +582,25 @@ class PostgresRestrictedQuery:
                 outcome = "settlement_pending"
             else:
                 outcome = "execution_error"
-            safe_error = "database"
+            safe_error = {
+                "22003": "arithmetic",
+                "22012": "arithmetic",
+                "53400": "storage",
+                "54000": "storage",
+                "57014": "time",
+                "55P03": "time",
+                "42501": "unavailable",
+                "28000": "unavailable",
+                "55000": "settlement",
+                "40001": "settlement",
+            }.get(code or "", "database")
         except (ValueError, TypeError, OverflowError):
             outcome, safe_error = "execution_error", "type"
+        except Exception:
+            # Local driver/callback failures still pass through owned cleanup
+            # and journal settlement. Never expose their text or return rows.
+            # An unconfirmed staging exit remains recovery-owned below.
+            outcome, safe_error = "execution_error", "database"
         finally:
             stop.set()
             if reader is not None:
@@ -552,7 +612,7 @@ class PostgresRestrictedQuery:
                     reader.close()
             # At most the monitor's bounded owned statement is in flight; if its
             # client is still uncertain, do not abandon it or report settlement.
-            if worker is not None:
+            if worker is not None and worker_started:
                 worker.join(timeout=1)
                 if worker.is_alive():
                     outcome = "settlement_pending"
@@ -587,7 +647,7 @@ class PostgresRestrictedQuery:
                     outcome = "settlement_pending"
             except Exception:
                 outcome, settlement = "settlement_pending", "settlement_pending"
-        if stage_started and not stage_confirmed:
+        if stage_started and not stage_confirmed and not stage_rolled_back:
             outcome = "settlement_pending"
         if outcome != "complete":
             return NativeQueryExecution(
@@ -598,6 +658,7 @@ class PostgresRestrictedQuery:
                 cancellation_started_ms=cancel_started[0] if cancel_started else None,
                 cancellation_request_failed=cancel_failed.is_set(),
                 error=safe_error,
+                error_position=error_position,
             )
         assert query is not None
         return NativeQueryExecution(

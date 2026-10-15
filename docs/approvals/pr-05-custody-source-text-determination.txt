@@ -1,0 +1,8 @@
+The independent custodian reviewed the second notice. Normalized package text can change search candidates and evidence availability, even though wire fields remain unchanged.
+Next: obtain a separately retained, content-free reconciliation binding the authority record to ea-3 and the attributable owner approvals:
+
+* Commit: `dab96f2dc9fa9ab8fcb483a12653f179fd1532aa`
+* Authority-record SHA-256: `63ecbb4c9b270e4e79af18c3c2cc00e077c8b5e2d98b88fe2200235c31c15697`
+
+Preserve matched authorization and representation rules across both evaluation conditions, raw-source restrictions, and existing evidence requirements. Returned query text must not receive hydration or exact-source credit merely because it is readable.
+Both migration hashes verified. Existing frozen hashes remain unchanged. No replacement freeze or threshold change is implied. Do not claim ea-3 covers the extension until reconciliation is recorded.

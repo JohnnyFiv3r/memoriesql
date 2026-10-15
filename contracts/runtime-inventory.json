@@ -234,6 +234,15 @@
     },
     {
       "path": "src/memoriesql/infrastructure/postgres/personal_local_initialization.py"
+    },
+    {
+      "path": "src/memoriesql/application/agent_sql_results.py"
+    },
+    {
+      "path": "src/memoriesql/infrastructure/postgres/agent_sql_results.py"
+    },
+    {
+      "path": "src/memoriesql/infrastructure/postgres/query_reader_provisioning.py"
     }
   ]
 }

@@ -7,7 +7,7 @@
   "interface_version": "1",
   "kind": "sql_recall_operations",
   "logical_catalog": {
-    "admission_stage": "internal_kernel; query/result/helper execution is not yet delivered",
+    "admission_stage": "trusted_executor_preview; query and reuse_result execute through the trusted executor; inspect, hydrate_source and checkpoints are not delivered; unreleased",
     "collation": "C",
     "evaluation_relation": {
       "columns": [
@@ -1428,6 +1428,6 @@
       "lead"
     ]
   },
-  "note": "No SQL recall records are included in this preview.",
+  "note": "No SQL recall contract record is registered in this preview. Query and reuse_result execute through the trusted executor under this catalog's logical_catalog; inspect, hydrate_source and checkpoints are not delivered.",
   "status": "not_implemented"
 }

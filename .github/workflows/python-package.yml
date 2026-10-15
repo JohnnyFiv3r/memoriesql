@@ -165,7 +165,7 @@ jobs:
             test_root="$(mktemp -d)"
             python -m venv "$test_root/venv"
             "$test_root/venv/bin/python" -m pip install --no-index --find-links build/dependencies "$artifact"
-            cp scripts/run_installed_acceptance.py scripts/prove_package_isolation.py scripts/prove_release_installation.py scripts/prove_fold_recovery_restart.py scripts/prove_assessed_relation_restart.py scripts/prove_database_time_recovery_restart.py "$test_root/"
+            cp scripts/run_installed_acceptance.py scripts/prove_package_isolation.py scripts/prove_release_installation.py scripts/prove_fold_recovery_restart.py scripts/prove_assessed_relation_restart.py scripts/prove_database_time_recovery_restart.py scripts/prove_query_result_restart.py "$test_root/"
             cp contracts/runtime-inventory.json contracts/public-registry.json "$test_root/"
             cp tests/migrations/*.py tests/runtime/*.py tests/unit/test_contract_catalog_preview.py tests/fixtures/*.json "$test_root/"
             (cd "$test_root" && venv/bin/python -I prove_package_isolation.py && venv/bin/python -I prove_release_installation.py)
@@ -185,6 +185,7 @@ jobs:
             (cd "$test_root" && venv/bin/python -I prove_assessed_relation_restart.py prepare && venv/bin/python -I prove_assessed_relation_restart.py recover && venv/bin/python -I prove_assessed_relation_restart.py cleanup)
             (cd "$test_root" && venv/bin/python -I prove_fold_recovery_restart.py prepare && venv/bin/python -I prove_fold_recovery_restart.py recover && venv/bin/python -I prove_fold_recovery_restart.py cleanup)
             (cd "$test_root" && venv/bin/python -I prove_database_time_recovery_restart.py prepare && venv/bin/python -I prove_database_time_recovery_restart.py recover && venv/bin/python -I prove_database_time_recovery_restart.py cleanup)
+            (cd "$test_root" && venv/bin/python -I prove_query_result_restart.py prepare && venv/bin/python -I prove_query_result_restart.py recover && venv/bin/python -I prove_query_result_restart.py cleanup)
           done
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
