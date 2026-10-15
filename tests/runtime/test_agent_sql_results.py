@@ -1500,6 +1500,212 @@ class AgentSqlResults(unittest.TestCase):
         ]
         return proposal
 
+    def test_owner_mode_retiring_task_candidate_loss_withholds_family_and_reuse(
+        self,
+    ) -> None:
+        fixture, db = self.fixture, self.db
+        tag = uuid4().hex[:8]
+        ends, ends_source = relation_agents.explicit_scope(db, fixture)
+        x, y = [
+            fixture.remote_bead(
+                f"Fictional {name}: the orchard accounts balanced.",
+                key=f"retiring-task-{name}-{tag}",
+                scope=ends,
+                source=ends_source,
+            )
+            for name in ("source", "target")
+        ]
+
+        def supports(packet: Any, **extra: Any) -> list[dict[str, Any]]:
+            proposal = fixture.proposal(
+                packet,
+                "supports",
+                fixture.endpoint(packet, x, 0),
+                fixture.endpoint(packet, y, 0),
+                basis="agent_inferred",
+                **extra,
+            )
+            return [
+                self.citing(proposal, fixture.endpoint(packet, x, 0)["statement_ids"])
+            ]
+
+        first = self.relation_in(x, (y,), "original-" + tag, supports)
+        principal, reader = fixture.second_human(ends)
+        relation_sql = (
+            "SELECT r.relation_id,r.state FROM memory_v1.assessed_relations r "
+            "ORDER BY r.relation_id"
+        )
+        original_run = self.start(reader)
+        _, original = self.query(original_run, relation_sql, secret=reader)
+        self.assertEqual(original["outcome"], "available", original)
+        self.assertEqual(
+            [r["values"] for r in original["page"]["rows"]], [[str(first), "active"]]
+        )
+        self.close(original_run, reader)
+
+        # Create the extra candidate only after the original task finished: it
+        # cannot already be in that task's captured population. It is neither
+        # an endpoint nor declared assertion evidence in the retiring task.
+        extra_scope, extra_source = relation_agents.explicit_scope(db, fixture)
+        extra_text = f"Fictional retiring-task candidate {tag}: frost damaged crates."
+        extra = fixture.remote_bead(
+            extra_text,
+            key="retiring-task-extra-" + tag,
+            scope=extra_scope,
+            source=extra_source,
+        )
+        extra_grant = uuid4()
+        with db.transaction():
+            fixture.begin()
+            db.execute(
+                "SELECT memoriesql.create_access_grant(%s,%s,%s,%s,%s,%s)",
+                (
+                    extra_grant,
+                    principal,
+                    extra_scope,
+                    ["read"],
+                    fixture.now,
+                    fixture.now + timedelta(hours=1),
+                ),
+            )
+        retirement_reason = "Fictional replacement because " + extra_text
+        second = self.relation_in(
+            x,
+            (y, extra),
+            "retiring-" + tag,
+            lambda packet: supports(
+                packet,
+                retires={
+                    "relation_kind": "assessed",
+                    "relation_id": str(first),
+                    "reason": retirement_reason,
+                },
+            ),
+        )
+        task_by_relation = dict(
+            db.execute(
+                "SELECT relation_id,task_id FROM memoriesql.assessed_relations "
+                "WHERE relation_id=ANY(%s)",
+                ([first, second],),
+            ).fetchall()
+        )
+        first_task, retiring_task = task_by_relation[first], task_by_relation[second]
+        self.assertNotEqual(first_task, retiring_task)
+        populations = {
+            task: {b["bead_id"] for b in beads}
+            for task, beads in db.execute(
+                "SELECT task_id,beads FROM memoriesql.relation_assessments "
+                "WHERE task_id=ANY(%s)",
+                ([first_task, retiring_task],),
+            ).fetchall()
+        }
+        self.assertEqual(populations[first_task], {str(x), str(y)})
+        self.assertEqual(populations[retiring_task], {str(x), str(y), str(extra)})
+        declared_beads = {
+            row[0]
+            for row in db.execute(
+                "SELECT DISTINCT bead_id FROM memoriesql.assessed_relation_statements "
+                "WHERE relation_id=ANY(%s)",
+                ([first, second],),
+            ).fetchall()
+        }
+        self.assertEqual(declared_beads, {x, y})
+        self.assertEqual(
+            db.execute(
+                "SELECT task_id,replacement_relation_id,reason_text "
+                "FROM memoriesql.relation_retirements "
+                "WHERE retired_kind='assessed' AND retired_relation_id=%s",
+                (first,),
+            ).fetchall(),
+            [(retiring_task, second, retirement_reason)],
+        )
+
+        # Positive owner-mode oracle after retirement, before losing authority:
+        # both relations, supersession and the retiring author's text are public
+        # to this caller. Save and reuse this exact post-retirement frame.
+        run = self.start(reader)
+        before = self.every_relation_row(run, secret=reader)
+        relations = {row[0]: row for row in before["assessed_relations"][0]}
+        self.assertEqual(set(relations), {str(first), str(second)})
+        state = self.ALL_RELATION_COLUMNS["assessed_relations"].index("state")
+        self.assertEqual(relations[str(first)][state], "superseded")
+        self.assertEqual(relations[str(second)][state], "active")
+        self.assertTrue(before["relation_evidence"][0])
+        self.assertTrue(
+            set(fixture.statements(extra)).isdisjoint(
+                row[1] for row in before["relation_evidence"][0]
+            )
+        )
+        self.assertIn([str(first), str(second)], before["relation_replacements"][0])
+        retirement_events = [
+            row
+            for row in before["relation_events"][0]
+            if row[1:6]
+            == [str(first), "retire", str(second), retirement_reason, "authored"]
+        ]
+        self.assertEqual(len(retirement_events), 1)
+        self.assertIn(
+            str(extra),
+            {bead for row in before["relation_pairs"][0] for bead in row[1:3]},
+        )
+        _, saved = self.query(run, relation_sql, page_size=50, secret=reader)
+        self.assertEqual(saved["outcome"], "available", saved)
+        expected = sorted([[str(first), "superseded"], [str(second), "active"]])
+        self.assertEqual([r["values"] for r in saved["page"]["rows"]], expected)
+        reused = self.reuse(run, saved["result"], page_size=50, secret=reader)
+        self.assertEqual(reused["outcome"], "available", reused)
+        self.assertEqual([r["values"] for r in reused["page"]["rows"]], expected)
+        self.close(run, reader)
+
+        # Change only the task-only candidate's grant, retaining both endpoint
+        # grants and the caller's owner-mode identity and capabilities.
+        with db.transaction():
+            fixture.begin()
+            db.execute(
+                "SELECT memoriesql.revise_access_grant(%s,1,%s,'revoked',%s,%s,%s)",
+                (
+                    extra_grant,
+                    ["read"],
+                    fixture.now,
+                    fixture.now + timedelta(hours=1),
+                    fixture.now,
+                ),
+            )
+        run = self.start(reader)
+        _, endpoints = self.query(
+            run,
+            "SELECT o.bead_id FROM memory_v1.observations o ORDER BY o.bead_id",
+            page_size=50,
+            secret=reader,
+        )
+        self.assertEqual(endpoints["outcome"], "available", endpoints)
+        self.assertEqual(
+            {row["values"][0] for row in endpoints["page"]["rows"]}, {str(x), str(y)}
+        )
+        hidden = {
+            str(first),
+            str(second),
+            str(first_task),
+            str(retiring_task),
+            str(extra),
+            retirement_reason,
+            extra_text,
+            retirement_events[0][0],
+        }
+        for column in ("acceptance_receipt_id", "head_token"):
+            index = self.ALL_RELATION_COLUMNS["assessed_relations"].index(column)
+            hidden.update(row[index] for row in relations.values() if row[index])
+        after = self.every_relation_row(run, secret=reader)
+        self.assertEqual(len(after), 9)
+        for table, (rows, reply) in after.items():
+            self.assertEqual(rows, [], table)
+            for value in hidden:
+                self.assertNotIn(value, reply, table)
+        unavailable = self.reuse(run, saved["result"], page_size=50, secret=reader)
+        self.assertEqual(unavailable["outcome"], "unavailable", unavailable)
+        self.assertNotIn("result", unavailable)
+        self.close(run, reader)
+
     def test_a_relation_whose_replacement_is_withheld_is_withheld_too(self) -> None:
         # Review P1. X, W and Z live in their own scopes, and W is derived from
         # Z. A (X supports W) cites only X's evidence. B replaces A and cites
