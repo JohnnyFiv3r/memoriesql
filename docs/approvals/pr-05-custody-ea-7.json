@@ -1,0 +1,497 @@
+{
+  "access_separation": {
+    "exposure_incidents": [],
+    "new_os_principal_isolation_claim": false,
+    "original_separation_retained": true,
+    "unseen_content_disclosed": false,
+    "unseen_questions_gold_hints_or_access_paths_inspected": false
+  },
+  "algorithm": "sha256",
+  "approved_interface_record": {
+    "amendments": [
+      {
+        "amendment_ref": "https://github.com/JohnnyFiv3r/memoriesql/pull/48#issuecomment-5851120561",
+        "supersedes": {
+          "algorithm": "sha256",
+          "dependencies": [
+            {
+              "commit": "2baffc688291dbfdeccaa46f7ca05f6e9ef0e12c",
+              "path": "docs/relation-assessment.md",
+              "sha256": "69a0d985466c6610a3a2abc73bcef9242749ff9535cb709e32867c7e06414d2a"
+            }
+          ],
+          "packet_commit": "2baffc688291dbfdeccaa46f7ca05f6e9ef0e12c",
+          "packet_path": "docs/agent-sql-results-v1.md",
+          "packet_sha256": "ba9e94b75b581949ff55e9b06b7271e2d4d0c79d6423e1dc6184d72245c585bb"
+        }
+      }
+    ],
+    "approval_ref": "https://github.com/JohnnyFiv3r/memoriesql/pull/49#issuecomment-5851352880",
+    "interface": {
+      "algorithm": "sha256",
+      "dependencies": [
+        {
+          "commit": "b3865f307b50bd94681b387ad0f3b16fbb20213a",
+          "path": "docs/relation-assessment.md",
+          "sha256": "69a0d985466c6610a3a2abc73bcef9242749ff9535cb709e32867c7e06414d2a"
+        }
+      ],
+      "packet_commit": "b3865f307b50bd94681b387ad0f3b16fbb20213a",
+      "packet_path": "docs/agent-sql-results-v1.md",
+      "packet_sha256": "78bbc04eaeffd0fd47b0576e270f25eaa30e07a90b42e53d27e64308dfd8269e"
+    },
+    "version": 2
+  },
+  "approved_packet": [
+    {
+      "bytes": 479,
+      "name": "MANIFEST.json",
+      "sha256": "7154e6c6392066b75329d99b0b768e82d00639415bd140d81c8461875d1bc2e7"
+    },
+    {
+      "bytes": 9741,
+      "name": "SCOPE-AND-PINS.md",
+      "sha256": "fcb2947b0ca553a83ee6e6656c89722affbbef10bcce21bacc69ced2e2a4a1a3"
+    },
+    {
+      "bytes": 2460,
+      "name": "CUSTODIAN-RELAY-DRAFT.md",
+      "sha256": "4f1c5de0e11adf414e06102719e942f938561df5eaf1b70d13a517c3e071ce3d"
+    }
+  ],
+  "authority_and_evidence_boundaries": {
+    "coverage": "Keep relation_history/owner_only for agent history/pair queries, relation_tables/source_read_required for eligible agent-mode callers lacking source.read, and the existing raw-read boundary for other callers. Internal relation_read_mode and withheld counts remain undisclosed.",
+    "principal_scope": "Under ea-6 decision 12(a), agent mode requires an agent principal with a pairing grant plus current memory.query and source.read throughout the full required closure. Other non-raw callers do not inherit AM-5 access. Pairing alone grants nothing.",
+    "raw_boundary": "Source-object identities, raw bytes/parts/lineage and source revisiting remain owner-only under source.raw.read. Governed lifecycle writes, activation and the relations inspection reader retain their existing authority.",
+    "tables": {
+      "agent_readable_if_authorized": [
+        "assessed_relations",
+        "relation_statements",
+        "relation_evidence",
+        "relation_types",
+        "relation_corrections",
+        "relation_replacements"
+      ],
+      "owner_only": [
+        "relation_events",
+        "relation_event_evidence",
+        "relation_pairs"
+      ]
+    },
+    "temporal_lifecycle": "Current/as-of semantics, canonical correction lineage, withdrawn/disputed support rules and qualified evidence-root requirements remain PR-03-owned. No archival label or source sharing establishes a later lifecycle transition."
+  },
+  "authority_limits": {
+    "changed_head": "Each future head or composition needs explicit comparison and linkage; these records do not follow a moving branch.",
+    "not_authorized": [
+      "attestation commit or push",
+      "product or contract edits",
+      "qualification execution or waiver",
+      "database, model or provider calls",
+      "new privileges",
+      "erasure or retention changes",
+      "production or Desktop activation",
+      "merge",
+      "tag",
+      "release",
+      "publication",
+      "held experiment or held review resumption"
+    ],
+    "reviews": "Existing broad/focused reviews and the independently held Lane6 review remain at their actual scopes. This source inspection does not substitute for them or consume the newly authorized GitHub review rounds.",
+    "scope": "Independent content-free consideration, determination and append-only local custody record only."
+  },
+  "current_owner_approval": {
+    "approved_document": {
+      "bytes": 5164,
+      "name": "NEXT-APPROVALS.md",
+      "sha256": "812a1e5f9bbae394f0e1f211e720a9beadc599b730e5c824dc0bef143b1f8d1e"
+    },
+    "coordinator_record": {
+      "bytes": 8557,
+      "name": "NEXT-APPROVALS-OWNER-RECORD.json",
+      "sha256": "7124d8ed0cf685f60f457a7ca902b54d8eb97a9b393f01d4fb756ad694a9930b"
+    },
+    "effective_scope": "Current October 15, 2026 approval of items 1-3, not backdated. Item 1 supplies exactly the four PR78 interpretations; item 2 supplies the PR79 relay and receipt authority; item 3 separately permits the specified independent reviews, which this custodian neither runs nor replaces.",
+    "exact_user_text": "Approve items 1–3 in NEXT-APPROVALS.md, SHA-256 812a1e5f9bbae394f0e1f211e720a9beadc599b730e5c824dc0bef143b1f8d1e. No attestation commit, qualification execution, merge or release. Keep the other lanes moving in parallel.\n",
+    "exact_user_text_sha256": "85c89329bfa729727d41bb7f1a8068fa2c9ef6c26680d4314dc0b115508a1186",
+    "historical_labels": "The byte-pinned DRAFT/PROPOSED/NOT_SENT labels record preparation. They are preserved. The actual later human approval is separately bound here; neither a historical approval date nor absence of all historical approval is inferred.",
+    "primary_message_independently_read_and_compared": true,
+    "source": {
+      "message_id": "01a14018-7004-7ba0-80b5-76fd5ae4f6df",
+      "role": "user",
+      "thread_id": "01a0676f-6eaa-7d70-b034-cb9be5832167",
+      "turn_id": "01a14018-6fc4-75b0-a2fd-3b11dd42ed6b",
+      "turn_started_at": "2026-10-15T15:05:05.000Z"
+    },
+    "timestamp_semantics": "Timestamp is the tool-returned start of the actual human turn; no separate message timestamp was supplied. Exact user text includes its terminal newline."
+  },
+  "current_visibility_reconciliation": [
+    {
+      "meaning": "Withhold a relation if a required replacement/root-lineage relation is unreadable; remove dependent families to a stable disclosed set in owner and paired-agent modes. Owner-mode task/pair coverage is withheld if it would reveal a relation withheld from that caller. No partial row, hidden-family count or absence claim is authorized.",
+      "rule": "Whole-family withholding in both modes",
+      "source": "migrations/0039_agent_relation_reads.sql:427-563"
+    },
+    {
+      "meaning": "For the paired-agent view only, head_token binds acceptance and visible corrections with governance events removed. An owner-only confirm must not alter it merely by occurring. Owner tokens and governed writes comparing owner tokens retain their behavior.",
+      "normative_exception": "This is the expressly approved narrow exception to ea-5/ea-6 whole rows with owner values for this column, effective with the current approval. Do not describe agent and owner tokens as identical or treat the agent token as owner write authority.",
+      "rule": "Agent-visible head token",
+      "source": "migrations/0039_agent_relation_reads.sql:435-445"
+    },
+    {
+      "limit": "This governs the named digest carriers only, not constant-time execution or a complete side-channel guarantee.",
+      "meaning": "Non-raw caller snapshot_digest and projection_manifest_sha256 bind disclosed row identities and values without private per-preparation evidence handles. Raw-authorized owner populations keep their full manifest digests. Revision-2 content_digest hashes a body omitting protected frame/witness hashes; those hashes, full dependencies and witness remain in the internal artifact-bound partition. Commit and saved disclosure continue checking that partition and current authorization.",
+      "rule": "Visible checksums, protected internal integrity",
+      "saved_results": "Do not rewrite sealed bytes, rehash an old result in place, reuse its identity for changed meaning, weaken revocation or silently rerun SQL. The new closure check refuses a revision-2 body that still carries protected hash fields. Such an undisclosable historical result stays preserved; a failed required reuse stays unmet rather than an automatic pass or exclusion.",
+      "sources": [
+        "src/memoriesql/infrastructure/postgres/relation_sql_population.py",
+        "src/memoriesql/infrastructure/postgres/query_result_commit.py",
+        "migrations/0039_agent_relation_reads.sql:970-981",
+        "migrations/0039_agent_relation_reads.sql:1048-1088"
+      ]
+    },
+    {
+      "limit": "This does not infer new relations, revise author text, grant raw access, approve a narrower-access contract or change canonical lifecycle decisions.",
+      "meaning": "Authored rationale and qualification depend on every bead pinned to the original task, including each pinned version at the frame and required records, in both modes. Owner-mode retirement reasons additionally require the retiring task population. A narrower declared evidence list cannot narrow this closure. Missing any required member withholds the relation whole; retained dependencies recheck later disclosure.",
+      "rule": "Whole pinned authoring population",
+      "source": "migrations/0039_agent_relation_reads.sql:368-396 and 451-475"
+    }
+  ],
+  "custodian": {
+    "role": "independent PR-04 evaluation custodian",
+    "task_id": "01a0d40a-b91a-73a0-b5b3-8067f150c880"
+  },
+  "determination": {
+    "additional_owner_decision_needed_for_this_scope": false,
+    "basis": "The four expressly approved visibility rules protect the required closure and unreadable metadata while retaining current reauthorization, protected integrity bindings, paired-agent eligibility, immutable results, source restrictions and existing grading obligations.",
+    "compatibility_is_not_certification": "This determination reconciles approved semantics and exact source references. It does not certify code correctness, complete noninterference, runtime/security/workload qualification, semantic quality or release readiness.",
+    "compatible_under_current_owner_decision": true,
+    "record_form": "A separate semantic/visibility reconciliation with this exact implementation binding is required. A mere refresh of ea-5-link-2 would conceal the explicit head_token exception and later disclosure changes. This one record supplies both; a duplicate implementation-only record is unnecessary."
+  },
+  "evaluation_conditions": [
+    {
+      "name": "fixed PostgreSQL FTS/pg_trgm",
+      "profile_id": "fts-trgm-v1",
+      "profile_manifest_revision": "ep-1",
+      "profile_manifest_sha256": "1b7086621dcb6a508114cb5bf4bcbbe6380d0e594b9da4827ca51be7e47125c6",
+      "role": "evaluation-only lexical peer"
+    },
+    {
+      "name": "optional in-Postgres vector condition",
+      "profile_id": "fts-trgm-vector-v1",
+      "profile_manifest_revision": "ep-1",
+      "profile_manifest_sha256": "1b7086621dcb6a508114cb5bf4bcbbe6380d0e594b9da4827ca51be7e47125c6",
+      "role": "evaluation-only lexical-plus-exact-vector peer"
+    }
+  ],
+  "final_implementation_commit": "055eac6ed3d4cccf65f6366103215ef2b104a1c4",
+  "final_implementation_tree": "e1cebc34d12925809857531ec117989960e7586d",
+  "format": "pr04-independent-custody-reconciliation-v1",
+  "frozen_at": "2026-09-26T22:01:04Z",
+  "frozen_revisions": {
+    "approved_policy": {
+      "revision": "pr05-evaluation-preregistration-v3",
+      "sha256": "6bdf6b0e790cb7b0ef71337de5b494f03913ec5c47cb3c1d746686594bc545db"
+    },
+    "pack": {
+      "digest_scope": "frozen inventory of exact constituent bytes",
+      "revision": "ef-1",
+      "sha256": "e6e7844592ae4694266b9890f328e90f19f2795eeb1c38f7b28d786ba46fabdd"
+    },
+    "preregistration": {
+      "revision": "er-1",
+      "sha256": "21d6ce7a08eaa084a779db175f0e68fabffa9e42c0f1961c2b25495bb70ce9a9"
+    },
+    "profiles": {
+      "revision": "ep-1",
+      "sha256": "1b7086621dcb6a508114cb5bf4bcbbe6380d0e594b9da4827ca51be7e47125c6"
+    },
+    "supplemental_approval": {
+      "revision": "pr04-custody-policy-approval-v1",
+      "sha256": "3b0170773413c9e772abb93c3f93de92cdeb9d7fe6cd59894eab8891eac47a00"
+    },
+    "thresholds": {
+      "revision": "et-1",
+      "sha256": "cb8d09abf5cd4eaf632eb142c88a7a0cdc12dbfd88c67b63d32d788dc227a236"
+    }
+  },
+  "grading_and_preservation": {
+    "evidence_credit": "A readable relation, visible fact, checksum, correct refusal or receipt alone earns no hydration, exact-source, independent-root, complete-coverage or semantic-quality credit. Withholding is limited visibility, not proof of absence or success on an unmet evidence obligation. Generated answers cannot select retrieval architecture.",
+    "fault_classes": "F0 remains optional reporting only. Safely settled failure is F1 and stays in the scheduled denominator. Unknown ownership/accounting is F2 and blocks the affected dispatch/disclosure/claim while safely isolated independent work may continue. A privacy, authorization or evidence-integrity breach remains F3; it is not downgraded by a different error label.",
+    "freeze_digest_basis": "Opaque freeze identifiers and digests are carried from prior issued custody records. No unseen payload was opened or rehashed for these determinations.",
+    "history": "Preserve original failures, statuses, charges, receipts, pending states, latency and raw proof evidence. Changed labels do not establish settlement or permit backdated qualification. Seen regression remains separate from unseen evaluation.",
+    "matched_conditions": "Both peers must receive the same declared implementation, principal/pairing eligibility, current authorization, representation, digest rules, candidate availability, controls, opportunities and budgets. Do not pool old and new heads as one primary paired comparison.",
+    "missing_capability": "Required but unimplemented or undelivered evidence, checkpoint/save/refinement/hydration capability stays unmet. No new deferral, exclusion, pass, retry allowance or budget reset follows from this determination.",
+    "numeric_or_evaluation_policy_change_required": false,
+    "replacement_freeze_required": false,
+    "unchanged_policy": "Original corpus, raw/source bytes, questions/gold, case-specific normalization, retained digests, preregistration, populations, conditions, ranking/embedding recipes, model settings, thresholds, sample counts, denominators, budgets, exclusions and rerun rules are unchanged. No new relation text is silently indexed or embedded."
+  },
+  "historical_records_preserved": [
+    {
+      "bytes": 7373,
+      "original_record_preserved": true,
+      "revision": "ea-2",
+      "sha256": "501ee401c88f4926431f8eb5f2e27b78082649a2949de7005bca17ce54b53711"
+    },
+    {
+      "bytes": 12916,
+      "original_record_preserved": true,
+      "revision": "ea-3",
+      "sha256": "12e802be3664a2c971ae144f692e993e43344e9d68dfff569cfc16f77547e60b"
+    },
+    {
+      "bytes": 12447,
+      "original_record_preserved": true,
+      "revision": "ea-4",
+      "sha256": "d118ded2578e7672d404b33c7c521f630bf4444e61cf57ca7e10cf6e2cea91f9"
+    },
+    {
+      "bytes": 2501,
+      "original_record_preserved": true,
+      "revision": "ea-4-link-1",
+      "sha256": "20447b37135ff4ae4bd09f3d5490fe610372c770aaa2a27c53742aec2c8b9252"
+    },
+    {
+      "bytes": 2919,
+      "original_record_preserved": true,
+      "revision": "ea-4-link-2",
+      "sha256": "4e2e350baf2daff2ec9825a3c5281381133b832c0db301321fa7a080bf791ae2"
+    },
+    {
+      "bytes": 11678,
+      "original_record_preserved": true,
+      "revision": "ea-4-link-3",
+      "sha256": "f4b1fddc3b9f1cd841260f15cade10b4a7751477365ea1237fd85ed9b18ac25d"
+    },
+    {
+      "bytes": 17333,
+      "original_record_preserved": true,
+      "revision": "ea-4-link-4",
+      "sha256": "04a6365a3387f4489ce8e3dad5c7b0ed1834cf7df747e04f99ba70fc97e19b09"
+    },
+    {
+      "bytes": 29679,
+      "original_record_preserved": true,
+      "revision": "ea-4-link-5",
+      "sha256": "a0b9c89b6aa1b8a679f20ea4afa8821b737a30cc8f2c656e43c7805f8682db9c"
+    },
+    {
+      "bytes": 38001,
+      "original_record_preserved": true,
+      "revision": "ea-4-link-6",
+      "sha256": "71d3cc5f94aa241b713273bd681484a93097b2031c5f06663c96f878702d1789"
+    },
+    {
+      "bytes": 18783,
+      "original_record_preserved": true,
+      "revision": "ea-5",
+      "sha256": "be36131e51989b860d726b764cb96f6c027215c6b6a8ceac391446cb18eaa017"
+    },
+    {
+      "bytes": 7752,
+      "original_record_preserved": true,
+      "revision": "ea-5-link-1",
+      "sha256": "f1ea1a28162812d205af3e42eeca01ccb3944651672e8e8cc2e5c3fe1557ae1b"
+    },
+    {
+      "bytes": 12512,
+      "original_record_preserved": true,
+      "revision": "ea-5-link-2",
+      "sha256": "b66bc6806de4c58788906616e16ba10682119c7f76eedf123e672796f644f9f7"
+    },
+    {
+      "bytes": 29178,
+      "original_record_preserved": true,
+      "revision": "ea-6",
+      "sha256": "74221b6fbc5674868590e548f1996cb3356a5404f26e23e8de1ba2af56a03c00"
+    },
+    {
+      "bytes": 16704,
+      "original_record_preserved": true,
+      "revision": "ea-6-link-1",
+      "sha256": "1277e530ae69af7743b32b3dd3102b156dc396a405a2725b87490e7cbd2730a2"
+    },
+    {
+      "bytes": 20381,
+      "original_record_preserved": true,
+      "revision": "ea-6-link-2",
+      "sha256": "8d81b00636b154f9aa69b8f4d7a57460c3abe1077aa265dfd8e8e773018e4644"
+    }
+  ],
+  "implementation_binding": {
+    "highest_migration": 39,
+    "m0038": {
+      "bytes": 67250,
+      "git_blob": "fcac378cc0835269e9df118a13cf2dc07210d8b4",
+      "path": "migrations/0038_query_result_access.sql",
+      "sha256": "76810d04d475f7b6fadde46f81f979a26b16331ef2efc3a06be7e06b0de8c2a5"
+    },
+    "migrations_0001_through_0038_byte_identical_to_ea4_link6_head": true,
+    "parent_result_control_link": {
+      "bytes": 38001,
+      "original_record_preserved": true,
+      "revision": "ea-4-link-6",
+      "sha256": "71d3cc5f94aa241b713273bd681484a93097b2031c5f06663c96f878702d1789"
+    },
+    "source_pins": [
+      {
+        "bytes": 4763,
+        "git_blob": "142c9bad6dd65ef2aba1843680a556c2af627414",
+        "path": "docs/approvals/pr-05-agent-relation-reads.md",
+        "sha256": "4491ca295d761955d4662dad43cb3e70840ef1bc199d8a1408c46b3bfe9530e3"
+      },
+      {
+        "bytes": 18783,
+        "git_blob": "b0dfc8bd67c5aa98bca8ffc90eb09145972d4e43",
+        "path": "docs/approvals/pr-05-custody-ea-5.json",
+        "sha256": "be36131e51989b860d726b764cb96f6c027215c6b6a8ceac391446cb18eaa017"
+      },
+      {
+        "bytes": 12512,
+        "git_blob": "dce1ebb39cc6df923851e907309fea0224c51484",
+        "path": "docs/approvals/pr-05-custody-ea-5-link-2.json",
+        "sha256": "b66bc6806de4c58788906616e16ba10682119c7f76eedf123e672796f644f9f7"
+      },
+      {
+        "bytes": 29178,
+        "git_blob": "2b5c4767aa34b8d5a5b445bee19b84a929b9be10",
+        "path": "docs/approvals/pr-05-custody-ea-6.json",
+        "sha256": "74221b6fbc5674868590e548f1996cb3356a5404f26e23e8de1ba2af56a03c00"
+      },
+      {
+        "bytes": 89193,
+        "git_blob": "c03a49630fd76b2d09c341fa699b88d1279b523f",
+        "path": "migrations/0039_agent_relation_reads.sql",
+        "sha256": "74fb8e5c1c9b297cc5e70c7e694ef1d8ba77e6f4a2daeb072cbeaedb4621d117"
+      },
+      {
+        "bytes": 15051,
+        "git_blob": "933a911502225eeb735feab455c062556e4fee50",
+        "path": "src/memoriesql/application/agent_sql_results.py",
+        "sha256": "b8a1b077a22f60af494563a991b9551cd63d9562d545d1375deedc2bb6ee56ca"
+      },
+      {
+        "bytes": 22420,
+        "git_blob": "128726818933961889a5e9643e8237ab84a9f689",
+        "path": "src/memoriesql/infrastructure/postgres/relation_sql_population.py",
+        "sha256": "e1e877848c4133fde23af860e1ccebea9a354420a13fde1b4199535a401abef8"
+      },
+      {
+        "bytes": 13926,
+        "git_blob": "98177c358803961d342f7b85dcedd83778507e42",
+        "path": "src/memoriesql/infrastructure/postgres/query_result_commit.py",
+        "sha256": "f86defc24b57932e11a7fe40dedb67c39343c213a032757184ba78102578ee27"
+      },
+      {
+        "bytes": 6064,
+        "git_blob": "f438a846967ddcb8c55948c3fc662e84dadbb8bd",
+        "path": "contracts/migration-inventory.json",
+        "sha256": "441524d892af75dac1bb72df992cd5c96f76dffd1e27399aab4b2be0f51b6f84"
+      },
+      {
+        "bytes": 89906,
+        "git_blob": "bd1acffad5325c93b732d72daf98c8fa78a83dd2",
+        "path": "docs/agent-sql-results-v1.md",
+        "sha256": "78bbc04eaeffd0fd47b0576e270f25eaa30e07a90b42e53d27e64308dfd8269e"
+      },
+      {
+        "bytes": 61527,
+        "git_blob": "cf9eab25b3e5446f2eefbc03b9360a3530877474",
+        "path": "docs/relation-assessment.md",
+        "sha256": "69a0d985466c6610a3a2abc73bcef9242749ff9535cb709e32867c7e06414d2a"
+      },
+      {
+        "bytes": 47073,
+        "git_blob": "f8b5ffd2e98181b550d1022f280f7e55c3a072f2",
+        "path": "docs/verification/pr-05-public-results.md",
+        "sha256": "db79a2ffbbc3b8af55f64dd540bfdd6c26d86de7e879ecf6d9f260344a6c8fab"
+      }
+    ],
+    "source_scope": "The current M0039 and the two digest adapters were compared with the older linked PR78 implementation. PR76 changes retain their ea-4-link-6 scope; inherited pair normalization retains ea-6-link-2 scope. No M0040 or later composition is bound.",
+    "unchanged_additional_governing_pins": [
+      {
+        "bytes": 88270,
+        "git_blob": "91ec2e67251427f48476f1239abe418d2dd921bd",
+        "path": "contracts/public-registry.json",
+        "sha256": "f3a34c3085dbb13740a2b558f1fa245a56bd7e34d0782a395be540fa29249dd1"
+      },
+      {
+        "bytes": 37358,
+        "git_blob": "bc0d78a55580bc90f534ceafafc304f87375af3d",
+        "path": "src/memoriesql/contracts/_catalogs/sql-recall-operations.json",
+        "sha256": "eb9241a3b1fba1f19ca3a63e256cffa88787cccf7dc0efafa71a352b3bc33bd1"
+      },
+      {
+        "bytes": 2606,
+        "git_blob": "524de51a2ba597bcf80d19b577d31406a8b002b3",
+        "path": "docs/approvals/pr-05-agent-source-text.md",
+        "sha256": "63ecbb4c9b270e4e79af18c3c2cc00e077c8b5e2d98b88fe2200235c31c15697"
+      },
+      {
+        "bytes": 1285,
+        "git_blob": "266efac10065ba5f14669073798b701f8974145b",
+        "path": "docs/approvals/pr-05-settings-approval-candidate-v2.json",
+        "sha256": "bcc4398a2f3bba618ae9eb85ee331fb0bf94ac9108bd42f161e5cc07d3a7a478"
+      }
+    ]
+  },
+  "parents": [
+    "16518d16a20cea32726e2a781e75440bcccaff6a",
+    "b4dae8780188a2b4b2bf71709dff310361bf8d51"
+  ],
+  "prior_scope": {
+    "am5": {
+      "bytes": 18783,
+      "original_record_preserved": true,
+      "revision": "ea-5",
+      "sha256": "be36131e51989b860d726b764cb96f6c027215c6b6a8ceac391446cb18eaa017"
+    },
+    "history": "Previous records remain true at their named heads and scopes. Their owner-mode-unchanged and owner-values statements are not silently extended to this later interpretation.",
+    "paired_agent_clarification": {
+      "bytes": 29178,
+      "original_record_preserved": true,
+      "revision": "ea-6",
+      "sha256": "74221b6fbc5674868590e548f1996cb3356a5404f26e23e8de1ba2af56a03c00"
+    },
+    "previous_implementation_commit": "9f3aa77f9f37f0db087b78de00f308b01d7936d2",
+    "previous_implementation_link": {
+      "bytes": 12512,
+      "original_record_preserved": true,
+      "revision": "ea-5-link-2",
+      "sha256": "b66bc6806de4c58788906616e16ba10682119c7f76eedf123e672796f644f9f7"
+    },
+    "previous_m0039_sha256": "ee846ac79f14ae79ed83389e8f640ae9b375205705ee8fbb051b659eaaf7c882"
+  },
+  "pull_request": "https://github.com/JohnnyFiv3r/memoriesql/pull/78",
+  "record_ref": "ea-7",
+  "recorded_at": "2026-10-15T15:17:42Z",
+  "remaining_gates": {
+    "held_concern": "The foreign-owner/query-cleanup admission-lock concern remains source-inferred, unresolved and unreproduced. This record neither resolves it nor authorizes its held experiment.",
+    "known_conformance_limits": "PR76-derived timeout limitations described by ea-4-link-6 remain on PR78 unless exact source/evidence establishes a correction. PR79 findings cannot be credited to PR78.",
+    "qualification": "PR78 needs its own exact-head full installed qualification on both supported Python versions under separately granted execution authority. Another branch, package CI or skipped compatibility does not replace it.",
+    "review": "The additional scoped review and held Lane6 review remain separate. No attestation commit is authorized."
+  },
+  "repository": "JohnnyFiv3r/memoriesql",
+  "revision": "ea-7",
+  "serialization": {
+    "encoding": "UTF-8 without BOM",
+    "final_newline": true,
+    "hash_scope": "Exact complete JSON document bytes; detached SHA-256 is not embedded in this document.",
+    "json": "Python json.dumps ensure_ascii=False, sort_keys=True, indent=2",
+    "line_endings": "LF"
+  },
+  "status": "issued_current_visibility_reconciliation_with_exact_implementation_binding",
+  "verification_basis": {
+    "hosted_compatibility": "SKIPPED; no qualification credit",
+    "live_observation_date_utc": "2026-10-15",
+    "merge_is_not_extended_custody": true,
+    "method": "Read-only primary approval and exact Git blob/hash comparison, plus bounded source inspection. No target code was imported or executed.",
+    "package_ci": {
+      "conclusion": "SUCCESS",
+      "url": "https://github.com/JohnnyFiv3r/memoriesql/actions/runs/38742167533/job/116446370876"
+    },
+    "pr76_merge": "44dc07f18af77cebd190b39857ef4f01e9843d8f",
+    "pr_draft": true,
+    "pr_state": "OPEN",
+    "source_pins_verified": 12,
+    "test_source_limit": "Named public mechanical regression assertions were located; no test execution or semantic-quality credit is claimed."
+  }
+}
