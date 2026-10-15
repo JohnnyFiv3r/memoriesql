@@ -1647,44 +1647,51 @@ class AgentSqlResults(unittest.TestCase):
             (retiring_task, str(extra)),
         ).fetchone()
         assert extra_pin is not None
-        try:
-            with db.transaction(force_rollback=True):
-                db.execute(observed_definition)
-                replaced = db.execute(function_state_sql).fetchone()
-                assert replaced is not None
-                self.assertEqual(replaced[1:], installed[1:])
-                db.execute("SET LOCAL ROLE memoriesql_application")
-                PostgresAuthorizationPort(db).begin_context(
-                    credential_sha256=reader,
-                    requested_workspace_id=fixture.workspace,
-                )
-                observed = db.execute(
-                    "SELECT memoriesql.prepare_relation_sql_population_v1(NULL,%s)",
-                    (64 * 1024 * 1024,),
-                ).fetchone()
-                assert observed is not None
-                own_family = [
-                    family
-                    for family in observed[0]["__fictional_test_families"]
-                    if family["relation_id"] == str(first)
-                ]
-                self.assertEqual(len(own_family), 1)
-                own_deps = own_family[0]["deps"]
-                self.assertTrue(
-                    any(d["kind"] == "bead" and d["id"] == str(extra) for d in own_deps)
-                )
-                self.assertTrue(
-                    any(
-                        d["kind"] == "accepted_bead"
-                        and d["id"] == extra_pin[0]["bead_version_id"]
-                        and d["row"]["bead_id"] == str(extra)
-                        for d in own_deps
+        with relation_projection_frame(
+            db,
+            credential_sha256=reader,
+            workspace_id=fixture.workspace,
+        ):
+            try:
+                with db.transaction(force_rollback=True):
+                    # The canonical frame selected the application role. Use
+                    # only existing fixture session authority for temporary DDL.
+                    db.execute("SET LOCAL ROLE NONE")
+                    db.execute(observed_definition)
+                    replaced = db.execute(function_state_sql).fetchone()
+                    assert replaced is not None
+                    self.assertEqual(replaced[1:], installed[1:])
+                    db.execute("SET LOCAL ROLE memoriesql_application")
+                    observed = db.execute(
+                        "SELECT memoriesql.prepare_relation_sql_population_v1(NULL,%s)",
+                        (64 * 1024 * 1024,),
+                    ).fetchone()
+                    assert observed is not None
+                    own_family = [
+                        family
+                        for family in observed[0]["__fictional_test_families"]
+                        if family["relation_id"] == str(first)
+                    ]
+                    self.assertEqual(len(own_family), 1)
+                    own_deps = own_family[0]["deps"]
+                    self.assertTrue(
+                        any(
+                            d["kind"] == "bead" and d["id"] == str(extra)
+                            for d in own_deps
+                        )
                     )
-                )
-        finally:
-            # Runs after success AND assertion/SQL error: byte-identical body,
-            # signature, owner, definer/config and ACL, not compensating DDL.
-            self.assertEqual(db.execute(function_state_sql).fetchone(), installed)
+                    self.assertTrue(
+                        any(
+                            d["kind"] == "accepted_bead"
+                            and d["id"] == extra_pin[0]["bead_version_id"]
+                            and d["row"]["bead_id"] == str(extra)
+                            for d in own_deps
+                        )
+                    )
+            finally:
+                # Runs after success AND assertion/SQL error: byte-identical body,
+                # signature, owner, definer/config and ACL, not compensating DDL.
+                self.assertEqual(db.execute(function_state_sql).fetchone(), installed)
 
         # Positive owner-mode oracle after retirement, before losing authority:
         # both relations, supersession and the retiring author's text are public
