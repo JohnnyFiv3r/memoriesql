@@ -1582,7 +1582,7 @@ class AgentSqlResults(unittest.TestCase):
                 },
             ),
         )
-        task_by_relation = dict(
+        task_by_relation: dict[UUID, UUID] = dict(
             db.execute(
                 "SELECT relation_id,task_id FROM memoriesql.assessed_relations "
                 "WHERE relation_id=ANY(%s)",
