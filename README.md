@@ -61,7 +61,7 @@ the authoring path must report incomplete work rather than invent an answer.
 ## Start with the published package
 
 Use **Python 3.13 or 3.14** (`>=3.13,<3.15`). Create an environment and pin the
-current published runtime, 0.0.12:
+current published runtime, 0.0.12 (0.0.13 is prepared, not yet published):
 
 ```console
 python3.13 -m venv .venv
@@ -83,9 +83,11 @@ cursor_contract = get_contract("memoriesql.capture.connector-cursor")
 ```
 
 Published `memoriesql==0.0.12` exposes contract inspection, not a one-command
-running memory service. The [public CLI development cut](docs/cli.md) adds
-authenticated stored-bead, exact-source and relation reads on the single public
-executable; those commands are not in the published 0.0.12 package.
+running memory service. The prepared 0.0.13 candidate adds the
+[public headless CLI](docs/cli.md): configuration and capability reports,
+authenticated stored-bead, exact-source and relation reads, and exact source
+enrollment, grant and revocation on the single public executable. Those commands
+are not in the published 0.0.12 package.
 
 ### Compose a runtime deliberately
 
@@ -145,6 +147,15 @@ rollback or final usage reconciliation.
   are not qualified for live durable use or recall. Schema 28 keeps why canonical
   apply refused an attempt's output ([runtime](docs/runtime.md)). Dependencies are
   unchanged from 0.0.11.
+- **Prepared for 0.0.13, not yet published:** the
+  [assessed-relation lifecycle](docs/verification/pr-03-lifecycle.md) (schema 30)
+  lets authenticated humans confirm, dispute or retract relation assertions
+  through append-only governed events without rewriting accepted beads.
+  [Exact source enrollment](docs/exact-source-enrollment.md) (schema 36)
+  explicitly enrolls, grants and terminally revokes one provider-neutral source,
+  and the [public CLI](docs/cli.md) binds it and the authorized reads. Schemas
+  31–35 add internal agent-SQL mechanics and the `sqlglot==30.19.0` dependency,
+  but no available query, result or checkpoint API.
 - **Not yet qualified as an end-to-end product:** live-provider composition,
   real-model observation quality, production source/trust provisioning and recall.
 

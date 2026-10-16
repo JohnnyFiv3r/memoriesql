@@ -16,14 +16,16 @@ qualification, authority, worker composition and qualified model bindings.
 
 ## Install and explore
 
-Use Python **3.13 or 3.14** (`>=3.13,<3.15`). This page describes the published
-0.0.12 distribution; install the exact pin below. Published 0.0.11 remains
-available without the canonical-apply refusal reason (schema 28) and relation
-assessment after acceptance (schema 29).
+Use Python **3.13 or 3.14** (`>=3.13,<3.15`). This page describes the 0.0.13
+distribution. Until its publication is independently verified, use the reviewed
+local wheel; after publication, install the exact pin below. Published 0.0.12
+remains available without the assessed-relation lifecycle (schema 30), exact
+source enrollment (schema 36) and the public headless CLI commands.
 
 ```console
-python3.13 -m pip install memoriesql==0.0.12
+python3.13 -m pip install memoriesql==0.0.13
 memoriesql --version
+memoriesql capabilities --json
 memoriesql contracts --json
 memoriesql contract memoriesql.capture.connector-cursor --json
 ```
@@ -35,8 +37,11 @@ schemas = load_catalog("json_schema")
 cursor_contract = get_contract("memoriesql.capture.connector-cursor")
 ```
 
-Catalog inspection uses bundled resources without a database, provider credentials
-or external service access. The CLI does not start a memory service.
+Catalog inspection, `doctor` and `capabilities` use bundled resources without a
+database, provider credentials or external service access. The authorized
+`inspect`, `source`, `relations` and `sources enroll|grant|revoke` commands need an
+existing migrated database, local credential and workspace. The CLI does not
+start a memory service, discover or capture sources, or run recall.
 
 ## What you can build on
 
@@ -53,7 +58,18 @@ attribution, conditions and uncertainty. Its short title and summary are human
 navigation, not replacement evidence. Meaning is authored by an agent or human;
 deterministic code validates and persists it.
 
-Version 0.0.12 adds relation assessment after acceptance (schema 29, task
+Version 0.0.13 adds the assessed-relation lifecycle (schema 30): authenticated
+humans with current authority confirm, dispute or retract an authored or assessed
+relation assertion through append-only governed events, without rewriting
+accepted beads, and a v3 relations read reports current or as-of state. Exact
+source enrollment (schema 36) lets an authorized human enroll one explicitly
+confirmed provider-neutral source, grant bounded access and terminally revoke it,
+without discovering, parsing or capturing anything. The single `memoriesql`
+executable gains `doctor`, `capabilities`, authorized stored-bead, exact-source
+and relation reads and those source commands. Schemas 31–35 add internal
+agent-SQL mechanics with the new `sqlglot==30.19.0` dependency, but no available
+query, result or checkpoint API; retrieval remains unqualified. Version 0.0.12
+adds relation assessment after acceptance (schema 29, task
 `memory.semantic.assess-relations` revision 1): a separate task pins explicitly
 supplied accepted beads and exact relation-type revisions, an author proposes
 relations between their existing statements and covers every pinned pair, and

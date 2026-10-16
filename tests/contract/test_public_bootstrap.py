@@ -24,7 +24,7 @@ class PublicBootstrapTests(unittest.TestCase):
         document = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
         project = document["project"]
         self.assertEqual(project["name"], "memoriesql")
-        self.assertEqual(project["version"], "0.0.12")
+        self.assertEqual(project["version"], "0.0.13")
         self.assertEqual(project["requires-python"], ">=3.13,<3.15")
         self.assertEqual(project["license"], "Apache-2.0")
         self.assertIn("Development Status :: 2 - Pre-Alpha", project["classifiers"])
@@ -46,7 +46,7 @@ class PublicBootstrapTests(unittest.TestCase):
     def test_source_version_fallback_matches_numeric_release(self) -> None:
         with patch("importlib.metadata.version", side_effect=PackageNotFoundError):
             namespace = runpy.run_path(str(ROOT / "src/memoriesql/__init__.py"))
-        self.assertEqual(namespace["__version__"], "0.0.12")
+        self.assertEqual(namespace["__version__"], "0.0.13")
 
     def test_registry_is_explicit_complete_and_default_deny(self) -> None:
         records = load_registry()
@@ -96,8 +96,8 @@ class PublicBootstrapTests(unittest.TestCase):
 
     def test_publisher_has_narrow_owner_approved_controls(self) -> None:
         workflow = (ROOT / ".github/workflows/publish-pypi.yml").read_text()
-        self.assertIn('tags: ["v0.0.12"]', workflow)
-        self.assertEqual(workflow.count("refs/tags/v0.0.12"), 2)
+        self.assertIn('tags: ["v0.0.13"]', workflow)
+        self.assertEqual(workflow.count("refs/tags/v0.0.13"), 2)
         self.assertNotIn("v0.0.2", workflow)
         self.assertNotIn("v0.0.3", workflow)
         self.assertNotIn("v0.0.4", workflow)
@@ -107,7 +107,8 @@ class PublicBootstrapTests(unittest.TestCase):
         self.assertNotIn("v0.0.9", workflow)
         self.assertNotIn("v0.0.10", workflow)
         self.assertNotIn("v0.0.11", workflow)
-        self.assertNotIn("v0.0.12a1", workflow)
+        self.assertNotIn("v0.0.12", workflow)
+        self.assertNotIn("v0.0.13a1", workflow)
         self.assertNotIn("v*", workflow)
         self.assertIn("github.repository == 'JohnnyFiv3r/memoriesql'", workflow)
         self.assertIn("github.repository_id == '1357510758'", workflow)
@@ -148,7 +149,7 @@ class PublicBootstrapTests(unittest.TestCase):
         self.assertIn("--source-commit", workflow)
         self.assertNotIn("verify_release.py artifacts build/dist-a", workflow)
         self.assertIn("verify_release.py artifacts", publishing)
-        self.assertIn('tags: ["v0.0.12"]', publishing)
+        self.assertIn('tags: ["v0.0.13"]', publishing)
 
     def test_ci_verifies_only_current_release_and_supported_interpreters(self) -> None:
         workflow = (ROOT / ".github/workflows/python-package.yml").read_text()

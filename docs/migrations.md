@@ -6,7 +6,12 @@ Published 0.0.12 contains schemas 1–29, including declared evidence scopes
 schema 28, which keeps
 [why canonical apply refused](runtime.md#run-references-and-canonical-apply-refusals)
 an attempt's output, and schema 29, the
-[relation assessment after acceptance](relation-assessment.md) task. All historical SQL bytes are preserved. Python 3.13+ is required; qualification covers
+[relation assessment after acceptance](relation-assessment.md) task. The prepared
+0.0.13 candidate adds schema 30, the
+[assessed-relation lifecycle](verification/pr-03-lifecycle.md); schemas 31–35,
+internal agent-SQL result and query mechanics without a public retrieval API; and
+schema 36, [exact source enrollment](exact-source-enrollment.md). Publication
+remains gated. All historical SQL bytes are preserved. Python 3.13+ is required; qualification covers
 3.13 and 3.14 (`>=3.13,<3.15`). Package installation does not apply migrations or
 provision production trust. Upgrade and release authorization remain separate.
 
@@ -15,9 +20,22 @@ Use the exact reviewed artifact and version, never an unbounded
 
 ```console
 python3.13 -m venv migration-env
-migration-env/bin/python -m pip install ./memoriesql-0.0.12-py3-none-any.whl
-migration-env/bin/python -c "from importlib.metadata import version; assert version('memoriesql') == '0.0.12'; from memoriesql.infrastructure.postgres.migration_runner import discover_migrations; assert len(discover_migrations()) == 29"
+migration-env/bin/python -m pip install ./memoriesql-0.0.13-py3-none-any.whl
+migration-env/bin/python -c "from importlib.metadata import version; assert version('memoriesql') == '0.0.13'; from memoriesql.infrastructure.postgres.migration_runner import discover_migrations; assert len(discover_migrations()) == 36"
 ```
+
+**Upgrade caution for schema 33.** Migration 0033 hardens database-wide
+privileges for the restricted query bridge. It revokes `PUBLIC` EXECUTE on the
+existing routines in `pg_catalog`, `information_schema`, `public`, `memoriesql`
+and `memoriesql_query`, re-granting that pre-existing set only to
+`memoriesql_application` and `memoriesql_worker`. It also revokes `PUBLIC`
+CREATE/TEMP on the database (TEMP is re-granted to those two roles), all `PUBLIC`
+privileges on schema `public` and `PUBLIC` UPDATE on `pg_settings`, and removes
+`PUBLIC`'s default EXECUTE on functions later created by the migrating role and
+the query view owner. Any other non-superuser login on that database, such as an
+installer, administration tool, monitor or product role, may lose ordinary
+catalog-function access after upgrading. Qualify each consumer's actual roles on
+a disposable upgraded database before an authorized upgrade.
 
 The installer rejects this artifact on unsupported interpreters. Publication and
 consumer deployment require separate approval; use an exact version pin. Runtime dependencies remain pinned in package metadata; no provider extras are included.
@@ -46,7 +64,7 @@ is a bounded test hook; `migrate()` always uses installed resources.
 
 ## Authority, history, and recovery
 
-`contracts/migration-inventory.json` explicitly owns the stream of 29 filenames and hashes packaged by published 0.0.12 (27 in published 0.0.11). Root `migrations/` is the sole authored stream. Setuptools
+`contracts/migration-inventory.json` explicitly owns the stream of 36 filenames and hashes packaged by the prepared 0.0.13 (29 in published 0.0.12). Root `migrations/` is the sole authored stream. Setuptools
 stages those exact bytes into the wheel; the sdist retains root SQL and rebuilds
 the same resources. There is no editable second stream or fallback discovery.
 The public provenance inventory records copy/adapt decisions and opaque content

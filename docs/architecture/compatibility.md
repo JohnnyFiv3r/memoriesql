@@ -2,7 +2,10 @@
 
 The `0.x` package line is experimental and provides no general API compatibility
 guarantee. Releases use plain numeric `X.Y.Z` with `vX.Y.Z` tags; `0.0.12` (`v0.0.12`)
-is the current published release. Alpha/beta/rc suffixes require a separate owner decision.
+is the current published release. This preparation proposes genuine `0.0.13`
+metadata and exact `v0.0.13` repository controls; it does not itself select the
+version, publish or supply protected upload approval. Alpha/beta/rc suffixes
+require a separate owner decision.
 Published releases, their tags and archives remain immutable; the repository
 retains only the current release inventory.
 
@@ -12,6 +15,11 @@ Two narrower integrity rules apply after publication:
 2. Breaking contract-payload changes require a new contract version. A defective
    uploaded wheel/sdist is corrected by a new distribution version, never replacement.
 
+The prepared 0.0.13 candidate preserves the bytes of migrations 0001–0029 and all
+64 published contract payloads. It adds migrations 0030–0036, three contract
+records (`memoriesql.assessed-relation-lifecycle.v1`,
+`memoriesql.source-enrollment.v1` and `memoriesql.core-cli.v1`; 67 in total) with
+regenerated catalogs, and one runtime dependency, `sqlglot==30.19.0`.
 Published 0.0.12 preserves dependencies, the bytes of migrations 0001–0027
 and all 63 previously published contract payloads. It adds migrations 0028 and 0029
 and one contract record, `memoriesql.relation-assessment.v1` (64 in total), with regenerated
@@ -75,7 +83,8 @@ unchanged and experimental. Repeated usage does not inflate unique target covera
 See [recovery](../transcript-fold-recovery.md) and [revisiting](../source-revisiting.md).
 
 Published archives and tags remain immutable; the repository keeps only the current
-release inventory, the 0.0.12 one. Production grants,
+release inventory, and only the new 0.0.13 inventory is used by the prepared
+release gate. Production grants,
 providers, implicit migration or task activation are not supplied by installation.
 
 ## Schema 21 source-stable opt-in in 0.0.7
@@ -98,6 +107,21 @@ Unopted sources, published records, receipts and SQL 0001–0021 remain unchange
 No historical equivalence, migration of bindings or duplicate repair is inferred.
 Production identity-policy approval and a separately authorized release precede
 consumer adoption. PR-02O/CP-2 and the historical queue evidence remain incomplete.
+
+## Prepared 0.0.13 public composition
+
+The 0.0.13 candidate adds, on top of published 0.0.12, the forward-only
+[assessed-relation lifecycle](../verification/pr-03-lifecycle.md) (schema 30):
+human-only, append-only confirm, dispute and retract events for authored and
+assessed relation assertions, whose canonical projection drives the v3 relations
+read, traversal eligibility, qualified roots and cycle reservations. Accepted
+beads and assertions are unchanged. [Exact source enrollment](../exact-source-enrollment.md)
+(schema 36) adds one explicitly confirmed, provider-neutral source authority
+step with bounded grants and terminal revocation, and the [public CLI](../cli.md)
+binds it and the existing authorized reads. Schemas 31–35 are internal agent-SQL
+mechanics; they add the `sqlglot==30.19.0` dependency but no available query,
+result, checkpoint or disclosure API. No provider, profile binding, source
+discovery, capture adapter or retrieval capability is added.
 
 ## Published 0.0.12 public composition
 
