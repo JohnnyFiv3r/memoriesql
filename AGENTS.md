@@ -49,17 +49,26 @@ This repository is the staged public boundary for the memoriesQL open core. Keep
 
 ## Owner-approved CI cost policy
 
-Routine PR/main pushes run only the required `package` job (database-free tests,
-lint/types, contracts, boundary and deterministic package checks). Full installed
-database qualification on Python 3.13 and 3.14 remains mandatory locally, with
-exact-head artifacts, hashes and logs retained. See `docs/ci-policy.md`.
-Paid hosted compatibility runs require explicit owner approval for that run;
-do not dispatch or retry one automatically. Superseded automatic checks cancel;
-manual qualification runs remain separate. Skipped matrix jobs are not proof.
-Release verification requires an explicitly requested full qualification run at
-exact release main, including successful jobs for both interpreters. Cheap CI,
-local evidence and this cost-policy authorization alone authorize no release or
-paid hosted matrix. Preserve unique in-progress runs and historical failures.
+Routine PR/main pushes retain the required `package` job (database-free tests,
+lint/types, contracts, boundary and deterministic package checks). John's
+2026-10-19 standing direction authorizes eligible fictional installed-package /
+PostgreSQL qualification on standard isolated hosted runners within the existing
+15-minute package / 60-minute per-interpreter ceilings. Ready internal candidates
+and material proof-input changes qualify under `docs/ci-policy.md`; docs-only or
+unselected intermediate changes do not trigger blanket full reruns. No owner
+question per eligible run. Preserve Python 3.13/3.14, pinned PostgreSQL, isolation,
+wheel/sdist equality, every installed test and restart proof, and durable failure
+logs/exits. Equivalent hosted evidence replaces the matching local full run;
+do not require both. Local database-heavy work still needs its coordinator slot.
+
+No held, private, owner, provider or unseen inputs may enter this hosted path.
+Historical one-attempt local approvals are not portable. A broader resource/spend
+class or substantive authority/custody/safety change still needs exact authority.
+Qualification jobs retain unique concurrency and historical failures; only cheap
+superseded package jobs cancel. Skipped compatibility jobs are not proof.
+Release qualification stays separately approved, exact-main manual dispatch with
+all three jobs successful. Candidate dispatch on main is refused so it cannot
+satisfy the existing release verifier. No release, tag or publication is authorized.
 
 The 2026-09-26 owner amendment prioritizes governed assessed-relation lifecycle
 and expands the PR-05 proposal to qualified SQL composition and durable branching

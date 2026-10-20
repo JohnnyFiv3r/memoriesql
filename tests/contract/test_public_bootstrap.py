@@ -157,14 +157,12 @@ class PublicBootstrapTests(unittest.TestCase):
         self.assertNotIn("older-python", workflow)
         compatibility = workflow.split("  compatibility:")[1]
         self.assertIn('python-version: ["3.13", "3.14"]', compatibility)
-        # The installed acceptance runs as parallel shards launched by the
-        # workflow shell; the script itself denies subprocesses.
-        self.assertIn(
-            'run_installed_acceptance.py --shard "$shard/$shards"', compatibility
-        )
-        self.assertIn('test "$failed" -eq 0', compatibility)
+        self.assertIn("run_hosted_qualification.py", compatibility)
+        self.assertIn("Retain complete proof exits and failures", compatibility)
+        self.assertIn("if: always()", compatibility)
+        self.assertIn("runs-on: ubuntu-24.04", compatibility)
 
-    def test_paid_matrix_is_explicit_and_automatic_checks_cancel_only_superseded(
+    def test_standing_matrix_is_selected_and_cheap_checks_cancel_only_superseded(
         self,
     ) -> None:
         workflow = (ROOT / ".github/workflows/python-package.yml").read_text()
@@ -172,9 +170,10 @@ class PublicBootstrapTests(unittest.TestCase):
         self.assertIn("  workflow_dispatch:", package)
         self.assertIn("      expected_sha:", package)
         self.assertIn("      owner_approval_ref:", package)
-        self.assertIn('test "$EXPECTED_SHA" = "$GITHUB_SHA"', package)
-        self.assertIn("OWNER_APPROVAL_REF//[[:space:]]/", package)
-        self.assertIn("if: github.event_name == 'workflow_dispatch'", compatibility)
+        self.assertIn("select_hosted_qualification.py", package)
+        self.assertIn("options: [candidate, release]", package)
+        self.assertIn("if: needs.package.outputs.qualify == 'true'", compatibility)
+        self.assertIn("cancel-in-progress: false", compatibility)
         self.assertIn("needs: package", compatibility)
         self.assertIn("timeout-minutes: 60", compatibility)
         self.assertIn("timeout-minutes: 15", package)

@@ -1,98 +1,126 @@
 # CI cost and qualification policy
 
-The owner approved reducing paid hosted repetition, not removing tests. This
-policy applies to this public repository; Desktop has its own workflow policy.
+John's 2026-10-19 direction authorizes moving eligible fictional qualification to
+standard isolated hosted CI within existing ceilings. Authority: human message
+`01a15724-1bc8-7830-b633-23ea16bd7b6b`, implemented from delivery audit commit
+`08820a17fe41db37e1d5cdaa70d15a927d8ce5f4`. This supersedes the former
+owner-per-hosted-run and mandatory duplicate local-full-proof requirements for
+this eligible path. Substantive authority, custody, safety and release gates stay.
+Public core owns these semantics; Desktop has its own workflow policy.
 
-| Stage | Required evidence | Execution |
+| Stage | Evidence | Selection |
 | --- | --- | --- |
-| Every PR/main push | `package`: database-free tests, contracts, boundary, lint/types, build/inspection and deterministic rebuild | Automatic hosted check |
-| Before implementation handoff | Full installed acceptance, package isolation, sdist-to-wheel equality and fresh-process relation, fold and clock-recovery proofs on Python 3.13 and 3.14 | Local, disposable PostgreSQL |
-| Explicit independent qualification | Same full matrix and exact-head archives | Owner-authorized manual hosted run |
-| Release | Latest explicitly requested successful full run at exact current release main; actual successful package/3.13/3.14 jobs and approved archive hashes | Separate owner-approved release procedure |
+| Every PR/main push | `package`: database-free tests, contracts, boundary, lint/types, archive inspection and deterministic rebuild | Automatic, inexpensive required check |
+| Ready fictional candidate / material proof-input change | Exact-head installed wheel and sdist equality, isolation, all installed tests and four restart proofs, Python 3.13 and 3.14, pinned PostgreSQL | Standing eligible hosted path below |
+| Local diagnostic | Focused source/CPU checks; DB work only with its coordinator slot | No duplicate full local run required when matching hosted proof is complete |
+| Release | Latest explicitly requested successful full run at exact release main, approved archive hashes and actual successful package/3.13/3.14 jobs | Separate explicit release authority and existing publication gates |
 
-`package` is the sole routine required status check. The repository's ruleset
-must require it, rather than an automatically skipped compatibility job. Keep
-review-thread resolution, main protection, tag rules and publishing protections.
-Workflow changes take effect on their merged branch; do not claim this policy is
-active on main before the owner merges it and the required-check configuration
-is reconciled. Existing unique #51/#52 runs are preserved, not cancelled by this
-policy rollout.
+`package` remains the sole routine required status. Do not make an intentionally
+skipped compatibility job a required check. Keep review resolution, main/tag
+protection and publishing protections. Branch implementation is not proof that
+this policy is active on main or that ruleset configuration has changed.
 
-## Local qualification and evidence
+## Eligible selection and repetition
 
-Use the steps in `.github/workflows/python-package.yml` as the executable source
-of truth, including its full `compatibility` job, not a hand-picked subset:
+`select_hosted_qualification.py` records source SHA, authority, purpose, reason and
+changed proof inputs in `qualification-request.json`. It accepts only the named
+public repository, with no owner/provider/held/unseen inputs:
 
-1. Work from a clean exact commit. Record its SHA and test-suite revision. Build
-   the wheel and normalized sdist using the pinned development tools and
-   `SOURCE_DATE_EPOCH=315532800`; retain both archives and the
-   `inspect_python_distribution.py --source-commit <SHA>` development receipt.
-   Run the normal package checks and deterministic second build locally first.
-2. For each supported interpreter, use a fresh virtual environment and an
-   explicitly disposable local PostgreSQL instance matching the workflow's
-   pinned image. Set `N1_TEST_DATABASE_URL` only to that fictional test instance.
-   Never source owner/provider credentials or point these tests at product data.
-3. Follow the dependency download and independent sdist-to-wheel rebuild steps;
-   retain dependency hashes. Rebuilt and reviewed wheels must be byte-identical.
-   An installed run on those identical bytes covers both artifact routes without
-   running the same suite twice per interpreter.
-4. Copy the acceptance scripts, all migration/runtime test modules, fixture JSON
-   and both inventories into the fresh temporary test directory exactly as in
-   the workflow. Run package isolation and release installation with `python -I`;
-   run **all three acceptance shards**, collecting every exit status; then run
-   assessed-relation, fold-recovery and database-time-recovery `prepare`, `recover`,
-   `cleanup` in separate processes. Do not run just source imports or the
-   database-free discovery suite.
-5. Retain complete stdout/stderr, interpreter/PostgreSQL versions, commands,
-   timestamps, test counts/skips, all exit statuses, source SHA, artifact sizes
-   and SHA-256 values. Link the evidence from the handoff. Preserve failures and
-   separately label targeted corrections and full reruns. Missing/failed proof
-   is a qualification gap, not a green result. Retain logs outside the package;
-   clean up only the explicitly task-owned database/container afterward.
+- An internal non-draft PR with `qualification-ready` selects a candidate when
+  labeled ready, opened/reopened ready, or made ready for review. Later pushes
+  select full proof only for changed proof inputs. The coordinator applies the
+  label to a final ready candidate; ordinary intermediate edits use cheap checks.
+- A main push selects full candidate proof only for material proof-input changes.
+- An exact branch `workflow_dispatch` with `purpose=candidate` selects explicit
+  standing qualification, including a justified failure correction. It needs no
+  new owner-per-run approval. The dispatcher still needs repository write access.
 
-No hidden full-suite reruns on every intermediate edit: use focused checks while
-working, then one full final-head local convergence. A later docs-only change may
-reuse earlier runtime evidence only when the handoff explicitly names both SHAs,
-the exact changed paths and why the qualified artifact/test inputs are unchanged;
-it is not a new exact-head full qualification. Release still requires the exact
-release-head hosted qualification below. Local tests are not an independent
-hosted observation, and mechanical checks are not semantic-quality certification.
+Proof inputs are `src/`, `tests/`, `scripts/`, `migrations/`, `contracts/`,
+`.github/`, package configuration and root `requirements*.txt`. Documentation-only
+changes use cheap checks unless explicitly selected ready. They do not acquire a
+new exact-head runtime qualification from an earlier head: name both SHAs, paths
+and unchanged qualified inputs when reusing earlier evidence. Missing comparison
+commits fail selection rather than silently counting as documentation-only.
 
-## Explicit hosted qualification
-
-Obtain approval for a specific hosted run (and separately for any paid retry).
-After this workflow exists on main, dispatch with the selected branch, its full
-SHA and a durable reference to that owner approval:
+After this workflow is available on main, a coordinator can select a branch:
 
 ```sh
 gh workflow run python-package.yml --repo JohnnyFiv3r/memoriesql \
-  --ref <approved-branch> \
-  -f expected_sha=<approved-full-sha> \
-  -f owner_approval_ref=<approval-reference>
+  --ref <ready-branch> -f expected_sha=<full-commit-sha> -f purpose=candidate
 ```
 
-The dispatcher must have repository write authority; the input reference records
-approval but does not itself prove the owner gave it. Agents must check actual
-authorization. The workflow rejects a changed branch SHA before installing tools.
-Only a manual request runs the PostgreSQL matrix. Normal pushes show it skipped.
-The package job has a 15-minute wall-clock cap; each matrix job has a 60-minute cap.
-These are safety ceilings, not promised runtimes or minute reservations.
+Do not dispatch duplicate runs for the same passing head, retry passing jobs, or
+rerun the full suite on every edit. Preserve failures; a correction or changed
+proof input can justify another bounded run. Source and archive receipts bind the
+actual selected head, not a PR merge simulation or moving branch name. Forks and
+private repositories are ineligible for this standing matrix.
 
-Automatic runs cancel older runs for the same PR/ref. Manual runs have unique
-concurrency groups: neither another push nor another dispatch silently cancels
-them. Do not dispatch duplicates, retry passing jobs or manufacture a green check.
-Preserve the original failure evidence when a correction justifies a rerun.
+## Installed proof and claim equivalence
 
-## Release cannot use cheap-only green CI
+The `compatibility` job and `run_hosted_qualification.py` are the executable proof.
+Each interpreter has its own standard `ubuntu-24.04` runner and disposable
+PostgreSQL service. Only tracked public scripts, inventories, test modules and
+fictional JSON fixtures are copied; no local evidence directory is uploaded.
+A public file remains subject to source review: tracking a file is not privacy
+classification. Never port PR80's held one-attempt packet or treat a historical
+exact local authorization as a new hosted authorization.
 
-The latest manual qualification on **main at the exact release SHA** must finish
-successfully. The publishing verifier independently requires the `package`,
-`compatibility (3.13)` and `compatibility (3.14)` jobs from that selected run and
-SHA to have actually succeeded; missing, skipped, cancelled, failing or partial
-job inventories are refused. There is no fallback to an older green manual run.
+| Required claim | Hosted evidence / limit |
+| --- | --- |
+| Exact reviewed source and archives | Clean tracked checkout, full source SHA, archive inventory verification, sizes/hashes; exact artifacts transferred from `package` |
+| Python coverage | Actual separate `compatibility (3.13)` and `compatibility (3.14)` jobs; interpreter and installed dependency versions retained |
+| PostgreSQL identity | Existing image index `postgres@sha256:a02db8cac496f15b094798a38254f14d6e00741f709360e5e00bb6668ea31636`; Linux amd64 child `sha256:4cc13dede823cab4e05290c7fb3350fb4e599ecabd9b07e6706b5d5e8f5bc929`; runtime server 18.4 asserted; Docker image ID and service state retained |
+| Same archive routes | Pinned build tools, `SOURCE_DATE_EPOCH=315532800`, independent sdist-to-wheel rebuild byte-identical to reviewed wheel, then one installed proof of those identical bytes per interpreter |
+| Installed isolation | Fresh venv and copied test directory, `python -I`, no `PYTHONPATH`, existing package-isolation and release-installation checks; installed acceptance guard denies checkout/home reads, subprocesses and non-loopback connections |
+| Full installed suite | All three acceptance shards run; every child exit/log retained. Reports must discover the same suite, cover every module exactly once, execute all discovered tests, and have zero skips/errors/failures. No selected subset substitutes |
+| Fresh-process restart proof | Assessed relation, fold recovery, database time recovery and query result each execute prepare/recover/cleanup as distinct processes. Failure does not skip cleanup or later restart attempts |
+| Failure and cleanup truth | Command manifest is written before child launch, with actual exits, timestamps and log hashes. Deadlines/interruption stop owned process groups; a single reserved cleanup window and always-run exact-service stop retain failure metadata and PostgreSQL state. Missing/failed/cancelled proof is not qualification |
 
+The pinned image is a multi-platform index; this runner selects its Linux amd64
+child, not an owner's macOS image. This is equivalent fictional Linux installed
+proof for the claims above. It does not certify owner-host resource behavior,
+a local-only fault reproduction, semantic quality, custody, live recall or
+integrated product acceptance. A separately scoped local-specific claim still
+needs its own evidence. No live model/provider calls belong to this path.
+
+The package job remains capped at 15 minutes; each interpreter at 60 minutes.
+Within that, the helper has a 50-minute proof deadline and one shared additional
+2-minute cleanup allowance; the proof step is capped at 55 minutes, exact-service
+cleanup at 3 minutes. Three shards share each isolated service. Standard public
+repository runners use GitHub's documented standard resources (currently four
+CPUs, 16 GB memory and 14 GB disk for this Linux class); no larger or paid runner
+class is selected. See [GitHub runner specifications](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
+These are ceilings, not runtime promises. Child regular-file/log writes are
+capped at 16 MiB, at most 40 commands (640 MiB of child logs); reaching the log cap
+fails proof rather than silently giving truncated output success. Runner/job
+limits additionally bound the environment; these harness limits change no core
+runtime contract. Broadening the resource/spend class needs explicit authority.
+
+Always-run uploads retain admission and complete qualification evidence for 30
+days, including failures, all child logs/exits, shard reports, dependency hashes,
+source/archive/input pins, versions and owned PostgreSQL cleanup state. GitHub
+retains job logs for failures before the helper can start. Artifact-upload or
+cleanup failure fails the job; an absent artifact is never a passing receipt.
+No harness can finish uploads after a hard runner loss: that run is incomplete
+and cannot qualify. Only cheap superseded package jobs cancel; compatibility
+jobs have unique per-run/interpreter concurrency, fail-fast disabled, and are
+not cancelled by a later documentation-only push. No duplicate local full run is
+required after complete equivalent hosted evidence.
+
+## Release remains separately authorized
+
+A manual main run is release-only: `purpose=release`, exact `expected_sha` and a
+nonempty durable `owner_approval_ref` for separately granted release-main
+qualification. Candidate manual dispatch on main is refused because the existing
+release verifier selects manual main runs. Automatic main candidate proof has
+`event=push` and cannot satisfy that gate. An input reference records approval;
+it does not grant it. Check the actual owner authority before release dispatch.
+
+The unchanged publishing verifier requires the latest manual qualification at
+exact current release main to succeed, with exactly `package`,
+`compatibility (3.13)` and `compatibility (3.14)` actually successful. Skipped,
+missing, cancelled, failed or partial jobs are refused; no older-pass fallback.
 Only its exact-head archives can be compared with the committed approved release
-inventory. The inexpensive main push is insufficient. Manual qualification does
-not publish: the exact approved tag, repository identity, immutable hashes and
-owner-only protected `pypi` upload gate remain unchanged. This CI change selects
-no release version and authorizes no tag, upload or external publisher change.
+inventory. Immutable hashes, approved tag/repository identity and owner-only
+protected `pypi` upload remain unchanged. This direction authorizes no version,
+merge, tag, release, upload, publisher change or Desktop consumption.

@@ -139,6 +139,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--shard", type=parse_shard, metavar="INDEX/COUNT")
     parser.add_argument("--print-weights", action="store_true")
+    parser.add_argument("--result-json", type=Path)
     args = parser.parse_args(arguments)
     install_guard()
     modules = discovered_modules()
@@ -164,6 +165,22 @@ def main(arguments: Sequence[str] | None = None) -> int:
 
     suite = unittest.defaultTestLoader.loadTestsFromNames(selected)
     result = unittest.TextTestRunner(verbosity=2, resultclass=TimedResult).run(suite)
+    if args.result_json is not None:
+        args.result_json.write_text(
+            json.dumps(
+                {
+                    "discovered_modules": modules,
+                    "selected_modules": selected,
+                    "tests_run": result.testsRun,
+                    "skipped": len(result.skipped),
+                    "failures": len(result.failures),
+                    "errors": len(result.errors),
+                },
+                sort_keys=True,
+                indent=2,
+            )
+            + "\n"
+        )
     for module, elapsed in sorted(seconds.items(), key=lambda item: -item[1]):
         print(f"{elapsed:7.1f}s {module}")
     if args.print_weights:
