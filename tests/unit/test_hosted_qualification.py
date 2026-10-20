@@ -292,7 +292,12 @@ class QualificationCoverageTests(unittest.TestCase):
         return [
             {
                 "discovered_modules": {"one": 2, "two": 1, "three": 3},
+                "discovered_tests": {
+                    m: {f"{m}.Case.test": n}
+                    for m, n in (("one", 2), ("two", 1), ("three", 3))
+                },
                 "selected_modules": [module],
+                "executed_tests": {module: {f"{module}.Case.test": count}},
                 "tests_run": count,
                 "skipped": 0,
                 "errors": 0,

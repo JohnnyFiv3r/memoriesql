@@ -144,18 +144,40 @@ class Commands:
             self.finish(child)
 
 
+def identity_inventory(value: object) -> dict[str, dict[str, int]]:
+    if not isinstance(value, dict):
+        raise ValueError("missing installed test identity inventory")
+    for module, cases in value.items():
+        if not isinstance(module, str) or not isinstance(cases, dict) or not cases:
+            raise ValueError("invalid installed test module inventory")
+        if any(
+            not isinstance(identity, str) or type(number) is not int or number < 1
+            for identity, number in cases.items()
+        ):
+            raise ValueError("invalid installed test identity multiplicity")
+    return value
+
+
 def check_shards(root: Path, count: int = 3) -> None:
     discovered: dict[str, int] | None = None
+    identities: dict[str, dict[str, int]] | None = None
     selected: set[str] = set()
     for index in range(1, count + 1):
         report = json.loads((root / f"acceptance-{index}.json").read_text())
         if discovered is None:
             discovered = report["discovered_modules"]
+            identities = identity_inventory(report.get("discovered_tests"))
+            if {m: sum(c.values()) for m, c in identities.items()} != discovered:
+                raise ValueError("installed identity and module counts disagree")
         if report["discovered_modules"] != discovered:
             raise ValueError("shards discovered different suites")
+        if identity_inventory(report.get("discovered_tests")) != identities:
+            raise ValueError("shards discovered different test identities")
         modules = set(report["selected_modules"])
         if (
             modules & selected
+            or len(modules) != len(report["selected_modules"])
+            or not modules <= discovered.keys()
             or report["skipped"]
             or report["errors"]
             or report["failures"]
@@ -163,6 +185,11 @@ def check_shards(root: Path, count: int = 3) -> None:
             raise ValueError("overlap, skips or failed installed tests")
         if report["tests_run"] != sum(discovered[m] for m in modules):
             raise ValueError("incomplete installed shard")
+        assert identities is not None
+        if identity_inventory(report.get("executed_tests")) != {
+            module: identities[module] for module in modules
+        }:
+            raise ValueError("installed test identities or multiplicities differ")
         selected |= modules
     if not discovered or selected != set(discovered):
         raise ValueError("missing installed test modules")
