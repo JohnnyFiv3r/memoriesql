@@ -396,3 +396,38 @@ class CompleteInputWriteOwnership(unittest.TestCase):
                 self.assertIs(caught.exception, failure)
                 self.assertEqual(gate.calls, [])
                 self.assertEqual(gate.entries, 0)
+
+    def test_queued_future_cancellation_fences_the_unstarted_write(self) -> None:
+        for kind in KINDS:
+            with self.subTest(kind=kind):
+                gate = WriteGate()
+                blocker = Event()
+
+                async def scenario() -> None:
+                    loop = asyncio.get_running_loop()
+                    loop.set_default_executor(ThreadPoolExecutor(max_workers=1))
+                    busy = loop.run_in_executor(None, blocker.wait, 2)
+                    task = asyncio.create_task(invocation(kind, gate))
+                    try:
+                        await asyncio.sleep(0.02)
+                        self.assertFalse(gate.started.is_set())
+                        self.assertTrue(execution_future(task).cancel())
+                        with self.assertRaises(asyncio.CancelledError):
+                            await task
+                        blocker.set()
+                        await busy
+                        # Drain the one-worker queue: a late capture must not write.
+                        await loop.run_in_executor(None, lambda: None)
+                        self.assertEqual(gate.calls, [])
+                        self.assertEqual(gate.entries, 0)
+                    finally:
+                        blocker.set()
+                        gate.open()
+                        await asyncio.gather(task, return_exceptions=True)
+
+                def call(port: PostgresCompleteInput, query: str,
+                         parameters: tuple[Any, ...], *, role: str) -> None:
+                    gate.call(port, query, parameters, role=role)
+
+                with patch.object(PostgresCompleteInput, "_call", call):
+                    asyncio.run(scenario())

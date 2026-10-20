@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextvars
+import threading
 from collections.abc import Callable
 from typing import Any
 from uuid import UUID
@@ -48,9 +49,16 @@ async def _await_owned_write(write: Callable[[], None]) -> None:
     loop = asyncio.get_running_loop()
     completed = asyncio.Event()
     failure: BaseException | None = None
+    transition = threading.Lock()
+    started = False
+    aborted = False
 
     def capture() -> None:
-        nonlocal failure
+        nonlocal failure, started
+        with transition:
+            if aborted:
+                return
+            started = True
         try:
             write()
         except BaseException as error:
@@ -63,6 +71,19 @@ async def _await_owned_write(write: Callable[[], None]) -> None:
     # No inner Task for loop-wide Task cancellation to destroy. The independent
     # outcome/event also survives cancellation of this Future after write-start.
     _operation = loop.run_in_executor(None, context.run, capture)
+
+    def cancel_unstarted(operation: asyncio.Future[None]) -> None:
+        nonlocal aborted, failure
+        if not operation.cancelled():
+            return
+        with transition:
+            if started:
+                return  # The independent completion still owns this real write.
+            aborted = True  # Fence capture before reporting definitely unstarted.
+            failure = asyncio.CancelledError()
+        completed.set()
+
+    _operation.add_done_callback(cancel_unstarted)
     cancelled: asyncio.CancelledError | None = None
     while not completed.is_set():
         try:
