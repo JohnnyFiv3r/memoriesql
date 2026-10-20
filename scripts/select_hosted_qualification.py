@@ -13,7 +13,16 @@ REPOSITORY = "JohnnyFiv3r/memoriesql"
 STANDING_AUTHORITY = "owner:01a15724-1bc8-7830-b633-23ea16bd7b6b"
 READY_LABEL = "qualification-ready"
 PROOF_ROOTS = ("src/", "tests/", "scripts/", "migrations/", "contracts/", ".github/")
-PROOF_FILES = {"pyproject.toml", "setup.py", "setup.cfg", "MANIFEST.in"}
+PROOF_FILES = {
+    "pyproject.toml",
+    "setup.py",
+    "setup.cfg",
+    "MANIFEST.in",
+    "README.md",
+    "PYPI_README.md",
+    "LICENSE",
+    "NOTICE",
+}
 
 
 def proof_input(path: str) -> bool:

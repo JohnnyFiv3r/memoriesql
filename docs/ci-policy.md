@@ -36,8 +36,10 @@ public repository, with no owner/provider/held/unseen inputs:
   new owner-per-run approval. The dispatcher still needs repository write access.
 
 Proof inputs are `src/`, `tests/`, `scripts/`, `migrations/`, `contracts/`,
-`.github/`, package configuration and root `requirements*.txt`. Documentation-only
-changes use cheap checks unless explicitly selected ready. They do not acquire a
+`.github/`, package configuration, root `requirements*.txt`, and the package-authored
+`README.md`, `PYPI_README.md`, `LICENSE` and `NOTICE`. Those four root files change
+reviewed archives and are material even when their content is prose. Other
+documentation-only changes use cheap checks unless explicitly selected ready. They do not acquire a
 new exact-head runtime qualification from an earlier head: name both SHAs, paths
 and unchanged qualified inputs when reusing earlier evidence. Missing comparison
 commits fail selection rather than silently counting as documentation-only.

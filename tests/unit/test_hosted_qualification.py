@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
+from scripts.inspect_python_distribution import AUTHORED_SDIST_FILES
 from scripts.run_hosted_qualification import Commands, check_shards, qualify
 from scripts.select_hosted_qualification import READY_LABEL, REPOSITORY, select
 
@@ -34,6 +35,16 @@ def event() -> dict[str, Any]:
 
 
 class QualificationSelectionTests(unittest.TestCase):
+    def test_all_package_authored_inputs_select_full_proof(self) -> None:
+        for name, ref in (("pull_request", REF), ("push", "refs/heads/main")):
+            with self.subTest(event=name):
+                missed = [
+                    path
+                    for path in sorted(AUTHORED_SDIST_FILES)
+                    if not select(name, event(), SHA, ref, [path])["qualify"]
+                ]
+                self.assertEqual(missed, [])
+
     def test_material_ready_candidate_and_main_push_qualify(self) -> None:
         for name, ref in (("pull_request", REF), ("push", "refs/heads/main")):
             for path in (
