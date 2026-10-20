@@ -23,9 +23,15 @@ import psycopg
 
 from memoriesql.application.local_entity_mentions import ActivateAuthoredMentions
 from memoriesql.application.model_accounting import AccountingPersistenceError
-from memoriesql.infrastructure.jobs.postgres_semantic_queue import PostgresSemanticTaskQueue
-from memoriesql.infrastructure.postgres.complete_input_execution import PostgresCompleteInput
-from memoriesql.infrastructure.postgres.model_accounting import PostgresModelRequestAccounting
+from memoriesql.infrastructure.jobs.postgres_semantic_queue import (
+    PostgresSemanticTaskQueue,
+)
+from memoriesql.infrastructure.postgres.complete_input_execution import (
+    PostgresCompleteInput,
+)
+from memoriesql.infrastructure.postgres.model_accounting import (
+    PostgresModelRequestAccounting,
+)
 
 if TYPE_CHECKING:
     from tests.runtime import test_authored_statement_kinds as fixtures
