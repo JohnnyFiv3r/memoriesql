@@ -1,12 +1,16 @@
 # CI cost and qualification policy
 
-John's 2026-10-19 direction authorizes moving eligible fictional qualification to
-standard isolated hosted CI within existing ceilings. Authority: human message
-`01a15724-1bc8-7830-b633-23ea16bd7b6b`, implemented from delivery audit commit
-`08820a17fe41db37e1d5cdaa70d15a927d8ce5f4`. This supersedes the former
-owner-per-hosted-run and mandatory duplicate local-full-proof requirements for
-this eligible path. Substantive authority, custody, safety and release gates stay.
-Public core owns these semantics; Desktop has its own workflow policy.
+The standing engineering delegation in
+[contributor guidance](../AGENTS.md#standing-engineering-delegation) authorizes
+eligible fictional qualification on standard isolated hosted CI within existing
+ceilings. It covers
+bounded implementation, testing, diagnosis, repair, justified reruns, publication
+of eligible public source changes, independent Codex review and eligible merge
+for an approved outcome. Routine steps require no new owner/run approval or
+coordinator START. This replaces the former owner-per-hosted-run and mandatory
+duplicate local-full-proof requirements for this eligible path. Substantive
+contract, custody, privacy, safety, quality and release gates stay. Public core
+owns these semantics; Desktop has its own workflow policy.
 
 | Stage | Evidence | Selection |
 | --- | --- | --- |
@@ -57,6 +61,20 @@ proof input can justify another bounded run. Source and archive receipts bind th
 actual selected head, not a PR merge simulation or moving branch name. Forks and
 private repositories are ineligible for this standing matrix.
 
+Technical failures lead to diagnosis, repair, appropriate review and a justified
+bounded rerun within the approved outcome and verified remaining resources, not
+another routine owner prompt. A documented diagnostic purpose can justify a
+bounded repeat; unchanged blind retries cannot. Keep complete coverage and the
+same acceptance thresholds. Preserve failed/spent attempts and UNKNOWN accounting;
+never relabel them successful or infer historical ceiling compliance. A successor
+uses current delegated authority and verified capacity, not a revived old grant.
+
+An accounting hold applies to its actual grant, inputs and resources. It does not
+freeze unrelated authorized public source/log work. Keep explicit cumulative
+allowances intact; the delivery owner can allocate existing capacity but cannot
+silently enlarge limits or assume headroom after UNKNOWN consumption. Serialize
+conflicting local database runs and verify cleanup before resource reuse.
+
 ## Installed proof and claim equivalence
 
 The `compatibility` job and `run_hosted_qualification.py` are the executable proof.
@@ -64,7 +82,7 @@ Each interpreter has its own standard `ubuntu-24.04` runner and disposable
 PostgreSQL service. Only tracked public scripts, inventories, test modules and
 fictional JSON fixtures are copied; no local evidence directory is uploaded.
 A public file remains subject to source review: tracking a file is not privacy
-classification. Never port PR80's held one-attempt packet or treat a historical
+classification. Never port a held one-attempt local packet or treat a historical
 exact local authorization as a new hosted authorization.
 
 | Required claim | Hosted evidence / limit |
@@ -109,6 +127,24 @@ jobs have unique per-run/interpreter concurrency, fail-fast disabled, and are
 not cancelled by a later documentation-only push. No duplicate local full run is
 required after complete equivalent hosted evidence.
 
+Consequential changes require a Codex review separate from the author, using
+actual source/logs, contracts and adversarial cases. Preserve custody separation,
+unseen-fixture isolation and executable evidence. This is not outside human
+validation, and unresolved safety/correctness claims stay open. Do not invent a
+missing human technical reviewer as a prerequisite. New material findings justify
+focused rereview after repair; no fixed review-count cap excuses unresolved
+findings. Avoid unchanged review loops.
+
+Compatible increments may merge in dependency order after applicable final-head
+CI and review pass, without waiting for the whole program. Keep requested PRs
+open/non-draft, subscribe to comments, and fix and answer actionable Codex review
+findings. Verify that merge cannot trigger unauthorized release or activation.
+An approved isolated integration may consume an immutable, attributable core
+candidate through public interfaces under `AGENTS.md`; this does not relax
+export boundaries, permit editable/private-interface substitutes or update
+default/released runtime pins. Candidate and hosted proof remain distinct from
+semantic quality, end-to-end acceptance and released consumption.
+
 ## Release remains separately authorized
 
 A manual main run is release-only: `purpose=release`, exact `expected_sha` and a
@@ -125,4 +161,6 @@ missing, cancelled, failed or partial jobs are refused; no older-pass fallback.
 Only its exact-head archives can be compared with the committed approved release
 inventory. Immutable hashes, approved tag/repository identity and owner-only
 protected `pypi` upload remain unchanged. This direction authorizes no version,
-merge, tag, release, upload, publisher change or Desktop consumption.
+tag, release, upload, publisher change or released product consumption. Eligible
+incremental merge and approved isolated candidate integration remain subject to
+the standing engineering and substantive gates above.
