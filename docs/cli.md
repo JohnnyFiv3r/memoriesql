@@ -74,7 +74,10 @@ current target membership and pairing authority.
 
 Each command accepts `--json`. Read commands serialize the same typed core
 result for human and JSON use. Source authority commands return an `available`
-envelope with their typed receipt, or an `unavailable`/`failed` reason. JSON is
+envelope with their typed receipt, or an `unavailable`/`failed` reason. A source
+authority command stopped by a lock timeout or a cancelled statement reports
+`failed` with reason `source_authority_busy`: nothing was written, and the
+identical request may be retried. JSON is
 compact and contains no branding. Exit status is 0 for `available`, 2 for
 `unavailable` and 3 for failure or exhausted work. An unavailable operation
 does not disclose partial content or reveal whether an ID was missing, revoked
