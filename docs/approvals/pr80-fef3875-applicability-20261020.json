@@ -1,0 +1,315 @@
+{
+  "access_separation": {
+    "method": "Read-only exact Git blobs in the named independent public-source clone, the approved content-free relay, public-record metadata, and direct owner approval. No target code imported or executed.",
+    "new_freeze": false,
+    "private_custody_store_consulted": false,
+    "quarantined_run_packet_consulted": false,
+    "unpublished_link_consulted_or_copied": false,
+    "unseen_content_disclosed": false,
+    "unseen_content_inspected": false
+  },
+  "algorithm": "sha256",
+  "approved_interface_record": {
+    "amendments": [
+      {
+        "amendment_ref": "https://github.com/JohnnyFiv3r/memoriesql/pull/48#issuecomment-5851120561",
+        "supersedes": {
+          "algorithm": "sha256",
+          "dependencies": [
+            {
+              "commit": "2baffc688291dbfdeccaa46f7ca05f6e9ef0e12c",
+              "path": "docs/relation-assessment.md",
+              "sha256": "69a0d985466c6610a3a2abc73bcef9242749ff9535cb709e32867c7e06414d2a"
+            }
+          ],
+          "packet_commit": "2baffc688291dbfdeccaa46f7ca05f6e9ef0e12c",
+          "packet_path": "docs/agent-sql-results-v1.md",
+          "packet_sha256": "ba9e94b75b581949ff55e9b06b7271e2d4d0c79d6423e1dc6184d72245c585bb"
+        }
+      }
+    ],
+    "approval_ref": "https://github.com/JohnnyFiv3r/memoriesql/pull/49#issuecomment-5851352880",
+    "interface": {
+      "algorithm": "sha256",
+      "dependencies": [
+        {
+          "commit": "b3865f307b50bd94681b387ad0f3b16fbb20213a",
+          "path": "docs/relation-assessment.md",
+          "sha256": "69a0d985466c6610a3a2abc73bcef9242749ff9535cb709e32867c7e06414d2a"
+        }
+      ],
+      "packet_commit": "b3865f307b50bd94681b387ad0f3b16fbb20213a",
+      "packet_path": "docs/agent-sql-results-v1.md",
+      "packet_sha256": "78bbc04eaeffd0fd47b0576e270f25eaa30e07a90b42e53d27e64308dfd8269e"
+    },
+    "version": 2
+  },
+  "authority_limits": {
+    "not_authorized": [
+      "attestation commit or push",
+      "runtime or policy implementation",
+      "database or SQL execution",
+      "model/provider calls or spending",
+      "live evaluation",
+      "new privileges",
+      "publication",
+      "merge",
+      "release",
+      "activation",
+      "deployment",
+      "held experiment or held review resumption"
+    ],
+    "return_channel": "Normal final response for Root to receive; no unsolicited cross-thread message."
+  },
+  "current_owner_approval": {
+    "direct_answer": "Approve this exact relay and receipt",
+    "message_id": "01a15a53-2382-78d0-bf35-75b1a417f285",
+    "relay_bytes": 6447,
+    "relay_sha256": "8802c61651a723a7f95fe0e5299497477fb22ca07e705a6f6fd72e545c9228b1",
+    "scope": "Exact content-free applicability request and receipt. The approved request permits identifying or issuing only the minimum append-only combined implementation/outcome linkage. No attestation commit or new contract is authorized.",
+    "thread_id": "01a0676f-6eaa-7d70-b034-cb9be5832167",
+    "turn_id": "01a159f8-7193-7dd0-88b1-6991d987245d"
+  },
+  "custodian": {
+    "role": "independent PR-04 evaluation custodian",
+    "thread_id": "01a0d40a-b91a-73a0-b5b3-8067f150c880"
+  },
+  "determination": {
+    "additional_owner_product_decision_required_for_this_source_scope": false,
+    "basis": "All current M0038/M0039, admission, result executor, reader provisioning, population, commit and normative pins match ea-4-link-7 except the strictly appended migration inventory. M0040, source-authority adapter and CLI match ea-6-link-1 byte-for-byte. All 39 main SQL files are preserved; 16 of 18 changed postimages equal public80. The two manual merges only append M0040 to the main inventory and advance the existing aggregate test target from 39 to 40. No additional authority/evidence semantic change is identified by this comparison.",
+    "boundary": "This record supplies only the previously missing exact source-composition and existing-outcome linkage. It is not runtime, security, workload, semantic-quality, full noninterference or release certification, and does not inherit a historical permission to run.",
+    "compatible_at_source_applicability_scope": true,
+    "existing_records_alone_cover_this_composition": false,
+    "minimum_link_supplied_by_this_record": true,
+    "new_semantic_reconciliation_required": false,
+    "reason": "ea-6-link-1 expressly excludes combined PR79/80 or later heads; ea-7 does not bind M0040; ea-4-link-7 expressly excludes M0040/PR80/other combined heads. Their historical boundaries remain unchanged.",
+    "replacement_freeze_required": false
+  },
+  "evaluation_conditions": [
+    {
+      "name": "fixed PostgreSQL FTS/pg_trgm",
+      "profile_id": "fts-trgm-v1",
+      "profile_manifest_revision": "ep-1",
+      "profile_manifest_sha256": "1b7086621dcb6a508114cb5bf4bcbbe6380d0e594b9da4827ca51be7e47125c6",
+      "role": "evaluation-only lexical peer"
+    },
+    {
+      "name": "optional in-Postgres vector condition",
+      "profile_id": "fts-trgm-vector-v1",
+      "profile_manifest_revision": "ep-1",
+      "profile_manifest_sha256": "1b7086621dcb6a508114cb5bf4bcbbe6380d0e594b9da4827ca51be7e47125c6",
+      "role": "evaluation-only lexical-plus-exact-vector peer"
+    }
+  ],
+  "explicit_public_record_links": [
+    {
+      "bytes": 16704,
+      "path": "docs/approvals/pr-05-custody-ea-6-link-1.json",
+      "revision": "ea-6-link-1",
+      "sha256": "1277e530ae69af7743b32b3dd3102b156dc396a405a2725b87490e7cbd2730a2"
+    },
+    {
+      "bytes": 26132,
+      "path": "docs/approvals/pr-05-custody-ea-7.json",
+      "revision": "ea-7",
+      "sha256": "90a6988102af33a0a783df9c70eeab5e7982b277a0a2f7ab93ab5dd6dfd38b29"
+    },
+    {
+      "bytes": 36417,
+      "path": "docs/approvals/pr-05-custody-ea-4-link-7.json",
+      "revision": "ea-4-link-7",
+      "sha256": "0c9a5f8c4bc608e1a9d3d166e9d64b6242c250ef3993b232326f318bc9303149"
+    },
+    {
+      "bytes": 29178,
+      "path": "docs/approvals/pr-05-custody-ea-6.json",
+      "revision": "ea-6",
+      "sha256": "74221b6fbc5674868590e548f1996cb3356a5404f26e23e8de1ba2af56a03c00"
+    },
+    {
+      "bytes": 38001,
+      "path": "docs/approvals/pr-05-custody-ea-4-link-6.json",
+      "revision": "ea-4-link-6",
+      "sha256": "71d3cc5f94aa241b713273bd681484a93097b2031c5f06663c96f878702d1789"
+    },
+    {
+      "bytes": 20381,
+      "path": "docs/approvals/pr-05-custody-ea-6-link-2.json",
+      "revision": "ea-6-link-2",
+      "sha256": "8d81b00636b154f9aa69b8f4d7a57460c3abe1077aa265dfd8e8e773018e4644"
+    }
+  ],
+  "final_implementation_commit": "fef3875845ce315e3a5f067e75edab11065cd7b3",
+  "final_implementation_tree": "97d9a9605478a069d79e8233320963be07186b6d",
+  "format": "pr04-independent-custody-implementation-link-v1",
+  "frozen_at": "2026-09-26T22:01:04Z",
+  "frozen_revisions": {
+    "approved_policy": {
+      "revision": "pr05-evaluation-preregistration-v3",
+      "sha256": "6bdf6b0e790cb7b0ef71337de5b494f03913ec5c47cb3c1d746686594bc545db"
+    },
+    "pack": {
+      "digest_scope": "frozen inventory of exact constituent bytes",
+      "revision": "ef-1",
+      "sha256": "e6e7844592ae4694266b9890f328e90f19f2795eeb1c38f7b28d786ba46fabdd"
+    },
+    "preregistration": {
+      "revision": "er-1",
+      "sha256": "21d6ce7a08eaa084a779db175f0e68fabffa9e42c0f1961c2b25495bb70ce9a9"
+    },
+    "profiles": {
+      "revision": "ep-1",
+      "sha256": "1b7086621dcb6a508114cb5bf4bcbbe6380d0e594b9da4827ca51be7e47125c6"
+    },
+    "supplemental_approval": {
+      "revision": "pr04-custody-policy-approval-v1",
+      "sha256": "3b0170773413c9e772abb93c3f93de92cdeb9d7fe6cd59894eab8891eac47a00"
+    },
+    "thresholds": {
+      "revision": "et-1",
+      "sha256": "cb8d09abf5cd4eaf632eb142c88a7a0cdc12dbfd88c67b63d32d788dc227a236"
+    }
+  },
+  "outcome_and_custody_rules": {
+    "cleanup_and_busy": "Carry ea-6-link-1 collection-only cleanup and exclusive source-authority/shared relation fence rules. Existing 500 ms source-authority wait limit remains. SourceAuthorityBusy / failed-source_authority_busy is a failed operation, not a successful grant, revoke, enrollment, disclosure or proof of settlement. Internal SQL causes remain undisclosed.",
+    "grading": "Existing evidence/receipt/status obligations, uncertainty, fault classes, limits, stop/rerun rules, thresholds, exclusions and denominators remain unchanged. Required undelivered evidence, unsupported required shapes and failed required operations stay unmet except for predeclared expected refusals. Historical failures remain historical; seen regression and unseen results stay separate.",
+    "matched_conditions": "Both evaluation-only peers must use the same exact implementation/schema40, authorization, representations, capabilities, opportunities and budgets. No extra attempts, time, retries or evidence credit follow from improved contention. Do not pool pre-change and post-change primary outcomes or infer retrieval architecture from generated answers or mechanical proofs.",
+    "result_and_accounting": "Carry ea-4-link-7 outcome/control/screening and reader-closure interpretation. Committed results survive failed disclosure; current authority and receipts remain required. Exact redelivery resolves the same work, without SQL/model rerun, refund or identity replacement. Genuine ownership/commit/cleanup/accounting uncertainty remains settlement_pending/F2; safely settled failure is F1 and remains in its scheduled denominator; authority/evidence breach remains F3.",
+    "source_authority_retry": "Identical source-authority retry remains conditional on conclusively rolled-back or settled prior work under existing frozen schedule and budgets; no blanket retry or new run permission is granted.",
+    "visibility_and_raw_source": "All four ea-7 visibility rules and ea-6 decision 12(a) remain: eligible paired-agent authority over the complete required closure; whole-family and original/retiring-task withholding; the narrow agent head-token exception; visible digest versus protected internal-integrity partitions. Raw source identities/bytes/parts/lineage/revisiting remain owner-only; agent history/pair tables and their gaps remain unchanged. Readable relation rows receive no hydration or exact-source credit."
+  },
+  "parents": [
+    "e7a913cc5a0ab1d59fff1ad47b01cab7ab142c64",
+    "36518f9c2ca3d016a182122cdf220070df0ad21b"
+  ],
+  "preservation": {
+    "no_existing_record_changed": true,
+    "no_implementation_repository_write": true,
+    "no_policy_threshold_budget_visibility_corpus_or_failure_rewrite": true,
+    "opaque_freeze_references": "Copied only from already public content-free records; no frozen payload inspected."
+  },
+  "publication_status": "The candidate is a locally verified prospective merge result. No public candidate URL or publication is asserted.",
+  "record_ref": "pr80-fef3875-applicability-20261020",
+  "recorded_at": "2026-10-20T17:21:37Z",
+  "remaining_gates": {
+    "held_concern": "The foreign-owner/query-cleanup admission-lock concern is not resolved by this applicability disposition. No held experiment or review is resumed or cleared.",
+    "qualification": "Exact-head applicable installed/hosted qualification and independent source review remain separate. The packet reports independent review CLEAR; this custodian does not rerun or certify that review or any tests. No historical qualification is extended to this candidate.",
+    "reader_profile": "Actual database reader profile and privileges must still be qualified by their authorized owner/admin path. No instance digest or execution is fabricated.",
+    "scope": "Applies only to this exact source comparison. A later materially changed source or composition requires explicit comparison; these records do not follow a moving branch. Existing explicit exclusions remain intact as historical scope."
+  },
+  "repository": "JohnnyFiv3r/memoriesql",
+  "revision": "pr80-fef3875-applicability-20261020",
+  "serialization": {
+    "encoding": "UTF-8 without BOM",
+    "final_newline": true,
+    "hash_scope": "Exact complete JSON document bytes; detached SHA-256 is not embedded in this document.",
+    "json": "Python json.dumps ensure_ascii=False, sort_keys=True, indent=2",
+    "line_endings": "LF"
+  },
+  "source_comparison": {
+    "all_39_main_sql_files_preserved": true,
+    "all_main_approval_files_preserved": 28,
+    "candidate_clean_on_read": true,
+    "changed_paths_vs_main": 18,
+    "exact_public80_postimages": 16,
+    "manual_merges": [
+      {
+        "change": "Exact main prefix plus unchanged M0040 entry.",
+        "path": "contracts/migration-inventory.json"
+      },
+      {
+        "change": "Only expected schema target 39 to 40.",
+        "path": "tests/runtime/test_agent_sql_results.py"
+      }
+    ]
+  },
+  "source_pins": [
+    {
+      "bytes": 10840,
+      "path": "migrations/0040_authorization_context_cleanup.sql",
+      "sha256": "09ce9ead7d3de5c1f68f7ae72b357c02e47f9bc48bb4aef114bf86919a50a3b2"
+    },
+    {
+      "bytes": 5839,
+      "path": "src/memoriesql/infrastructure/postgres/source_enrollment.py",
+      "sha256": "9393c7427068ef831deeb9fba580f0cbe54765ba2e3dee2de9d0105806969e4b"
+    },
+    {
+      "bytes": 24760,
+      "path": "src/memoriesql/cli.py",
+      "sha256": "1ac6595fa86a356932730148160e5d3b94bfda8ad754b3e20cf288b80923bcbd"
+    },
+    {
+      "bytes": 67250,
+      "path": "migrations/0038_query_result_access.sql",
+      "sha256": "76810d04d475f7b6fadde46f81f979a26b16331ef2efc3a06be7e06b0de8c2a5"
+    },
+    {
+      "bytes": 89193,
+      "path": "migrations/0039_agent_relation_reads.sql",
+      "sha256": "74fb8e5c1c9b297cc5e70c7e694ef1d8ba77e6f4a2daeb072cbeaedb4621d117"
+    },
+    {
+      "bytes": 6220,
+      "path": "contracts/migration-inventory.json",
+      "sha256": "0b621e04868b9e21c0d14b1d28a4aacecc4a6a237f4229b595fdd3a756612ef9"
+    },
+    {
+      "bytes": 66932,
+      "path": "src/memoriesql/application/agent_sql_admission.py",
+      "sha256": "f2a043796b32233cd99ad11ab084160eb95b4705f19967a97c5fd2351f79b987"
+    },
+    {
+      "bytes": 57381,
+      "path": "src/memoriesql/infrastructure/postgres/agent_sql_results.py",
+      "sha256": "ab5630936a46957257cedad35d158c5e476e890da682ba9f35cccdd0048662b5"
+    },
+    {
+      "bytes": 8197,
+      "path": "src/memoriesql/infrastructure/postgres/query_reader_provisioning.py",
+      "sha256": "ee90c7720aef226decd5eb1c2557dc6d6977e05574ef306f88084b27d2795fe1"
+    },
+    {
+      "bytes": 22701,
+      "path": "src/memoriesql/infrastructure/postgres/relation_sql_population.py",
+      "sha256": "20703c88ad3f96e5901b2d6a2638d322102c92c72b1fc73e2b5c981a438fb22b"
+    },
+    {
+      "bytes": 13926,
+      "path": "src/memoriesql/infrastructure/postgres/query_result_commit.py",
+      "sha256": "f86defc24b57932e11a7fe40dedb67c39343c213a032757184ba78102578ee27"
+    },
+    {
+      "bytes": 89906,
+      "path": "docs/agent-sql-results-v1.md",
+      "sha256": "78bbc04eaeffd0fd47b0576e270f25eaa30e07a90b42e53d27e64308dfd8269e"
+    },
+    {
+      "bytes": 61527,
+      "path": "docs/relation-assessment.md",
+      "sha256": "69a0d985466c6610a3a2abc73bcef9242749ff9535cb709e32867c7e06414d2a"
+    },
+    {
+      "bytes": 88270,
+      "path": "contracts/public-registry.json",
+      "sha256": "f3a34c3085dbb13740a2b558f1fa245a56bd7e34d0782a395be540fa29249dd1"
+    },
+    {
+      "bytes": 37358,
+      "path": "src/memoriesql/contracts/_catalogs/sql-recall-operations.json",
+      "sha256": "eb9241a3b1fba1f19ca3a63e256cffa88787cccf7dc0efafa71a352b3bc33bd1"
+    },
+    {
+      "bytes": 2606,
+      "path": "docs/approvals/pr-05-agent-source-text.md",
+      "sha256": "63ecbb4c9b270e4e79af18c3c2cc00e077c8b5e2d98b88fe2200235c31c15697"
+    },
+    {
+      "bytes": 1285,
+      "path": "docs/approvals/pr-05-settings-approval-candidate-v2.json",
+      "sha256": "bcc4398a2f3bba618ae9eb85ee331fb0bf94ac9108bd42f161e5cc07d3a7a478"
+    }
+  ],
+  "status": "issued_source_only_combined_implementation_outcome_link_not_qualification",
+  "timestamp_meaning": "Preparation time of this content-free determination, not a runtime, freeze or human approval timestamp."
+}
