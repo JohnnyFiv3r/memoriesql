@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import sys
 import tempfile
+import textwrap
 import time
 import unittest
 from copy import deepcopy
@@ -124,6 +126,47 @@ class QualificationSelectionTests(unittest.TestCase):
 
 
 class QualificationProcessTests(unittest.TestCase):
+    def test_workflow_propagates_driver_failure_through_retained_log(self) -> None:
+        workflow = (
+            Path(__file__).resolve().parents[2] / ".github/workflows/python-package.yml"
+        ).read_text()
+        step = workflow.split(
+            "      - name: Qualify reviewed installed bytes, all shards and restart processes\n"
+        )[1].split(
+            "      - name: Retain and stop the exact owned PostgreSQL service\n"
+        )[0]
+        body = textwrap.dedent(step.split("        run: |\n")[1])
+        # GitHub's documented unspecified shell is bash -e; explicit bash also
+        # sets pipefail. Exercise the actual run block with a fictional driver.
+        shell = ["bash", "-e"]
+        if "        shell: bash\n" in step:
+            shell = ["bash", "--noprofile", "--norc", "-e", "-o", "pipefail"]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "scripts").mkdir()
+            (root / "scripts/run_hosted_qualification.py").write_text(
+                "print('deliberate fictional driver failure', flush=True)\nraise SystemExit(7)\n"
+            )
+            result = subprocess.run(
+                [*shell, "-c", body],
+                cwd=root,
+                env=os.environ
+                | {
+                    "PATH": str(Path(sys.executable).parent)
+                    + os.pathsep
+                    + os.environ["PATH"],
+                    "SOURCE_SHA": SHA,
+                    "PROOF_ROOT": str(root / "proof"),
+                },
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.returncode, 7, result.stdout + result.stderr)
+            self.assertIn(
+                "deliberate fictional driver failure",
+                (root / "build/qualification/driver.log").read_text(),
+            )
+
     def test_failure_does_not_lose_peer_exit_or_logs(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

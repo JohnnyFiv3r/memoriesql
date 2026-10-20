@@ -155,6 +155,7 @@ jobs:
           path: build/reviewed-package
       - name: Qualify reviewed installed bytes, all shards and restart processes
         timeout-minutes: 55
+        shell: bash
         env:
           SOURCE_SHA: ${{ needs.package.outputs.source_sha }}
           PROOF_ROOT: ${{ runner.temp }}/qualification-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.python-version }}
