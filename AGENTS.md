@@ -45,21 +45,96 @@ This repository is the staged public boundary for the memoriesQL open core. Keep
 - Generated catalogs must be refreshed with `python scripts/generate_catalogs.py` and verified with `--check`.
 - Treat all 0.x APIs as experimental. Preserve an already published contract ID and version payload; model breaking changes as a new contract version.
 - Every contribution must carry a Developer Certificate of Origin sign-off.
-- Open requested PRs in non-draft state, subscribe to their comments, and address, answer, and resolve actionable review threads. Require CI on the final PR commit. For this bootstrap, request one broad review and at most one focused rereview; do not merge, publish, or change repository visibility without owner authorization.
+- Open requested PRs in non-draft state, subscribe to their comments, and address, answer, and resolve actionable review threads. Require applicable CI and independent Codex review on the final candidate. Follow the standing engineering delegation below for publication of eligible public source changes and merge; release and repository-visibility changes still require separate authority.
+
+## Standing engineering delegation
+
+Codex owns implementation, testing, diagnosis, repair, review and eligible merge
+for an approved engineering outcome. The owner retains product direction,
+meaningful user and trust-policy choices, agreed resource limits and release
+authorization. A technical delivery owner assigns the outcome, one writer per
+branch/shared path, approved inputs, applicable contracts, acceptance checks,
+resource envelope and substantive stop conditions. Do not assume an outside
+engineering contributor or human technical verifier will finish the work.
+
+Within that assignment, complete source and fixture changes, approved environment
+preparation, isolated fictional tests, diagnosis, repairs, justified bounded
+reruns, commits, pushes, open PRs, review responses and eligible merges. Routine
+steps do not need another owner prompt, proposal packet or coordinator START.
+This prospectively replaces conflicting procedural per-edit, run, repair,
+publication, review and merge approvals for the approved outcome. Historical
+slice and release records retain their substantive scope and evidence; this
+delegation does not resurrect stopped or spent historical grants.
+
+Use focused checks during iteration and full qualification for a ready candidate
+or material proof-input change. Preserve the original failure, distinguish
+diagnosis from hypothesis, and justify a correction or bounded diagnostic repeat
+within verified remaining resources. Do not weaken tests, coverage, thresholds
+or acceptance to make a check pass. Avoid blind retries and unchanged review
+loops. Exact source, run and artifact identities remain required evidence.
+
+A Codex pass separate from the author must review consequential changes against
+contracts, adversarial cases and actual source/logs. Preserve custody separation
+and unseen-fixture isolation. A material finding permits focused rereview after
+repair; a numerical review-count cap must not leave a real finding unresolved.
+Independent Codex review is not outside human validation: shared blind spots are
+possible, and unverifiable safety claims remain open. Merge compatible increments
+in dependency order after applicable current-head checks and review pass; the
+whole program need not be complete. Verify that merge cannot trigger an
+unauthorized release or activation, and record the actual merged state.
+
+Keep agreed time, concurrency, output, storage, retention, spend and aggregate
+account limits enforceable. The delivery owner may allocate existing capacity;
+there are no unlimited retries, silent quota resets, unrecorded consumption or
+assumed headroom after UNKNOWN accounting. Preserve failures and UNKNOWN values
+honestly. Scope an accounting hold to its affected grant, inputs and resources;
+ordinary authorized public source/log reads outside that hold use normal logging,
+without per-read approval. Do not silently reset an explicit cumulative read
+allowance. Serialize conflicting local database work and verify cleanup before
+reusing held resources; eligible isolated hosted jobs may run concurrently within
+the agreed limits. See `docs/ci-policy.md` for the unchanged runner/job ceilings.
+
+An approved isolated integration may build/install an immutable, attributable
+core candidate and consume it through public interfaces. Record candidate
+identity, allowed inputs and applicable installed/runtime checks. No editable
+install or private-interface shortcut substitutes for that proof. Keep unreleased
+dependencies isolated from default/released runtime pins and distribution paths;
+released-artifact and released-consumption verification remain separate checks.
+Candidate proof does not establish release, activation or product acceptance.
+
+Retain substantive gates for changed public contracts or product/trust semantics,
+protected or unseen data, public/private export boundaries, custody, privilege
+expansion, quality thresholds, new live-model/provider spend, broader runner/spend
+classes, exhausted or unprovable capacity, production activation and release.
+Resolve technical uncertainty through investigation and review; do not ask the
+owner to certify an opaque implementation. Unresolved correctness/security
+findings block acceptance. Escalate a genuine owner choice with user consequences,
+recommendation, alternatives and risk. Platform approval denials must be resolved
+through the supported approval path, not bypassed through another agent.
 
 ## Owner-approved CI cost policy
 
-Routine PR/main pushes run only the required `package` job (database-free tests,
-lint/types, contracts, boundary and deterministic package checks). Full installed
-database qualification on Python 3.13 and 3.14 remains mandatory locally, with
-exact-head artifacts, hashes and logs retained. See `docs/ci-policy.md`.
-Paid hosted compatibility runs require explicit owner approval for that run;
-do not dispatch or retry one automatically. Superseded automatic checks cancel;
-manual qualification runs remain separate. Skipped matrix jobs are not proof.
-Release verification requires an explicitly requested full qualification run at
-exact release main, including successful jobs for both interpreters. Cheap CI,
-local evidence and this cost-policy authorization alone authorize no release or
-paid hosted matrix. Preserve unique in-progress runs and historical failures.
+Routine PR/main pushes retain the required `package` job (database-free tests,
+lint/types, contracts, boundary and deterministic package checks). The standing
+engineering delegation authorizes eligible fictional installed-package /
+PostgreSQL qualification on standard isolated hosted runners within the existing
+15-minute package / 60-minute per-interpreter ceilings. Ready internal candidates
+and material proof-input changes qualify under `docs/ci-policy.md`; docs-only or
+unselected intermediate changes do not trigger blanket full reruns. No owner
+question per eligible run. Preserve Python 3.13/3.14, pinned PostgreSQL, isolation,
+wheel/sdist equality, every installed test and restart proof, and durable failure
+logs/exits. Equivalent hosted evidence replaces the matching local full run;
+do not require both. Local database-heavy work still needs its coordinator slot.
+
+No held, private, owner, provider or unseen inputs may enter this hosted path.
+Historical one-attempt local approvals are not portable. A broader resource/spend
+class or substantive authority/custody/safety change still needs exact authority.
+Qualification jobs retain unique concurrency and historical failures; only cheap
+superseded package jobs cancel. Skipped compatibility jobs are not proof.
+Release qualification stays separately approved, exact-main manual dispatch with
+all three jobs successful. Candidate dispatch on main is refused so it cannot
+satisfy the existing release verifier. No release, tag, package publication or
+production activation is authorized by this CI policy.
 
 The 2026-09-26 owner amendment prioritizes governed assessed-relation lifecycle
 and expands the PR-05 proposal to qualified SQL composition and durable branching

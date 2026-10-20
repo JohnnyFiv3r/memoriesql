@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
+import threading
 from collections.abc import Callable
 from typing import Any
 from uuid import UUID
@@ -40,6 +42,59 @@ from memoriesql.application.source_revisiting import (
     SourceRevisitingActivationReceipt,
 )
 from memoriesql.infrastructure.postgres.authorization import PostgresAuthorizationPort
+
+
+async def _await_owned_write(write: Callable[[], None]) -> None:
+    """Drain the actual write/context, even if its observer or Future is cancelled."""
+    loop = asyncio.get_running_loop()
+    completed = asyncio.Event()
+    failure: BaseException | None = None
+    transition = threading.Lock()
+    started = False
+    aborted = False
+
+    def capture() -> None:
+        nonlocal failure, started
+        with transition:
+            if aborted:
+                return
+            started = True
+        try:
+            write()
+        except BaseException as error:
+            failure = error
+        finally:
+            # Publish only after write() returned/raised, including context exit.
+            loop.call_soon_threadsafe(completed.set)
+
+    context = contextvars.copy_context()
+    # No inner Task for loop-wide Task cancellation to destroy. The independent
+    # outcome/event also survives cancellation of this Future after write-start.
+    _operation = loop.run_in_executor(None, context.run, capture)
+
+    def cancel_unstarted(operation: asyncio.Future[None]) -> None:
+        nonlocal aborted, failure
+        if not operation.cancelled():
+            return
+        with transition:
+            if started:
+                return  # The independent completion still owns this real write.
+            aborted = True  # Fence capture before reporting definitely unstarted.
+            failure = asyncio.CancelledError()
+        completed.set()
+
+    _operation.add_done_callback(cancel_unstarted)
+    cancelled: asyncio.CancelledError | None = None
+    while not completed.is_set():
+        try:
+            # Cancelling a waiter removes that waiter, never the completion event.
+            await completed.wait()
+        except asyncio.CancelledError as error:
+            cancelled = error
+    if failure is not None:
+        raise failure
+    if cancelled is not None:
+        raise cancelled
 
 
 class PostgresCompleteInput:
@@ -169,16 +224,7 @@ class PostgresEvidenceExposureRecorder:
                     "SELECT memoriesql.record_classification_v1(%s,%s,%s,%s)",
                     (request_id,request_payload_hash,Jsonb(packet.model_dump(mode="json")),Jsonb(decision.model_dump(mode="json"))),
                     role="memoriesql_worker")
-        operation = asyncio.create_task(asyncio.to_thread(write))
-        cancelled: asyncio.CancelledError | None = None
-        while True:
-            try:
-                await asyncio.shield(operation)
-                break
-            except asyncio.CancelledError as error:
-                cancelled = error
-        if cancelled is not None:
-            raise cancelled
+        await _await_owned_write(write)
 
     async def record_delivery(
         self, *, request_id: UUID, request_payload_hash: str, delivery: SourceDelivery
@@ -199,16 +245,7 @@ class PostgresEvidenceExposureRecorder:
                     role="memoriesql_worker",
                 )
 
-        operation = asyncio.create_task(asyncio.to_thread(write))
-        cancelled: asyncio.CancelledError | None = None
-        while True:
-            try:
-                await asyncio.shield(operation)
-                break
-            except asyncio.CancelledError as error:
-                cancelled = error
-        if cancelled is not None:
-            raise cancelled
+        await _await_owned_write(write)
 
     async def record_received(
         self,
@@ -233,14 +270,4 @@ class PostgresEvidenceExposureRecorder:
                     role="memoriesql_worker",
                 )
 
-        operation = asyncio.create_task(asyncio.to_thread(write))
-        cancelled: asyncio.CancelledError | None = None
-        while True:
-            try:
-                await asyncio.shield(operation)
-                break
-            except asyncio.CancelledError as error:
-                cancelled = error
-                continue
-        if cancelled is not None:
-            raise cancelled
+        await _await_owned_write(write)

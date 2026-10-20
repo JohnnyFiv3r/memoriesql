@@ -21,6 +21,7 @@ import sys
 import tempfile
 import time
 import unittest
+from collections import Counter
 from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -75,9 +76,14 @@ def install_guard() -> None:
         raise AssertionError("filesystem isolation guard is inactive")
 
 
-def discovered_modules() -> dict[str, int]:
-    """Discovered test modules, in discovery order, with their test counts."""
-    modules: dict[str, int] = {}
+def discovered_suite() -> dict[str, list[unittest.TestCase]]:
+    """Retain discovered instances, including imports and load_tests output.
+
+    Reloading their module names would discover a different suite: an imported
+    TestCase belongs to its defining module but can occur in several loaders.
+    Preserve every discovered occurrence, and make that multiplicity explicit.
+    """
+    modules: dict[str, list[unittest.TestCase]] = {}
     broken: list[str] = []
 
     def walk(item: unittest.TestSuite | unittest.TestCase) -> None:
@@ -89,12 +95,21 @@ def discovered_modules() -> dict[str, int]:
         if module == "unittest.loader":
             broken.append(str(item))
             return
-        modules[module] = modules.get(module, 0) + 1
+        modules.setdefault(module, []).append(item)
 
     walk(unittest.defaultTestLoader.discover("."))
     if broken:
         raise SystemExit("test discovery failed:\n" + "\n".join(broken))
     return modules
+
+
+def test_inventory(
+    modules: dict[str, list[unittest.TestCase]],
+) -> dict[str, dict[str, int]]:
+    return {
+        module: dict(Counter(test.id() for test in tests))
+        for module, tests in modules.items()
+    }
 
 
 def recorded_weights() -> dict[str, float]:
@@ -139,9 +154,12 @@ def main(arguments: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--shard", type=parse_shard, metavar="INDEX/COUNT")
     parser.add_argument("--print-weights", action="store_true")
+    parser.add_argument("--result-json", type=Path)
     args = parser.parse_args(arguments)
     install_guard()
-    modules = discovered_modules()
+    discovered = discovered_suite()
+    modules = {module: len(tests) for module, tests in discovered.items()}
+    planned_tests = test_inventory(discovered)
     if args.shard is None:
         selected = list(modules)
     else:
@@ -149,6 +167,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
         selected = shard_modules(modules, recorded_weights(), index, count)
         print(f"shard {index}/{count}: {len(selected)} of {len(modules)} modules")
     seconds: dict[str, float] = {}
+    executed_tests: dict[str, dict[str, int]] = {}
 
     class TimedResult(_TextTestResult):
         def startTest(self, test: unittest.TestCase) -> None:
@@ -158,12 +177,32 @@ def main(arguments: Sequence[str] | None = None) -> int:
         def stopTest(self, test: unittest.TestCase) -> None:
             super().stopTest(test)
             module = type(test).__module__
+            counts = executed_tests.setdefault(module, {})
+            counts[test.id()] = counts.get(test.id(), 0) + 1
             seconds[module] = seconds.get(module, 0.0) + (
                 time.perf_counter() - self._started
             )
 
-    suite = unittest.defaultTestLoader.loadTestsFromNames(selected)
+    suite = unittest.TestSuite(test for module in selected for test in discovered[module])
     result = unittest.TextTestRunner(verbosity=2, resultclass=TimedResult).run(suite)
+    if args.result_json is not None:
+        args.result_json.write_text(
+            json.dumps(
+                {
+                    "discovered_modules": modules,
+                    "discovered_tests": planned_tests,
+                    "selected_modules": selected,
+                    "executed_tests": executed_tests,
+                    "tests_run": result.testsRun,
+                    "skipped": len(result.skipped),
+                    "failures": len(result.failures),
+                    "errors": len(result.errors),
+                },
+                sort_keys=True,
+                indent=2,
+            )
+            + "\n"
+        )
     for module, elapsed in sorted(seconds.items(), key=lambda item: -item[1]):
         print(f"{elapsed:7.1f}s {module}")
     if args.print_weights:
