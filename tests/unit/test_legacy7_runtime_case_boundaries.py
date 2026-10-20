@@ -31,7 +31,7 @@ class Legacy7RuntimeCaseBoundaries(unittest.TestCase):
         for node in self.tree.body:
             if isinstance(node, ast.Expr):
                 self.assertIsInstance(node.value, ast.Constant)
-            if isinstance(node, (ast.Assign, ast.AnnAssign)):
+            if isinstance(node, ast.Assign | ast.AnnAssign):
                 self.assertFalse(any(isinstance(x, ast.Call) for x in ast.walk(node)))
 
     def test_no_inherited_fixture_test_rediscovery(self) -> None:
@@ -64,7 +64,7 @@ class Legacy7RuntimeCaseBoundaries(unittest.TestCase):
         self.assertEqual(len({key for key, _ in specifications}), 4)
         self.assertTrue(all(value.startswith("SPEC_ONLY:") for _, value in specifications))
         for node in ast.walk(self.tree):
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
                 for decorator in node.decorator_list:
                     self.assertNotIn("skip", ast.unparse(decorator))
                 if node.name.startswith("test_"):
