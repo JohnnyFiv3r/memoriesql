@@ -175,3 +175,14 @@ proof completion. Default installed discovery does not select these cases.
 This adds no runner, deadline, privilege or release
 route. The helper keeps its existing40-command cap; current host composition and
 actual complete-suite/host timing remain to be qualified at their exact head.
+
+The prepared two-identity CLI fixture remains disabled without its separately
+approved exact source/launcher/authority binding. This source preparation grants
+no sudo, account, group, capability or workflow privilege. Unknown process birth,
+lineage or cleanup irreversibly fails the host helper and job and stops later
+proofs. Its private S-owned failure record is retained by the ordinary evidence
+path; failure to retain that record also fails the job. Only bounded cleanup of
+already registered resources, PostgreSQL stop and evidence upload may follow.
+Standard disposable hosted VM destruction is failed-job infrastructure fallback,
+not a success oracle, cleanup/reaping evidence, elapsed-time credit or refund.
+All existing cases, restart proofs, deadlines and resource caps remain required.

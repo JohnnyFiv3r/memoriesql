@@ -481,41 +481,50 @@ class QueryHostHarness(unittest.TestCase):
         return json.dumps(request).encode()
 
 
+if TYPE_CHECKING:
+    from tests.runtime.query_host_cli_identity import Session
+else:
+    from query_host_cli_identity import Session
+
+
 class QueryHostAcceptance(QueryHostHarness):
     # -- acceptance ----------------------------------------------------------
 
-    def test_public_cli_query_and_reuse_cross_real_socket_with_current_authority(self) -> None:
-        host = self.spawn()
+    def test_public_cli_query_and_reuse_cross_real_socket_with_current_authority(
+        self,
+    ) -> None:
         statement = self.root / "public-cli.sql"
         statement.write_text(OBSERVATIONS, encoding="utf-8")
-        # Fresh public CLI processes get only their own identity and real socket.
-        # No database URL, reader login, provider or injected transport is used.
-        environment = {
-            "MEMORIESQL_RESULTS_SOCKET": str(self.config.socket_path),
-            "MEMORIESQL_LOCAL_CREDENTIAL": self.agent_secret,
-            "MEMORIESQL_WORKSPACE_ID": str(self.fixture.workspace),
-            "MEMORIESQL_STATE_DIR": str(self.root / "public-cli-state"),
-        }
+        statement.chmod(0o440)
+        session = Session.prepare(
+            self.root,
+            self.agent_secret,
+            str(self.fixture.workspace),
+            str(self.config.socket_path),
+        )
+        self.config = self.config.model_copy(
+            update={"client_uid": session.plan["client_uid"]}
+        )
+        commit_config(stage_config(self.config_path, self.config), self.config_path)
+        host = self.spawn()
+        self.addCleanup(session.close)
+        session.start()
+        cli = session.cli
 
-        def cli(arguments: list[str]) -> tuple[int, dict[str, Any]]:
-            completed = subprocess.run(
-                [
-                    sys.executable, "-I", "-c",
-                    "from memoriesql.cli import main; raise SystemExit(main())",
-                    *arguments,
-                ],
-                env=environment,
-                capture_output=True,
-                timeout=10,
-            )
-            self.assertEqual(completed.stderr, b"")
-            self.assertNotIn(self.agent_secret.encode(), completed.stdout)
-            return completed.returncode, json.loads(completed.stdout)
-
-        code, first = cli([
-            "query", "--file", str(statement), "--intent", "enumerate",
-            "--view", "historical", "--page-size", "1", "--json",
-        ])
+        code, first = cli(
+            [
+                "query",
+                "--file",
+                str(statement),
+                "--intent",
+                "enumerate",
+                "--view",
+                "historical",
+                "--page-size",
+                "1",
+                "--json",
+            ]
+        )
         self.assertEqual(code, 0, first)
         self.assertEqual(first["outcome"], "available", first)
         self.assertTrue(first["page"]["rows"])
@@ -523,8 +532,13 @@ class QueryHostAcceptance(QueryHostHarness):
         result = first["result"]
         invocations = self.scalar("SELECT count(*) FROM memoriesql_query.invocations")
         arguments = [
-            "result", result["result_id"], "--digest", result["content_digest"],
-            "--page-size", "1", "--json",
+            "result",
+            result["result_id"],
+            "--digest",
+            result["content_digest"],
+            "--page-size",
+            "1",
+            "--json",
         ]
         code, page = cli(arguments + ["--cursor", first["page"]["next_cursor"]])
         self.assertEqual(code, 0, page)
@@ -555,6 +569,7 @@ class QueryHostAcceptance(QueryHostHarness):
             self.scalar("SELECT count(*) FROM memoriesql_query.invocations"),
             invocations,
         )
+        session.close()
         host.send_signal(signal.SIGTERM)
         self.assertEqual(host.wait(10), 0)
         self.assertFalse(self.config.socket_path.exists())

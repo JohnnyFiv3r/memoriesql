@@ -11,6 +11,7 @@ import re
 import resource
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import time
@@ -88,6 +89,11 @@ class Commands:
                 stderr=subprocess.STDOUT,
                 start_new_session=True,
                 preexec_fn=child_file_limit,
+                env={
+                    **os.environ,
+                    "N1_QUALIFICATION_DEADLINE": repr(self.deadline),
+                    "N1_QUALIFICATION_CLEANUP_DEADLINE": repr(self.cleanup_deadline),
+                },
             )
         row["pid"] = process.pid
         self.active.append((process, row))
@@ -196,10 +202,48 @@ def check_shards(root: Path, count: int = 3) -> None:
         raise ValueError("missing installed test modules")
 
 
+def retain_containment_failure(
+    test_root: Path, evidence: Path, metadata: dict[str, Any]
+) -> None:
+    path = test_root / "query-host-containment-fatal.json"
+    try:
+        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    except FileNotFoundError:
+        return
+    metadata["proof_complete"] = False
+    metadata["containment_fatal"] = True
+    try:
+        info = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(info.st_mode)
+            or info.st_uid != os.geteuid()
+            or info.st_mode & 0o077
+            or info.st_nlink != 1
+        ):
+            raise RuntimeError("unsafe containment evidence")
+        data = os.read(descriptor, 65537)
+    finally:
+        os.close(descriptor)
+    if len(data) > 65536:
+        raise RuntimeError("containment evidence limit")
+    record = json.loads(data)
+    if record.get("fatal") is not True or record.get("cleanup") != "UNKNOWN":
+        raise RuntimeError("invalid containment failure record")
+    output = os.open(
+        evidence / path.name,
+        os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+        0o600,
+    )
+    with os.fdopen(output, "wb") as stream:
+        stream.write(data)
+    metadata["containment_record_sha256"] = hashlib.sha256(data).hexdigest()
+
+
 def qualify(
     checkout: Path, artifacts: Path, evidence: Path, root: Path, sha: str
 ) -> None:
     runner = Commands(evidence)
+    test_root: Path | None = None
     python = str(Path(sys.executable).resolve())
     metadata: dict[str, Any] = {
         "source_sha": sha,
@@ -430,9 +474,23 @@ def qualify(
             metadata["cleanup_failure"] = f"{type(error).__name__}: {error}"
             raise
         finally:
+            evidence_error: Exception | None = None
+            try:
+                if test_root is not None:
+                    retain_containment_failure(test_root, evidence, metadata)
+            except Exception as error:
+                metadata["proof_complete"] = False
+                metadata["containment_evidence_failure"] = type(error).__name__
+                evidence_error = error
             (evidence / "qualification.json").write_text(
                 json.dumps(metadata, indent=2) + "\n"
             )
+            if evidence_error is not None:
+                raise evidence_error
+            if metadata.get("containment_fatal"):
+                raise RuntimeError(
+                    "query host containment failed; later proof forbidden"
+                )
 
 
 def main() -> None:

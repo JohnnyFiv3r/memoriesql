@@ -115,3 +115,40 @@ CLI runtime cases using an injected transport do not substitute for this route.
 The helper rejects an omitted CLI case, any other missing case, duplicates,
 extra cases, skips, failures or a zero selection. CPU stand-ins check only this
 selection/error propagation, not native transport or semantic correctness.
+
+### Prepared two-identity fixture: execution held
+
+The public CLI's default peer check requires a different service owner. The
+same-UID harness cannot qualify that route. `query_host_cli_identity.py` prepares
+a fixed test worker and cleanup controller; neither run-as operation is approved
+by this source change. No local UID probe or privileged execution has occurred.
+
+Before execution, the owner and Root must approve and review the exact external
+binding, source and launcher. The S-owned, C-nonwritable JSON binding is supplied
+through `N1_TEST_CLI_IDENTITY_BINDING` and its SHA-256 environment variable. It
+pins `source_sha`, `authority_sha256`, distinct nonroot `service_uid`/`client_uid`,
+the service `gid`, permitted supplementary `groups`, system `sudo_sha256` and
+`env_sha256`, every executable/helper input hash, and the installed interpreter's
+complete `import_roots`. The only executable placeholders are
+`@installed-python` and `@copied-helper`; `root` must be `@fresh-fixture`.
+`N1_TEST_CLI_IDENTITY_AUTHORITY_SHA256` must independently match that approved
+record. Missing bindings fail before a process launch. Actual hosted image,
+account availability, ownership, import closure and successful cleanup remain
+unverified prerequisites, not evidence established by a JSON field.
+
+The controller permits at most two fixed invocations: noninteractive sudo as
+C:G, an empty environment, the bound installed Python and copied helper, and
+`run-case` or `cleanup` with the bound manifest. It sends the paired credential
+only over a pipe after registration; the CLI receives no database login. The
+parent's existing normal deadline and 120-second cleanup deadline are inherited,
+never reset. CLI output, protocol frames, state identity and PID/start-time
+registrations are bounded and checked. An unknown birth, lineage, monitor or
+cleanup latches a private S-owned failure record and stops later tests/proofs.
+Only bounded known-resource cleanup and evidence retention may follow. Disposable
+hosted VM destruction is a failed-job fallback, never successful cleanup proof.
+
+The inert unit controls exercise the actual identity, registration, protocol and
+runner methods with mocks. They do not establish OS isolation, native query
+semantics, permissions, reaping, timing fit or privilege approval. Success still
+requires all 17 host cases, the complete default suite and all four restart
+triplets on both supported interpreters at the actual successor head.

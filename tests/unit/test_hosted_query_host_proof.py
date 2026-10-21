@@ -45,20 +45,28 @@ class HostedQueryHostProof(unittest.TestCase):
             "exec",
         )
         names = [identity.rsplit(".", 1)[1] for identity in EXPECTED_TEST_IDS]
-        cli_case = "test_public_cli_query_and_reuse_cross_real_socket_with_current_authority"
+        cli_case = (
+            "test_public_cli_query_and_reuse_cross_real_socket_with_current_authority"
+        )
         self.assertIn(cli_case, names)
         self.assertEqual(len(names), 17)
 
         def source_for(outcome: str) -> str | None:
             if outcome == "empty":
                 return None
-            text = "import unittest\nclass QueryHostAcceptance(unittest.TestCase):\n"
+            text = "import unittest\nfrom query_host_cli_identity import ContainmentFatal\nclass QueryHostAcceptance(unittest.TestCase):\n"
             for index, method in enumerate(names):
                 if outcome == "missing-cli" and method == cli_case:
                     continue
                 if outcome == "skip" and index == 0:
                     text += " @unittest.skip('fictional')\n"
-                body = "self.fail('fictional')" if outcome == "fail" and index == 0 else "pass"
+                body = "pass"
+                if outcome == "fail" and index == 0:
+                    body = "self.fail('fictional')"
+                if outcome == "fatal" and index == 0:
+                    body = "raise ContainmentFatal('inert_partial_registration')"
+                if outcome == "fatal" and index > 0:
+                    body = "self.fail('later_proof_must_not_run')"
                 text += f" def {method}(self): {body}\n"
             if outcome == "extra":
                 text += " def test_unselected(self): pass\n"
@@ -70,9 +78,19 @@ class HostedQueryHostProof(unittest.TestCase):
                 )
             return text
 
-        cases = {name: source_for(name) for name in (
-            "pass", "fail", "skip", "missing-cli", "extra", "duplicate", "empty"
-        )}
+        cases = {
+            name: source_for(name)
+            for name in (
+                "pass",
+                "fail",
+                "skip",
+                "missing-cli",
+                "extra",
+                "duplicate",
+                "empty",
+                "fatal",
+            )
+        }
         for name, source in cases.items():
             with self.subTest(outcome=name), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
@@ -80,6 +98,10 @@ class HostedQueryHostProof(unittest.TestCase):
                 evidence.mkdir()
                 shutil.copyfile(
                     ROOT / "scripts/prove_query_host.py", root / "prove_query_host.py"
+                )
+                shutil.copyfile(
+                    ROOT / "tests/runtime/query_host_cli_identity.py",
+                    root / "query_host_cli_identity.py",
                 )
                 if source is not None:
                     (root / "query_host_acceptance.py").write_text(source)
@@ -106,6 +128,13 @@ class HostedQueryHostProof(unittest.TestCase):
                 self.assertTrue(runner.rows[0]["complete"])
                 self.assertTrue(runner.rows[0]["log_sha256"])
                 self.assertFalse(runner.active)
+                if name == "fatal":
+                    log = (evidence / runner.rows[0]["log"]).read_text()
+                    self.assertIn("Ran 1 test", log)
+                    self.assertNotIn("later_proof_must_not_run", log)
+                    self.assertTrue(
+                        (root / "query-host-containment-fatal.json").exists()
+                    )
 
 
 if __name__ == "__main__":
