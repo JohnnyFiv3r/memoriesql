@@ -602,12 +602,18 @@ class CliQueryResults(unittest.TestCase):
         grants = assessed_relation_for_agent(
             self.db, self.fixture, UUID(paired["receipt"]["principal_id"])
         )
+        # Both cached runs predate this fixture. Use one actual post-commit
+        # database cutoff for every relation read, without rotating either run
+        # or changing its access/resource accounting.
+        relation_known_at = (
+            self.db.execute("SELECT clock_timestamp()").fetchone()[0].isoformat()
+        )
         relation_sql = (
             "SELECT r.relation_id FROM memory_v1.assessed_relations r "
             "ORDER BY r.relation_id"
         )
         status, relation_reply, _ = self.query(
-            relation_sql, environment=agent_environment
+            relation_sql, "--known-at", relation_known_at, environment=agent_environment
         )
         self.assertEqual(status, 0, relation_reply)
         self.assertIn(
@@ -624,10 +630,16 @@ class CliQueryResults(unittest.TestCase):
             with self.subTest(authorized_table=table):
                 count_sql = f"SELECT count(*) AS n FROM {table}"
                 owner_status, owner_relation, _ = self.query(
-                    count_sql, environment=owner_environment
+                    count_sql,
+                    "--known-at",
+                    relation_known_at,
+                    environment=owner_environment,
                 )
                 agent_status, agent_relation, _ = self.query(
-                    count_sql, environment=agent_environment
+                    count_sql,
+                    "--known-at",
+                    relation_known_at,
+                    environment=agent_environment,
                 )
                 self.assertEqual((owner_status, agent_status), (0, 0))
                 self.assertEqual(
@@ -652,6 +664,8 @@ class CliQueryResults(unittest.TestCase):
                         "enumerate",
                         "--view",
                         "resolved",
+                        "--known-at",
+                        relation_known_at,
                     ],
                     agent_environment,
                 )
@@ -673,7 +687,10 @@ class CliQueryResults(unittest.TestCase):
         for table in sorted(AGENT_RELATION_TABLES):
             with self.subTest(denied_closure_table=table):
                 status, hidden, _ = self.query(
-                    f"SELECT count(*) AS n FROM {table}", environment=agent_environment
+                    f"SELECT count(*) AS n FROM {table}",
+                    "--known-at",
+                    relation_known_at,
+                    environment=agent_environment,
                 )
                 self.assertEqual(status, 0, hidden)
                 self.assertEqual(
@@ -681,7 +698,7 @@ class CliQueryResults(unittest.TestCase):
                 )
                 self.assertEqual(hidden["result"]["coverage"]["gaps"], [])
         status, hidden_relation, _ = self.query(
-            relation_sql, environment=agent_environment
+            relation_sql, "--known-at", relation_known_at, environment=agent_environment
         )
         self.assertEqual(status, 0, hidden_relation)
         self.assertNotIn(
@@ -689,7 +706,7 @@ class CliQueryResults(unittest.TestCase):
             {row["values"][0] for row in hidden_relation["page"]["rows"]},
         )
         status, owner_relation, _ = self.query(
-            relation_sql, environment=owner_environment
+            relation_sql, "--known-at", relation_known_at, environment=owner_environment
         )
         self.assertEqual(status, 0, owner_relation)
         self.assertIn(
