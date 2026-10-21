@@ -553,23 +553,61 @@ class DatabaseTimeRefusal(fixtures.CompleteInputExecution):
         self.refuse_start(worker)
 
         async def run() -> None:
-            observed = self.observe_settlement(worker, asyncio.get_running_loop())
-            await asyncio.wait_for(worker.run_once(), 3)
-            await asyncio.wait_for(observed.wait(), 3)
-            first = self.attempt()
-            with self.connection() as blocker, blocker.transaction():
-                blocker.execute(
-                    "LOCK TABLE memoriesql.semantic_task_attempts IN ACCESS EXCLUSIVE MODE"
+            observed = asyncio.Event()
+            release = threading.Event()
+            loop = asyncio.get_running_loop()
+            original_start = worker._start
+
+            def held_start(*args: Any, **kwargs: Any) -> Any:
+                try:
+                    return original_start(*args, **kwargs)
+                except psycopg.errors.CheckViolation as error:
+                    self.assertEqual(
+                        error.diag.constraint_name, "semantic_task_attempts_time_order"
+                    )
+                    self.trace.append({
+                        "blocked_recovery_start_constraint": error.diag.constraint_name,
+                        "transaction_rolled_back": True,
+                    })
+                    loop.call_soon_threadsafe(observed.set)
+                    if not release.wait(3):
+                        raise AssertionError("recovery blocker was not installed")
+                    raise
+
+            worker._start = held_start
+            foreground = asyncio.create_task(worker.run_once())
+            observation = asyncio.create_task(observed.wait())
+            try:
+                # Coordinate before recovery begins. Waiting only for a later
+                # settlement CheckViolation can hide an earlier owned DB error.
+                await asyncio.wait(
+                    (observation, foreground), timeout=3,
+                    return_when=asyncio.FIRST_COMPLETED,
                 )
-                self.assertTrue(worker.cleanup_pending)
-                # A real lock wait exceeds the existing configured transaction
-                # bound. The worker must expose that different database error
-                # after its owned call exits, rather than retry or claim success.
-                with self.assertRaises(psycopg.errors.TransactionTimeout):
-                    await asyncio.wait_for(worker.wait_for_cleanup(), 3)
-                self.assertFalse(worker.cleanup_pending)
-            self.assertEqual(self.attempt(), first)
-            self.assert_not_dispatched()
+                if foreground.done():
+                    await foreground  # Expose its actual error, never an event timeout.
+                self.assertTrue(observation.done(), "start refusal was not observed")
+                first = self.attempt()
+                with self.connection() as blocker, blocker.transaction():
+                    blocker.execute(
+                        "LOCK TABLE memoriesql.semantic_task_attempts IN ACCESS EXCLUSIVE MODE"
+                    )
+                    release.set()
+                    # Keep the existing 200ms native transaction bound and 3s
+                    # observer bound. Either foreground or cleanup may expose
+                    # the completed owned call's actual TransactionTimeout.
+                    with self.assertRaises(psycopg.errors.TransactionTimeout):
+                        await asyncio.wait_for(asyncio.shield(foreground), 3)
+                        await asyncio.wait_for(worker.wait_for_cleanup(), 3)
+                    self.assertFalse(worker.cleanup_pending)
+                self.assertEqual(self.attempt(), first)
+                self.assert_not_dispatched()
+            finally:
+                release.set()
+                observation.cancel()
+                if not foreground.done():
+                    foreground.cancel()
+                await asyncio.gather(observation, foreground, return_exceptions=True)
 
         self.run_owned(worker, run)
 

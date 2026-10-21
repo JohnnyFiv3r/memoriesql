@@ -15,17 +15,23 @@ import time
 import unittest
 import uuid
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 
 import psycopg
+from psycopg.types.json import Jsonb
 
-from memoriesql.application.local_entity_mentions import ActivateAuthoredMentions
+from memoriesql.application.local_entity_mentions import (
+    ActivateAuthoredMentions,
+    AuthoredMentionActivationReceipt,
+)
 from memoriesql.application.model_accounting import AccountingPersistenceError
 from memoriesql.infrastructure.jobs.postgres_semantic_queue import (
     PostgresSemanticTaskQueue,
 )
+from memoriesql.infrastructure.postgres.authorization import PostgresAuthorizationPort
 from memoriesql.infrastructure.postgres.complete_input_execution import (
     PostgresCompleteInput,
 )
@@ -167,9 +173,27 @@ class Legacy7Cutover(unittest.TestCase):
 
         def activate_before_commit() -> Any:
             with fixture.connection() as connection, connection.transaction():
-                receipt = self.adapter(fixture, connection).activate_authored_mentions(
-                    self.command(fixture, "legacy7.not-a-drain")
+                # The client adapter owns its transaction and rejects nesting.
+                # This SQL control intentionally retains the original native
+                # transaction after the same public function returns.
+                connection.execute("SET TRANSACTION ISOLATION LEVEL READ COMMITTED")
+                connection.execute("SET LOCAL statement_timeout='2s'")
+                connection.execute("SET LOCAL lock_timeout='500ms'")
+                connection.execute("SET LOCAL ROLE memoriesql_application")
+                PostgresAuthorizationPort(connection).begin_context(
+                    credential_sha256=fixture.secret_hash,
+                    requested_workspace_id=fixture.workspace,
                 )
+                row = connection.execute(
+                    "SELECT memoriesql.activate_complete_input_v6(%s)",
+                    (
+                        Jsonb(self.command(fixture, "legacy7.not-a-drain").model_dump(
+                            mode="json"
+                        )),
+                    ),
+                ).fetchone()
+                assert row is not None
+                receipt = AuthoredMentionActivationReceipt.model_validate(row[0])
                 saved.update(receipt=receipt, pid=connection.info.backend_pid)
                 prepared.set()
                 if not release.wait(timeout=10):
@@ -260,6 +284,9 @@ class Legacy7Cutover(unittest.TestCase):
             raise AssertionError("cancelled pending intent must not dispatch a model")
 
         worker = fixture.worker(forbidden_provider)
+        worker._config = replace(
+            worker._config, cancellation_return_timeout_seconds=0.02
+        )
 
         async def scenario() -> None:
             entered = asyncio.Event()
@@ -423,6 +450,24 @@ class Legacy7Cutover(unittest.TestCase):
         migrate(fixture.db, expected_current_version=43, target_version=45)
         with self.assertRaises(psycopg.errors.InsufficientPrivilege) as refused, fixture.db.transaction():
             fixture.worker_queue()
+            fixture.db.execute(
+                "SELECT memoriesql.source_revisiting_authorize(%s,%s)",
+                (fixture.tenant, fixture.activation.execution_task_id),
+            )
+        self.assertEqual(refused.exception.sqlstate, "42501")
+        self.assertEqual(
+            refused.exception.diag.message_primary,
+            "permission denied for function source_revisiting_authorize",
+        )
+        # The helper has never granted direct worker EXECUTE. Also exercise its
+        # body with the existing fixture owner's SQL privilege, retaining the
+        # original worker's real current authorization context; add no grant.
+        with self.assertRaises(psycopg.errors.InsufficientPrivilege) as refused, fixture.db.transaction():
+            fixture.worker_queue()
+            fixture.db.execute("RESET ROLE")
+            self.assertEqual(fixture.db.execute(
+                "SELECT principal_id FROM memoriesql.current_authorization_context()"
+            ).fetchone(), (fixture.worker_principal,))
             fixture.db.execute(
                 "SELECT memoriesql.source_revisiting_authorize(%s,%s)",
                 (fixture.tenant, fixture.activation.execution_task_id),

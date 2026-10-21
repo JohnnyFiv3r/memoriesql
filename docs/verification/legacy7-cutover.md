@@ -18,6 +18,21 @@ note distinguishes artifact presence from execution availability.
 | Original request parked outside SQL | Pause the real worker immediately before its first intent SQL, install45 while this exact fixture ingress is parked, then resume. Its first intent must refuse with no ledger row, model callback or meaning; await original cleanup. |
 | Direct canonical caller | With the original queued execution and current worker authority, call the canonical task-bound source authorizer directly after45. Require the actual42501 gate rather than a worker-only restriction. |
 
+The failed installed candidate `119e412ed08f1e58270fe7165e3e59c5e1c377a6`
+is preserved in hosted run `39518702328`. Its successor fixture corrections
+retain all native oracles: the uncommitted-activation control uses the public SQL
+function inside its original authorized transaction, because the Python adapter
+owns and commits its own transaction. The cancellation fixture selects a 20ms
+foreground return bound inside its existing five-second observer deadline.
+Direct worker EXECUTE must still fail under the historical ACL; a second call
+uses the existing fixture owner's SQL privilege with the same current worker
+authorization context to reach the canonical gate, without granting privileges.
+Historical relation equality compares the same explicit `known_at` frame.
+The separate blocked-recovery case observes the real rolled-back start-time
+constraint before installing its blocker, and retains the 200ms transaction and
+three-second observer bounds while exposing the actual owned database error.
+These are unqualified source repairs until installed native evidence passes.
+
 The finite fixture roster is closed by construction. OwnedCall completion joins
 the actual target, including its transaction context exits. Observing a reply,
 requesting cancellation or setting an Event alone is not drain evidence. Failed
