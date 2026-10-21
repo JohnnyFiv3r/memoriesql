@@ -425,7 +425,8 @@ class Legacy7Unavailable(unittest.TestCase):
         )
         self.assertEqual(fixture.inspect(fresh).outcome, "available")
         self.assertEqual(len(fixture.inspect(fresh).relations), 1)
-        self.assertEqual(fixture.inspect(effect), before)
+        # Compare the same knowledge frame; current authorization still applies.
+        self.assertEqual(fixture.inspect(effect, known_at=before.known_at), before)
 
     def test_hidden_candidate_family_preserves_missing_equivalence(self) -> None:
         fixture = self.relations_fixture()
