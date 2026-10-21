@@ -818,3 +818,196 @@ class AutomaticCheckpointRuntime(unittest.TestCase):
         self.assertEqual(
             self.h.scalar("SELECT count(*) FROM memoriesql.query_checkpoints"), 1
         )
+
+    def expire_investigation(self, investigation: str) -> None:
+        # Boundary-only fixture clock control, as in the expiry oracles above.
+        self.db.execute(
+            "UPDATE memoriesql.query_checkpoints SET created_at=created_at-interval "
+            "'31 days',expires_at=expires_at-interval '31 days' WHERE investigation_id=%s",
+            (investigation,),
+        )
+
+    def age_stubs(self, run: dict[str, Any], by: timedelta) -> None:
+        # Fixture clock control of prune time only; no manifest, digest or route.
+        self.db.execute(
+            "UPDATE memoriesql.query_checkpoints cp SET pruned_at=cp.pruned_at-%s::interval "
+            "FROM memoriesql.result_preparation_operations o WHERE o.tenant_id=cp.tenant_id "
+            "AND o.operation_ref=cp.operation_ref AND o.run_ref=%s AND NOT cp.automatic_retained",
+            (f"{int(by.total_seconds())} seconds", run["run_ref"]),
+        )
+
+    def residue(self, investigation: str, *runs: dict[str, Any]) -> dict[str, int]:
+        refs = [run["run_ref"] for run in runs]
+        counts = {
+            "checkpoints": (
+                "SELECT count(*) FROM memoriesql.query_checkpoints WHERE investigation_id=%s",
+                investigation,
+            ),
+            "branches": (
+                "SELECT count(*) FROM memoriesql.query_investigation_branches "
+                "WHERE investigation_id=%s",
+                investigation,
+            ),
+            "investigations": (
+                "SELECT count(*) FROM memoriesql.query_investigations "
+                "WHERE investigation_id=%s",
+                investigation,
+            ),
+            "runs": (
+                "SELECT count(*) FROM memoriesql.query_runs WHERE run_ref=ANY(%s::uuid[])",
+                refs,
+            ),
+            "operations": (
+                "SELECT count(*) FROM memoriesql.result_preparation_operations "
+                "WHERE run_ref=ANY(%s::uuid[])",
+                refs,
+            ),
+            "receipts": (
+                "SELECT count(*) FROM memoriesql.query_disclosures x "
+                "JOIN memoriesql.query_deliveries d USING(tenant_id,delivery_ref) "
+                "WHERE d.run_ref=ANY(%s::uuid[])",
+                refs,
+            ),
+        }
+        return {k: self.h.scalar(sql, (value,)) for k, (sql, value) in counts.items()}
+
+    def test_expired_checkpoint_tombstones_leave_no_rows_receipts_or_charge(
+        self,
+    ) -> None:
+        baseline = self.r.retained()
+        run, result = self.query_root()
+        first = self.r.send(self.append(run, result))
+        self.assert_checkpoint(first)
+        reader = self.r.start()
+        self.assert_checkpoint(self.r.send(self.read(reader, first["branch"]["head"])))
+        investigation = first["checkpoint"]["investigation_id"]
+        self.expire_investigation(investigation)
+        self.r.service().cleanup_expired()
+        # The expired slot is a charged noncontent stub; no digest remains in it
+        # or in the ended investigation's head, which cannot be continued.
+        self.assertEqual(
+            self.db.execute(
+                "SELECT cp.automatic_retained,cp.manifest_digest,cp.pruned_at IS NOT NULL,"
+                "o.allocation_bytes FROM memoriesql.query_checkpoints cp "
+                "JOIN memoriesql.result_preparation_operations o USING(tenant_id,operation_ref) "
+                "WHERE cp.checkpoint_id=%s",
+                (first["checkpoint"]["checkpoint_id"],),
+            ).fetchone(),
+            (False, None, True, 40960),
+        )
+        self.assertEqual(
+            self.db.execute(
+                "SELECT head_ref,head_digest FROM memoriesql.query_investigation_branches "
+                "WHERE investigation_id=%s",
+                (investigation,),
+            ).fetchone(),
+            (None, None),
+        )
+        ended = self.r.send(self.append(reader, result, first))
+        self.assertEqual(ended["outcome"], "unavailable", ended)
+        for owner in (run, reader):
+            self.r.age(owner["run_ref"], timedelta(days=32))
+        self.r.service().cleanup_expired()
+        self.assertEqual(self.residue(investigation, run, reader)["receipts"], 0)
+        status = json.loads(self.r.service().cleanup_status())["cleanup"]
+        self.assertEqual(status["due"]["tombstones"], 0)
+        self.assertEqual(status["overdue"]["tombstones"], 0)
+        for owner in (run, reader):
+            self.r.age_tombstone(owner["run_ref"], timedelta(days=31))
+        self.age_stubs(run, timedelta(days=31))
+        status = json.loads(self.r.service().cleanup_status())["cleanup"]
+        self.assertEqual(status["due"]["tombstones"], 2)
+        expired = json.loads(self.r.service().cleanup_expired())
+        self.assertEqual(expired["cleanup"]["purged"]["tombstones"], 2)
+        self.assertEqual(
+            self.residue(investigation, run, reader),
+            {
+                "checkpoints": 0,
+                "branches": 0,
+                "investigations": 0,
+                "runs": 0,
+                "operations": 0,
+                "receipts": 0,
+            },
+        )
+        self.assertEqual(self.r.retained(), baseline)
+
+    def test_pruned_stub_keeps_only_noncontent_lineage_until_its_tombstone_ends(
+        self,
+    ) -> None:
+        run, result = self.query_root()
+        first_run = self.r.start()
+        first = self.r.send(self.append(first_run, result))
+        self.assert_checkpoint(first)
+        # The root's own run ends; only the first checkpoint holds the root now.
+        self.r.age(run["run_ref"], timedelta(days=32))
+        later = self.r.start()
+        current = first
+        for _ in range(20):
+            request = self.append(later, result, current)
+            request["roots"] = []
+            current = self.r.send(request)
+            self.assert_checkpoint(current)
+        investigation = first["checkpoint"]["investigation_id"]
+        self.assertEqual(
+            self.db.execute(
+                "SELECT cp.manifest_digest,o.allocation_bytes,"
+                "(SELECT count(*) FROM memoriesql.query_checkpoint_roots r "
+                "WHERE r.checkpoint_id=cp.checkpoint_id),"
+                "(SELECT count(*) FROM memoriesql.query_checkpoint_holds h "
+                "WHERE h.checkpoint_id=cp.checkpoint_id),"
+                "(SELECT count(*) FROM memoriesql.result_preparation_artifacts a "
+                "WHERE a.artifact_ref=cp.checkpoint_id) "
+                "FROM memoriesql.query_checkpoints cp "
+                "JOIN memoriesql.result_preparation_operations o USING(tenant_id,operation_ref) "
+                "WHERE cp.checkpoint_id=%s AND NOT cp.automatic_retained",
+                (first["checkpoint"]["checkpoint_id"],),
+            ).fetchone(),
+            (None, 40960, 0, 0, 0),
+        )
+        self.r.age(first_run["run_ref"], timedelta(days=32))
+        self.r.service().cleanup_expired()
+        # The run's tombstone counts from the prune, not from the run purge.
+        self.r.age_tombstone(first_run["run_ref"], timedelta(days=31))
+        status = json.loads(self.r.service().cleanup_status())["cleanup"]
+        self.assertEqual(status["due"]["tombstones"], 0)
+        self.assertEqual(status["overdue"]["tombstones"], 0)
+        self.assertEqual(self.residue(investigation, first_run)["checkpoints"], 21)
+        # Successors retained beside the stub (expired, not yet swept) hold it.
+        self.expire_investigation(investigation)
+        self.age_stubs(first_run, timedelta(days=31))
+        self.assertEqual(
+            self.h.scalar(
+                "SELECT memoriesql.expire_query_tombstone_v1(%s,%s)",
+                (self.fixture.tenant, first_run["run_ref"]),
+            ),
+            "pending",
+        )
+        self.r.service().cleanup_expired()
+        self.assertEqual(
+            self.residue(investigation, first_run),
+            {
+                "checkpoints": 20,
+                "branches": 1,
+                "investigations": 1,
+                "runs": 0,
+                "operations": 0,
+                "receipts": 0,
+            },
+        )
+        self.r.age(later["run_ref"], timedelta(days=32))
+        self.r.service().cleanup_expired()
+        self.r.age_tombstone(later["run_ref"], timedelta(days=31))
+        self.age_stubs(later, timedelta(days=31))
+        self.r.service().cleanup_expired()
+        self.assertEqual(
+            self.residue(investigation, first_run, later),
+            {
+                "checkpoints": 0,
+                "branches": 0,
+                "investigations": 0,
+                "runs": 0,
+                "operations": 0,
+                "receipts": 0,
+            },
+        )

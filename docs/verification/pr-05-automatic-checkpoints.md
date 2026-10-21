@@ -15,8 +15,20 @@ An append atomically binds canonical manifest bytes, compared branch head,
 investigation-wide sequence, charged allocation, selected root pins, dependency
 holds and the common idempotency/disclosure receipt. The newest 20 automatic
 slots persist for at most 30 days from creation. Prune/expiry releases only that
-checkpoint's holds under the workspace ledger/investigation locks. Charged
-noncontent lineage/control stubs remain; no unbounded free history is introduced.
+checkpoint's holds under the workspace ledger/investigation locks.
+
+A pruned or expired slot becomes a charged noncontent stub. It keeps opaque
+identifiers, its sequence and timestamps, but no manifest digest. Checkpoint and
+read_checkpoint receipts are removed when their run is purged. Receipts and
+cursors bound to a released context go once their run has also ended. The stub
+is deleted with its publishing run's 30-day tombstone. That tombstone counts
+from the run's last purge, result purge or prune, and it waits while a
+checkpoint retained beside the stub still exists. Investigation and branch rows
+go with the last stub, and the charges then leave the workspace allocation.
+An investigation with no retained checkpoint has ended: it keeps no head digest
+and cannot be continued. Tombstone sweep and status share one due time, so a
+retained tombstone is neither due nor overdue. Nothing is kept past these
+windows.
 The layout's conservative metadata reservations still need measured physical
 qualification. Encoded bytes and ledger charges are not physical disk use.
 

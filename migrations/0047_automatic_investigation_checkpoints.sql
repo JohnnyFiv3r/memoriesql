@@ -14,15 +14,20 @@ CREATE TABLE memoriesql.query_investigation_branches (
 CREATE TABLE memoriesql.query_checkpoints (
  tenant_id uuid NOT NULL, checkpoint_id uuid NOT NULL, investigation_id uuid NOT NULL,
  branch_id uuid NOT NULL, investigation_sequence bigint NOT NULL,
- manifest_digest text NOT NULL CHECK(manifest_digest ~ '^[a-f0-9]{64}$'),
+ manifest_digest text CHECK(manifest_digest ~ '^[a-f0-9]{64}$'),
  operation_ref uuid NOT NULL, created_at timestamptz NOT NULL,
  expires_at timestamptz NOT NULL, automatic_retained boolean NOT NULL DEFAULT true,
+ pruned_at timestamptz,
  PRIMARY KEY(tenant_id,checkpoint_id), UNIQUE(tenant_id,investigation_id,investigation_sequence),
  FOREIGN KEY(tenant_id,investigation_id) REFERENCES memoriesql.query_investigations,
  FOREIGN KEY(tenant_id,branch_id) REFERENCES memoriesql.query_investigation_branches,
  FOREIGN KEY(tenant_id,operation_ref) REFERENCES memoriesql.result_preparation_operations,
- CHECK(expires_at=created_at+interval '720 hours')
+ CHECK(expires_at=created_at+interval '720 hours'),
+ -- A pruned or expired slot keeps no manifest digest; its prune time starts the
+ -- 30-day noncontent tombstone that ends with its publishing run's tombstone.
+ CHECK((manifest_digest IS NOT NULL)=automatic_retained AND (pruned_at IS NULL)=automatic_retained)
 );
+CREATE INDEX query_checkpoints_operation ON memoriesql.query_checkpoints(tenant_id,operation_ref);
 CREATE TABLE memoriesql.query_checkpoint_roots (
  tenant_id uuid NOT NULL, checkpoint_id uuid NOT NULL, result_id uuid NOT NULL,
  content_digest text NOT NULL, frame_ref uuid NOT NULL,
@@ -95,6 +100,21 @@ ALTER TABLE memoriesql.query_disclosures ADD CONSTRAINT query_disclosures_access
   AND access_context->'basis'='{"kind":"automatic"}'::jsonb) OR
  (access_context ?& ARRAY['checkpoint','basis'] AND access_context-ARRAY['checkpoint','basis']='{}'::jsonb
   AND access_context->'basis'='{"kind":"automatic"}'::jsonb),false));
+
+-- The checkpoint a receipt or cursor context names (either receipt shape), or NULL.
+CREATE FUNCTION memoriesql.query_checkpoint_context_ref_v1(access jsonb) RETURNS text
+LANGUAGE sql IMMUTABLE SET search_path=pg_catalog AS $$
+ SELECT CASE WHEN access->>'kind'='checkpoint' THEN access->>'checkpoint_id'
+  ELSE access#>>'{checkpoint,checkpoint_id}' END
+$$;
+REVOKE ALL ON FUNCTION memoriesql.query_checkpoint_context_ref_v1(jsonb) FROM PUBLIC;
+CREATE INDEX query_disclosures_checkpoint_context ON memoriesql.query_disclosures
+ (tenant_id,memoriesql.query_checkpoint_context_ref_v1(access_context))
+ WHERE memoriesql.query_checkpoint_context_ref_v1(access_context) IS NOT NULL;
+CREATE INDEX query_cursors_checkpoint_context ON memoriesql.query_cursors
+ (tenant_id,memoriesql.query_checkpoint_context_ref_v1(access_context))
+ WHERE memoriesql.query_checkpoint_context_ref_v1(access_context) IS NOT NULL;
+CREATE INDEX query_cursors_issued_by ON memoriesql.query_cursors(tenant_id,issued_by_delivery);
 
 CREATE FUNCTION memoriesql.checkpoint_identity_v1(c memoriesql.authorization_contexts)
 RETURNS jsonb LANGUAGE sql IMMUTABLE SET search_path=pg_catalog AS $$
@@ -208,14 +228,30 @@ BEGIN
    SELECT investigation_sequence FROM memoriesql.query_checkpoints WHERE tenant_id=t
     AND investigation_id=investigation AND automatic_retained ORDER BY investigation_sequence DESC OFFSET 20))
   ORDER BY investigation_sequence FOR UPDATE LOOP
-  UPDATE memoriesql.query_checkpoints SET automatic_retained=false WHERE tenant_id=t AND checkpoint_id=cp.checkpoint_id;
+  UPDATE memoriesql.query_checkpoints SET automatic_retained=false,manifest_digest=NULL,
+   pruned_at=clock_timestamp() WHERE tenant_id=t AND checkpoint_id=cp.checkpoint_id;
   DELETE FROM memoriesql.query_checkpoint_holds WHERE tenant_id=t AND checkpoint_id=cp.checkpoint_id;
   DELETE FROM memoriesql.query_checkpoint_roots WHERE tenant_id=t AND checkpoint_id=cp.checkpoint_id;
   DELETE FROM memoriesql.result_preparation_artifacts WHERE tenant_id=t AND artifact_ref=cp.checkpoint_id;
   -- Retain charged noncontent identity/lineage/control stubs, never a free audit.
   UPDATE memoriesql.result_preparation_operations SET state='discarded',request_fingerprint=NULL,
    encoded_bytes=0,allocation_bytes=40960 WHERE tenant_id=t AND operation_ref=cp.operation_ref;
+  -- Receipts and cursors bound to the released context carry its manifest
+  -- digest. Those of runs already purged go now; a live run's go at its purge.
+  DELETE FROM memoriesql.query_disclosures x USING memoriesql.query_deliveries d,memoriesql.query_run_purges p
+   WHERE x.tenant_id=t AND memoriesql.query_checkpoint_context_ref_v1(x.access_context)=cp.checkpoint_id::text
+    AND d.tenant_id=x.tenant_id AND d.delivery_ref=x.delivery_ref AND p.tenant_id=d.tenant_id AND p.run_ref=d.run_ref;
+  DELETE FROM memoriesql.query_cursors k USING memoriesql.query_deliveries d,memoriesql.query_run_purges p
+   WHERE k.tenant_id=t AND memoriesql.query_checkpoint_context_ref_v1(k.access_context)=cp.checkpoint_id::text
+    AND d.tenant_id=k.tenant_id AND d.delivery_ref=k.issued_by_delivery AND p.tenant_id=d.tenant_id AND p.run_ref=d.run_ref;
  END LOOP;
+ -- Without a retained checkpoint the investigation has ended: no head digest
+ -- remains in its control rows, which leave with its last stub's tombstone.
+ IF NOT EXISTS(SELECT 1 FROM memoriesql.query_checkpoints WHERE tenant_id=t
+  AND investigation_id=investigation AND automatic_retained) THEN
+  UPDATE memoriesql.query_investigation_branches SET head_ref=NULL,head_digest=NULL
+   WHERE tenant_id=t AND investigation_id=investigation AND head_ref IS NOT NULL;
+ END IF;
 END $$;
 REVOKE ALL ON FUNCTION memoriesql.prune_automatic_checkpoints_v1(uuid,uuid) FROM PUBLIC;
 
@@ -332,6 +368,11 @@ BEGIN
   SELECT * INTO branch FROM memoriesql.query_investigation_branches WHERE tenant_id=c.tenant_id AND branch_id=branch_id_value FOR UPDATE;
   IF inv.owner_identity IS DISTINCT FROM memoriesql.checkpoint_identity_v1(c)
    OR branch.investigation_id IS DISTINCT FROM investigation THEN
+   RAISE EXCEPTION 'checkpoint_unavailable' USING ERRCODE='42501'; END IF;
+  -- With no retained, unexpired checkpoint the investigation has ended; an
+  -- expired head is never continued or rescued by its old pin.
+  IF NOT EXISTS(SELECT 1 FROM memoriesql.query_checkpoints cp WHERE cp.tenant_id=c.tenant_id
+   AND cp.investigation_id=investigation AND cp.automatic_retained AND clock_timestamp()<cp.expires_at) THEN
    RAISE EXCEPTION 'checkpoint_unavailable' USING ERRCODE='42501'; END IF;
   IF jsonb_build_object('checkpoint_id',branch.head_ref,'manifest_digest',branch.head_digest) IS DISTINCT FROM request->'expected_head' THEN
    RAISE EXCEPTION 'checkpoint_branch_conflict' USING ERRCODE='22023'; END IF;
@@ -455,6 +496,66 @@ REVOKE ALL ON FUNCTION memoriesql.clear_checkpoint_step_v1() FROM PUBLIC;
 CREATE TRIGGER query_checkpoint_clear_pin BEFORE UPDATE OF purged_at ON memoriesql.query_steps
  FOR EACH ROW EXECUTE FUNCTION memoriesql.clear_checkpoint_step_v1();
 
+-- A checkpoint/read receipt only served its run, and the run's tombstone keeps
+-- no digest. Receipts and cursors bound to a released checkpoint context go
+-- too; a retained context keeps them until its own prune or expiry.
+CREATE FUNCTION memoriesql.query_checkpoint_context_retained_v1(t uuid,access jsonb) RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog,memoriesql SET row_security=off AS $$
+ SELECT memoriesql.query_checkpoint_context_ref_v1(access) IS NULL OR EXISTS(
+  SELECT 1 FROM memoriesql.query_checkpoints cp WHERE cp.tenant_id=t
+   AND cp.checkpoint_id=memoriesql.query_checkpoint_context_ref_v1(access)::uuid AND cp.automatic_retained)
+$$;
+REVOKE ALL ON FUNCTION memoriesql.query_checkpoint_context_retained_v1(uuid,jsonb) FROM PUBLIC;
+CREATE FUNCTION memoriesql.purge_checkpoint_step_v1() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,memoriesql SET row_security=off AS $$
+BEGIN
+ IF NEW.purged_at IS NULL OR OLD.purged_at IS NOT NULL THEN RETURN NEW; END IF;
+ DELETE FROM memoriesql.query_disclosures x USING memoriesql.query_deliveries d
+  WHERE d.tenant_id=NEW.tenant_id AND d.run_ref=NEW.run_ref AND d.step_key=NEW.step_key
+   AND x.tenant_id=d.tenant_id AND x.delivery_ref=d.delivery_ref
+   AND ((NEW.kind IN ('checkpoint','read_checkpoint') AND x.result_id IS NULL)
+    OR NOT memoriesql.query_checkpoint_context_retained_v1(x.tenant_id,x.access_context));
+ DELETE FROM memoriesql.query_cursors k USING memoriesql.query_deliveries d
+  WHERE d.tenant_id=NEW.tenant_id AND d.run_ref=NEW.run_ref AND d.step_key=NEW.step_key
+   AND k.tenant_id=d.tenant_id AND k.issued_by_delivery=d.delivery_ref
+   AND NOT memoriesql.query_checkpoint_context_retained_v1(k.tenant_id,k.access_context);
+ RETURN NEW;
+END $$;
+REVOKE ALL ON FUNCTION memoriesql.purge_checkpoint_step_v1() FROM PUBLIC;
+CREATE TRIGGER query_checkpoint_purge AFTER UPDATE OF purged_at ON memoriesql.query_steps
+ FOR EACH ROW EXECUTE FUNCTION memoriesql.purge_checkpoint_step_v1();
+
+-- One tombstone due time for expiry, the sweep and status. NULL while the run
+-- still retains content, a live checkpoint, a receipt or a cursor, or while a
+-- checkpoint retained beside one of its pruned slots still needs that
+-- noncontent lineage stub (bounded: that checkpoint ends within 30 days of the
+-- prune). Otherwise 30 days after its last run purge, result purge or prune.
+CREATE FUNCTION memoriesql.query_tombstone_due_at_v1(t uuid,run uuid) RETURNS timestamptz
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog,memoriesql SET row_security=off AS $$
+ SELECT CASE WHEN EXISTS(SELECT 1 FROM memoriesql.result_preparation_operations
+   WHERE tenant_id=t AND run_ref=run AND state<>'discarded')
+  OR EXISTS(SELECT 1 FROM memoriesql.query_checkpoints cp JOIN memoriesql.result_preparation_operations op
+   ON op.tenant_id=cp.tenant_id AND op.operation_ref=cp.operation_ref
+   WHERE cp.tenant_id=t AND op.run_ref=run AND cp.automatic_retained)
+  OR EXISTS(SELECT 1 FROM memoriesql.query_checkpoints s JOIN memoriesql.result_preparation_operations op
+   ON op.tenant_id=s.tenant_id AND op.operation_ref=s.operation_ref
+   JOIN memoriesql.query_checkpoints live ON live.tenant_id=s.tenant_id
+    AND live.investigation_id=s.investigation_id AND live.automatic_retained AND live.created_at<=s.pruned_at
+   WHERE s.tenant_id=t AND op.run_ref=run AND NOT s.automatic_retained)
+  OR EXISTS(SELECT 1 FROM memoriesql.query_disclosures x JOIN memoriesql.query_deliveries d
+   ON d.tenant_id=x.tenant_id AND d.delivery_ref=x.delivery_ref WHERE d.tenant_id=t AND d.run_ref=run)
+  OR EXISTS(SELECT 1 FROM memoriesql.query_cursors x JOIN memoriesql.query_deliveries d
+   ON d.tenant_id=x.tenant_id AND d.delivery_ref=x.issued_by_delivery WHERE d.tenant_id=t AND d.run_ref=run)
+  THEN NULL ELSE (
+   SELECT GREATEST(p.purged_at,
+    (SELECT max(purged_at) FROM memoriesql.query_result_purges WHERE tenant_id=t AND run_ref=run),
+    (SELECT max(s.pruned_at) FROM memoriesql.query_checkpoints s JOIN memoriesql.result_preparation_operations op
+      ON op.tenant_id=s.tenant_id AND op.operation_ref=s.operation_ref WHERE s.tenant_id=t AND op.run_ref=run))
+    +interval '30 days'
+   FROM memoriesql.query_run_purges p WHERE p.tenant_id=t AND p.run_ref=run) END
+$$;
+REVOKE ALL ON FUNCTION memoriesql.query_tombstone_due_at_v1(uuid,uuid) FROM PUBLIC;
+
 CREATE FUNCTION memoriesql.query_result_cleanup_eligible_at_v1(t uuid,result_ref uuid) RETURNS timestamptz
 LANGUAGE sql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,memoriesql SET row_security=off AS $$
  -- UNION, not an arbitrary depth/count cutoff, follows the immutable hold DAG.
@@ -537,12 +638,14 @@ BEGIN
   FROM memoriesql.query_result_creations x JOIN memoriesql.result_preparation_operations o
    ON o.tenant_id=x.tenant_id AND o.operation_ref=x.operation_ref
   WHERE x.tenant_id=c.tenant_id AND o.workspace_id=c.workspace_id AND memoriesql.query_result_cleanup_eligible_at_v1(x.tenant_id,x.result_id)<=now_at;
- SELECT count(*),count(*) FILTER (WHERE p.purged_at<now_at-interval '31 days')
+ SELECT count(*),count(*) FILTER (WHERE x.due_at<now_at-interval '24 hours')
   INTO due_tombstones,late_tombstones
-  FROM memoriesql.query_run_purges p JOIN memoriesql.query_runs r
-   ON r.tenant_id=p.tenant_id AND r.run_ref=p.run_ref
-  WHERE p.tenant_id=c.tenant_id AND r.workspace_id=c.workspace_id
-   AND p.purged_at<=now_at-interval '30 days';
+  FROM (SELECT memoriesql.query_tombstone_due_at_v1(p.tenant_id,p.run_ref) AS due_at
+   FROM memoriesql.query_run_purges p JOIN memoriesql.query_runs r
+    ON r.tenant_id=p.tenant_id AND r.run_ref=p.run_ref
+   WHERE p.tenant_id=c.tenant_id AND r.workspace_id=c.workspace_id
+    AND p.purged_at<=now_at-interval '30 days') x
+  WHERE x.due_at<=now_at;
  SELECT count(*),max(last_failed_at) INTO failures,failed_at FROM memoriesql.query_purge_failures
   WHERE tenant_id=c.tenant_id AND workspace_id=c.workspace_id;
  SELECT error_code INTO failed_code FROM memoriesql.query_purge_failures
@@ -1422,7 +1525,7 @@ CREATE OR REPLACE FUNCTION memoriesql.expire_query_tombstone_v1(t uuid,run uuid)
 LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,memoriesql,memoriesql_query
  SET row_security=off AS $$
 DECLARE r memoriesql.query_runs%ROWTYPE; marker memoriesql.query_run_purges%ROWTYPE;
- last_purge timestamptz;
+ due timestamptz; item uuid; investigations uuid[]:='{}';
 BEGIN
  SELECT * INTO r FROM memoriesql.query_runs WHERE tenant_id=t AND run_ref=run;
  IF NOT FOUND THEN RETURN 'skipped'; END IF;
@@ -1432,22 +1535,26 @@ BEGIN
  ON CONFLICT(tenant_id,workspace_id) DO UPDATE SET revision=memoriesql.result_preparation_allocators.revision+1;
  SELECT * INTO marker FROM memoriesql.query_run_purges WHERE tenant_id=t AND run_ref=run;
  IF NOT FOUND THEN RETURN 'skipped'; END IF;
- IF EXISTS(SELECT 1 FROM memoriesql.query_checkpoints cp JOIN memoriesql.result_preparation_operations op
-    ON op.tenant_id=cp.tenant_id AND op.operation_ref=cp.operation_ref WHERE cp.tenant_id=t AND op.run_ref=run)
-  OR EXISTS(SELECT 1 FROM memoriesql.result_preparation_operations
-   WHERE tenant_id=t AND run_ref=run AND state<>'discarded')
-  OR EXISTS(SELECT 1 FROM memoriesql.query_disclosures x JOIN memoriesql.query_deliveries d
-   ON d.tenant_id=x.tenant_id AND d.delivery_ref=x.delivery_ref WHERE d.tenant_id=t AND d.run_ref=run)
-  OR EXISTS(SELECT 1 FROM memoriesql.query_cursors x JOIN memoriesql.query_deliveries d
-   ON d.tenant_id=x.tenant_id AND d.delivery_ref=x.issued_by_delivery
-   WHERE d.tenant_id=t AND d.run_ref=run) THEN
-  RETURN 'pending';
- END IF;
- SELECT GREATEST(marker.purged_at,max(purged_at)) INTO last_purge
-  FROM memoriesql.query_result_purges WHERE tenant_id=t AND run_ref=run;
- IF clock_timestamp()<COALESCE(last_purge,marker.purged_at)+interval '30 days' THEN
-  RETURN 'skipped';
- END IF;
+ -- Retention locks of every investigation whose stub this tombstone may end.
+ FOR item IN SELECT DISTINCT cp.investigation_id FROM memoriesql.query_checkpoints cp
+  JOIN memoriesql.result_preparation_operations op ON op.tenant_id=cp.tenant_id AND op.operation_ref=cp.operation_ref
+  WHERE cp.tenant_id=t AND op.run_ref=run ORDER BY cp.investigation_id LOOP
+  PERFORM pg_advisory_xact_lock(hashtextextended(t::text||':investigation:'||item::text,0));
+  investigations:=investigations||item;
+ END LOOP;
+ due:=memoriesql.query_tombstone_due_at_v1(t,run);
+ IF due IS NULL THEN RETURN 'pending'; END IF;
+ IF clock_timestamp()<due THEN RETURN 'skipped'; END IF;
+ -- Noncontent stubs end with this tombstone, then the control rows of any
+ -- investigation left without a checkpoint; their charges leave the ledger.
+ DELETE FROM memoriesql.query_checkpoints cp USING memoriesql.result_preparation_operations op
+  WHERE op.tenant_id=t AND op.run_ref=run AND cp.tenant_id=t AND cp.operation_ref=op.operation_ref;
+ DELETE FROM memoriesql.query_investigation_branches b WHERE b.tenant_id=t
+  AND b.investigation_id=ANY(investigations) AND NOT EXISTS(SELECT 1 FROM memoriesql.query_checkpoints cp
+   WHERE cp.tenant_id=t AND cp.investigation_id=b.investigation_id);
+ DELETE FROM memoriesql.query_investigations i WHERE i.tenant_id=t
+  AND i.investigation_id=ANY(investigations) AND NOT EXISTS(SELECT 1 FROM memoriesql.query_checkpoints cp
+   WHERE cp.tenant_id=t AND cp.investigation_id=i.investigation_id);
  DELETE FROM memoriesql.query_result_purges WHERE tenant_id=t AND run_ref=run;
  DELETE FROM memoriesql.query_visible_refs WHERE tenant_id=t AND run_ref=run;
  DELETE FROM memoriesql.query_deliveries WHERE tenant_id=t AND run_ref=run;
@@ -1489,10 +1596,12 @@ BEGIN
      ON o.tenant_id=c.tenant_id AND o.operation_ref=c.operation_ref
     WHERE memoriesql.query_result_cleanup_eligible_at_v1(c.tenant_id,c.result_id)<=started
    UNION ALL
-   SELECT 3,'tombstone',p.tenant_id,r.workspace_id,p.run_ref,p.purged_at+interval '30 days'
+   SELECT 3,'tombstone',p.tenant_id,r.workspace_id,p.run_ref,
+    memoriesql.query_tombstone_due_at_v1(p.tenant_id,p.run_ref)
     FROM memoriesql.query_run_purges p JOIN memoriesql.query_runs r
      ON r.tenant_id=p.tenant_id AND r.run_ref=p.run_ref
     WHERE p.purged_at<=started-interval '30 days'
+     AND memoriesql.query_tombstone_due_at_v1(p.tenant_id,p.run_ref)<=started
   ) due
   LEFT JOIN memoriesql.query_purge_failures f ON f.tenant_id=due.tenant_id
    AND f.subject_kind=due.kind AND f.subject_ref=due.subject

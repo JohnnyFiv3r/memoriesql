@@ -668,5 +668,114 @@ class AutomaticCheckpointExecution(unittest.TestCase):
             service._admit.assert_not_called()
 
 
+class CheckpointRetentionLifecycle(unittest.TestCase):
+    """Shipped 0047 retention text only: stubs, receipts and control rows end.
+
+    Runtime oracles execute these paths; these pins keep the forward SQL from
+    silently restoring indefinite stubs, receipts or pending tombstones.
+    """
+
+    SQL = (ROOT / "migrations/0047_automatic_investigation_checkpoints.sql").read_text()
+
+    def body(self, name: str) -> str:
+        match = re.search(
+            r"CREATE (?:OR REPLACE )?FUNCTION memoriesql\." + name + r"\(.*?\$\$;",
+            self.SQL,
+            re.DOTALL,
+        )
+        assert match is not None, name
+        return " ".join(re.sub(r"--[^\n]*", "", match[0]).split())
+
+    def table(self, name: str) -> str:
+        start = self.SQL.index("CREATE TABLE memoriesql." + name + " (")
+        text = self.SQL[start : self.SQL.index(");", start)]
+        return " ".join(re.sub(r"--[^\n]*", "", text).split())
+
+    def test_pruned_slot_is_a_noncontent_tombstone(self) -> None:
+        table = self.table("query_checkpoints")
+        self.assertIn("manifest_digest text CHECK(", table)
+        self.assertIn(
+            "CHECK((manifest_digest IS NOT NULL)=automatic_retained "
+            "AND (pruned_at IS NULL)=automatic_retained)",
+            table,
+        )
+        prune = self.body("prune_automatic_checkpoints_v1")
+        self.assertIn(
+            "SET automatic_retained=false,manifest_digest=NULL, pruned_at=clock_timestamp()",
+            prune,
+        )
+        self.assertIn(
+            "UPDATE memoriesql.query_investigation_branches SET head_ref=NULL,head_digest=NULL",
+            prune,
+        )
+
+    def test_ended_investigation_cannot_be_continued_from_an_old_head(self) -> None:
+        prepare = self.body("prepare_automatic_checkpoint_v1")
+        ended = prepare.index(
+            "AND cp.automatic_retained AND clock_timestamp()<cp.expires_at) THEN "
+            "RAISE EXCEPTION 'checkpoint_unavailable'"
+        )
+        self.assertLess(ended, prepare.index("'checkpoint_branch_conflict'"))
+
+    def test_receipts_and_released_contexts_leave_with_their_run(self) -> None:
+        self.assertIn(
+            "CREATE TRIGGER query_checkpoint_purge AFTER UPDATE OF purged_at "
+            "ON memoriesql.query_steps",
+            " ".join(self.SQL.split()),
+        )
+        purge = self.body("purge_checkpoint_step_v1")
+        for predicate in (
+            "NEW.kind IN ('checkpoint','read_checkpoint') AND x.result_id IS NULL",
+            "NOT memoriesql.query_checkpoint_context_retained_v1(x.tenant_id,x.access_context)",
+            "NOT memoriesql.query_checkpoint_context_retained_v1(k.tenant_id,k.access_context)",
+        ):
+            self.assertIn(predicate, purge)
+        prune = self.body("prune_automatic_checkpoints_v1")
+        for relation in ("query_disclosures x", "query_cursors k"):
+            self.assertIn(
+                "DELETE FROM memoriesql."
+                + relation
+                + " USING memoriesql.query_deliveries d,"
+                "memoriesql.query_run_purges p",
+                prune,
+            )
+
+    def test_tombstone_expiry_ends_stubs_control_rows_and_charges(self) -> None:
+        expire = self.body("expire_query_tombstone_v1")
+        self.assertIn("due:=memoriesql.query_tombstone_due_at_v1(t,run);", expire)
+        order = [
+            expire.index("DELETE FROM memoriesql." + relation)
+            for relation in (
+                "query_checkpoints cp",
+                "query_investigation_branches b",
+                "query_investigations i",
+                "result_preparation_operations",
+            )
+        ]
+        self.assertEqual(order, sorted(order))
+        due = self.body("query_tombstone_due_at_v1")
+        for predicate in (
+            "cp.automatic_retained",
+            "live.automatic_retained AND live.created_at<=s.pruned_at",
+            "(SELECT max(s.pruned_at) FROM memoriesql.query_checkpoints s",
+            "+interval '30 days'",
+        ):
+            self.assertIn(predicate, due)
+        # Any surviving checkpoint row, stub included, no longer pins a run.
+        self.assertNotIn("WHERE cp.tenant_id=t AND op.run_ref=run) OR", due + expire)
+
+    def test_sweep_and_status_share_the_tombstone_due_time(self) -> None:
+        for name in ("purge_expired_query_state_v1", "query_cleanup_status_v1"):
+            with self.subTest(function=name):
+                self.assertIn(
+                    "memoriesql.query_tombstone_due_at_v1(p.tenant_id,p.run_ref)",
+                    self.body(name),
+                )
+        self.assertNotIn(
+            "p.purged_at<now_at-interval '31 days'",
+            self.body("query_cleanup_status_v1"),
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
