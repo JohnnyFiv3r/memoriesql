@@ -6,6 +6,7 @@ import ast
 import copy
 import hashlib
 import json
+import re
 import time
 import unittest
 from collections.abc import Iterator
@@ -120,6 +121,47 @@ class CheckpointReviewRegressions(unittest.TestCase):
                 self.assertIs(
                     self.overdue_predicate(now - timedelta(days=2), end), expected
                 )
+
+    def frame_segment(self, migration: str, name: str, start: str, end: str) -> str:
+        text = (ROOT / f"migrations/{migration}.sql").read_text()
+        match = re.search(
+            r"CREATE (?:OR REPLACE )?FUNCTION memoriesql\." + name + r"\(.*?\$\$;",
+            text,
+            re.DOTALL,
+        )
+        assert match is not None, (migration, name)
+        body = " ".join(re.sub(r"--[^\n]*", "", match[0]).split())
+        return body[body.index(start) : body.index(end, body.index(start))]
+
+    def test_redefined_helpers_keep_frame_records_as_canonical_text(self) -> None:
+        # 0047 redefines both helpers for checkpoint access. Retained rows carry
+        # numeric SQL values (author_confidence) and private partitions refuse
+        # JSON floats, so frames must stay canonical text exactly as 0046 does.
+        for name, start, end in (
+            (
+                "prepare_query_inspection_v1",
+                "'dependencies',jsonb_build_object('frames'",
+                "'raw_sources',raw_sources",
+            ),
+            (
+                "read_query_helper_artifact_v1",
+                "FOR item IN SELECT value FROM jsonb_array_elements(deps->'frames')",
+                "IF record_pin->>'kind'='unit_package'",
+            ),
+        ):
+            with self.subTest(function=name):
+                checkpoint = self.frame_segment(
+                    "0047_automatic_investigation_checkpoints", name, start, end
+                )
+                self.assertEqual(
+                    checkpoint,
+                    self.frame_segment(
+                        "0046_agent_sql_result_helpers", name, start, end
+                    ),
+                )
+                self.assertIn("records_base64", checkpoint)
+                self.assertNotIn("'records',(SELECT", checkpoint)
+                self.assertNotIn("item->'records'", checkpoint)
 
     def runtime_request(self, *, hydration: bool) -> tuple[dict[str, Any], str]:
         source = ast.parse(

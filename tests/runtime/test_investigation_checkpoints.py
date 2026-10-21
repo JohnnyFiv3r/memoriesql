@@ -784,7 +784,9 @@ class AutomaticCheckpointRuntime(unittest.TestCase):
 
             def execute(self, *args: Any, **kwargs: Any) -> Any:
                 outcome = super().execute(*args, **kwargs)
-                if "record_checkpoint_disclosure_v1" in str(args[0]):
+                if str(args[0]).startswith(
+                    "SELECT memoriesql.record_checkpoint_disclosure_v1("
+                ):
                     self.recorded = True
                 return outcome
 
