@@ -252,11 +252,13 @@ class AgentSqlResults(unittest.TestCase):
         raw: str,
         source: UUID | None = None,
         scope: UUID | None = None,
+        more: tuple[str, ...] = (),
     ) -> UUID:
         """A bead authored from a producer-normalized package over raw bytes.
 
         The fixture captures `raw` as the retained source range; the sealed part
-        holds only `text`, derived from it and lineage-linked to it.
+        holds only `text`, derived from it and lineage-linked to it. Each of
+        `more` is a further statement, retained after a newline in that part.
         """
         original = self.fixture.part
 
@@ -272,7 +274,7 @@ class AgentSqlResults(unittest.TestCase):
 
         normalized.__module__ = original.__module__
         with self.in_scope(scope), patch.object(self.fixture, "part", normalized):
-            bead: UUID = self.fixture.bead(text, key=key, source=source)
+            bead: UUID = self.fixture.bead(text, *more, key=key, source=source)
         return bead
 
     def newer_representation(

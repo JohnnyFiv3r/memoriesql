@@ -39,6 +39,17 @@ else:
 class AgentSqlHelperRuntime(unittest.TestCase):
     TEXT = "Fictional normalized harvest: α pears in the orchard. " * 32
     RAW = "Fictional RAW harvest [alpha pears]; original captured bytes. " * 32
+    # Retained as one part, newline-joined; each statement is one <=2048-character
+    # render clause. Runs of 4-byte and 2-byte characters let a span reach
+    # 16 KiB of UTF-8 in far fewer than 16384 characters.
+    WIDE = (
+        "Fictional astral pears: " + "🍐" * 2024,
+        "🍐" * 2048,
+        "🍐" * 2048,
+        "Fictional accented pears: " + "é" * 2022,
+        *("é" * 2048,) * 4,
+    )
+    WIDE_RAW = "Fictional RAW wide harvest; original captured bytes. " * 320
 
     def setUp(self) -> None:
         # Compose the established real fixture; do not inherit its entire suite.
@@ -56,6 +67,14 @@ class AgentSqlHelperRuntime(unittest.TestCase):
             raw=self.RAW,
             source=normalized_source,
             scope=normalized_scope,
+        )
+        self.wide = self.r.normalized_bead(
+            self.WIDE[0],
+            "helper-wide",
+            raw=self.WIDE_RAW,
+            source=normalized_source,
+            scope=normalized_scope,
+            more=self.WIDE[1:],
         )
         capabilities = ["memory.inspect", "memory.query", "source.read"]
         grant, self.agent = self.r.home_agent(capabilities)
@@ -149,9 +168,11 @@ class AgentSqlHelperRuntime(unittest.TestCase):
             },
         )
 
-    def pins(self, run: dict[str, Any]) -> list[dict[str, Any]]:
+    def pins(
+        self, run: dict[str, Any], bead: UUID | None = None
+    ) -> list[dict[str, Any]]:
         request = self.inspection(
-            run, beads=(self.normalized,), facets=("evidence_metadata",)
+            run, beads=(bead or self.normalized,), facets=("evidence_metadata",)
         )
         raw, reply = self.send(request)
         self.available(raw, reply)
@@ -183,6 +204,17 @@ class AgentSqlHelperRuntime(unittest.TestCase):
             "max_bytes": 65536,
             "cursor": None,
         }
+
+    def span(self, text: str, size: int, *, after: int = 0) -> tuple[int, int]:
+        """The first character interval from `after` of exactly `size` UTF-8 bytes."""
+        for start in range(after, len(text)):
+            end, used = start, 0
+            while used < size and end < len(text):
+                used += len(text[end].encode())
+                end += 1
+            if used == size:
+                return start, end
+        raise AssertionError("fixture text has no such span")
 
     def test_inspection_receipt_and_exact_replay_reuse_one_original_artifact(
         self,
@@ -331,6 +363,173 @@ class AgentSqlHelperRuntime(unittest.TestCase):
             selection["returned_sha256"], hashlib.sha256(returned).hexdigest()
         )
         self.assertIsNone(selection["content"])
+
+    def test_hydration_through_a_result_carries_that_results_one_access_basis(
+        self,
+    ) -> None:
+        run = self.r.start()
+        _, result = self.r.query(
+            run,
+            "SELECT s.statement_id,s.bead_id,e.evidence_ref FROM memory_v1.statements s "
+            "JOIN memory_v1.statement_sources e ON e.statement_id=s.statement_id "
+            "ORDER BY s.statement_id,e.evidence_ref",
+            page_size=50,
+        )
+        self.assertEqual(result["outcome"], "available", result)
+        columns = [c["name"] for c in result["result"]["result_schema"]]
+        row = next(
+            r
+            for r in result["page"]["rows"]
+            if r["values"][columns.index("bead_id")] == str(self.normalized)
+        )
+        statement = row["values"][columns.index("statement_id")]
+        source_ref = next(
+            ref for ref in row["evidence_refs"] if ref["kind"] == "source"
+        )
+        # Associate the part by exact statement/unit/content pins, never by
+        # guessing that a direct evidence UUID was delivered with this result.
+        pin = next(
+            p
+            for p in self.pins(run)
+            if p["statement_id"] == statement
+            and p["unit"]["source_unit_id"] == source_ref["unit_ref"]
+            and p["unit"]["content_sha256"] == source_ref["content_sha256"]
+        )
+        origin = {
+            "result": {k: result["result"][k] for k in ("result_id", "content_digest")},
+            "access": {"kind": "standalone"},
+        }
+        request = self.hydration(run, pin)
+        request["selections"] = [
+            dict(
+                request["selections"][0],
+                evidence_ref=source_ref["ref"],
+                origin=origin,
+                start=start,
+                end=start + 64,
+            )
+            for start in (0, 128)
+        ]
+        raw, hydrated = self.send(request)
+        self.available(raw, hydrated)
+        self.assertEqual(
+            [part["content"] for part in hydrated["hydration"]["slices"]],
+            [self.TEXT[0:64], self.TEXT[128:192]],
+        )
+        # Exactly the basis the result itself reported, once for both spans;
+        # only its check time is this reply's.
+        self.assertEqual(
+            [
+                {k: v for k, v in basis.items() if k != "checked_at"}
+                for basis in hydrated["access_bases"]
+            ],
+            [
+                {k: v for k, v in basis.items() if k != "checked_at"}
+                for basis in result["access_bases"]
+            ],
+        )
+        self.assertEqual(len(hydrated["access_bases"]), 1)
+
+    def test_normalized_spans_are_at_most_16_kib_of_utf8_not_only_characters(
+        self,
+    ) -> None:
+        run = self.r.start()
+        pin = self.pins(run, self.wide)[0]
+        text = "\n".join(self.WIDE)
+        astral = self.span(text, 16384)
+        accented = self.span(text, 16384, after=text.index("é"))
+        over = self.span(text, 16385, after=text.index("é"))
+        self.assertIn("🍐", text[slice(*astral)])
+        self.assertNotIn("🍐", text[slice(*accented)] + text[slice(*over)])
+        for start, end in (astral, accented):
+            request = self.hydration(run, pin)
+            request["selections"][0].update(start=start, end=end)
+            raw, reply = self.send(request)
+            self.available(raw, reply)
+            (selection,) = reply["hydration"]["slices"]
+            self.assertEqual(selection["content"], text[start:end])
+            self.assertEqual(len(selection["content"].encode()), 16384)
+            self.assertLess(end - start, 16384)
+            self.assertLessEqual(len(raw), 65536)
+        disclosures = self.scalar("SELECT count(*) FROM memoriesql.query_disclosures")
+        # Within the character interval, but one character or byte past 16 KiB.
+        for start, end in (over, (astral[0], astral[1] + 1)):
+            request = self.hydration(run, pin)
+            request["selections"][0].update(start=start, end=end)
+            _, refused = self.send(request)
+            self.assertEqual(
+                (refused["outcome"], refused["error"]),
+                ("invalid_request", {"code": "binding"}),
+                refused,
+            )
+            self.assertNotIn("hydration", refused)
+        self.assertEqual(
+            self.scalar("SELECT count(*) FROM memoriesql.query_disclosures"),
+            disclosures,
+        )
+        # Raw spans keep their byte interval: 16384 bytes, never 16385.
+        request = self.hydration(run, pin)
+        request["selections"][0].update(
+            representation="raw_bytes", lineage_ordinal=0, start=0, end=16384
+        )
+        raw, original = self.send(request)
+        self.available(raw, original)
+        returned = base64.b64decode(
+            original["hydration"]["slices"][0]["bytes_base64"], validate=True
+        )
+        self.assertEqual(returned, self.WIDE_RAW.encode()[:16384])
+        request = dict(request, step_key=str(uuid4()))
+        request["selections"] = [dict(request["selections"][0], end=16385)]
+        _, refused = self.send(request)
+        self.assertEqual(refused["outcome"], "invalid_request", refused)
+
+    def test_hydration_replies_are_at_most_64_kib_encoded_and_page_whole_spans(
+        self,
+    ) -> None:
+        run = self.r.start()
+        pin = self.pins(run, self.wide)[0]
+        request = self.hydration(run, pin)
+        # 64 KiB of raw content is about 85 KiB as base64: under the general
+        # 256 KiB cap it would be one reply.
+        request["selections"] = [
+            dict(
+                request["selections"][0],
+                representation="raw_bytes",
+                lineage_ordinal=0,
+                start=ordinal * 64,
+                end=ordinal * 64 + 16384,
+            )
+            for ordinal in range(4)
+        ]
+        original = dict(request)
+        raw, page = self.send(request)
+        self.available(raw, page)
+        sizes = [len(raw)]
+        slices = list(page["hydration"]["slices"])
+        self.assertTrue(page["has_more"], page["work"])
+        for _ in range(4):
+            if not page["has_more"]:
+                break
+            request = dict(original, step_key=str(uuid4()), cursor=page["next_cursor"])
+            raw, page = self.send(request)
+            self.available(raw, page)
+            sizes.append(len(raw))
+            slices.extend(page["hydration"]["slices"])
+        self.assertFalse(page["has_more"])
+        self.assertTrue(all(size <= 65536 for size in sizes), sizes)
+        self.assertEqual([part["start"] for part in slices], [0, 64, 128, 192])
+        self.assertEqual(
+            [base64.b64decode(part["bytes_base64"]) for part in slices],
+            [self.WIDE_RAW.encode()[i * 64 : i * 64 + 16384] for i in range(4)],
+        )
+        self.assertEqual(
+            self.scalar(
+                "SELECT array_agg(charged_transport ORDER BY delivery_ref) "
+                "FROM memoriesql.query_deliveries d JOIN memoriesql.query_steps s "
+                "USING(tenant_id,run_ref,step_key) WHERE s.kind='hydrate_source'"
+            ),
+            sizes,
+        )
 
     def test_hydration_revocation_precedes_offsets_and_withholds_every_selection(
         self,

@@ -19,6 +19,13 @@ FUNCTION = re.compile(
 )
 
 
+# || and the JSON path operators share one precedence level and associate
+# left: a||b->'k' is (a||b)->'k'. Any such right operand needs parentheses.
+UNPARENTHESIZED_PATH = re.compile(
+    r"\|\|\s*(?:[a-z_][a-z0-9_.]*)?\s*(?:\([^()]*\))?\s*(?:->|#>)"
+)
+
+
 def compact(sql: str) -> str:
     return " ".join(re.sub(r"--[^\n]*", "", sql).split())
 
@@ -312,6 +319,47 @@ class HelperMigrationTests(unittest.TestCase):
             "'returned_sha256',encode(sha256(body_bytes),'hex')",
         ):
             self.assertIn(predicate, body[boundary:])
+
+    def test_hydration_spans_are_bounded_in_bytes_as_well_as_characters(
+        self,
+    ) -> None:
+        # The approved 16 KiB per span is binary bytes. Normalized offsets are
+        # characters, so their UTF-8 bytes are checked once the content is read.
+        body = self.body("prepare_query_hydration_v1")
+        check = (
+            "IF octet_length(body_bytes)>16384 THEN RAISE EXCEPTION "
+            "'invalid_query_helper_interval' USING ERRCODE='22023'; END IF;"
+        )
+        self.assertEqual(body.count(check), 1)
+        self.assertLess(
+            body.index(
+                "FOR resolved IN SELECT value FROM jsonb_array_elements(planned)"
+            ),
+            body.index(check),
+        )
+        self.assertLess(
+            body.index("data:=memoriesql.stored_bead_evidence_content"),
+            body.index(check),
+        )
+        self.assertLess(
+            body.index(check), body.index("amount:=amount+octet_length(body_bytes)")
+        )
+
+    def test_hydration_keeps_one_basis_per_resolved_access_context(self) -> None:
+        body = compact(self.body("prepare_query_hydration_v1"))
+        self.assertIn("bases:=bases||(resolved->'access_bases');", body)
+        # Each resolution stamps its own check time; the reply restamps them.
+        self.assertIn(
+            "SELECT DISTINCT ON (value-'checked_at') value "
+            "FROM jsonb_array_elements(bases) "
+            "ORDER BY value-'checked_at',value->>'checked_at'",
+            body,
+        )
+        for path in sorted((ROOT / "migrations").glob("*.sql")):
+            with self.subTest(migration=path.name):
+                self.assertIsNone(
+                    UNPARENTHESIZED_PATH.search(compact(path.read_text()))
+                )
 
     def test_cursor_replay_binds_run_scope_artifact_and_original_page(self) -> None:
         body = self.body("prepare_query_helper_v1")

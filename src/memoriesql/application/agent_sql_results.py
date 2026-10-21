@@ -119,6 +119,8 @@ UNSUPPORTED_SOURCE_FACETS = (
 SEARCH_TEXT_FACET = "source_units.search_text"
 
 MAX_RESPONSE_BYTES = 262144
+# A whole encoded hydration reply, not only its content, is at most 64 KiB.
+MAX_HYDRATION_RESPONSE_BYTES = 65536
 MAX_PAGE_ROWS = 50
 
 

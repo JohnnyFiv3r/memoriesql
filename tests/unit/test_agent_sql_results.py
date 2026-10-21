@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import re
 import time
@@ -19,13 +20,16 @@ from psycopg.errors import InsufficientPrivilege
 from memoriesql.application.agent_sql_catalog import SqlCatalog
 from memoriesql.application.agent_sql_helpers import validate_helper_content
 from memoriesql.application.investigation_contracts import (
+    HydrateRequest,
     InspectRequest,
     parse_investigation_request,
+    result_json_bytes,
 )
 from memoriesql.infrastructure.postgres.agent_sql_results import (
     PostgresAgentSqlResults,
     _Failure,
 )
+from tests.unit.test_agent_sql_helpers import hydration_fixture
 
 
 class HelperDispatch(unittest.TestCase):
@@ -208,13 +212,45 @@ class HelperExecution(HelperDispatch):
             raise AssertionError(statement)
         return Mock(fetchone=Mock(return_value=(result,)))
 
-    def run_helper(self) -> dict[str, Any]:
+    def hydration(self, *texts: str) -> HydrateRequest:
+        """Make the prepared packet one normalized slice per text."""
+        request, content = hydration_fixture()
+        template = content["payload"]["hydration"]["slices"][0]
+        slices, selections = [], []
+        for text in texts:
+            item = copy.deepcopy(template)
+            item["evidence_pin"]["ref"] = str(uuid4())
+            item["evidence_pin"]["part"]["part_id"] = str(uuid4())
+            item.update(
+                end=len(text),
+                content=text,
+                returned_sha256=hashlib.sha256(text.encode()).hexdigest(),
+            )
+            slices.append(item)
+            selections.append(
+                request.selections[0].model_copy(
+                    update={
+                        "evidence_ref": item["evidence_pin"]["ref"],
+                        "part_id": item["evidence_pin"]["part"]["part_id"],
+                        "end": len(text),
+                    }
+                )
+            )
+        content["payload"]["hydration"]["slices"] = slices
+        self.packet["content"] = content
+        return request.model_copy(
+            update={"selections": tuple(selections), "max_bytes": 65536}
+        )
+
+    def run_helper(
+        self, request: InspectRequest | HydrateRequest | None = None
+    ) -> dict[str, Any]:
         start = time.monotonic()
         with patch(
             MODULE + ".relation_projection_frame", return_value=nullcontext(self.owner)
         ) as fence:
             data = self.service._helper(
-                self.request_value,
+                request or self.request_value,
                 "0" * 64,
                 self.admission,
                 start,
@@ -415,6 +451,45 @@ class HelperExecution(HelperDispatch):
         self.assertEqual(
             result["visibility"]["new_refs"][0]["ref"],
             original["observation"]["bead_id"],
+        )
+
+    def test_hydration_replies_page_at_64_kib_of_whole_encoded_bytes(self) -> None:
+        # 32 KiB of astral content escapes to about 96 KiB of JSON. The 256 KiB
+        # general cap would send both spans; hydration's whole-reply cap pages.
+        request = self.hydration("🙂" * 4096, "🍐" * 4096)
+        self.assertGreater(len(result_json_bytes(self.packet["content"])), 65536)
+        result = self.run_helper(request)
+        self.assertTrue(result["has_more"])
+        self.assertEqual(
+            [item["content"] for item in result["hydration"]["slices"]],
+            ["🙂" * 4096],
+        )
+        (recorded,) = [
+            values
+            for statement, values in self.sql
+            if "record_query_helper_disclosure_v1" in statement
+        ]
+        self.assertEqual(recorded[5], result["work"]["transport_bytes"])
+        self.assertLessEqual(recorded[5], 65536)
+
+    def test_a_span_encoding_past_the_hydration_reply_cap_is_never_truncated(
+        self,
+    ) -> None:
+        # 16 KiB of control characters is 96 KiB once escaped: no reply fits.
+        request = self.hydration("\x01" * 16384)
+        with self.assertRaises(_Failure) as caught:
+            self.run_helper(request)
+        self.assertEqual(
+            (caught.exception.outcome, caught.exception.code),
+            ("budget_exhausted", "transport"),
+        )
+        self.assertFalse(
+            any(
+                (
+                    "record_query_helper_disclosure_v1" in statement
+                    for statement, _ in self.sql
+                )
+            )
         )
 
     def test_replay_preserves_exact_page_even_when_a_smaller_page_would_fit(
@@ -643,6 +718,10 @@ class HelperBackendBoundary(unittest.TestCase):
             call = frame.execute.call_args
             self.assertIn("admit_query_delivery_v1", call.args[0])
             self.assertEqual(call.args[1][2:4], (kind, "b" * 64))
+            # Admission reserves only what one whole encoded reply may use.
+            self.assertEqual(
+                call.args[1][5], 65536 if kind == "hydrate_source" else 262144
+            )
             self.assertEqual(frame.execute.call_count, 2)
 
     def test_authorization_failure_cannot_reach_helper_delivery_or_leak_details(
