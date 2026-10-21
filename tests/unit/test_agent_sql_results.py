@@ -23,7 +23,6 @@ from memoriesql.application.investigation_contracts import (
     HydrateRequest,
     InspectRequest,
     parse_investigation_request,
-    result_json_bytes,
 )
 from memoriesql.infrastructure.postgres.agent_sql_results import (
     PostgresAgentSqlResults,
@@ -453,44 +452,55 @@ class HelperExecution(HelperDispatch):
             original["observation"]["bead_id"],
         )
 
-    def test_hydration_replies_page_at_64_kib_of_whole_encoded_bytes(self) -> None:
-        # 32 KiB of astral content escapes to about 96 KiB of JSON. The 256 KiB
-        # general cap would send both spans; hydration's whole-reply cap pages.
-        request = self.hydration("🙂" * 4096, "🍐" * 4096)
-        self.assertGreater(len(result_json_bytes(self.packet["content"])), 65536)
-        result = self.run_helper(request)
-        self.assertTrue(result["has_more"])
-        self.assertEqual(
-            [item["content"] for item in result["hydration"]["slices"]],
-            ["🙂" * 4096],
-        )
-        (recorded,) = [
-            values
+    def disclosed_transport(self) -> list[int]:
+        return [
+            values[5]
             for statement, values in self.sql
             if "record_query_helper_disclosure_v1" in statement
         ]
-        self.assertEqual(recorded[5], result["work"]["transport_bytes"])
-        self.assertLessEqual(recorded[5], 65536)
 
-    def test_a_span_encoding_past_the_hydration_reply_cap_is_never_truncated(
+    def test_hydration_delivers_64_kib_of_content_in_one_reply_under_the_cap(
         self,
     ) -> None:
-        # 16 KiB of control characters is 96 KiB once escaped: no reply fits.
-        request = self.hydration("\x01" * 16384)
+        # Hydration's 64 KiB per response is selected content (W4: sixteen
+        # calls carry 1 MiB plus metadata). Escaped, these four astral spans are
+        # about 196 KiB: still one reply under the 256 KiB whole-response cap.
+        texts = ("🙂" * 4096, "🍐" * 4096, "🌳" * 4096, "🚀" * 4096)
+        request = self.hydration(*texts)
+        self.assertEqual(sum(len(t.encode()) for t in texts), request.max_bytes)
+        result = self.run_helper(request)
+        self.assertFalse(result["has_more"])
+        self.assertEqual(
+            [item["content"] for item in result["hydration"]["slices"]], list(texts)
+        )
+        (transport,) = self.disclosed_transport()
+        self.assertEqual(transport, result["work"]["transport_bytes"])
+        self.assertGreater(transport, 65536)
+        self.assertLessEqual(transport, 262144)
+
+    def test_hydration_encoded_past_the_cap_pages_whole_spans(self) -> None:
+        # 64 KiB of control characters escapes six-fold, to about 384 KiB.
+        texts = tuple(chr(code) * 16384 for code in (1, 2, 3, 4))
+        result = self.run_helper(self.hydration(*texts))
+        self.assertTrue(result["has_more"])
+        self.assertEqual(
+            [item["content"] for item in result["hydration"]["slices"]],
+            list(texts[:2]),
+        )
+        (transport,) = self.disclosed_transport()
+        self.assertLessEqual(transport, 262144)
+
+    def test_a_span_that_cannot_fit_its_reserved_transport_is_never_truncated(
+        self,
+    ) -> None:
+        self.admission["reserved_transport"] = 65536
         with self.assertRaises(_Failure) as caught:
-            self.run_helper(request)
+            self.run_helper(self.hydration("\x01" * 16384))
         self.assertEqual(
             (caught.exception.outcome, caught.exception.code),
             ("budget_exhausted", "transport"),
         )
-        self.assertFalse(
-            any(
-                (
-                    "record_query_helper_disclosure_v1" in statement
-                    for statement, _ in self.sql
-                )
-            )
-        )
+        self.assertEqual(self.disclosed_transport(), [])
 
     def test_replay_preserves_exact_page_even_when_a_smaller_page_would_fit(
         self,
@@ -718,10 +728,8 @@ class HelperBackendBoundary(unittest.TestCase):
             call = frame.execute.call_args
             self.assertIn("admit_query_delivery_v1", call.args[0])
             self.assertEqual(call.args[1][2:4], (kind, "b" * 64))
-            # Admission reserves only what one whole encoded reply may use.
-            self.assertEqual(
-                call.args[1][5], 65536 if kind == "hydrate_source" else 262144
-            )
+            # Hydration's 64 KiB is content; its whole reply has the general cap.
+            self.assertEqual(call.args[1][5], 262144)
             self.assertEqual(frame.execute.call_count, 2)
 
     def test_authorization_failure_cannot_reach_helper_delivery_or_leak_details(

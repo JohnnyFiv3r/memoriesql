@@ -33,7 +33,6 @@ from memoriesql.application.agent_sql_catalog import SqlAdmissionError, SqlCatal
 from memoriesql.application.agent_sql_results import (
     ALLOCATION_PROFILE_HASH,
     CONTRACT_VERSION,
-    MAX_HYDRATION_RESPONSE_BYTES,
     MAX_RESPONSE_BYTES,
     POLICY_HASH,
     PREPARED_RELATIONS,
@@ -135,13 +134,6 @@ def _helper_module_available() -> bool:
         )
     except (ImportError, ValueError):
         return False
-
-
-def _response_bytes(request: AccessRequest) -> int:
-    """The whole encoded reply cap that admission reserves and paging obeys."""
-    if isinstance(request, HydrateRequest):
-        return min(MAX_RESPONSE_BYTES, MAX_HYDRATION_RESPONSE_BYTES)
-    return MAX_RESPONSE_BYTES
 
 
 # Admission refusals write nothing and disclose no other principal's work.
@@ -894,7 +886,7 @@ class PostgresAgentSqlResults:
             raise _Failure("unavailable", "unavailable")
         cursor = packet.get("page_cursor") or str(uuid4())
         previous = set(packet["previous_refs"])
-        limit = min(_response_bytes(request), int(admission["reserved_transport"]))
+        limit = min(MAX_RESPONSE_BYTES, int(admission["reserved_transport"]))
 
         def encode(count: int) -> tuple[bytes, int, int, dict[str, Any]]:
             self._remaining_ms(deadline)
@@ -1763,7 +1755,7 @@ class PostgresAgentSqlResults:
                         kind,
                         fingerprint,
                         30000,
-                        _response_bytes(request),
+                        MAX_RESPONSE_BYTES,
                     ),
                 ).fetchone()
         if row is None or row[0] is None:

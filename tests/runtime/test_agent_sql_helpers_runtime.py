@@ -435,7 +435,6 @@ class AgentSqlHelperRuntime(unittest.TestCase):
             self.assertEqual(selection["content"], text[start:end])
             self.assertEqual(len(selection["content"].encode()), 16384)
             self.assertLess(end - start, 16384)
-            self.assertLessEqual(len(raw), 65536)
         disclosures = self.scalar("SELECT count(*) FROM memoriesql.query_disclosures")
         # Within the character interval, but past 16 KiB: one more astral
         # character, or exactly 16385 bytes with the one-byte space before.
@@ -473,14 +472,15 @@ class AgentSqlHelperRuntime(unittest.TestCase):
         _, refused = self.send(request)
         self.assertEqual(refused["outcome"], "invalid_request", refused)
 
-    def test_hydration_replies_are_at_most_64_kib_encoded_and_page_whole_spans(
+    def test_hydration_delivers_64_kib_of_content_in_one_reply_and_refuses_more(
         self,
     ) -> None:
         run = self.r.start()
         pin = self.pins(run, self.wide)[0]
         request = self.hydration(run, pin)
-        # 64 KiB of raw content is about 85 KiB as base64: under the general
-        # 256 KiB cap it would be one reply.
+        # Hydration's 64 KiB per response is selected content (W4: sixteen
+        # calls carry 1 MiB plus metadata). Four 16 KiB raw spans are about
+        # 85 KiB as base64: one reply under the 256 KiB whole-response cap.
         request["selections"] = [
             dict(
                 request["selections"][0],
@@ -491,34 +491,30 @@ class AgentSqlHelperRuntime(unittest.TestCase):
             )
             for ordinal in range(4)
         ]
-        original = dict(request)
-        raw, page = self.send(request)
-        self.available(raw, page)
-        sizes = [len(raw)]
-        slices = list(page["hydration"]["slices"])
-        self.assertTrue(page["has_more"], page["work"])
-        for _ in range(4):
-            if not page["has_more"]:
-                break
-            request = dict(original, step_key=str(uuid4()), cursor=page["next_cursor"])
-            raw, page = self.send(request)
-            self.available(raw, page)
-            sizes.append(len(raw))
-            slices.extend(page["hydration"]["slices"])
-        self.assertFalse(page["has_more"])
-        self.assertTrue(all(size <= 65536 for size in sizes), sizes)
-        self.assertEqual([part["start"] for part in slices], [0, 64, 128, 192])
+        raw, reply = self.send(request)
+        self.available(raw, reply)
+        self.assertFalse(reply["has_more"])
         self.assertEqual(
-            [base64.b64decode(part["bytes_base64"]) for part in slices],
+            [
+                base64.b64decode(part["bytes_base64"])
+                for part in reply["hydration"]["slices"]
+            ],
             [self.WIDE_RAW.encode()[i * 64 : i * 64 + 16384] for i in range(4)],
         )
+        self.assertGreater(len(raw), 65536)
+        self.assertLessEqual(len(raw), 262144)
+        disclosures = self.scalar("SELECT count(*) FROM memoriesql.query_disclosures")
+        # One byte less allowance than the selected content: nothing disclosed.
+        _, refused = self.send(dict(request, step_key=str(uuid4()), max_bytes=65535))
         self.assertEqual(
-            self.scalar(
-                "SELECT array_agg(charged_transport ORDER BY delivery_ref) "
-                "FROM memoriesql.query_deliveries d JOIN memoriesql.query_steps s "
-                "USING(tenant_id,run_ref,step_key) WHERE s.kind='hydrate_source'"
-            ),
-            sizes,
+            (refused["outcome"], refused["error"]),
+            ("budget_exhausted", {"code": "storage"}),
+            refused,
+        )
+        self.assertNotIn("hydration", refused)
+        self.assertEqual(
+            self.scalar("SELECT count(*) FROM memoriesql.query_disclosures"),
+            disclosures,
         )
 
     def test_hydration_revocation_precedes_offsets_and_withholds_every_selection(
