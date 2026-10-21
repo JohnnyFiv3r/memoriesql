@@ -36,6 +36,16 @@ CREATE TABLE memoriesql.query_checkpoint_holds (
  FOREIGN KEY(tenant_id,artifact_ref) REFERENCES memoriesql.result_preparation_artifacts
 );
 CREATE INDEX query_checkpoint_holds_artifact ON memoriesql.query_checkpoint_holds(tenant_id,artifact_ref);
+-- One charged control record per retained artifact, not a new disclosure route.
+-- Record actual early releases, and natural expiry rather than delayed GC time.
+CREATE TABLE memoriesql.query_result_cleanup_hold_ends (
+ tenant_id uuid NOT NULL, artifact_ref uuid NOT NULL, last_hold_end timestamptz NOT NULL,
+ PRIMARY KEY(tenant_id,artifact_ref),
+ FOREIGN KEY(tenant_id,artifact_ref) REFERENCES memoriesql.result_preparation_artifacts ON DELETE CASCADE
+);
+ALTER TABLE memoriesql.query_result_cleanup_hold_ends ENABLE ROW LEVEL SECURITY;
+ALTER TABLE memoriesql.query_result_cleanup_hold_ends FORCE ROW LEVEL SECURITY;
+REVOKE ALL ON memoriesql.query_result_cleanup_hold_ends FROM PUBLIC,memoriesql_application;
 ALTER TABLE memoriesql.query_investigations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE memoriesql.query_investigations FORCE ROW LEVEL SECURITY;
 ALTER TABLE memoriesql.query_investigation_branches ENABLE ROW LEVEL SECURITY;
@@ -445,6 +455,56 @@ REVOKE ALL ON FUNCTION memoriesql.clear_checkpoint_step_v1() FROM PUBLIC;
 CREATE TRIGGER query_checkpoint_clear_pin BEFORE UPDATE OF purged_at ON memoriesql.query_steps
  FOR EACH ROW EXECUTE FUNCTION memoriesql.clear_checkpoint_step_v1();
 
+CREATE FUNCTION memoriesql.query_result_cleanup_eligible_at_v1(t uuid,result_ref uuid) RETURNS timestamptz
+LANGUAGE sql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,memoriesql SET row_security=off AS $$
+ -- UNION, not an arbitrary depth/count cutoff, follows the immutable hold DAG.
+ WITH RECURSIVE consumers(artifact_ref) AS (
+  SELECT result_ref
+  UNION SELECT h.child_ref FROM consumers c JOIN memoriesql.result_preparation_parent_holds h
+   ON h.tenant_id=t AND h.parent_ref=c.artifact_ref
+ ), promises AS (
+  SELECT q.expires_at AS ends_at FROM consumers c JOIN memoriesql.query_result_creations q
+   ON q.tenant_id=t AND q.result_id=c.artifact_ref
+  UNION ALL SELECT e.last_hold_end FROM consumers c JOIN memoriesql.query_result_cleanup_hold_ends e
+   ON e.tenant_id=t AND e.artifact_ref=c.artifact_ref
+  UNION ALL SELECT cp.expires_at FROM consumers c JOIN memoriesql.query_checkpoint_holds h
+   ON h.tenant_id=t AND h.artifact_ref=c.artifact_ref
+   JOIN memoriesql.query_checkpoints cp ON cp.tenant_id=t AND cp.checkpoint_id=h.checkpoint_id
+   WHERE cp.automatic_retained
+ )
+ SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM memoriesql.query_result_creations WHERE tenant_id=t AND result_id=result_ref)
+  OR EXISTS(SELECT 1 FROM consumers c JOIN memoriesql.result_preparation_artifacts a
+   ON a.tenant_id=t AND a.artifact_ref=c.artifact_ref
+   WHERE NOT EXISTS(SELECT 1 FROM memoriesql.query_result_creations q WHERE q.tenant_id=t AND q.result_id=c.artifact_ref))
+  -- A private preparation with no declared result lifetime retains its explicit
+  -- hold until owned release. It cannot be treated as expired by guessing time.
+  THEN NULL ELSE (SELECT max(ends_at) FROM promises) END
+$$;
+REVOKE ALL ON FUNCTION memoriesql.query_result_cleanup_eligible_at_v1(uuid,uuid) FROM PUBLIC;
+
+CREATE FUNCTION memoriesql.record_query_hold_end_v1() RETURNS trigger
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,memoriesql SET row_security=off AS $$
+DECLARE parent uuid; ends_at timestamptz; now_at timestamptz:=clock_timestamp();
+BEGIN
+ IF TG_TABLE_NAME='query_checkpoint_holds' THEN
+  parent:=OLD.artifact_ref;
+  SELECT LEAST(now_at,cp.expires_at) INTO ends_at FROM memoriesql.query_checkpoints cp
+   WHERE cp.tenant_id=OLD.tenant_id AND cp.checkpoint_id=OLD.checkpoint_id;
+ ELSE
+  parent:=OLD.parent_ref;
+  ends_at:=LEAST(now_at,COALESCE(memoriesql.query_result_cleanup_eligible_at_v1(OLD.tenant_id,OLD.child_ref),now_at));
+ END IF;
+ INSERT INTO memoriesql.query_result_cleanup_hold_ends VALUES(OLD.tenant_id,parent,COALESCE(ends_at,now_at))
+ ON CONFLICT(tenant_id,artifact_ref) DO UPDATE SET last_hold_end=
+  GREATEST(memoriesql.query_result_cleanup_hold_ends.last_hold_end,EXCLUDED.last_hold_end);
+ RETURN OLD;
+END $$;
+REVOKE ALL ON FUNCTION memoriesql.record_query_hold_end_v1() FROM PUBLIC;
+CREATE TRIGGER query_checkpoint_hold_end AFTER DELETE ON memoriesql.query_checkpoint_holds
+ FOR EACH ROW EXECUTE FUNCTION memoriesql.record_query_hold_end_v1();
+CREATE TRIGGER query_parent_hold_end AFTER DELETE ON memoriesql.result_preparation_parent_holds
+ FOR EACH ROW EXECUTE FUNCTION memoriesql.record_query_hold_end_v1();
+
 CREATE OR REPLACE FUNCTION memoriesql.query_cleanup_overdue_v1(t uuid,w uuid) RETURNS boolean
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog,memoriesql SET row_security=off AS $$
  SELECT EXISTS(SELECT 1 FROM memoriesql.query_runs r WHERE r.tenant_id=t AND r.workspace_id=w
@@ -452,10 +512,62 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog,memoriesql SET r
    AND NOT EXISTS(SELECT 1 FROM memoriesql.query_run_purges p WHERE p.tenant_id=r.tenant_id AND p.run_ref=r.run_ref))
   OR EXISTS(SELECT 1 FROM memoriesql.query_result_creations c JOIN memoriesql.result_preparation_operations o
    ON o.tenant_id=c.tenant_id AND o.operation_ref=c.operation_ref WHERE c.tenant_id=t AND o.workspace_id=w
-    AND c.expires_at<clock_timestamp()-interval '24 hours')
+    AND memoriesql.query_result_cleanup_eligible_at_v1(c.tenant_id,c.result_id)<clock_timestamp()-interval '24 hours')
   OR EXISTS(SELECT 1 FROM memoriesql.query_checkpoints cp JOIN memoriesql.query_investigations i USING(tenant_id,investigation_id)
    WHERE cp.tenant_id=t AND i.workspace_id=w AND cp.automatic_retained AND cp.expires_at<clock_timestamp()-interval '24 hours')
 $$;
+
+CREATE OR REPLACE FUNCTION memoriesql.query_cleanup_status_v1() RETURNS jsonb
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=pg_catalog,memoriesql SET row_security=off AS $$
+DECLARE c memoriesql.authorization_contexts%ROWTYPE; now_at timestamptz:=clock_timestamp();
+ due_runs bigint; due_results bigint; due_tombstones bigint; late_runs bigint; late_results bigint;
+ late_tombstones bigint; oldest timestamptz; failures bigint; failed_at timestamptz; failed_code text;
+ purged timestamptz;
+BEGIN
+ c:=memoriesql.result_preparation_authority_v1();
+ SELECT count(*) FILTER (WHERE true),count(*) FILTER (WHERE r.expires_at<now_at-interval '24 hours'),
+  min(r.expires_at) FILTER (WHERE r.expires_at<now_at-interval '24 hours')
+  INTO due_runs,late_runs,oldest
+  FROM memoriesql.query_runs r WHERE r.tenant_id=c.tenant_id AND r.workspace_id=c.workspace_id
+   AND r.expires_at<=now_at AND NOT EXISTS(SELECT 1 FROM memoriesql.query_run_purges p
+    WHERE p.tenant_id=r.tenant_id AND p.run_ref=r.run_ref);
+ SELECT count(*),count(*) FILTER (WHERE memoriesql.query_result_cleanup_eligible_at_v1(x.tenant_id,x.result_id)<now_at-interval '24 hours'),
+  LEAST(oldest,min(memoriesql.query_result_cleanup_eligible_at_v1(x.tenant_id,x.result_id)) FILTER (WHERE memoriesql.query_result_cleanup_eligible_at_v1(x.tenant_id,x.result_id)<now_at-interval '24 hours'))
+  INTO due_results,late_results,oldest
+  FROM memoriesql.query_result_creations x JOIN memoriesql.result_preparation_operations o
+   ON o.tenant_id=x.tenant_id AND o.operation_ref=x.operation_ref
+  WHERE x.tenant_id=c.tenant_id AND o.workspace_id=c.workspace_id AND memoriesql.query_result_cleanup_eligible_at_v1(x.tenant_id,x.result_id)<=now_at;
+ SELECT count(*),count(*) FILTER (WHERE p.purged_at<now_at-interval '31 days')
+  INTO due_tombstones,late_tombstones
+  FROM memoriesql.query_run_purges p JOIN memoriesql.query_runs r
+   ON r.tenant_id=p.tenant_id AND r.run_ref=p.run_ref
+  WHERE p.tenant_id=c.tenant_id AND r.workspace_id=c.workspace_id
+   AND p.purged_at<=now_at-interval '30 days';
+ SELECT count(*),max(last_failed_at) INTO failures,failed_at FROM memoriesql.query_purge_failures
+  WHERE tenant_id=c.tenant_id AND workspace_id=c.workspace_id;
+ SELECT error_code INTO failed_code FROM memoriesql.query_purge_failures
+  WHERE tenant_id=c.tenant_id AND workspace_id=c.workspace_id
+  ORDER BY last_failed_at DESC,subject_ref LIMIT 1;
+ SELECT max(x) INTO purged FROM (
+  SELECT max(p.purged_at) x FROM memoriesql.query_run_purges p JOIN memoriesql.query_runs r
+   ON r.tenant_id=p.tenant_id AND r.run_ref=p.run_ref
+   WHERE p.tenant_id=c.tenant_id AND r.workspace_id=c.workspace_id
+  UNION ALL
+  SELECT max(purged_at) FROM memoriesql.query_result_purges
+   WHERE tenant_id=c.tenant_id AND workspace_id=c.workspace_id) latest;
+ RETURN jsonb_build_object(
+  'checked_at',to_char(now_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+  'cleanup_sla_hours',24,'tombstone_days',30,
+  'due',jsonb_build_object('runs',due_runs,'results',due_results,'tombstones',due_tombstones),
+  'overdue',jsonb_build_object('runs',late_runs,'results',late_results,'tombstones',late_tombstones),
+  'oldest_overdue_due_at',to_char(oldest AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+  'failures',jsonb_build_object('count',failures,
+   'last_failed_at',to_char(failed_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+   'last_error_code',failed_code),
+  'last_purged_at',to_char(purged AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+  'admission',CASE WHEN memoriesql.query_cleanup_overdue_v1(c.tenant_id,c.workspace_id)
+   THEN 'blocked' ELSE 'open' END);
+END $$;
 
 CREATE FUNCTION memoriesql.query_result_context_live_v1(result_ref uuid,digest text,access jsonb) RETURNS boolean
 LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,memoriesql SET row_security=off AS $$
@@ -1273,7 +1385,9 @@ BEGIN
  ON CONFLICT(tenant_id,workspace_id) DO UPDATE SET revision=memoriesql.result_preparation_allocators.revision+1;
  SELECT * INTO c FROM memoriesql.query_result_creations WHERE tenant_id=t AND result_id=result FOR UPDATE;
  now_at:=clock_timestamp();
- IF NOT FOUND OR now_at<c.expires_at THEN RETURN 'skipped'; END IF;
+ IF NOT FOUND THEN RETURN 'skipped'; END IF;
+ IF memoriesql.query_result_cleanup_eligible_at_v1(t,result) IS NULL
+  OR memoriesql.query_result_cleanup_eligible_at_v1(t,result)>now_at THEN RETURN 'held'; END IF;
  IF EXISTS(SELECT 1 FROM memoriesql.result_preparation_parent_holds WHERE tenant_id=t AND parent_ref=result)
   OR EXISTS(SELECT 1 FROM memoriesql.query_checkpoint_holds WHERE tenant_id=t AND artifact_ref=result)
   THEN RETURN 'held'; END IF;
@@ -1356,10 +1470,11 @@ BEGIN
      AND NOT EXISTS(SELECT 1 FROM memoriesql.query_run_purges p
       WHERE p.tenant_id=r.tenant_id AND p.run_ref=r.run_ref)
    UNION ALL
-   SELECT 2,'result',c.tenant_id,o.workspace_id,c.result_id,c.expires_at
+   SELECT 2,'result',c.tenant_id,o.workspace_id,c.result_id,
+    memoriesql.query_result_cleanup_eligible_at_v1(c.tenant_id,c.result_id)
     FROM memoriesql.query_result_creations c JOIN memoriesql.result_preparation_operations o
      ON o.tenant_id=c.tenant_id AND o.operation_ref=c.operation_ref
-    WHERE c.expires_at<=started
+    WHERE memoriesql.query_result_cleanup_eligible_at_v1(c.tenant_id,c.result_id)<=started
    UNION ALL
    SELECT 3,'tombstone',p.tenant_id,r.workspace_id,p.run_ref,p.purged_at+interval '30 days'
     FROM memoriesql.query_run_purges p JOIN memoriesql.query_runs r

@@ -15,14 +15,21 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import psycopg
 from psycopg.conninfo import make_conninfo
 
+from memoriesql.application.agent_sql_catalog import SqlCatalog
+from memoriesql.application.agent_sql_results import POLICY_HASH
 from memoriesql.application.investigation_contracts import CheckpointManifest
 from memoriesql.infrastructure.postgres.relation_projection import (
     relation_projection_frame,
+)
+from memoriesql.infrastructure.postgres.result_preparation import (
+    PostgresResultPreparation,
+    PreparationPin,
+    PreparedContent,
 )
 
 if TYPE_CHECKING:
@@ -146,8 +153,18 @@ class AutomaticCheckpointRuntime(unittest.TestCase):
         run, result = self.query_root()
         first = self.r.send(self.append(run, result))
         self.assert_checkpoint(first)
-        self.r.age(run["run_ref"], timedelta(days=31))
+        self.r.age(run["run_ref"], timedelta(days=32))
         new = self.r.start()
+        other = self.r.start(self.h.agent)
+        hidden = self.r.send(
+            self.read(other, first["branch"]["head"]), secret=self.h.agent
+        )
+        self.assertEqual(hidden["outcome"], "unavailable", hidden)
+        self.assertNotIn("checkpoint", hidden)
+        status = json.loads(self.r.service().cleanup_status())["cleanup"]
+        self.assertEqual(status["overdue"]["results"], 0)
+        self.assertEqual(status["due"]["results"], 0)
+        self.assertEqual(status["admission"], "open")
         self.assertEqual(self.r.reuse(new, result["result"])["outcome"], "unavailable")
         restored = self.r.send(self.read(new, first["branch"]["head"]))
         self.assert_checkpoint(restored)
@@ -182,6 +199,197 @@ class AutomaticCheckpointRuntime(unittest.TestCase):
             ),
             1,
         )
+
+    def test_final_holder_prune_starts_cleanup_clock_and_real_overdue_gate(
+        self,
+    ) -> None:
+        run, result = self.query_root()
+        first = self.r.send(self.append(run, result))
+        self.assert_checkpoint(first)
+        self.r.age(run["run_ref"], timedelta(days=32))
+        current_run = self.r.start()
+        result_id = result["result"]["result_id"]
+        standalone_end = self.h.scalar(
+            "SELECT expires_at FROM memoriesql.query_result_creations WHERE result_id=%s",
+            (result_id,),
+        )
+        before = self.h.scalar("SELECT clock_timestamp()")
+        current = first
+        # Twenty authored, root-free checkpoints prune the sole root holder.
+        for _ in range(20):
+            request = self.append(current_run, result, current)
+            request["roots"] = []
+            current = self.r.send(request)
+            self.assert_checkpoint(current)
+        eligible = self.h.scalar(
+            "SELECT memoriesql.query_result_cleanup_eligible_at_v1(%s,%s)",
+            (self.fixture.tenant, result_id),
+        )
+        self.assertGreaterEqual(eligible, before)
+        self.assertLessEqual(eligible, self.h.scalar("SELECT clock_timestamp()"))
+        self.assertEqual(
+            self.h.scalar(
+                "SELECT expires_at FROM memoriesql.query_result_creations WHERE result_id=%s",
+                (result_id,),
+            ),
+            standalone_end,
+        )
+        status = json.loads(self.r.service().cleanup_status())["cleanup"]
+        self.assertEqual(status["due"]["results"], 1)
+        self.assertEqual(status["overdue"]["results"], 0)
+        self.assertEqual(status["admission"], "open")
+        # Private fixture clock control simulates missed ordinary cleanup. It
+        # does not alter standalone expiry, content/digests or any valid route.
+        self.db.execute(
+            "UPDATE memoriesql.query_result_cleanup_hold_ends SET last_hold_end=last_hold_end-interval '25 hours' WHERE artifact_ref=%s",
+            (result_id,),
+        )
+        status = json.loads(self.r.service().cleanup_status())["cleanup"]
+        self.assertEqual(status["overdue"]["results"], 1)
+        self.assertEqual(status["admission"], "blocked")
+        # Exercise the actual inherited admission gate before host cleanup,
+        # with the same public function/authority frame as start_run().
+        with (
+            self.fixture.connection() as connection,
+            relation_projection_frame(
+                connection,
+                credential_sha256=self.fixture.secret_hash,
+                workspace_id=self.fixture.workspace,
+                query_access=True,
+            ) as frame,
+        ):
+            row = frame.execute(
+                "SELECT memoriesql.start_query_run_v1(%s,%s)",
+                (SqlCatalog.installed().hash, POLICY_HASH),
+            ).fetchone()
+            assert row is not None
+            self.assertEqual(row[0], {"refused": "cleanup"})
+        self.r.service().cleanup_expired()
+        self.assertEqual(
+            self.h.scalar(
+                "SELECT count(*) FROM memoriesql.result_preparation_artifacts WHERE artifact_ref=%s",
+                (result_id,),
+            ),
+            0,
+        )
+        self.r.start()
+
+    def test_delayed_checkpoint_gc_preserves_natural_hold_end_and_debt(self) -> None:
+        run, result = self.query_root()
+        first = self.r.send(self.append(run, result))
+        self.assert_checkpoint(first)
+        self.r.age(run["run_ref"], timedelta(days=32))
+        checkpoint_id = first["checkpoint"]["checkpoint_id"]
+        # Expired control boundary only; never accept a rewritten manifest.
+        self.db.execute(
+            "UPDATE memoriesql.query_checkpoints SET created_at=created_at-interval '32 days',expires_at=expires_at-interval '32 days' WHERE checkpoint_id=%s",
+            (checkpoint_id,),
+        )
+        natural_end = self.h.scalar(
+            "SELECT expires_at FROM memoriesql.query_checkpoints WHERE checkpoint_id=%s",
+            (checkpoint_id,),
+        )
+        self.db.execute(
+            "SELECT memoriesql.expire_automatic_checkpoints_v1(16,%s,%s,clock_timestamp()+interval '5 seconds')",
+            (self.fixture.tenant, self.fixture.workspace),
+        )
+        result_id = result["result"]["result_id"]
+        self.assertEqual(
+            self.h.scalar(
+                "SELECT last_hold_end FROM memoriesql.query_result_cleanup_hold_ends WHERE artifact_ref=%s",
+                (result_id,),
+            ),
+            natural_end,
+        )
+        self.assertEqual(
+            self.h.scalar(
+                "SELECT memoriesql.query_result_cleanup_eligible_at_v1(%s,%s)",
+                (self.fixture.tenant, result_id),
+            ),
+            natural_end,
+        )
+        status = json.loads(self.r.service().cleanup_status())["cleanup"]
+        self.assertEqual(status["overdue"]["results"], 1)
+        self.assertEqual(status["admission"], "blocked")
+        self.r.service().cleanup_expired()
+        self.assertEqual(
+            self.h.scalar(
+                "SELECT count(*) FROM memoriesql.result_preparation_artifacts WHERE artifact_ref=%s",
+                (result_id,),
+            ),
+            0,
+        )
+
+    def test_private_child_hold_defers_debt_until_owned_release(self) -> None:
+        run, result = self.query_root()
+        result_id = result["result"]["result_id"]
+        parent_hash = self.h.scalar(
+            "SELECT artifact_sha256 FROM memoriesql.result_preparation_artifacts WHERE artifact_ref=%s",
+            (result_id,),
+        )
+        with self.fixture.connection() as connection:
+            store = PostgresResultPreparation(
+                connection,
+                credential_sha256=self.fixture.secret_hash,
+                workspace_id=self.fixture.workspace,
+            )
+            owned = store.reserve(
+                run_ref=uuid4(),
+                step_key=uuid4(),
+                request_fingerprint="e" * 64,
+                reservation_bytes=16384,
+            )
+            try:
+                # Actual private M31 preparation/hold, not a fabricated public
+                # saved-input result, receipt or supported refinement feature.
+                store.seal(
+                    operation_ref=owned.operation_ref,
+                    ownership_ref=owned.ownership_ref,
+                    artifact_ref=uuid4(),
+                    content=PreparedContent.encode(
+                        content={"fictional": "child"}, witnesses={}, dependencies={}
+                    ),
+                    parents=(PreparationPin(UUID(result_id), parent_hash),),
+                )
+                self.r.age(run["run_ref"], timedelta(days=32))
+                current = self.r.start()
+                self.r.start(self.h.agent)
+                self.assertIsNone(
+                    self.h.scalar(
+                        "SELECT memoriesql.query_result_cleanup_eligible_at_v1(%s,%s)",
+                        (self.fixture.tenant, result_id),
+                    )
+                )
+                status = json.loads(self.r.service().cleanup_status())["cleanup"]
+                self.assertEqual(status["due"]["results"], 0)
+                self.assertEqual(status["admission"], "open")
+                self.assertEqual(
+                    self.r.reuse(current, result["result"])["outcome"], "unavailable"
+                )
+                before = self.h.scalar("SELECT clock_timestamp()")
+                store.discard(
+                    operation_ref=owned.operation_ref, ownership_ref=owned.ownership_ref
+                )
+                eligible = self.h.scalar(
+                    "SELECT memoriesql.query_result_cleanup_eligible_at_v1(%s,%s)",
+                    (self.fixture.tenant, result_id),
+                )
+                self.assertGreaterEqual(eligible, before)
+                self.assertLessEqual(
+                    eligible, self.h.scalar("SELECT clock_timestamp()")
+                )
+                self.r.service().cleanup_expired()
+                self.assertEqual(
+                    self.h.scalar(
+                        "SELECT count(*) FROM memoriesql.result_preparation_artifacts WHERE artifact_ref=%s",
+                        (result_id,),
+                    ),
+                    0,
+                )
+            finally:
+                store.discard(
+                    operation_ref=owned.operation_ref, ownership_ref=owned.ownership_ref
+                )
 
     def test_paired_agent_context_cannot_be_consumed_by_the_other_principal(
         self,
@@ -234,22 +442,78 @@ class AutomaticCheckpointRuntime(unittest.TestCase):
     def test_checkpoint_context_inspection_and_normalized_hydration_use_original_frame(
         self,
     ) -> None:
-        run, result = self.query_root()
+        run = self.r.start()
+        _, result = self.r.query(
+            run,
+            "SELECT s.statement_id,s.bead_id,e.evidence_ref FROM memory_v1.statements s "
+            "JOIN memory_v1.statement_sources e ON e.statement_id=s.statement_id "
+            "ORDER BY s.statement_id,e.evidence_ref",
+            page_size=50,
+        )
+        self.assertEqual(result["outcome"], "available", result)
         first = self.r.send(self.append(run, result))
         self.assert_checkpoint(first)
+        self.r.age(run["run_ref"], timedelta(days=32))
+        run = self.r.start()
+        self.assertEqual(self.r.reuse(run, result["result"])["outcome"], "unavailable")
         read = self.r.send(self.read(run, first["branch"]["head"]))
         context = read["root_contexts"][0]
-        inspection = self.h.inspection(
-            run, beads=(self.h.normalized,), facets=("content", "evidence_metadata")
+        # Re-deliver real result refs in this run after old-run cleanup, using
+        # the explicit CP context. Direct-inspection refs are a different route.
+        page = self.r.send(
+            {
+                "contract_version": 1,
+                "run_ref": run["run_ref"],
+                "step_key": str(uuid4()),
+                "kind": "reuse_result",
+                "result": self.pin(result),
+                "access": context,
+                "page_size": 50,
+            }
         )
+        self.assertEqual(page["outcome"], "available", page)
+        columns = [c["name"] for c in result["result"]["result_schema"]]
+        row = next(
+            r
+            for r in page["page"]["rows"]
+            if r["values"][columns.index("bead_id")] == str(self.h.normalized)
+        )
+        statement = row["values"][columns.index("statement_id")]
+        source_ref = next(
+            ref for ref in row["evidence_refs"] if ref["kind"] == "source"
+        )
+        inspection = self.h.inspection(run, beads=(), facets=("content",))
         inspection.update(
             result={"pin": self.pin(result), "access": context},
             known_at=result["result"]["frame"]["known_at"],
         )
         raw, observed = self.h.send(inspection)
         self.h.available(raw, observed)
-        pin = observed["inspection"]["evidence_pins"][0]
+        self.assertEqual(
+            observed["inspection"]["result"]["frame"], result["result"]["frame"]
+        )
+        self.assertEqual(
+            observed["inspection"]["result"]["content_digest"],
+            result["result"]["content_digest"],
+        )
+        self.assertEqual(observed["access_bases"][0]["context"], context)
+        metadata = self.h.inspection(
+            run, beads=(self.h.normalized,), facets=("evidence_metadata",)
+        )
+        raw, direct = self.h.send(metadata)
+        self.h.available(raw, direct)
+        # Associate the part by exact statement/unit/content pins, never by
+        # guessing that a direct evidence UUID was delivered with this result.
+        pin = next(
+            p
+            for p in direct["inspection"]["evidence_pins"]
+            if p["statement_id"] == statement
+            and p["unit"]["source_unit_id"] == source_ref["unit_ref"]
+            and p["unit"]["content_sha256"] == source_ref["content_sha256"]
+            and p["part"] is not None
+        )
         hydration = self.h.hydration(run, pin)
+        hydration["selections"][0]["evidence_ref"] = source_ref["ref"]
         hydration["selections"][0]["origin"] = {
             "result": self.pin(result),
             "access": context,
@@ -260,6 +524,21 @@ class AutomaticCheckpointRuntime(unittest.TestCase):
             hydrated["hydration"]["slices"][0]["content"], self.h.TEXT[:512]
         )
         self.assertEqual(hydrated["access_bases"][0]["context"], context)
+        mixed = copy.deepcopy(inspection)
+        mixed.update(
+            step_key=str(uuid4()), observation_refs=[self.h.target(self.h.normalized)]
+        )
+        _, denied = self.h.send(mixed)
+        self.assertEqual(denied["outcome"], "unsupported_query", denied)
+        unbound = copy.deepcopy(hydration)
+        unbound["step_key"] = str(uuid4())
+        unbound["selections"][0]["evidence_ref"] = str(uuid4())
+        self.assertNotEqual(unbound["selections"][0]["evidence_ref"], source_ref["ref"])
+        _, missing = self.h.send(unbound)
+        self.assertEqual(missing["outcome"], "unavailable", missing)
+        for refused in (denied, missing):
+            for field in ("inspection", "hydration", "result", "page", "visibility"):
+                self.assertNotIn(field, refused)
 
     def test_replay_is_one_manifest_and_stale_head_is_content_free_conflict(
         self,

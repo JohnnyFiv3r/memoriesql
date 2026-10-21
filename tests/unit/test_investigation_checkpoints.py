@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import copy
 import hashlib
 import json
@@ -9,11 +10,15 @@ import time
 import unittest
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from types import MethodType, SimpleNamespace
 from typing import Any
 from unittest.mock import Mock, patch
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from psycopg import OperationalError
+from sqlglot import exp, parse_one
 
 from memoriesql.application.investigation_contracts import (
     CheckpointManifest,
@@ -28,6 +33,282 @@ from memoriesql.infrastructure.postgres.agent_sql_results import (
 )
 
 MODULE = "memoriesql.infrastructure.postgres.agent_sql_results"
+ROOT = Path(__file__).resolve().parents[2]
+
+
+class CheckpointReviewRegressions(unittest.TestCase):
+    """Actual shipped SQL predicates/request builders, evaluated only in Python.
+
+    This does not execute SQL or assert that PostgreSQL/authorization works.
+    Runtime acceptance below remains necessary for the complete implementation.
+    """
+
+    def overdue_predicate(
+        self, standalone_end: datetime, eligibility: datetime | None
+    ) -> Any:
+        text = (
+            ROOT / "migrations/0047_automatic_investigation_checkpoints.sql"
+        ).read_text()
+        start = text.index(
+            "CREATE OR REPLACE FUNCTION memoriesql.query_cleanup_overdue_v1("
+        )
+        body = text[text.index("AS $$", start) + 5 :]
+        tree = parse_one(body[: body.index("$$;")], dialect="postgres")
+        query = next(
+            q
+            for q in tree.find_all(exp.Select)
+            if isinstance(q.args.get("from_"), exp.From)
+            and isinstance(q.args["from_"].this, exp.Table)
+            and q.args["from_"].this.name == "query_result_creations"
+        )
+        now = datetime(2026, 10, 21, tzinfo=UTC)
+        values = {
+            "c.tenant_id": "t",
+            "o.workspace_id": "w",
+            "c.result_id": "root",
+            "c.expires_at": standalone_end,
+            "t": "t",
+            "w": "w",
+        }
+
+        def evaluate(node: exp.Expression) -> Any:
+            if isinstance(node, exp.Paren):
+                return evaluate(node.this)
+            if isinstance(node, exp.Column):
+                return values[node.sql(dialect="postgres")]
+            if isinstance(node, exp.CurrentTimestamp):
+                return now
+            if isinstance(node, exp.Dot):
+                return evaluate(node.expression)
+            if isinstance(node, exp.Anonymous):
+                if node.name.lower() == "clock_timestamp":
+                    return now
+                if node.name.lower() == "query_result_cleanup_eligible_at_v1":
+                    return eligibility
+                raise AssertionError(node.sql())
+            if isinstance(node, exp.Interval):
+                return timedelta(hours=int(node.this.this))
+            if isinstance(node, exp.And):
+                a, b = evaluate(node.this), evaluate(node.expression)
+                return (
+                    False
+                    if a is False or b is False
+                    else None
+                    if a is None or b is None
+                    else True
+                )
+            if isinstance(node, exp.EQ):
+                return evaluate(node.this) == evaluate(node.expression)
+            if isinstance(node, exp.Sub):
+                return evaluate(node.this) - evaluate(node.expression)
+            if isinstance(node, exp.LT):
+                a, b = evaluate(node.this), evaluate(node.expression)
+                return None if a is None or b is None else a < b
+            raise AssertionError("unhandled predicate node: " + node.sql())
+
+        return evaluate(query.args["where"].this)
+
+    def test_actual_overdue_predicate_uses_last_required_hold_end(self) -> None:
+        now = datetime(2026, 10, 21, tzinfo=UTC)
+        for label, end, expected in (
+            ("live-checkpoint", now + timedelta(days=29), False),
+            ("recent-final-release", now - timedelta(hours=2), False),
+            ("true-debt", now - timedelta(hours=25), True),
+            ("private-child-still-held", None, None),
+        ):
+            with self.subTest(boundary=label):
+                self.assertIs(
+                    self.overdue_predicate(now - timedelta(days=2), end), expected
+                )
+
+    def runtime_request(self, *, hydration: bool) -> tuple[dict[str, Any], str]:
+        source = ast.parse(
+            (ROOT / "tests/runtime/test_investigation_checkpoints.py").read_text()
+        )
+        methods = next(n for n in source.body if isinstance(n, ast.ClassDef)).body
+        selected = [
+            copy.deepcopy(n)
+            for n in methods
+            if isinstance(n, ast.FunctionDef)
+            and n.name
+            in {
+                "pin",
+                "append",
+                "read",
+                "test_checkpoint_context_inspection_and_normalized_hydration_use_original_frame",
+            }
+        ]
+        case_method = next(n for n in selected if n.name.startswith("test_"))
+        kept: list[ast.stmt] = []
+        for statement in case_method.body:
+            if isinstance(statement, ast.Assign) and isinstance(
+                statement.value, ast.Call
+            ):
+                call = statement.value
+                if (
+                    isinstance(call.func, ast.Attribute)
+                    and isinstance(call.func.value, ast.Attribute)
+                    and call.func.value.attr == "h"
+                    and call.func.attr == "send"
+                ):
+                    arg = call.args[0]
+                    if not hydration or (
+                        isinstance(arg, ast.Name) and arg.id == "hydration"
+                    ):
+                        kept.append(ast.Return(arg))
+                        break
+            kept.append(statement)
+        else:
+            raise AssertionError("missing source request boundary")
+        case_method.body = kept
+        namespace: dict[str, Any] = {
+            "Any": Any,
+            "UUID": UUID,
+            "uuid4": uuid4,
+            "timedelta": timedelta,
+        }
+        klass = ast.ClassDef(
+            name="BuilderOnly",
+            bases=[],
+            keywords=[],
+            body=list[ast.stmt](selected),
+            decorator_list=[],
+            type_params=[],
+        )
+        exec(
+            compile(
+                ast.fix_missing_locations(ast.Module(body=[klass], type_ignores=[])),
+                "<actual-runtime-builders-only>",
+                "exec",
+            ),
+            namespace,
+        )
+        case = namespace["BuilderOnly"]()
+        normalized = uuid4()
+        run = {"run_ref": str(uuid4()), "default_known_at": "2026-10-21T00:00:00Z"}
+        root = {
+            "result_id": str(uuid4()),
+            "content_digest": "a" * 64,
+            "frame": {"known_at": run["default_known_at"], "view": "historical"},
+            "result_schema": [
+                {"name": "statement_id"},
+                {"name": "bead_id"},
+                {"name": "evidence_ref"},
+            ],
+        }
+        statement_id, unit = str(uuid4()), str(uuid4())
+        evidence = {
+            "kind": "source",
+            "ref": str(uuid4()),
+            "unit_ref": unit,
+            "content_sha256": "d" * 64,
+        }
+        result = {
+            "outcome": "available",
+            "result": root,
+            "page": {
+                "rows": [
+                    {
+                        "values": [statement_id, str(normalized), evidence["ref"]],
+                        "evidence_refs": [evidence],
+                    }
+                ]
+            },
+        }
+        pin = {"checkpoint_id": str(uuid4()), "manifest_digest": "b" * 64}
+        context = {
+            "kind": "checkpoint",
+            **pin,
+            "root": {k: root[k] for k in ("result_id", "content_digest")},
+            "basis": {"kind": "automatic"},
+        }
+        first = {
+            "checkpoint": {
+                "checkpoint_id": pin["checkpoint_id"],
+                "investigation_id": str(uuid4()),
+                "branch_id": str(uuid4()),
+            },
+            "branch": {"head": pin},
+        }
+        part_pin = {
+            "ref": str(uuid4()),
+            "statement_id": statement_id,
+            "unit": {
+                "source_unit_id": unit,
+                "content_sha256": evidence["content_sha256"],
+            },
+            "part": {"part_id": str(uuid4())},
+        }
+        case.r = Mock()
+        case.r.start.return_value = run
+        case.r.query.return_value = ({}, result)
+        case.r.reuse.return_value = {"outcome": "unavailable"}
+        case.r.send.side_effect = (
+            lambda r: first
+            if r["kind"] == "checkpoint"
+            else {"root_contexts": [context]}
+            if r["kind"] == "read_checkpoint"
+            else result
+        )
+        case.query_root = lambda: (run, result)
+        case.assert_checkpoint = Mock()
+        for name in ("assertEqual", "assertTrue", "assertNotEqual", "assertIn"):
+            setattr(case, name, getattr(self, name))
+        h = SimpleNamespace(
+            source=uuid4(), normalized=normalized, TEXT="fictional", available=Mock()
+        )
+        h.target = lambda bead: {"bead_id": str(bead), "bead_version_id": str(uuid4())}
+        helper_tree = ast.parse(
+            (ROOT / "tests/runtime/test_agent_sql_helpers_runtime.py").read_text()
+        )
+        helper = next(n for n in helper_tree.body if isinstance(n, ast.ClassDef))
+        for name in ("inspection", "hydration"):
+            fn = copy.deepcopy(
+                next(
+                    n
+                    for n in helper.body
+                    if isinstance(n, ast.FunctionDef) and n.name == name
+                )
+            )
+            exec(
+                compile(
+                    ast.fix_missing_locations(ast.Module(body=[fn], type_ignores=[])),
+                    "<actual-helper-request-builder>",
+                    "exec",
+                ),
+                namespace,
+            )
+            setattr(h, name, MethodType(namespace[name], h))
+        h.send = lambda request: (
+            b"",
+            {
+                "inspection": {
+                    "result": root,
+                    "observations": [],
+                    "evidence_pins": [part_pin],
+                },
+                "access_bases": [{"context": context}],
+            },
+        )
+        case.h = h
+        return getattr(case, case_method.name)(), evidence["ref"]
+
+    def test_actual_positive_inspection_builder_does_not_mix_saved_and_live_targets(
+        self,
+    ) -> None:
+        request, _ = self.runtime_request(hydration=False)
+        self.assertIsNotNone(request["result"])
+        self.assertEqual(request["observation_refs"], [])
+        self.assertEqual(request["relation_refs"], [])
+
+    def test_actual_positive_hydration_builder_uses_result_receipted_reference(
+        self,
+    ) -> None:
+        request, result_ref = self.runtime_request(hydration=True)
+        self.assertEqual(request["selections"][0]["evidence_ref"], result_ref)
+        self.assertEqual(
+            request["selections"][0]["origin"]["access"]["kind"], "checkpoint"
+        )
 
 
 class AutomaticCheckpointDispatch(unittest.TestCase):

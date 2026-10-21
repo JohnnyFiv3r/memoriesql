@@ -29,6 +29,19 @@ result rows, facts or evidence; subsequent explicit reuse/inspect/hydrate steps
 have their own access receipts and charges. Unknown settlement retains its
 reservation. No constant-time or measured-capacity claim is made.
 
+Ordinary result cleanup becomes due only after the last required route or hold
+ends. A private per-artifact control row preserves early hold-release time and
+natural expiry through delayed garbage collection; it does not change the
+original standalone expiry or authorize disclosure. Cleanup selection, status
+and admission debt use the same eligibility clock. A private child preparation
+without a declared result lifetime retains its explicit hold until owned release.
+The 24-hour overdue gate still applies to genuinely eligible retained content.
+
+Contextual inspection uses the supported result-only frame. Hydration selects
+the source evidence reference actually receipted for that result, matching part
+metadata by statement, unit and content pins. Mixed live/saved inspection and
+unbound evidence remain refusals; no weaker standalone fallback is introduced.
+
 The new unit controls use inert SQL acknowledgments. The separately admitted
 runtime suite must execute actual public executor operations, durable journal/
 artifact/receipt checks, expiry and pruning boundaries, shared holds, replay/CAS,
@@ -36,3 +49,8 @@ finding visibility, contextual helpers/cursors, revocation, storage refusal,
 server cancellation and lost acknowledgement after real commit. The full suite
 and both supported Python minors remain required. Governed erasure has no new
 public operation in this slice; no erasure capability is claimed.
+
+The review-repair runtime oracles additionally cover fresh own/other-principal
+admission beyond standalone expiry, final-holder pruning, delayed natural expiry
+without resetting cleanup debt, and owned private-child release. These cases
+are authored acceptance checks, not executed PostgreSQL evidence.
