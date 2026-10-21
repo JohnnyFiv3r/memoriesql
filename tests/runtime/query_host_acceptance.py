@@ -114,6 +114,10 @@ class CommitCutRelay:
         threading.Thread(target=self._accept, daemon=True).start()
 
     def close(self) -> None:
+        # Linux keeps listening after close() while _accept is blocked in
+        # accept(); shutting down first makes later connections refused.
+        with contextlib.suppress(OSError):
+            self.listener.shutdown(socket.SHUT_RDWR)
         with contextlib.suppress(OSError):
             self.listener.close()
 
