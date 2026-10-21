@@ -118,7 +118,7 @@ Routine PR/main pushes retain the required `package` job (database-free tests,
 lint/types, contracts, boundary and deterministic package checks). The standing
 engineering delegation authorizes eligible fictional installed-package /
 PostgreSQL qualification on standard isolated hosted runners within the existing
-15-minute package / 60-minute per-interpreter ceilings. Ready internal candidates
+15-minute package / 100-minute per-interpreter ceilings. Ready internal candidates
 and material proof-input changes qualify under `docs/ci-policy.md`; docs-only or
 unselected intermediate changes do not trigger blanket full reruns. No owner
 question per eligible run. Preserve Python 3.13/3.14, pinned PostgreSQL, isolation,

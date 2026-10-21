@@ -239,6 +239,9 @@
       "path": "src/memoriesql/application/agent_sql_results.py"
     },
     {
+      "path": "src/memoriesql/application/agent_sql_helpers.py"
+    },
+    {
       "path": "src/memoriesql/infrastructure/postgres/agent_sql_results.py"
     },
     {
