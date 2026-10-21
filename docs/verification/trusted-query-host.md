@@ -101,3 +101,17 @@ the host's secrets or the owner's credential, the harness is configured and
 qualified as documented, and the host's code, configuration and socket
 directory stay unmodifiable by that user. Those conditions are checked, not
 assumed.
+
+The installed selector now requires exactly 17 named cases in
+`query_host_acceptance.py`: all 16 existing host cases plus
+`test_public_cli_query_and_reuse_cross_real_socket_with_current_authority`.
+That new, still-unrun native case starts the real host and fresh public CLI
+processes with only their own paired credential, workspace, state directory and
+Unix socket. It checks query, persisted-run cursor reuse, digest refusal, current
+pairing revocation, no extra query invocation and owned host shutdown. It injects
+no transport and gives the CLI no database login. `query_host_fault.py` supplies
+fault hooks for existing cases; it contains no acceptance cases. The five default
+CLI runtime cases using an injected transport do not substitute for this route.
+The helper rejects an omitted CLI case, any other missing case, duplicates,
+extra cases, skips, failures or a zero selection. CPU stand-ins check only this
+selection/error propagation, not native transport or semantic correctness.

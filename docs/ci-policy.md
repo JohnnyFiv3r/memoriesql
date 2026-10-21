@@ -167,8 +167,11 @@ the standing engineering and substantive gates above.
 
 The host/CLI refresh additionally requires the separately invoked
 `prove_query_host.py` on both supported interpreters after the four restart
-triplets and before proof completion. It runs both host acceptance modules;
-default installed discovery does not select them. Failure, skip or zero tests
-cannot satisfy host proof. This adds no runner, deadline, privilege or release
+triplets and before proof completion. It requires exactly 17 named cases in
+`query_host_acceptance.py`: the 16 existing host cases and the public CLI case
+using the real Unix socket. `query_host_fault.py` is support code, not a second
+acceptance module. Missing, extra, duplicate, failed or skipped cases prevent
+proof completion. Default installed discovery does not select these cases.
+This adds no runner, deadline, privilege or release
 route. The helper keeps its existing40-command cap; current host composition and
 actual complete-suite/host timing remain to be qualified at their exact head.

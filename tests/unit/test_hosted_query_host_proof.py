@@ -7,6 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from scripts.prove_query_host import EXPECTED_TEST_IDS
 from scripts.run_hosted_qualification import SCRIPTS, Commands
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -43,12 +44,35 @@ class HostedQueryHostProof(unittest.TestCase):
             "<actual-hosted-host-invocation>",
             "exec",
         )
-        cases = {
-            "pass": "import unittest\nclass Fictional(unittest.TestCase):\n def test_host(self): pass\n",
-            "fail": "import unittest\nclass Fictional(unittest.TestCase):\n def test_host(self): self.fail('fictional')\n",
-            "skip": "import unittest\nclass Fictional(unittest.TestCase):\n @unittest.skip('fictional')\n def test_host(self): pass\n",
-            "empty": None,
-        }
+        names = [identity.rsplit(".", 1)[1] for identity in EXPECTED_TEST_IDS]
+        cli_case = "test_public_cli_query_and_reuse_cross_real_socket_with_current_authority"
+        self.assertIn(cli_case, names)
+        self.assertEqual(len(names), 17)
+
+        def source_for(outcome: str) -> str | None:
+            if outcome == "empty":
+                return None
+            text = "import unittest\nclass QueryHostAcceptance(unittest.TestCase):\n"
+            for index, method in enumerate(names):
+                if outcome == "missing-cli" and method == cli_case:
+                    continue
+                if outcome == "skip" and index == 0:
+                    text += " @unittest.skip('fictional')\n"
+                body = "self.fail('fictional')" if outcome == "fail" and index == 0 else "pass"
+                text += f" def {method}(self): {body}\n"
+            if outcome == "extra":
+                text += " def test_unselected(self): pass\n"
+            if outcome == "duplicate":
+                text += (
+                    "def load_tests(loader, tests, pattern):\n"
+                    f" tests.addTest(QueryHostAcceptance({names[0]!r}))\n"
+                    " return tests\n"
+                )
+            return text
+
+        cases = {name: source_for(name) for name in (
+            "pass", "fail", "skip", "missing-cli", "extra", "duplicate", "empty"
+        )}
         for name, source in cases.items():
             with self.subTest(outcome=name), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
@@ -58,7 +82,7 @@ class HostedQueryHostProof(unittest.TestCase):
                     ROOT / "scripts/prove_query_host.py", root / "prove_query_host.py"
                 )
                 if source is not None:
-                    (root / "query_host_fictional_acceptance.py").write_text(source)
+                    (root / "query_host_acceptance.py").write_text(source)
                 # The ordinary shard discovery cannot substitute for this proof.
                 self.assertEqual(
                     unittest.TestLoader().discover(str(root)).countTestCases(), 0

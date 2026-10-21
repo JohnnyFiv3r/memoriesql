@@ -484,6 +484,81 @@ class QueryHostHarness(unittest.TestCase):
 class QueryHostAcceptance(QueryHostHarness):
     # -- acceptance ----------------------------------------------------------
 
+    def test_public_cli_query_and_reuse_cross_real_socket_with_current_authority(self) -> None:
+        host = self.spawn()
+        statement = self.root / "public-cli.sql"
+        statement.write_text(OBSERVATIONS, encoding="utf-8")
+        # Fresh public CLI processes get only their own identity and real socket.
+        # No database URL, reader login, provider or injected transport is used.
+        environment = {
+            "MEMORIESQL_RESULTS_SOCKET": str(self.config.socket_path),
+            "MEMORIESQL_LOCAL_CREDENTIAL": self.agent_secret,
+            "MEMORIESQL_WORKSPACE_ID": str(self.fixture.workspace),
+            "MEMORIESQL_STATE_DIR": str(self.root / "public-cli-state"),
+        }
+
+        def cli(arguments: list[str]) -> tuple[int, dict[str, Any]]:
+            completed = subprocess.run(
+                [
+                    sys.executable, "-I", "-c",
+                    "from memoriesql.cli import main; raise SystemExit(main())",
+                    *arguments,
+                ],
+                env=environment,
+                capture_output=True,
+                timeout=10,
+            )
+            self.assertEqual(completed.stderr, b"")
+            self.assertNotIn(self.agent_secret.encode(), completed.stdout)
+            return completed.returncode, json.loads(completed.stdout)
+
+        code, first = cli([
+            "query", "--file", str(statement), "--intent", "enumerate",
+            "--view", "historical", "--page-size", "1", "--json",
+        ])
+        self.assertEqual(code, 0, first)
+        self.assertEqual(first["outcome"], "available", first)
+        self.assertTrue(first["page"]["rows"])
+        self.assertTrue(first["page"]["has_more"])
+        result = first["result"]
+        invocations = self.scalar("SELECT count(*) FROM memoriesql_query.invocations")
+        arguments = [
+            "result", result["result_id"], "--digest", result["content_digest"],
+            "--page-size", "1", "--json",
+        ]
+        code, page = cli(arguments + ["--cursor", first["page"]["next_cursor"]])
+        self.assertEqual(code, 0, page)
+        self.assertEqual(page["outcome"], "available", page)
+        self.assertEqual(page["run_ref"], first["run_ref"])
+        self.assertEqual(page["result"]["result_id"], result["result_id"])
+        self.assertEqual(page["result"]["content_digest"], result["content_digest"])
+        self.assertNotEqual(page["page"]["rows"], first["page"]["rows"])
+        self.assertEqual(
+            self.scalar("SELECT count(*) FROM memoriesql_query.invocations"),
+            invocations,
+        )
+        bad_pin = arguments.copy()
+        bad_pin[bad_pin.index("--digest") + 1] = "0" * 64
+        code, refused = cli(bad_pin)
+        self.assertNotEqual(code, 0, refused)
+        self.assertEqual(refused["outcome"], "unavailable", refused)
+        self.assertIsNone(refused.get("result"))
+        self.assertIsNone(refused.get("page"))
+
+        self.revoke(self.grant)
+        code, revoked = cli(arguments)
+        self.assertNotEqual(code, 0, revoked)
+        self.assertEqual(revoked["outcome"], "unavailable", revoked)
+        self.assertIsNone(revoked.get("result"))
+        self.assertIsNone(revoked.get("page"))
+        self.assertEqual(
+            self.scalar("SELECT count(*) FROM memoriesql_query.invocations"),
+            invocations,
+        )
+        host.send_signal(signal.SIGTERM)
+        self.assertEqual(host.wait(10), 0)
+        self.assertFalse(self.config.socket_path.exists())
+
     def test_replies_are_the_executors_bytes_and_readers_match_direct(self) -> None:
         self.serve_in_process()
         captured: list[bytes] = []
