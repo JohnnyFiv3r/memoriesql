@@ -175,7 +175,7 @@ class PublicBootstrapTests(unittest.TestCase):
         self.assertIn("if: needs.package.outputs.qualify == 'true'", compatibility)
         self.assertIn("cancel-in-progress: false", compatibility)
         self.assertIn("needs: package", compatibility)
-        self.assertIn("timeout-minutes: 60", compatibility)
+        self.assertIn("timeout-minutes: 100", compatibility)
         self.assertIn("timeout-minutes: 15", package)
         self.assertIn(
             "github.event_name == 'workflow_dispatch' && github.run_id", package
