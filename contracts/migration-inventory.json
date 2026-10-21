@@ -185,6 +185,10 @@
     {
       "filename": "0046_agent_sql_result_helpers.sql",
       "sha256": "9d0dde5560c875d51f381b9d561845154f903563ccf354946b69e13773c03451"
+    },
+    {
+      "filename": "0047_automatic_investigation_checkpoints.sql",
+      "sha256": "ac9c676d8ab60a4af31d28b554a50e82a8393f5e84de136c60e9d1f00f75a158"
     }
   ]
 }

@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def verify() -> None:
     inventory = json.loads((ROOT / "contracts/migration-inventory.json").read_text())
     rows = inventory["migrations"]
-    if inventory["default_policy"] != "deny" or len(rows) != 46:
+    if inventory["default_policy"] != "deny" or len(rows) != 47:
         raise ValueError("invalid migration inventory")
     for version, row in enumerate(rows, 1):
         name = row["filename"]
@@ -33,7 +33,9 @@ def verify() -> None:
             ROOT / path
         ).read_text() != '"""Canonical PostgreSQL migration substrate."""\n':
             raise ValueError("unexpected initializer dependency")
-    print(f"Migration export: {len(rows)} inventoried SQL resources, 2 audited modules.")
+    print(
+        f"Migration export: {len(rows)} inventoried SQL resources, 2 audited modules."
+    )
 
 
 if __name__ == "__main__":
