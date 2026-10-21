@@ -181,6 +181,10 @@
     {
       "filename": "0045_legacy7_execution_unavailable.sql",
       "sha256": "88bbda99e6c4f3cb21bbd388fc22c6be84de856dafba3f4c978f3d4ee77c8f43"
+    },
+    {
+      "filename": "0046_agent_sql_result_helpers.sql",
+      "sha256": "9d0dde5560c875d51f381b9d561845154f903563ccf354946b69e13773c03451"
     }
   ]
 }
