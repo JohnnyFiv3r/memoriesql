@@ -51,7 +51,7 @@ def child_file_limit() -> None:
 
 
 class Commands:
-    def __init__(self, evidence: Path, seconds: int = 3000) -> None:
+    def __init__(self, evidence: Path, seconds: int = 5400) -> None:
         self.evidence = evidence
         self.deadline = time.monotonic() + seconds
         self.cleanup_deadline = self.deadline + 120
