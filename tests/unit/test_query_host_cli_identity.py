@@ -7,7 +7,7 @@ import io
 import json
 import stat
 import unittest
-from contextlib import ExitStack
+from contextlib import ExitStack, nullcontext
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -193,12 +193,16 @@ class QueryHostCliIdentity(unittest.TestCase):
 
     def test_actual_prepare_requires_independent_valid_authority(self) -> None:
         for field, independent in (
+            ("__omitted__", "a" * 64),
             (None, None),
+            (None, "a" * 64),
+            ("a" * 64, None),
             ("", ""),
             ([], None),
             ("a" * 63, "a" * 63),
             ("z" * 64, "z" * 64),
             ("a" * 64, "b" * 64),
+            ("a" * 64, "a" * 64),
         ):
             plan = {
                 **self.plan,
@@ -211,6 +215,9 @@ class QueryHostCliIdentity(unittest.TestCase):
                 "sudo_sha256": hashlib.sha256(b"immutable").hexdigest(),
                 "env_sha256": hashlib.sha256(b"immutable").hexdigest(),
             }
+            if field == "__omitted__":
+                del plan["authority_sha256"]
+            valid = field == "a" * 64 and independent == "a" * 64
             env = {
                 "N1_TEST_CLI_IDENTITY_BINDING": "/safe/binding",
                 "N1_TEST_CLI_IDENTITY_BINDING_SHA256": "a" * 64,
@@ -235,11 +242,14 @@ class QueryHostCliIdentity(unittest.TestCase):
                 patch.object(Path, "mkdir"),
                 patch.object(identity.os, "lstat", return_value=system),
                 patch.object(identity.subprocess, "Popen") as spawn,
-                self.assertRaises(identity.ContainmentFatal),
+                nullcontext()
+                if valid
+                else self.assertRaises(identity.ContainmentFatal),
             ):
-                identity.Session.prepare(
+                session = identity.Session.prepare(
                     Path("/safe/root"), "fictional", "fictional", "fictional"
                 )
+                self.assertIsInstance(session, identity.Session)
             spawn.assert_not_called()
 
     def test_actual_close_ack_uses_original_cleanup_deadline(self) -> None:
