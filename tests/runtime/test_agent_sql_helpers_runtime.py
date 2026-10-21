@@ -39,15 +39,14 @@ else:
 class AgentSqlHelperRuntime(unittest.TestCase):
     TEXT = "Fictional normalized harvest: α pears in the orchard. " * 32
     RAW = "Fictional RAW harvest [alpha pears]; original captured bytes. " * 32
-    # Retained as one part, newline-joined; each statement is one <=2048-character
-    # render clause. Runs of 4-byte and 2-byte characters let a span reach
-    # 16 KiB of UTF-8 in far fewer than 16384 characters.
+    # A retained part longer than any authored statement. Its runs of 4-byte
+    # and 2-byte characters reach 16 KiB of UTF-8 in far fewer characters.
     WIDE = (
-        "Fictional astral pears: " + "🍐" * 2024,
-        "🍐" * 2048,
-        "🍐" * 2048,
-        "Fictional accented pears: " + "é" * 2022,
-        *("é" * 2048,) * 4,
+        "Fictional astral pears: "
+        + "🍐" * 4100
+        + " Fictional accented pears: "
+        + "é" * 8200
+        + " End of the fictional wide harvest."
     )
     WIDE_RAW = "Fictional RAW wide harvest; original captured bytes. " * 320
 
@@ -69,12 +68,12 @@ class AgentSqlHelperRuntime(unittest.TestCase):
             scope=normalized_scope,
         )
         self.wide = self.r.normalized_bead(
-            self.WIDE[0],
+            "Fictional wide harvest of astral and accented pears.",
             "helper-wide",
             raw=self.WIDE_RAW,
             source=normalized_source,
             scope=normalized_scope,
-            more=self.WIDE[1:],
+            retained=self.WIDE,
         )
         capabilities = ["memory.inspect", "memory.query", "source.read"]
         grant, self.agent = self.r.home_agent(capabilities)
@@ -204,17 +203,6 @@ class AgentSqlHelperRuntime(unittest.TestCase):
             "max_bytes": 65536,
             "cursor": None,
         }
-
-    def span(self, text: str, size: int, *, after: int = 0) -> tuple[int, int]:
-        """The first character interval from `after` of exactly `size` UTF-8 bytes."""
-        for start in range(after, len(text)):
-            end, used = start, 0
-            while used < size and end < len(text):
-                used += len(text[end].encode())
-                end += 1
-            if used == size:
-                return start, end
-        raise AssertionError("fixture text has no such span")
 
     def test_inspection_receipt_and_exact_replay_reuse_one_original_artifact(
         self,
@@ -435,13 +423,10 @@ class AgentSqlHelperRuntime(unittest.TestCase):
     ) -> None:
         run = self.r.start()
         pin = self.pins(run, self.wide)[0]
-        text = "\n".join(self.WIDE)
-        astral = self.span(text, 16384)
-        accented = self.span(text, 16384, after=text.index("é"))
-        over = self.span(text, 16385, after=text.index("é"))
-        self.assertIn("🍐", text[slice(*astral)])
-        self.assertNotIn("🍐", text[slice(*accented)] + text[slice(*over)])
-        for start, end in (astral, accented):
+        text = self.WIDE
+        astral, accented = text.index("🍐"), text.index("é")
+        # A whole span of 4-byte, or of 2-byte, characters is exactly 16 KiB.
+        for start, end in ((astral, astral + 4096), (accented, accented + 8192)):
             request = self.hydration(run, pin)
             request["selections"][0].update(start=start, end=end)
             raw, reply = self.send(request)
@@ -452,8 +437,13 @@ class AgentSqlHelperRuntime(unittest.TestCase):
             self.assertLess(end - start, 16384)
             self.assertLessEqual(len(raw), 65536)
         disclosures = self.scalar("SELECT count(*) FROM memoriesql.query_disclosures")
-        # Within the character interval, but one character or byte past 16 KiB.
-        for start, end in (over, (astral[0], astral[1] + 1)):
+        # Within the character interval, but past 16 KiB: one more astral
+        # character, or exactly 16385 bytes with the one-byte space before.
+        for start, end in (
+            (astral, astral + 4097),
+            (astral - 1, astral + 4096),
+            (accented - 1, accented + 8192),
+        ):
             request = self.hydration(run, pin)
             request["selections"][0].update(start=start, end=end)
             _, refused = self.send(request)
