@@ -89,10 +89,12 @@ class Legacy7RuntimeCaseBoundaries(unittest.TestCase):
             ast.dump(x, include_attributes=False) for x in retained
         ).encode()).hexdigest()
         # 119 historical pin: c3279dc472429b441814ea7bdf958a527e91f351c4cb5f6a6111a00fe87af38d
-        # Successor changes only the revision6 read to the same known_at frame.
+        # 79 historical pin: 5077b7301c7f7db1b940b1169f40d0a27b347e4b9dcd6b029ec21ec498e942dc
+        # bbe additionally pins the final revision6 read to the original known_at.
+        # Full response equality and fresh-authoring assertions remain unchanged.
         # Exact source pin; separate review/native proof remain required.
         self.assertEqual(
-            digest, "5077b7301c7f7db1b940b1169f40d0a27b347e4b9dcd6b029ec21ec498e942dc"
+            digest, "074c0e64e36782c2f82a89f8f8d25339c0974eed6639a474d572bf22b487ff28"
         )
         self.assertEqual(
             [x.name for x in methods if x.name not in REVIEWED_CASE_NAMES],
