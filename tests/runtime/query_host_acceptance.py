@@ -225,7 +225,7 @@ class QueryHostHarness(unittest.TestCase):
         self.addCleanup(self.h.doCleanups)
         self.fixture = self.h.fixture
         self.db = self.h.db
-        migrate(self.db, expected_current_version=34, target_version=38)
+        migrate(self.db, expected_current_version=34, target_version=39)
         self.root = _short_root()
         self.addCleanup(shutil.rmtree, self.root, True)
         (self.root / "config").mkdir(mode=0o700)
