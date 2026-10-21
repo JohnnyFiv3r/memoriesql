@@ -65,8 +65,8 @@ class Legacy7AvailabilityMigration(unittest.TestCase):
             (ROOT / "contracts/migration-inventory.json").read_text()
         )
         rows = inventory["migrations"]
-        self.assertEqual(rows[-1]["filename"], NAME)
-        self.assertEqual(len(rows), 45)
+        self.assertEqual(rows[44]["filename"], NAME)
+        self.assertEqual(len(rows), 46)
         for row in rows:
             data = (ROOT / "migrations" / row["filename"]).read_bytes()
             self.assertEqual(hashlib.sha256(data).hexdigest(), row["sha256"])
