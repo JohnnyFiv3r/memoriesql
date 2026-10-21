@@ -79,7 +79,7 @@ class Legacy7RuntimeCaseBoundaries(unittest.TestCase):
                 for forbidden in ("DISABLE TRIGGER", "CREATE FUNCTION", "GRANT "):
                     self.assertNotIn(forbidden, value)
 
-    def test_reviewed_ten_cases_are_preserved_with_only_two_first_write_cases_added(self) -> None:
+    def test_ten_cases_with_pinned_history_frame_and_two_first_write_cases(self) -> None:
         case = next(x for x in self.tree.body if isinstance(x, ast.ClassDef))
         methods = [x for x in case.body if isinstance(x, ast.FunctionDef)
                    and x.name.startswith("test_")]
@@ -88,8 +88,11 @@ class Legacy7RuntimeCaseBoundaries(unittest.TestCase):
         digest = hashlib.sha256("\n".join(
             ast.dump(x, include_attributes=False) for x in retained
         ).encode()).hexdigest()
+        # 119 historical pin: c3279dc472429b441814ea7bdf958a527e91f351c4cb5f6a6111a00fe87af38d
+        # Successor changes only the revision6 read to the same known_at frame.
+        # Exact source pin; separate review/native proof remain required.
         self.assertEqual(
-            digest, "c3279dc472429b441814ea7bdf958a527e91f351c4cb5f6a6111a00fe87af38d"
+            digest, "5077b7301c7f7db1b940b1169f40d0a27b347e4b9dcd6b029ec21ec498e942dc"
         )
         self.assertEqual(
             [x.name for x in methods if x.name not in REVIEWED_CASE_NAMES],

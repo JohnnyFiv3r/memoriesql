@@ -410,7 +410,8 @@ class Legacy7Unavailable(unittest.TestCase):
         self.assertIn(relation, [item.relation_id for item in before.relations])
         history = self.snapshot(fixture, MEANING_TABLES + relation_fixtures.RELATION_TABLES)
         migrate(fixture.db, expected_current_version=43, target_version=45)
-        self.assertEqual(fixture.inspect(effect), before)
+        self.assertIsNotNone(before.known_at)
+        self.assertEqual(fixture.inspect(effect, known_at=before.known_at), before)
         self.assertEqual(
             self.snapshot(fixture, MEANING_TABLES + relation_fixtures.RELATION_TABLES),
             history,
