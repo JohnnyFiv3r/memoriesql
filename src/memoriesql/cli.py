@@ -122,7 +122,12 @@ def _parser() -> argparse.ArgumentParser:
         help="Limit output to one catalog kind.",
     )
     contracts.add_argument(
-        "--status", help="Limit entries to one exact generated status."
+        "--status",
+        help=(
+            "Limit entries to one exact generated status. "
+            "Contract status describes bundled artifacts, not current runtime "
+            "execution availability."
+        ),
     )
     contracts.add_argument(
         "--json", action="store_true", help="Emit stable machine-readable JSON."
