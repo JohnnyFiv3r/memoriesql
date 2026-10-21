@@ -605,9 +605,10 @@ class CliQueryResults(unittest.TestCase):
         # Both cached runs predate this fixture. Use one actual post-commit
         # database cutoff for every relation read, without rotating either run
         # or changing its access/resource accounting.
-        relation_known_at = (
-            self.db.execute("SELECT clock_timestamp()").fetchone()[0].isoformat()
-        )
+        cutoff_row = self.db.execute("SELECT clock_timestamp()").fetchone()
+        self.assertIsNotNone(cutoff_row)
+        assert cutoff_row is not None
+        relation_known_at = cutoff_row[0].isoformat()
         relation_sql = (
             "SELECT r.relation_id FROM memory_v1.assessed_relations r "
             "ORDER BY r.relation_id"

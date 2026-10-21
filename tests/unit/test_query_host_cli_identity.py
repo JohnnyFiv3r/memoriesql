@@ -5,14 +5,27 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import os
+import select
 import stat
+import subprocess
+import sys
+import time
 import unittest
 from contextlib import ExitStack, nullcontext
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import Mock, patch
 
 from tests.runtime import query_host_cli_identity as identity
+
+
+def stat_info(
+    *, st_uid: int, st_mode: int, st_nlink: int = 1, st_dev: int = 0, st_ino: int = 0
+) -> os.stat_result:
+    """Construct only fictional metadata, with the real stat_result shape."""
+    return os.stat_result((st_mode, st_ino, st_dev, st_nlink, st_uid, 0, 0, 0, 0, 0))
 
 
 class QueryHostCliIdentity(unittest.TestCase):
@@ -33,7 +46,9 @@ class QueryHostCliIdentity(unittest.TestCase):
             "caps": [0, 0, 0],
         }
 
-    def worker_inputs(self, writable: str, search: list[str] | None = None):
+    def worker_inputs(
+        self, writable: str, search: list[str] | None = None
+    ) -> tuple[ExitStack, dict[str, Any]]:
         stack = ExitStack()
         paths = search or ["/safe/import"]
         plan = {
@@ -50,7 +65,9 @@ class QueryHostCliIdentity(unittest.TestCase):
             "import_roots": [paths[0]],
         }
 
-        def info(path, *args, **kwargs):
+        def info(
+            path: str | os.PathLike[str], *args: object, **kwargs: object
+        ) -> os.stat_result:
             regular = str(path) in {
                 "/safe/python",
                 "/safe/helper",
@@ -59,22 +76,20 @@ class QueryHostCliIdentity(unittest.TestCase):
             mode = stat.S_IFREG if regular else stat.S_IFDIR
             if str(path) == "/venv/bin/python":
                 mode = stat.S_IFLNK
-            return SimpleNamespace(st_uid=1001, st_mode=mode | 0o555)
+            return stat_info(st_uid=1001, st_mode=mode | 0o555)
 
-        stack.enter_context(patch.object(identity.os, "closerange"))
-        stack.enter_context(patch.object(identity.os, "getpid", return_value=123))
+        stack.enter_context(patch.object(os, "closerange"))
+        stack.enter_context(patch.object(os, "getpid", return_value=123))
         stack.enter_context(
             patch.object(identity, "process", return_value=self.process)
         )
-        stack.enter_context(patch.object(identity.sys, "path", paths))
-        stack.enter_context(patch.object(identity.time, "monotonic", return_value=0))
-        stack.enter_context(patch.object(identity.os, "lstat", side_effect=info))
-        stack.enter_context(
-            patch.object(identity.os, "readlink", return_value="/safe/python")
-        )
+        stack.enter_context(patch.object(sys, "path", paths))
+        stack.enter_context(patch.object(time, "monotonic", return_value=0))
+        stack.enter_context(patch.object(os, "lstat", side_effect=info))
+        stack.enter_context(patch.object(os, "readlink", return_value="/safe/python"))
         stack.enter_context(
             patch.object(
-                identity.os, "access", side_effect=lambda p, *a, **k: str(p) == writable
+                os, "access", side_effect=lambda p, *a, **k: str(p) == writable
             )
         )
         stack.enter_context(patch.object(Path, "stat", autospec=True, side_effect=info))
@@ -146,10 +161,10 @@ class QueryHostCliIdentity(unittest.TestCase):
     ) -> None:
         for scenario in ("absent", "client-owned"):
 
-            def info(path):
+            def info(path: str | os.PathLike[str]) -> os.stat_result:
                 if str(path) == "/sticky/future" and scenario == "absent":
                     raise FileNotFoundError
-                return SimpleNamespace(
+                return stat_info(
                     st_uid=65534 if str(path) == "/sticky/future" else 0,
                     st_mode=stat.S_IFDIR
                     | 0o555
@@ -158,13 +173,13 @@ class QueryHostCliIdentity(unittest.TestCase):
 
             with (
                 self.subTest(scenario=scenario),
-                patch.object(identity.os, "lstat", side_effect=info),
+                patch.object(os, "lstat", side_effect=info),
                 patch.object(
-                    identity.os,
+                    os,
                     "access",
                     side_effect=lambda p, *a, **k: str(p) == "/sticky",
                 ),
-                patch.object(identity.time, "monotonic", return_value=0),
+                patch.object(time, "monotonic", return_value=0),
                 self.assertRaises(identity.ContainmentFatal),
             ):
                 identity.check_trusted_path(
@@ -172,8 +187,8 @@ class QueryHostCliIdentity(unittest.TestCase):
                 )
 
     def test_actual_path_check_accepts_existing_protected_sticky_child(self) -> None:
-        def info(path):
-            return SimpleNamespace(
+        def info(path: str | os.PathLike[str]) -> os.stat_result:
+            return stat_info(
                 st_uid=1001,
                 st_mode=stat.S_IFDIR
                 | 0o555
@@ -181,13 +196,13 @@ class QueryHostCliIdentity(unittest.TestCase):
             )
 
         with (
-            patch.object(identity.os, "lstat", side_effect=info),
+            patch.object(os, "lstat", side_effect=info),
             patch.object(
-                identity.os,
+                os,
                 "access",
                 side_effect=lambda p, *a, **k: str(p) == "/sticky",
             ),
-            patch.object(identity.time, "monotonic", return_value=0),
+            patch.object(time, "monotonic", return_value=0),
         ):
             identity.check_trusted_path(Path("/sticky/protected"), self.plan, 1)
 
@@ -232,16 +247,16 @@ class QueryHostCliIdentity(unittest.TestCase):
             system = SimpleNamespace(st_uid=0, st_mode=stat.S_IFREG | 0o555)
             with (
                 self.subTest(field=field),
-                patch.dict(identity.os.environ, env, clear=True),
+                patch.dict(os.environ, env, clear=True),
                 patch.object(identity, "read_binding", return_value=plan),
-                patch.object(identity.os, "geteuid", return_value=1001),
-                patch.object(identity.os, "getegid", return_value=1001),
-                patch.object(identity.time, "monotonic", return_value=0),
+                patch.object(os, "geteuid", return_value=1001),
+                patch.object(os, "getegid", return_value=1001),
+                patch.object(time, "monotonic", return_value=0),
                 patch.object(Path, "read_bytes", return_value=b"immutable"),
                 patch.object(Path, "chmod"),
                 patch.object(Path, "mkdir"),
-                patch.object(identity.os, "lstat", return_value=system),
-                patch.object(identity.subprocess, "Popen") as spawn,
+                patch.object(os, "lstat", return_value=system),
+                patch.object(subprocess, "Popen") as spawn,
                 nullcontext()
                 if valid
                 else self.assertRaises(identity.ContainmentFatal),
@@ -263,9 +278,9 @@ class QueryHostCliIdentity(unittest.TestCase):
         session.monitor.wait.return_value = 0
         session.state_identity = [7, 8]
         session.channel = SimpleNamespace(deadline=1)
-        seen = []
+        seen: list[float] = []
 
-        def acknowledgement():
+        def acknowledgement() -> dict[str, bool]:
             seen.append(session.channel.deadline)
             identity.remaining(session.channel.deadline)
             return {"closed": True}
@@ -279,22 +294,22 @@ class QueryHostCliIdentity(unittest.TestCase):
         }
         state = Mock()
         with (
-            patch.object(identity.time, "monotonic", return_value=2),
+            patch.object(time, "monotonic", return_value=2),
             patch.object(identity, "send"),
             patch.object(
                 session, "launch", return_value=(cleanup_monitor, cleanup_channel)
             ),
             patch.object(identity, "private_state", return_value=state),
-            patch.object(
-                identity.os, "lstat", return_value=SimpleNamespace(st_dev=7, st_ino=8)
-            ),
+            patch.object(os, "lstat", return_value=SimpleNamespace(st_dev=7, st_ino=8)),
             patch.object(identity, "latch"),
         ):
             session.close()
         self.assertEqual(seen, [121])
         self.assertTrue(session.ledger.complete())
 
-    def worker_output(self, stdout: bytes, stderr: bytes):
+    def worker_output(
+        self, stdout: bytes, stderr: bytes
+    ) -> tuple[ExitStack, dict[str, Any]]:
         stack = ExitStack()
         plan = {
             **self.plan,
@@ -311,8 +326,8 @@ class QueryHostCliIdentity(unittest.TestCase):
             patch.object(identity, "process", return_value=self.process)
         )
         stack.enter_context(patch.object(identity, "send"))
-        stack.enter_context(patch.object(identity.time, "monotonic", return_value=0))
-        stack.enter_context(patch.object(identity.os, "set_blocking"))
+        stack.enter_context(patch.object(time, "monotonic", return_value=0))
+        stack.enter_context(patch.object(os, "set_blocking"))
         request = [
             "query",
             "--file",
@@ -342,21 +357,17 @@ class QueryHostCliIdentity(unittest.TestCase):
         output.fileno.return_value, error.fileno.return_value = 10, 11
         child = Mock(stdout=output, stderr=error)
         child.wait.return_value = 0
-        stack.enter_context(
-            patch.object(identity.subprocess, "Popen", return_value=child)
-        )
+        stack.enter_context(patch.object(subprocess, "Popen", return_value=child))
         chunks = {10: [stdout, b""], 11: [stderr, b""] if stderr else [b""]}
         stack.enter_context(
             patch.object(
-                identity.select,
+                select,
                 "select",
                 side_effect=lambda reads, *args: (list(reads), [], []),
             )
         )
         stack.enter_context(
-            patch.object(
-                identity.os, "read", side_effect=lambda fd, size: chunks[fd].pop(0)
-            )
+            patch.object(os, "read", side_effect=lambda fd, size: chunks[fd].pop(0))
         )
         return stack, plan
 
@@ -390,11 +401,11 @@ class QueryHostCliIdentity(unittest.TestCase):
         clock = [0]
 
         class Incoming:
-            def __init__(self, stream, deadline):
+            def __init__(self, stream: object, deadline: float) -> None:
                 self.deadline = deadline
                 self.calls = 0
 
-            def read(inner):
+            def read(inner) -> dict[str, object]:
                 identity.remaining(inner.deadline)
                 inner.calls += 1
                 if inner.calls == 1:
@@ -407,8 +418,8 @@ class QueryHostCliIdentity(unittest.TestCase):
             patch.object(identity, "process", return_value=self.process),
             patch.object(identity, "send"),
             patch.object(identity, "Channel", Incoming),
-            patch.object(identity.time, "monotonic", side_effect=lambda: clock[0]),
-            patch.object(identity.subprocess, "Popen") as spawn,
+            patch.object(time, "monotonic", side_effect=lambda: clock[0]),
+            patch.object(subprocess, "Popen") as spawn,
         ):
             self.assertEqual(identity.worker(plan, Path("/safe/manifest"), "a" * 64), 0)
         spawn.assert_not_called()
@@ -473,7 +484,7 @@ class QueryHostCliIdentity(unittest.TestCase):
 
     def test_substituted_or_caller_writable_evidence_is_rejected(self) -> None:
         baseline = {"st_uid": 1001, "st_mode": stat.S_IFREG | 0o600, "st_nlink": 1}
-        identity.check_entry(SimpleNamespace(**baseline), 1001, private=True)
+        identity.check_entry(stat_info(**baseline), 1001, private=True)
         for change in (
             {"st_uid": 65534},
             {"st_nlink": 2},
@@ -482,8 +493,34 @@ class QueryHostCliIdentity(unittest.TestCase):
         ):
             with self.assertRaises(identity.ContainmentFatal):
                 identity.check_entry(
-                    SimpleNamespace(**{**baseline, **change}), 1001, private=True
+                    stat_info(**{**baseline, **change}), 1001, private=True
                 )
+        # JSON decoding supplies an object, not permission to treat an arbitrary
+        # JSON value as the independently bound manifest.
+        invalid_manifests: tuple[object, ...] = (None, [], True, "not-an-object")
+        for value in invalid_manifests:
+            raw = json.dumps(value).encode()
+            with (
+                self.subTest(manifest=value),
+                patch.object(os, "open", return_value=99),
+                patch.object(os, "read", return_value=raw),
+                patch.object(os, "fstat", return_value=stat_info(**baseline)),
+                patch.object(os, "close"),
+                self.assertRaises(identity.ContainmentFatal),
+            ):
+                identity.read_binding(
+                    Path("/inert/manifest"), hashlib.sha256(raw).hexdigest()
+                )
+
+        invalid_nonces: tuple[object, ...] = (None, [], 0)
+        for nonce in invalid_nonces:
+            with (
+                self.subTest(nonce=nonce),
+                patch.object(Path, "is_symlink") as probe,
+                self.assertRaises(identity.ContainmentFatal),
+            ):
+                identity.private_state({"root": "/inert", "nonce": nonce})
+            probe.assert_not_called()
 
     def test_fixed_launcher_allows_only_two_bound_actions(self) -> None:
         plan = {
@@ -518,8 +555,8 @@ class QueryHostCliIdentity(unittest.TestCase):
         self,
     ) -> None:
         with (
-            patch.dict(identity.os.environ, {}, clear=True),
-            patch.object(identity.subprocess, "Popen") as spawn,
+            patch.dict(os.environ, {}, clear=True),
+            patch.object(subprocess, "Popen") as spawn,
             patch.object(identity, "process") as probe,
             self.assertRaises(identity.ContainmentFatal),
         ):
@@ -533,16 +570,14 @@ class QueryHostCliIdentity(unittest.TestCase):
         stream = Mock()
         for data in (b"", b"x" * (identity.MAX_FRAME + 1)):
             with (
-                patch.object(identity.time, "monotonic", return_value=0),
-                patch.object(
-                    identity.select, "select", return_value=([stream], [], [])
-                ),
-                patch.object(identity.os, "read", return_value=data),
+                patch.object(time, "monotonic", return_value=0),
+                patch.object(select, "select", return_value=([stream], [], [])),
+                patch.object(os, "read", return_value=data),
                 self.assertRaises(identity.ContainmentFatal),
             ):
                 identity.Channel(stream, 1).read()
         with (
-            patch.object(identity.time, "monotonic", return_value=1),
+            patch.object(time, "monotonic", return_value=1),
             self.assertRaises(identity.ContainmentFatal),
         ):
             identity.Channel(stream, 1).read()
@@ -557,16 +592,14 @@ class QueryHostCliIdentity(unittest.TestCase):
         ).encode()
         chunks[10] = [raw[:10], raw[10:], b""]
         with (
-            patch.object(identity.os, "set_blocking"),
-            patch.object(identity.time, "monotonic", return_value=0),
+            patch.object(os, "set_blocking"),
+            patch.object(time, "monotonic", return_value=0),
             patch.object(
-                identity.select,
+                select,
                 "select",
                 side_effect=lambda reads, *a: (list(reads), [], []),
             ),
-            patch.object(
-                identity.os, "read", side_effect=lambda fd, size: chunks[fd].pop(0)
-            ),
+            patch.object(os, "read", side_effect=lambda fd, size: chunks[fd].pop(0)),
         ):
             self.assertEqual(
                 identity.cli_reply(stream, 1, stderr, "fictional-output-canary")[
@@ -575,19 +608,17 @@ class QueryHostCliIdentity(unittest.TestCase):
                 "available",
             )
         with (
-            patch.object(identity.os, "set_blocking"),
-            patch.object(identity.time, "monotonic", return_value=0),
-            patch.object(identity.select, "select", return_value=([], [], [])),
+            patch.object(os, "set_blocking"),
+            patch.object(time, "monotonic", return_value=0),
+            patch.object(select, "select", return_value=([], [], [])),
             self.assertRaises(identity.ContainmentFatal),
         ):
             identity.cli_reply(stream, 1, stderr, "fictional-output-canary")
         with (
-            patch.object(identity.os, "set_blocking"),
-            patch.object(identity.time, "monotonic", return_value=0),
-            patch.object(identity.select, "select", return_value=([stream], [], [])),
-            patch.object(
-                identity.os, "read", return_value=b"x" * (identity.MAX_OUTPUT + 1)
-            ),
+            patch.object(os, "set_blocking"),
+            patch.object(time, "monotonic", return_value=0),
+            patch.object(select, "select", return_value=([stream], [], [])),
+            patch.object(os, "read", return_value=b"x" * (identity.MAX_OUTPUT + 1)),
             self.assertRaises(identity.ContainmentFatal),
         ):
             identity.cli_reply(stream, 1, stderr, "fictional-output-canary")
@@ -595,10 +626,10 @@ class QueryHostCliIdentity(unittest.TestCase):
     def test_partial_write_is_bounded_and_never_resets_deadline(self) -> None:
         stream = Mock()
         with (
-            patch.object(identity.os, "set_blocking"),
-            patch.object(identity.time, "monotonic", return_value=0),
-            patch.object(identity.select, "select", return_value=([], [stream], [])),
-            patch.object(identity.os, "write", return_value=0),
+            patch.object(os, "set_blocking"),
+            patch.object(time, "monotonic", return_value=0),
+            patch.object(select, "select", return_value=([], [stream], [])),
+            patch.object(os, "write", return_value=0),
             self.assertRaises(identity.ContainmentFatal),
         ):
             identity.send(stream, {"registered": True}, 1)
@@ -625,6 +656,7 @@ class QueryHostCliIdentity(unittest.TestCase):
             result = unittest.TextTestRunner(
                 stream=io.StringIO(), resultclass=ContainmentResult
             ).run(unittest.defaultTestLoader.loadTestsFromTestCase(Cases))
+        assert isinstance(result, ContainmentResult)
         self.assertEqual(result.testsRun, 1)
         self.assertTrue(result.shouldStop)
         self.assertTrue(result.containment_fatal)

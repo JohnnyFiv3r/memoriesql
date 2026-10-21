@@ -6,6 +6,7 @@ import io
 import json
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -222,7 +223,7 @@ class HostedQueryHostProof(unittest.TestCase):
                 )
             )
             with (
-                patch.object(hosted.subprocess, "Popen", return_value=child) as launch,
+                patch.object(subprocess, "Popen", return_value=child) as launch,
                 patch.dict(os.environ, {**env, "SOURCE_SHA": "a" * 40}),
             ):
                 runner.start("inert-child", ["not-executed"], root, env=env)

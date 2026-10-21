@@ -13,7 +13,14 @@ import sys
 import unittest
 from collections import Counter
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from unittest.runner import _TextTestStream
+
+    _TextResult = unittest.TextTestResult[_TextTestStream]
+else:
+    _TextResult = unittest.TextTestResult
 
 EXPECTED_TEST_IDS = (
     "query_host_acceptance.QueryHostAcceptance.test_a_commit_still_in_flight_is_never_read_as_a_rollback",
@@ -48,7 +55,7 @@ def test_ids(suite: unittest.TestSuite) -> list[str]:
     return identities
 
 
-class ContainmentResult(unittest.TextTestResult):
+class ContainmentResult(_TextResult):
     containment_fatal = False
     fatal_evidence_failed = False
 
@@ -59,7 +66,10 @@ class ContainmentResult(unittest.TextTestResult):
             self.containment_fatal = True
             self.stop()
             try:
-                from query_host_cli_identity import latch
+                if TYPE_CHECKING:
+                    from tests.runtime.query_host_cli_identity import latch
+                else:
+                    from query_host_cli_identity import latch
 
                 latch("host_case_containment_unknown", [])
             except Exception:

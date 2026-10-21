@@ -99,6 +99,8 @@ def read_binding(path: Path, digest: str) -> dict[str, Any]:
     if len(data) > MAX_FRAME or hashlib.sha256(data).hexdigest() != digest:
         raise ContainmentFatal("manifest_binding_mismatch")
     plan = json.loads(data)
+    if not isinstance(plan, dict):
+        raise ContainmentFatal("invalid_identity_binding")
     check_entry(info, plan["service_uid"])
     for name in ("service_uid", "client_uid", "gid"):
         if type(plan[name]) is not int or plan[name] < 0:
@@ -298,11 +300,14 @@ def cli_reply(
 
 def private_state(plan: dict[str, Any]) -> Path:
     area = Path(plan["root"]) / "client-area"
-    name = "state-" + plan["nonce"]
-    if len(plan["nonce"]) != 32 or any(
-        c not in "0123456789abcdef" for c in plan["nonce"]
+    nonce = plan["nonce"]
+    if (
+        not isinstance(nonce, str)
+        or len(nonce) != 32
+        or any(c not in "0123456789abcdef" for c in nonce)
     ):
         raise ContainmentFatal("invalid_state_nonce")
+    name = "state-" + nonce
     if (
         area.is_symlink()
         or area.resolve() != Path(plan["root"]).resolve() / "client-area"
@@ -550,7 +555,7 @@ def cleanup(plan: dict[str, Any]) -> int:
         raise ContainmentFatal("cleanup_not_registered")
     for expected in plan["targets"]:
         current = process(expected["pid"])
-        if same_process(expected, current):
+        if current is not None and same_process(expected, current):
             check_identity(current, plan)
             fd = os.pidfd_open(expected["pid"])
             try:
