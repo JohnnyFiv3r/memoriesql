@@ -211,6 +211,10 @@ class HelperMigrationTests(unittest.TestCase):
             "records_text IS DISTINCT FROM "
             "memoriesql.lifecycle_canonical_json_v1(pinned_records)",
             "FOR record_pin IN SELECT value FROM jsonb_array_elements(pinned_records)",
+            # Undecodable retained text is unavailable, never a caller error.
+            "EXCEPTION WHEN invalid_text_representation OR invalid_parameter_value "
+            "OR character_not_in_repertoire THEN "
+            "RAISE EXCEPTION 'query_helper_unavailable' USING ERRCODE='42501'; END;",
         ):
             self.assertIn(predicate, replay)
         self.assertNotIn("item->'records'", replay)

@@ -195,8 +195,12 @@ BEGIN
  FOR item IN SELECT value FROM jsonb_array_elements(deps->'frames') LOOP
   IF jsonb_typeof(item->'manifest') IS DISTINCT FROM 'array' OR jsonb_typeof(item->'records_base64') IS DISTINCT FROM 'string' THEN
    RAISE EXCEPTION 'query_helper_unavailable' USING ERRCODE='42501'; END IF;
-  records_text:=convert_from(decode(item->>'records_base64','base64'),'UTF8');
-  pinned_records:=records_text::jsonb;
+  BEGIN
+   records_text:=convert_from(decode(item->>'records_base64','base64'),'UTF8');
+   pinned_records:=records_text::jsonb;
+  EXCEPTION WHEN invalid_text_representation OR invalid_parameter_value OR character_not_in_repertoire THEN
+   RAISE EXCEPTION 'query_helper_unavailable' USING ERRCODE='42501';
+  END;
   IF jsonb_typeof(pinned_records) IS DISTINCT FROM 'array'
    OR records_text IS DISTINCT FROM memoriesql.lifecycle_canonical_json_v1(pinned_records) THEN
    RAISE EXCEPTION 'query_helper_unavailable' USING ERRCODE='42501'; END IF;
