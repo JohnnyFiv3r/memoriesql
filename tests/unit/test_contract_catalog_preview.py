@@ -23,6 +23,43 @@ from memoriesql.contracts import (
 
 
 class ContractCatalogPreviewTests(unittest.TestCase):
+    def test_legacy7_text_discloses_execution_gate_without_changing_json(self) -> None:
+        identifier = "memoriesql.local-entity-mentions.v2"
+        note = (
+            "Runtime execution unavailable: legacy author-complete-unit revision 7 "
+            "is gated. The available label describes the bundled historical "
+            "schema, not permission to execute it."
+        )
+        text = io.StringIO()
+        with redirect_stdout(text):
+            self.assertEqual(main(["contract", identifier]), 0)
+        self.assertIn(note, text.getvalue())
+        machine = io.StringIO()
+        with redirect_stdout(machine):
+            self.assertEqual(main(["contract", identifier, "--json"]), 0)
+        self.assertEqual(json.loads(machine.getvalue()), get_contract(identifier))
+        self.assertNotIn(note, machine.getvalue())
+        self.assertEqual(get_contract(identifier)["status"], "available")
+
+    def test_status_inventory_and_help_explain_artifact_status(self) -> None:
+        notice = (
+            "Contract status describes bundled artifacts, not current runtime "
+            "execution availability."
+        )
+        text = io.StringIO()
+        with redirect_stdout(text):
+            self.assertEqual(main(["contracts", "--status", "available"]), 0)
+        self.assertIn(notice, text.getvalue())
+        help_text = io.StringIO()
+        with redirect_stdout(help_text), self.assertRaises(SystemExit) as exited:
+            main(["contracts", "--help"])
+        self.assertEqual(exited.exception.code, 0)
+        self.assertIn(notice, " ".join(help_text.getvalue().split()))
+        self.assertIn(
+            "revision 7 is unavailable for activation, source delivery and canonical apply",
+            str(load_catalog("json_schema")["note"]),
+        )
+
     def test_fixed_catalog_inventory_is_useful_and_truthful(self) -> None:
         self.assertEqual(available_catalogs(), CATALOG_KINDS)
         schemas = load_catalog("json-schema")
@@ -31,7 +68,7 @@ class ContractCatalogPreviewTests(unittest.TestCase):
         schema_entries = schemas.get("entries")
         self.assertIsInstance(schema_entries, list)
         assert isinstance(schema_entries, list)
-        self.assertEqual(len(schema_entries), 62)
+        self.assertEqual(len(schema_entries), 63)
 
         cursor = get_contract("memoriesql.capture.connector-cursor")
         self.assertEqual(cursor["version"], "1")
@@ -45,7 +82,7 @@ class ContractCatalogPreviewTests(unittest.TestCase):
         self.assertEqual(unavailable["status"], "not_implemented")
         self.assertEqual(unavailable["entries"], [])
 
-        self.assertEqual(len(iter_contracts()), 69)
+        self.assertEqual(len(iter_contracts()), 70)
         cli = load_catalog("cli")
         self.assertEqual(cli["status"], "available")
         entries = cli["entries"]

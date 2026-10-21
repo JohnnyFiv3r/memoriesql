@@ -4,6 +4,13 @@ Status: implementation in this development branch; no release or production
 source enrollment is claimed. Published `memoriesql==0.0.12` still has only the
 contract-catalog commands.
 
+Contract status describes bundled artifacts, not current runtime execution
+availability. The individual text display for `memoriesql.local-entity-mentions.v2`
+explains that legacy author-complete-unit revision 7 is gated; its historical
+schema and authorized inspection remain. Raw contract JSON and existing available
+labels retain their historical artifact meaning. See [legacy7 availability](legacy7-availability.md)
+for the forward migration, effective cutover and remaining proof requirements.
+
 The public package owns the single `memoriesql` executable. It is useful without
 Desktop and never loads private Python modules or arbitrary plugins. `contracts`,
 `contract` and `--version` keep their existing behavior. This cut adds:
@@ -176,7 +183,9 @@ use to read broader credentials. `clients revoke` takes the pairing grant,
 expected revision, capabilities and scopes from the pairing receipt and records a
 terminal revision; a changed revision is a conflict, not a success. A
 revocation that reports `revocation_outcome_unknown` may have applied; retrying
-it reports `pairing_revision_conflict` once it has.
+it reports `pairing_revision_conflict` once it has. A revoked grant accepts no
+further revision: revoking it again at its new revision reports
+`resource_unavailable`, and nothing can reactivate it.
 
 This slice does not route Desktop's Textual interface or provider adapters. A
 future, reviewed static service/client seam must preserve public core commands,

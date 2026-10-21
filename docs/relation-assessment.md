@@ -612,7 +612,11 @@ independent-root count is null if any required item is unqualified. No partial
 count is reported as the union. `unavailable`/`budget_exhausted` responses contain
 only `{contract_version:3,outcome}`, with no frame or payload. Preserve existing
 512 KiB inspection response and 128-bead root bounds; overflow refuses the whole
-read. Event histories are not silently pruned or capped to the latest entries.
+read. Since migration 0043, the response-size and two-second time budgets are
+decided only after every authorization check. An `unavailable` or
+`budget_exhausted` inspection leaves no authorization audit records, exactly as
+an inspection of a missing bead. Event histories are not silently pruned or
+capped to the latest entries.
 The 512 KiB bound applies to this inspection response, not an entire PR-05 SQL
 result. A scan uses the shared qualified per-root closure and 128-bead limit;
 PR-05 owns admission of its complete result/provenance allocation. It may not

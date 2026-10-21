@@ -1019,6 +1019,17 @@ It allows only a labelled preview with these terms:
 Expired-result deletion is required work, not an exception. It is implemented
 in this cut (see Schema 38) and qualifies with the exact-head run.
 
+Cursor refusal conformance also requires the result's current availability after
+its cursor binding has been removed by cleanup. A syntactically valid absent
+cursor now checks the requested result's complete original closure under the
+existing current-authority fence: expired, purged, missing or inaccessible
+results remain `unavailable`; a usable result retains `invalid_request/cursor`.
+The check reads no page and records no disclosure. Malformed cursors and known
+mismatched bindings retain their request errors. This changes no SQL migration,
+privilege, deadline, accounting policy or timing floor; it establishes no
+latency-invariance guarantee. Exact-head installed database verification remains
+required for this repair.
+
 Still gating any preview release:
 
 - keeping any preview within the measured range above (up to 200

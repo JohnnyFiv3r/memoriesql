@@ -29,6 +29,19 @@ else:
     from test_postgres_runtime import migrate as locked_migrate
 
 
+class InstalledMigrationResources(unittest.TestCase):
+    def test_packaged_stream_discovers_all_reviewed_resources_without_a_database(
+        self,
+    ) -> None:
+        stream = runner.discover_migrations()
+        self.assertEqual([m.version for m in stream], list(range(1, 46)))
+        for migration in stream:
+            self.assertEqual(
+                hashlib.sha256(migration.path.read_bytes()).hexdigest(),
+                migration.sha256,
+            )
+
+
 class InstalledMigrations(unittest.TestCase):
     def setUp(self) -> None:
         self.admin_url = os.environ["N1_TEST_DATABASE_URL"]
@@ -69,7 +82,7 @@ class InstalledMigrations(unittest.TestCase):
         }
         self.assertIn(Path(runner.__file__).resolve(), owned)
         stream = runner.discover_migrations()
-        self.assertEqual(len(stream), 40)
+        self.assertEqual(len(stream), 45)
         for migration in stream:
             self.assertIn(Path(str(migration.path)).resolve(), owned)
             self.assertEqual(
@@ -105,7 +118,7 @@ class InstalledMigrations(unittest.TestCase):
         self.assertEqual(output.getvalue().strip(), __version__)
         registry = json.loads(Path("public-registry.json").read_text())
         entries = {entry["id"]: entry for entry in iter_contracts()}
-        self.assertEqual(len(entries), 69)
+        self.assertEqual(len(entries), 70)
         self.assertIn("memoriesql.core-cli.v1", entries)
         self.assertIn("memoriesql.local-client-pairing.v1", entries)
         self.assertIn("memoriesql.source-enrollment.v1", entries)
@@ -144,7 +157,8 @@ class InstalledMigrations(unittest.TestCase):
     def test_wrong_bound_downgrade_and_out_of_range_are_atomic(self) -> None:
         self.migrate(0, 14)
         before = self.history()
-        for start, end in ((13, 14), (14, 13), (14, 41), (14, -1)):
+        latest_version = runner.discover_migrations()[-1].version
+        for start, end in ((13, 14), (14, 13), (14, latest_version + 1), (14, -1)):
             with (
                 self.subTest(start=start, end=end),
                 self.assertRaises(runner.MigrationError),

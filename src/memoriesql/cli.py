@@ -110,7 +110,12 @@ def _parser() -> argparse.ArgumentParser:
         help="Limit output to one catalog kind.",
     )
     contracts.add_argument(
-        "--status", help="Limit entries to one exact generated status."
+        "--status",
+        help=(
+            "Limit entries to one exact generated status. "
+            "Contract status describes bundled artifacts, not current runtime "
+            "execution availability."
+        ),
     )
     contracts.add_argument(
         "--json", action="store_true", help="Emit stable machine-readable JSON."
@@ -508,6 +513,10 @@ def main(arguments: Sequence[str] | None = None) -> int:
             _write_json(inventory)
         else:
             print("memoriesQL experimental contract-catalog preview")
+            print(
+                "Contract status describes bundled artifacts, not current runtime "
+                "execution availability."
+            )
             catalogs = inventory.get("catalogs")
             if not isinstance(catalogs, list):
                 raise RuntimeError("generated catalog inventory is malformed")
@@ -532,6 +541,12 @@ def main(arguments: Sequence[str] | None = None) -> int:
         else:
             print(f"{entry['id']} {entry['version']} [{entry['status']}]")
             print(entry["summary"])
+            if entry["id"] == "memoriesql.local-entity-mentions.v2":
+                print(
+                    "Runtime execution unavailable: legacy author-complete-unit "
+                    "revision 7 is gated. The available label describes the bundled "
+                    "historical schema, not permission to execute it."
+                )
         return 0
 
     if args.command == "doctor":
