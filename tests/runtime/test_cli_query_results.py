@@ -623,6 +623,7 @@ class CliQueryResults(unittest.TestCase):
         )
         self.assertEqual(relation_reply["result"]["coverage"]["gaps"], [])
         retained_relation = relation_reply["result"]["result_id"]
+        retained_relation_digest = relation_reply["result"]["content_digest"]
 
         # Six whole-row populations share AM-5 authorization. Comparing every
         # population keeps empty correction/replacement tables from substituting
@@ -715,7 +716,14 @@ class CliQueryResults(unittest.TestCase):
             {row["values"][0] for row in owner_relation["page"]["rows"]},
         )
         status, output = self.cli(
-            ["result", retained_relation, "--json"], agent_environment
+            [
+                "result",
+                retained_relation,
+                "--digest",
+                retained_relation_digest,
+                "--json",
+            ],
+            agent_environment,
         )
         unavailable = json.loads(output)
         self.assertEqual((status, unavailable["outcome"]), (2, "unavailable"))

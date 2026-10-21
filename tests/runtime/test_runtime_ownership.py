@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib
 import importlib.metadata
 import json
@@ -17,6 +18,16 @@ class RuntimeOwnership(unittest.TestCase):
             for p in distribution.files or []
         }
         rows = json.loads(Path("runtime-inventory.json").read_text())["runtime"]
+        paths = [row["path"] for row in rows]
+        self.assertEqual(len(paths), 90)
+        self.assertEqual(len(set(paths)), 90)
+        # Independently reviewed path census, checked before any runtime import.
+        self.assertEqual(
+            hashlib.sha256(
+                "".join(p + "\n" for p in sorted(paths)).encode()
+            ).hexdigest(),
+            "e6f8deccb7cc40dedcd6bc2db8d3ea12159431ba34c79801b2f2310155386d45",
+        )
         for row in rows:
             module_name = (
                 row["path"]
@@ -29,7 +40,6 @@ class RuntimeOwnership(unittest.TestCase):
             assert module.__file__ is not None
             origin = Path(module.__file__).resolve()
             self.assertIn(origin, owned)
-        self.assertEqual(len(rows), 81)
         self.assertEqual(
             distribution.requires,
             [
