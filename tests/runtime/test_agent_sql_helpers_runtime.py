@@ -46,7 +46,7 @@ class AgentSqlHelperRuntime(unittest.TestCase):
         self.addCleanup(self.r.doCleanups)
         self.r.setUp()
         self.db, self.fixture = self.r.db, self.r.fixture
-        self.source, self.target, _ = self.fixture.assertion()
+        self.source, self.target_bead, _ = self.fixture.assertion()
         normalized_scope, normalized_source = relation_agents.explicit_scope(
             self.db, self.fixture
         )
@@ -411,7 +411,7 @@ class AgentSqlHelperRuntime(unittest.TestCase):
             self.assertEqual(replay["next_cursor"], first["next_cursor"])
             page = first
             slices.extend(page["hydration"]["slices"])
-            cursors = set()
+            cursors: set[str] = set()
             for _ in range(8):
                 if not page["has_more"]:
                     break
