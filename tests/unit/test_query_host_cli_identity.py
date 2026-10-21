@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import stat
 import unittest
+from contextlib import ExitStack
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -30,6 +32,376 @@ class QueryHostCliIdentity(unittest.TestCase):
             "groups": [1001],
             "caps": [0, 0, 0],
         }
+
+    def worker_inputs(self, writable: str, search: list[str] | None = None):
+        stack = ExitStack()
+        paths = search or ["/safe/import"]
+        plan = {
+            **self.plan,
+            "python": "/safe/python",
+            "helper": "/safe/helper",
+            "sql": "/safe/query.sql",
+            "deadline": 1,
+            "cleanup_deadline": 121,
+            "inputs": [
+                (p, hashlib.sha256(b"immutable").hexdigest())
+                for p in ("/safe/python", "/safe/helper", "/safe/query.sql")
+            ],
+            "import_roots": [paths[0]],
+        }
+
+        def info(path, *args, **kwargs):
+            regular = str(path) in {
+                "/safe/python",
+                "/safe/helper",
+                "/safe/query.sql",
+            } or str(path).endswith("module.py")
+            mode = stat.S_IFREG if regular else stat.S_IFDIR
+            if str(path) == "/venv/bin/python":
+                mode = stat.S_IFLNK
+            return SimpleNamespace(st_uid=1001, st_mode=mode | 0o555)
+
+        stack.enter_context(patch.object(identity.os, "closerange"))
+        stack.enter_context(patch.object(identity.os, "getpid", return_value=123))
+        stack.enter_context(
+            patch.object(identity, "process", return_value=self.process)
+        )
+        stack.enter_context(patch.object(identity.sys, "path", paths))
+        stack.enter_context(patch.object(identity.time, "monotonic", return_value=0))
+        stack.enter_context(patch.object(identity.os, "lstat", side_effect=info))
+        stack.enter_context(
+            patch.object(identity.os, "readlink", return_value="/safe/python")
+        )
+        stack.enter_context(
+            patch.object(
+                identity.os, "access", side_effect=lambda p, *a, **k: str(p) == writable
+            )
+        )
+        stack.enter_context(patch.object(Path, "stat", autospec=True, side_effect=info))
+        stack.enter_context(
+            patch.object(
+                Path,
+                "is_symlink",
+                autospec=True,
+                side_effect=lambda p: str(p) == "/venv/bin/python",
+            )
+        )
+        stack.enter_context(
+            patch.object(
+                Path,
+                "exists",
+                autospec=True,
+                side_effect=lambda p: str(p) != "/future/search",
+            )
+        )
+        stack.enter_context(
+            patch.object(
+                Path,
+                "resolve",
+                autospec=True,
+                side_effect=lambda p, **k: Path("/safe/python")
+                if str(p) == "/venv/bin/python"
+                else p,
+            )
+        )
+        stack.enter_context(patch.object(Path, "read_bytes", return_value=b"immutable"))
+        stack.enter_context(
+            patch.object(
+                Path, "rglob", return_value=iter([Path(paths[0]) / "module.py"])
+            )
+        )
+        return stack, plan
+
+    def test_actual_worker_rejects_writable_import_root_and_ancestor(self) -> None:
+        for writable in ("/imports/root", "/imports"):
+            stack, plan = self.worker_inputs(writable, ["/imports/root"])
+            with (
+                stack,
+                self.subTest(writable=writable),
+                self.assertRaises(identity.ContainmentFatal),
+            ):
+                identity.check_worker(plan)
+
+    def test_actual_worker_rejects_omitted_nonexistent_search_entry(self) -> None:
+        stack, plan = self.worker_inputs("/future", ["/safe/import", "/future/search"])
+        with stack, self.assertRaises(identity.ContainmentFatal):
+            identity.check_worker(plan)
+
+    def test_actual_worker_checks_invoked_interpreter_symlink_ancestor(self) -> None:
+        stack, plan = self.worker_inputs("/venv/bin")
+        plan["python"] = "/venv/bin/python"
+        with stack, self.assertRaises(identity.ContainmentFatal):
+            identity.check_worker(plan)
+
+    def test_actual_worker_accepts_complete_readonly_bound_search_and_link(
+        self,
+    ) -> None:
+        stack, plan = self.worker_inputs("/not-present")
+        plan["python"] = "/venv/bin/python"
+        with stack:
+            identity.check_worker(plan)
+
+    def test_actual_path_check_rejects_creation_or_chmod_under_client_control(
+        self,
+    ) -> None:
+        for scenario in ("absent", "client-owned"):
+
+            def info(path):
+                if str(path) == "/sticky/future" and scenario == "absent":
+                    raise FileNotFoundError
+                return SimpleNamespace(
+                    st_uid=65534 if str(path) == "/sticky/future" else 0,
+                    st_mode=stat.S_IFDIR
+                    | 0o555
+                    | (stat.S_ISVTX if str(path) == "/sticky" else 0),
+                )
+
+            with (
+                self.subTest(scenario=scenario),
+                patch.object(identity.os, "lstat", side_effect=info),
+                patch.object(
+                    identity.os,
+                    "access",
+                    side_effect=lambda p, *a, **k: str(p) == "/sticky",
+                ),
+                patch.object(identity.time, "monotonic", return_value=0),
+                self.assertRaises(identity.ContainmentFatal),
+            ):
+                identity.check_trusted_path(
+                    Path("/sticky/future"), self.plan, 1, allow_missing=True
+                )
+
+    def test_actual_path_check_accepts_existing_protected_sticky_child(self) -> None:
+        def info(path):
+            return SimpleNamespace(
+                st_uid=1001,
+                st_mode=stat.S_IFDIR
+                | 0o555
+                | (stat.S_ISVTX if str(path) == "/sticky" else 0),
+            )
+
+        with (
+            patch.object(identity.os, "lstat", side_effect=info),
+            patch.object(
+                identity.os,
+                "access",
+                side_effect=lambda p, *a, **k: str(p) == "/sticky",
+            ),
+            patch.object(identity.time, "monotonic", return_value=0),
+        ):
+            identity.check_trusted_path(Path("/sticky/protected"), self.plan, 1)
+
+    def test_actual_prepare_requires_independent_valid_authority(self) -> None:
+        for field, independent in (
+            (None, None),
+            ("", ""),
+            ([], None),
+            ("a" * 63, "a" * 63),
+            ("z" * 64, "z" * 64),
+            ("a" * 64, "b" * 64),
+        ):
+            plan = {
+                **self.plan,
+                "source_sha": "source",
+                "root": "@fresh-fixture",
+                "authority_sha256": field,
+                "python": "@installed-python",
+                "helper": "@copied-helper",
+                "inputs": [],
+                "sudo_sha256": hashlib.sha256(b"immutable").hexdigest(),
+                "env_sha256": hashlib.sha256(b"immutable").hexdigest(),
+            }
+            env = {
+                "N1_TEST_CLI_IDENTITY_BINDING": "/safe/binding",
+                "N1_TEST_CLI_IDENTITY_BINDING_SHA256": "a" * 64,
+                "RUNNER_ENVIRONMENT": "github-hosted",
+                "RUNNER_OS": "Linux",
+                "SOURCE_SHA": "source",
+                identity.NORMAL_ENV: "1",
+                identity.CLEANUP_ENV: "121",
+            }
+            if independent is not None:
+                env["N1_TEST_CLI_IDENTITY_AUTHORITY_SHA256"] = independent
+            system = SimpleNamespace(st_uid=0, st_mode=stat.S_IFREG | 0o555)
+            with (
+                self.subTest(field=field),
+                patch.dict(identity.os.environ, env, clear=True),
+                patch.object(identity, "read_binding", return_value=plan),
+                patch.object(identity.os, "geteuid", return_value=1001),
+                patch.object(identity.os, "getegid", return_value=1001),
+                patch.object(identity.time, "monotonic", return_value=0),
+                patch.object(Path, "read_bytes", return_value=b"immutable"),
+                patch.object(Path, "chmod"),
+                patch.object(Path, "mkdir"),
+                patch.object(identity.os, "lstat", return_value=system),
+                patch.object(identity.subprocess, "Popen") as spawn,
+                self.assertRaises(identity.ContainmentFatal),
+            ):
+                identity.Session.prepare(
+                    Path("/safe/root"), "fictional", "fictional", "fictional"
+                )
+            spawn.assert_not_called()
+
+    def test_actual_close_ack_uses_original_cleanup_deadline(self) -> None:
+        session = identity.Session(
+            {**self.plan, "deadline": 1, "cleanup_deadline": 121},
+            "fictional",
+            "fictional",
+            "fictional",
+        )
+        session.monitor = Mock()
+        session.monitor.wait.return_value = 0
+        session.state_identity = [7, 8]
+        session.channel = SimpleNamespace(deadline=1)
+        seen = []
+
+        def acknowledgement():
+            seen.append(session.channel.deadline)
+            identity.remaining(session.channel.deadline)
+            return {"closed": True}
+
+        session.channel.read = acknowledgement
+        cleanup_monitor = Mock()
+        cleanup_monitor.wait.return_value = 0
+        cleanup_channel = Mock()
+        cleanup_channel.read.return_value = {
+            "cleanup": "known_targets_absent_state_contents_deleted"
+        }
+        state = Mock()
+        with (
+            patch.object(identity.time, "monotonic", return_value=2),
+            patch.object(identity, "send"),
+            patch.object(
+                session, "launch", return_value=(cleanup_monitor, cleanup_channel)
+            ),
+            patch.object(identity, "private_state", return_value=state),
+            patch.object(
+                identity.os, "lstat", return_value=SimpleNamespace(st_dev=7, st_ino=8)
+            ),
+            patch.object(identity, "latch"),
+        ):
+            session.close()
+        self.assertEqual(seen, [121])
+        self.assertTrue(session.ledger.complete())
+
+    def worker_output(self, stdout: bytes, stderr: bytes):
+        stack = ExitStack()
+        plan = {
+            **self.plan,
+            "deadline": 1,
+            "cleanup_deadline": 121,
+            "sql": "/safe/query.sql",
+            "python": "/safe/python",
+            "helper": "/safe/helper",
+        }
+        state = Mock()
+        state.stat.return_value = SimpleNamespace(st_dev=7, st_ino=8)
+        stack.enter_context(patch.object(identity, "private_state", return_value=state))
+        stack.enter_context(
+            patch.object(identity, "process", return_value=self.process)
+        )
+        stack.enter_context(patch.object(identity, "send"))
+        stack.enter_context(patch.object(identity.time, "monotonic", return_value=0))
+        stack.enter_context(patch.object(identity.os, "set_blocking"))
+        request = [
+            "query",
+            "--file",
+            "/safe/query.sql",
+            "--intent",
+            "enumerate",
+            "--view",
+            "historical",
+            "--page-size",
+            "1",
+            "--json",
+        ]
+        incoming = Mock()
+        incoming.read.side_effect = [
+            {"env": {"MEMORIESQL_LOCAL_CREDENTIAL": "fictional-output-canary"}},
+            {"args": request},
+            {"spawn": True},
+            {"registered": True},
+            {"op": "stop"},
+        ]
+        ready = Mock()
+        ready.read.return_value = {"identity": self.process}
+        stack.enter_context(
+            patch.object(identity, "Channel", side_effect=[incoming, ready])
+        )
+        output, error = Mock(), Mock()
+        output.fileno.return_value, error.fileno.return_value = 10, 11
+        child = Mock(stdout=output, stderr=error)
+        child.wait.return_value = 0
+        stack.enter_context(
+            patch.object(identity.subprocess, "Popen", return_value=child)
+        )
+        chunks = {10: [stdout, b""], 11: [stderr, b""] if stderr else [b""]}
+        stack.enter_context(
+            patch.object(
+                identity.select,
+                "select",
+                side_effect=lambda reads, *args: (list(reads), [], []),
+            )
+        )
+        stack.enter_context(
+            patch.object(
+                identity.os, "read", side_effect=lambda fd, size: chunks[fd].pop(0)
+            )
+        )
+        return stack, plan
+
+    def test_actual_worker_rejects_nonempty_stderr_even_whitespace(self) -> None:
+        stack, plan = self.worker_output(b'{"outcome":"available"}', b" ")
+        with stack, self.assertRaises(identity.ContainmentFatal):
+            identity.worker(plan, Path("/safe/manifest"), "a" * 64)
+
+    def test_actual_worker_rejects_credential_bearing_valid_json(self) -> None:
+        for value in (
+            b'{"credential":"fictional-output-canary"}',
+            b'{"credential":"\\u0066ictional-output-canary"}',
+        ):
+            stack, plan = self.worker_output(value, b"")
+            with (
+                stack,
+                self.subTest(escaped=b"\\u" in value),
+                self.assertRaises(identity.ContainmentFatal),
+            ):
+                identity.worker(plan, Path("/safe/manifest"), "a" * 64)
+
+    def test_actual_worker_accepts_empty_stderr_and_no_credential(self) -> None:
+        stack, plan = self.worker_output(b'{"outcome":"available"}', b"")
+        with stack:
+            self.assertEqual(identity.worker(plan, Path("/safe/manifest"), "a" * 64), 0)
+
+    def test_actual_worker_can_receive_stop_after_normal_deadline(self) -> None:
+        plan = {**self.plan, "deadline": 1, "cleanup_deadline": 121}
+        state = Mock()
+        state.stat.return_value = SimpleNamespace(st_dev=7, st_ino=8)
+        clock = [0]
+
+        class Incoming:
+            def __init__(self, stream, deadline):
+                self.deadline = deadline
+                self.calls = 0
+
+            def read(inner):
+                identity.remaining(inner.deadline)
+                inner.calls += 1
+                if inner.calls == 1:
+                    clock[0] = 2
+                    return {"env": {}}
+                return {"op": "stop"}
+
+        with (
+            patch.object(identity, "private_state", return_value=state),
+            patch.object(identity, "process", return_value=self.process),
+            patch.object(identity, "send"),
+            patch.object(identity, "Channel", Incoming),
+            patch.object(identity.time, "monotonic", side_effect=lambda: clock[0]),
+            patch.object(identity.subprocess, "Popen") as spawn,
+        ):
+            self.assertEqual(identity.worker(plan, Path("/safe/manifest"), "a" * 64), 0)
+        spawn.assert_not_called()
 
     def test_actual_identity_rejects_retained_ids_groups_and_capabilities(self) -> None:
         identity.check_identity(self.process, self.plan)
@@ -167,23 +539,38 @@ class QueryHostCliIdentity(unittest.TestCase):
 
     def test_actual_cli_pretty_json_requires_bounded_eof(self) -> None:
         stream = Mock()
+        stderr = Mock()
+        stream.fileno.return_value, stderr.fileno.return_value = 10, 11
+        chunks = {10: [], 11: [b""]}
         raw = json.dumps(
             {"outcome": "available", "page": {"rows": [1]}}, indent=2
         ).encode()
+        chunks[10] = [raw[:10], raw[10:], b""]
         with (
             patch.object(identity.os, "set_blocking"),
             patch.object(identity.time, "monotonic", return_value=0),
-            patch.object(identity.select, "select", return_value=([stream], [], [])),
-            patch.object(identity.os, "read", side_effect=[raw[:10], raw[10:], b""]),
+            patch.object(
+                identity.select,
+                "select",
+                side_effect=lambda reads, *a: (list(reads), [], []),
+            ),
+            patch.object(
+                identity.os, "read", side_effect=lambda fd, size: chunks[fd].pop(0)
+            ),
         ):
-            self.assertEqual(identity.cli_reply(stream, 1)["outcome"], "available")
+            self.assertEqual(
+                identity.cli_reply(stream, 1, stderr, "fictional-output-canary")[
+                    "outcome"
+                ],
+                "available",
+            )
         with (
             patch.object(identity.os, "set_blocking"),
             patch.object(identity.time, "monotonic", return_value=0),
             patch.object(identity.select, "select", return_value=([], [], [])),
             self.assertRaises(identity.ContainmentFatal),
         ):
-            identity.cli_reply(stream, 1)
+            identity.cli_reply(stream, 1, stderr, "fictional-output-canary")
         with (
             patch.object(identity.os, "set_blocking"),
             patch.object(identity.time, "monotonic", return_value=0),
@@ -193,7 +580,7 @@ class QueryHostCliIdentity(unittest.TestCase):
             ),
             self.assertRaises(identity.ContainmentFatal),
         ):
-            identity.cli_reply(stream, 1)
+            identity.cli_reply(stream, 1, stderr, "fictional-output-canary")
 
     def test_partial_write_is_bounded_and_never_resets_deadline(self) -> None:
         stream = Mock()

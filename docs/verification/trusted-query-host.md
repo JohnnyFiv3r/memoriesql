@@ -136,6 +136,16 @@ record. Missing bindings fail before a process launch. Actual hosted image,
 account availability, ownership, import closure and successful cleanup remain
 unverified prerequisites, not evidence established by a JSON field.
 
+`import_roots` binds the complete ordered, absolute import search list, including
+nonexistent zip or directory candidates. The check covers each root itself,
+its replacement ancestors and descendants, and the actual invoked interpreter's
+lexical symlink path and targets. Client-owned entries are refused even when
+currently read-only. Sticky protection applies only to an existing non-client
+child whose parent prevents replacement; it cannot protect a missing search
+entry from creation. Authority pins must each independently be present and be
+matching lowercase 64-hex SHA-256 values; matching nulls are refused. These
+metadata checks still do not confer authority.
+
 The controller permits at most two fixed invocations: noninteractive sudo as
 C:G, an empty environment, the bound installed Python and copied helper, and
 `run-case` or `cleanup` with the bound manifest. It sends the paired credential
@@ -146,6 +156,13 @@ registrations are bounded and checked. An unknown birth, lineage, monitor or
 cleanup latches a private S-owned failure record and stops later tests/proofs.
 Only bounded known-resource cleanup and evidence retention may follow. Disposable
 hosted VM destruction is a failed-job fallback, never successful cleanup proof.
+
+Stop reception and acknowledgement use the original shared cleanup deadline,
+including when the normal deadline has expired; new CLI work retains the normal
+deadline. CLI stdout and stderr are drained separately under the same existing
+output/deadline bounds. Any stderr, including whitespace, or paired credential
+in raw or decoded JSON stdout fails before forwarding a reply, with fixed
+content-free diagnostics.
 
 The inert unit controls exercise the actual identity, registration, protocol and
 runner methods with mocks. They do not establish OS isolation, native query

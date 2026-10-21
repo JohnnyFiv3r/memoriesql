@@ -248,22 +248,51 @@ def sudo_argv(plan: dict[str, Any], action: str, path: Path, digest: str) -> lis
     ]
 
 
-def cli_reply(stream: Any, deadline: float) -> dict[str, Any]:
-    """Read the actual CLI's pretty JSON through bounded EOF, never one RPC line."""
+def check_credential_absent(value: Any, credential: str) -> None:
+    if not isinstance(credential, str) or not credential:
+        raise ContainmentFatal("credential_oracle_missing")
+    pending = [value]
+    while pending:
+        item = pending.pop()
+        if isinstance(item, str) and credential in item:
+            raise ContainmentFatal("credential_in_cli_output")
+        if isinstance(item, dict):
+            pending.extend(item.keys())
+            pending.extend(item.values())
+        elif isinstance(item, list):
+            pending.extend(item)
+
+
+def cli_reply(
+    stream: Any, deadline: float, stderr: Any, credential: str
+) -> dict[str, Any]:
+    """Drain bounded separate pipes; reject stderr or credentials before forwarding."""
     data = bytearray()
-    os.set_blocking(stream.fileno(), False)
-    while True:
-        if not select.select([stream], [], [], remaining(deadline))[0]:
+    active = [stream, stderr]
+    for pipe in active:
+        os.set_blocking(pipe.fileno(), False)
+    while active:
+        ready = select.select(active, [], [], remaining(deadline))[0]
+        if not ready:
             raise ContainmentFatal("cli_output_or_eof_deadline")
-        part = os.read(stream.fileno(), 4096)
-        if not part:
-            break
-        data.extend(part)
-        if len(data) > MAX_OUTPUT:
-            raise ContainmentFatal("cli_output_limit")
+        for pipe in ready:
+            part = os.read(pipe.fileno(), 4096)
+            if not part:
+                active.remove(pipe)
+                continue
+            if pipe is stderr:
+                raise ContainmentFatal("nonempty_cli_stderr")
+            data.extend(part)
+            if len(data) > MAX_OUTPUT:
+                raise ContainmentFatal("cli_output_limit")
+    if not isinstance(credential, str) or not credential:
+        raise ContainmentFatal("credential_oracle_missing")
+    if credential.encode() in data:
+        raise ContainmentFatal("credential_in_cli_output")
     value = json.loads(data)
     if not isinstance(value, dict):
         raise ContainmentFatal("invalid_cli_reply")
+    check_credential_absent(value, credential)
     return value
 
 
@@ -282,6 +311,59 @@ def private_state(plan: dict[str, Any]) -> Path:
     return area / name
 
 
+def check_trusted_path(
+    path: Path,
+    plan: dict[str, Any],
+    deadline: float,
+    *,
+    allow_missing: bool = False,
+    links: tuple[str, ...] = (),
+) -> None:
+    """Check lexical names, link targets and replacement ancestors as effective C."""
+    if (
+        not path.is_absolute()
+        or ".." in path.parts
+        or str(path) in links
+        or len(links) >= 40
+    ):
+        raise ContainmentFatal("unbound_or_cyclic_input_path")
+    child_info: Any = None
+    for entry in (path, *path.parents):
+        remaining(deadline)
+        try:
+            info = os.lstat(entry)
+        except FileNotFoundError:
+            if not allow_missing:
+                raise ContainmentFatal("missing_bound_input") from None
+            child_info = None
+            continue
+        if info.st_uid == plan["client_uid"]:
+            raise ContainmentFatal("caller_owned_input_path")
+        if stat.S_ISLNK(info.st_mode):
+            target = Path(os.readlink(entry))
+            if not target.is_absolute():
+                target = entry.parent / target
+            check_trusted_path(
+                target,
+                plan,
+                deadline,
+                allow_missing=allow_missing,
+                links=(*links, str(path)),
+            )
+        if os.access(entry, os.W_OK, effective_ids=True):
+            protected = (
+                entry != path
+                and stat.S_ISDIR(info.st_mode)
+                and info.st_mode & stat.S_ISVTX
+                and info.st_uid != plan["client_uid"]
+                and child_info is not None
+                and child_info.st_uid != plan["client_uid"]
+            )
+            if not protected:
+                raise ContainmentFatal("caller_writable_or_replaceable_input")
+        child_info = info
+
+
 def check_worker(plan: dict[str, Any], cleanup_phase: bool = False) -> None:
     # Execute only after the separately approved transition, never during import.
     os.closerange(3, int(os.sysconf("SC_OPEN_MAX")))
@@ -289,39 +371,33 @@ def check_worker(plan: dict[str, Any], cleanup_phase: bool = False) -> None:
     if identity is None:
         raise ContainmentFatal("worker_identity_unavailable")
     check_identity(identity, plan)
+    deadline = plan["cleanup_deadline"] if cleanup_phase else plan["deadline"]
+    for key in ("python", "helper", "sql"):
+        check_trusted_path(Path(plan[key]), plan, deadline)
     required = {str(Path(plan[key]).resolve()) for key in ("python", "helper", "sql")}
     if not required <= {raw for raw, _ in plan["inputs"]}:
         raise ContainmentFatal("critical_input_binding_missing")
     for raw, expected in plan["inputs"]:
         path = Path(raw)
+        check_trusted_path(path, plan, deadline)
         if (
             path.is_symlink()
             or hashlib.sha256(path.read_bytes()).hexdigest() != expected
         ):
             raise ContainmentFatal("input_substitution")
-        child_entry = path
-        for entry in (path, *path.parents):
-            if os.access(entry, os.W_OK, effective_ids=True):
-                info = entry.stat()
-                sticky_protected = (
-                    entry != path
-                    and stat.S_ISDIR(info.st_mode)
-                    and info.st_mode & stat.S_ISVTX
-                    and info.st_uid != plan["client_uid"]
-                    and child_entry.stat().st_uid != plan["client_uid"]
-                )
-                if not sticky_protected:
-                    raise ContainmentFatal("caller_writable_host_input")
-            child_entry = entry
-    roots = {str(Path(raw).resolve()) for raw in sys.path if raw and Path(raw).exists()}
-    if roots != set(plan["import_roots"]):
+    roots = list(sys.path)
+    if roots != plan["import_roots"] or any(
+        not isinstance(raw, str) or not raw or not Path(raw).is_absolute()
+        for raw in roots
+    ):
         raise ContainmentFatal("import_root_binding_mismatch")
     for raw in roots:
         root = Path(raw)
+        check_trusted_path(root, plan, deadline, allow_missing=True)
         entries = root.rglob("*") if root.is_dir() else iter((root,))
         for entry in entries:
-            remaining(plan["cleanup_deadline"] if cleanup_phase else plan["deadline"])
-            if entry.is_symlink() or os.access(entry, os.W_OK, effective_ids=True):
+            check_trusted_path(entry, plan, deadline, allow_missing=entry == root)
+            if entry.is_symlink():
                 raise ContainmentFatal("caller_writable_or_unbound_import")
 
 
@@ -414,10 +490,15 @@ def worker(plan: dict[str, Any], path: Path, digest: str) -> int:
     environment = incoming.read()["env"]
     environment["MEMORIESQL_STATE_DIR"] = str(state)
     while True:
+        # An idle worker must still receive stop during the original cleanup
+        # allowance; every new CLI birth and its gates retain the normal bound.
+        incoming.deadline = plan["cleanup_deadline"]
         request = incoming.read()
         if request.get("op") == "stop":
             send(sys.stdout.buffer, {"closed": True}, plan["cleanup_deadline"])
             return 0
+        incoming.deadline = plan["deadline"]
+        remaining(plan["deadline"])
         cli_arguments(request["args"], plan)
         send(sys.stdout.buffer, {"birth": True}, plan["deadline"])
         if incoming.read() != {"spawn": True}:
@@ -426,10 +507,14 @@ def worker(plan: dict[str, Any], path: Path, digest: str) -> int:
             [plan["python"], "-I", plan["helper"], "child", str(path), digest],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
+            stderr=subprocess.PIPE,
             close_fds=True,
         )
-        assert process_child.stdin is not None and process_child.stdout is not None
+        assert (
+            process_child.stdin is not None
+            and process_child.stdout is not None
+            and process_child.stderr is not None
+        )
         ready = Channel(process_child.stdout, plan["deadline"]).read()
         send(sys.stdout.buffer, ready, plan["deadline"])
         if incoming.read() != {"registered": True}:
@@ -441,7 +526,12 @@ def worker(plan: dict[str, Any], path: Path, digest: str) -> int:
         )
         process_child.stdin.close()
         process_child.stdin = None
-        reply = cli_reply(process_child.stdout, plan["deadline"])
+        reply = cli_reply(
+            process_child.stdout,
+            plan["deadline"],
+            process_child.stderr,
+            environment["MEMORIESQL_LOCAL_CREDENTIAL"],
+        )
         code = process_child.wait(timeout=min(10, remaining(plan["deadline"])))
         send(
             sys.stdout.buffer,
@@ -560,8 +650,16 @@ class Session:
             raise ContainmentFatal("prepopulated_cleanup_targets")
         if plan["service_uid"] != os.geteuid() or plan["gid"] != os.getegid():
             raise ContainmentFatal("fixture_service_identity_mismatch")
-        if plan["authority_sha256"] != os.environ.get(
-            "N1_TEST_CLI_IDENTITY_AUTHORITY_SHA256"
+        authority = plan.get("authority_sha256")
+        independent = os.environ.get("N1_TEST_CLI_IDENTITY_AUTHORITY_SHA256")
+        if (
+            any(
+                not isinstance(pin, str)
+                or len(pin) != 64
+                or any(c not in "0123456789abcdef" for c in pin)
+                for pin in (authority, independent)
+            )
+            or authority != independent
         ):
             raise ContainmentFatal("fixture_authority_binding_missing_execution_held")
         plan["deadline"] = float(os.environ[NORMAL_ENV])
@@ -682,6 +780,9 @@ class Session:
                 self.ledger.identities[-1], process(self.ledger.identities[-1]["pid"])
             ):
                 self.fail("cli_reaping_unproven")
+            check_credential_absent(
+                reply["reply"], self.environment["MEMORIESQL_LOCAL_CREDENTIAL"]
+            )
             return reply["code"], reply["reply"]
         except Exception as error:
             self.fail(type(error).__name__ + "_during_cli")
@@ -696,6 +797,7 @@ class Session:
             self.fail("pre_registration_cleanup_unknown")
         try:
             if not self.ledger.fatal:
+                self.channel.deadline = self.plan["cleanup_deadline"]
                 send(self.monitor.stdin, {"op": "stop"}, self.plan["cleanup_deadline"])
                 if self.channel.read() != {"closed": True}:
                     self.fail("worker_closure_unproven")
