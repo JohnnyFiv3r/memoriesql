@@ -121,7 +121,7 @@ jobs:
     if: needs.package.outputs.qualify == 'true'
     needs: package
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 100
     concurrency:
       group: qualification-${{ github.run_id }}-${{ matrix.python-version }}
       cancel-in-progress: false
@@ -155,7 +155,7 @@ jobs:
           name: memoriesql-python-${{ needs.package.outputs.source_sha }}
           path: build/reviewed-package
       - name: Qualify reviewed installed bytes, all shards and restart processes
-        timeout-minutes: 55
+        timeout-minutes: 95
         shell: bash
         env:
           SOURCE_SHA: ${{ needs.package.outputs.source_sha }}

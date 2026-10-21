@@ -183,7 +183,7 @@ class CompleteInputExecution(LogicalUnitMaterialization):
                                     "model_run_ref": "orchard.complete.run",
                                 }
                             ],
-                            "render": {"title": clause, "summary": [clause]},
+                            "render": {"title": clause, "summary": [dict(clause)]},
                         }
                     ]
                 },

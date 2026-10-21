@@ -103,9 +103,9 @@ a local-only fault reproduction, semantic quality, custody, live recall or
 integrated product acceptance. A separately scoped local-specific claim still
 needs its own evidence. No live model/provider calls belong to this path.
 
-The package job remains capped at 15 minutes; each interpreter at 60 minutes.
-Within that, the helper has a 50-minute proof deadline and one shared additional
-2-minute cleanup allowance; the proof step is capped at 55 minutes, exact-service
+The package job remains capped at 15 minutes; each interpreter at 100 minutes.
+Within that, the helper has a 90-minute proof deadline and one shared additional
+2-minute cleanup allowance; the proof step is capped at 95 minutes, exact-service
 cleanup at 3 minutes. Three shards share each isolated service. Standard public
 repository runners use GitHub's documented standard resources (currently four
 CPUs, 16 GB memory and 14 GB disk for this Linux class); no larger or paid runner

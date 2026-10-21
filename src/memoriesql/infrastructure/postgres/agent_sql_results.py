@@ -13,6 +13,7 @@ that records its disclosure receipt. Nothing is disclosed from a partial result.
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import math
 import time
 from collections.abc import Callable
@@ -21,6 +22,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from psycopg import Connection, Error
+from psycopg.types.json import Jsonb
 
 from memoriesql.application.agent_sql_admission import (
     RecursionBound,
@@ -41,6 +43,8 @@ from memoriesql.application.agent_sql_results import (
     stable_reply_bytes,
 )
 from memoriesql.application.investigation_contracts import (
+    HydrateRequest,
+    InspectRequest,
     InvestigationRequestError,
     QueryRequest,
     ReuseRequest,
@@ -68,9 +72,69 @@ from memoriesql.infrastructure.postgres.relation_sql_population import (
 from memoriesql.infrastructure.postgres.restricted_query import PostgresRestrictedQuery
 from memoriesql.infrastructure.postgres.result_preparation import (
     PostgresResultPreparation,
+    PreparedContent,
 )
 
 ConnectionFactory = Callable[[], Connection[Any]]
+AccessRequest = QueryRequest | ReuseRequest | InspectRequest | HydrateRequest
+
+# Presence is a fail-closed capability check, never authorization or SQL proof.
+# A registered, reviewed forward migration and installed tests remain required.
+_HELPER_BACKEND_SIGNATURES = (
+    "memoriesql.prepare_query_helper_v1(uuid,jsonb)",
+    "memoriesql.record_query_helper_disclosure_v1(uuid,uuid,text,jsonb,text,bigint,bigint,timestamp with time zone,bigint,integer,uuid,bigint)",
+    "memoriesql.query_helper_preparation_v1(uuid)",
+    "memoriesql.read_query_helper_artifact_v1(uuid,uuid,uuid)",
+    "memoriesql.query_helper_delivery_v1(uuid)",
+    "memoriesql.query_helper_evidence_pin_v1(uuid,uuid,uuid,uuid,uuid)",
+    "memoriesql.prepare_query_inspection_v1(uuid,jsonb)",
+    "memoriesql.resolve_query_helper_evidence_v1(uuid,uuid,uuid,jsonb)",
+    "memoriesql.prepare_query_hydration_v1(uuid,jsonb)",
+    "memoriesql.purge_query_helper_step_v1()",
+)
+_HELPER_BACKEND_CAPABILITY_SQL = (
+    "SELECT "
+    + " AND ".join(
+        "to_regprocedure('" + signature + "') IS NOT NULL"
+        for signature in _HELPER_BACKEND_SIGNATURES
+    )
+    + " AND (SELECT count(*) = 4 FROM pg_catalog.pg_attribute "
+    "WHERE attrelid=to_regclass('memoriesql.query_steps') "
+    "AND NOT attisdropped AND attnum>0 "
+    "AND ((attname='helper_artifact_ref' AND atttypid='uuid'::regtype) "
+    "OR (attname='helper_page_first' AND atttypid='bigint'::regtype) "
+    "OR (attname='helper_page_count' AND atttypid='integer'::regtype) "
+    "OR (attname='helper_page_cursor' AND atttypid='uuid'::regtype)))"
+    " AND EXISTS (SELECT 1 FROM pg_catalog.pg_attribute "
+    "WHERE attrelid=to_regclass('memoriesql.query_disclosures') "
+    "AND attname='result_id' AND NOT attisdropped AND NOT attnotnull)"
+    " AND EXISTS (SELECT 1 FROM pg_catalog.pg_constraint "
+    "WHERE conrelid=to_regclass('memoriesql.query_steps') "
+    "AND conname='query_steps_helper_kind_check' AND contype='c' AND convalidated)"
+    " AND EXISTS (SELECT 1 FROM pg_catalog.pg_constraint "
+    "WHERE conrelid=to_regclass('memoriesql.query_steps') "
+    "AND conname='query_steps_helper_complete_check' AND contype='c' AND convalidated)"
+    " AND EXISTS (SELECT 1 FROM pg_catalog.pg_class "
+    "WHERE oid=to_regclass('memoriesql.query_helper_cursors') "
+    "AND relrowsecurity AND relforcerowsecurity)"
+    " AND (SELECT count(*) = 2 FROM pg_catalog.pg_trigger "
+    "WHERE tgrelid=to_regclass('memoriesql.query_steps') "
+    "AND NOT tgisinternal AND tgenabled IN ('O','A') "
+    "AND tgname IN ('query_helper_clear_pin','query_helper_purge'))"
+)
+
+
+def _helper_module_available() -> bool:
+    # The source component is deliberately not yet in the runtime inventory.
+    # Missing it must not break existing query/reuse imports or admit a helper.
+    try:
+        return (
+            importlib.util.find_spec("memoriesql.application.agent_sql_helpers")
+            is not None
+        )
+    except (ImportError, ValueError):
+        return False
+
 
 # Admission refusals write nothing and disclose no other principal's work.
 _REFUSALS = {
@@ -463,7 +527,9 @@ class PostgresAgentSqlResults:
             request = parse_investigation_request(data)
         except InvestigationRequestError as error:
             return self._bare(None, None, error.outcome, {"code": error.code}, None)
-        if not isinstance(request, QueryRequest | ReuseRequest):
+        if not isinstance(
+            request, QueryRequest | ReuseRequest | InspectRequest | HydrateRequest
+        ):
             return self._bare(
                 request.run_ref,
                 request.step_key,
@@ -471,12 +537,20 @@ class PostgresAgentSqlResults:
                 {"code": "feature", "feature": request.kind},
                 None,
             )
-        kind = "query" if isinstance(request, QueryRequest) else "reuse_result"
+        kind = request.kind
         fingerprint = request_fingerprint(request)
         admission: dict[str, Any] = {}
         for attempt in range(2):
             try:
                 admission = self._admit(request, kind, fingerprint)
+            except _Failure as failure:
+                return self._bare(
+                    request.run_ref,
+                    request.step_key,
+                    failure.outcome,
+                    failure.error(),
+                    None,
+                )
             except (PermissionError, Error) as error:
                 # Nothing was admitted or charged: a timed-out admission is a
                 # budget refusal, not missing authority.
@@ -526,7 +600,7 @@ class PostgresAgentSqlResults:
 
     def _deliver(
         self,
-        request: QueryRequest | ReuseRequest,
+        request: AccessRequest,
         kind: str,
         fingerprint: str,
         admission: dict[str, Any],
@@ -551,6 +625,10 @@ class PostgresAgentSqlResults:
             try:
                 if admission["replay"] and step["state"] == "failed":
                     raise _Failure(step["outcome"], step["error_code"])
+                if isinstance(request, InspectRequest | HydrateRequest):
+                    return self._helper(
+                        request, fingerprint, admission, start, deadline, owner
+                    )
                 if admission["replay"] and step["state"] == "complete":
                     return self._disclose(
                         request,
@@ -580,6 +658,329 @@ class PostgresAgentSqlResults:
             except Error:
                 pass
             owner.close()
+
+    def _helper(
+        self,
+        request: InspectRequest | HydrateRequest,
+        fingerprint: str,
+        admission: dict[str, Any],
+        start: float,
+        deadline: float,
+        owner: Connection[Any],
+    ) -> bytes:
+        """Use the admitted delivery's owning backend for all helper work.
+
+        Work is already durably reserved by admission. Helper bytes, their
+        exact preparation charge, step and disclosure publish in one fenced
+        transaction. No untracked reader or owner-only inspector is used.
+        """
+        from memoriesql.application.agent_sql_helpers import (
+            UnsupportedHelperProvenance,
+            project_helper_provenance,
+            validate_helper_content,
+        )
+
+        delivery = UUID(admission["delivery_ref"])
+        try:
+            with relation_projection_frame(
+                owner,
+                credential_sha256=self._credential,
+                workspace_id=self._workspace,
+                statement_timeout_ms=self._remaining_ms(deadline),
+            ) as frame:
+
+                def check_work() -> None:
+                    self._remaining_ms(deadline)
+
+                def execute(statement: str, values: tuple[Any, ...] = ()) -> Any:
+                    frame.execute(
+                        f"SET LOCAL statement_timeout='{self._remaining_ms(deadline)}ms'"
+                    )
+                    return frame.execute(statement, values)
+
+                found = execute(
+                    "SELECT memoriesql.query_helper_preparation_v1(%s)",
+                    (delivery,),
+                ).fetchone()
+                existing = found[0] if found else None
+                if existing is not None:
+                    if existing["state"] != "sealed":
+                        raise _Failure("execution_error", "database")
+                    row = execute(
+                        "SELECT memoriesql.read_query_helper_artifact_v1(%s,%s,%s)",
+                        (
+                            delivery,
+                            UUID(existing["operation_ref"]),
+                            UUID(existing["ownership_ref"]),
+                        ),
+                    ).fetchone()
+                else:
+                    row = execute(
+                        "SELECT memoriesql.prepare_query_helper_v1(%s,%s)",
+                        (delivery, Jsonb(request.model_dump(mode="json"))),
+                    ).fetchone()
+                if not row or not isinstance(row[0], dict):
+                    raise _Failure("unavailable", "unavailable")
+                packet = row[0]
+                sealed = existing is not None or packet.get("artifact_ref") is not None
+                try:
+                    if (
+                        not sealed
+                        and isinstance(request, InspectRequest)
+                        and packet["witnesses"].get("native_provenance") is not None
+                    ):
+                        graph = project_helper_provenance(
+                            packet["witnesses"].pop("native_provenance"),
+                            str(request.provenance_ref),
+                            check_work=check_work,
+                        )
+                        packet["content"]["payload"]["inspection"]["provenance"] = graph
+                    visible = validate_helper_content(request, packet["content"])
+                except UnsupportedHelperProvenance:
+                    raise _Failure("unsupported_query", "provenance") from None
+                except (ValueError, KeyError, TypeError):
+                    raise _Failure("execution_error", "provenance") from None
+                if existing is not None:
+                    packet.update(
+                        {
+                            key: existing[key]
+                            for key in ("page_first", "page_count", "page_cursor")
+                            if key in existing
+                        }
+                    )
+                if not sealed:
+                    packet["content"]["refs"] = visible
+                elif packet["content"]["refs"] != visible:
+                    # Never rewrite sealed bytes when a newer implementation
+                    # cannot validate their original disclosure associations.
+                    raise _Failure("unavailable", "unavailable")
+                if not sealed:
+                    content = PreparedContent.encode(
+                        content=packet["content"],
+                        witnesses=packet["witnesses"],
+                        dependencies=packet["dependencies"],
+                    )
+                    capacity = max(8192, content.encoded_bytes + 8192)
+                    if capacity > _POPULATION_BYTES:
+                        raise _Failure("budget_exhausted", "storage")
+                    try:
+                        content.validate()
+                    except ValueError:
+                        raise _Failure("execution_error", "provenance") from None
+                    reserved = execute(
+                        "SELECT memoriesql.reserve_result_preparation_v1(%s,%s,%s,%s)",
+                        (
+                            UUID(request.run_ref),
+                            UUID(request.step_key),
+                            fingerprint,
+                            capacity,
+                        ),
+                    ).fetchone()
+                    if not reserved or reserved[0]["replayed"]:
+                        raise _pending()
+                    artifact = uuid4()
+                    sealed = execute(
+                        "SELECT memoriesql.seal_result_preparation_v1("
+                        "%s,%s,%s,%s,%s,%s,%s,%s)",
+                        (
+                            UUID(reserved[0]["operation_ref"]),
+                            UUID(reserved[0]["ownership_ref"]),
+                            artifact,
+                            content.content,
+                            content.witnesses,
+                            content.dependencies,
+                            content.artifact_sha256,
+                            Jsonb([]),
+                        ),
+                    ).fetchone()
+                    if not sealed or not isinstance(sealed[0], dict):
+                        raise _Failure("execution_error", "provenance")
+                    packet["retained_bytes"] = int(sealed[0]["allocation_bytes"])
+                else:
+                    artifact = UUID(packet["artifact_ref"])
+                before = execute(
+                    "SELECT memoriesql.query_delivery_remaining_v1(%s)",
+                    (delivery,),
+                ).fetchone()
+                known = execute(
+                    "SELECT memoriesql.query_visible_refs_v1(%s,%s)",
+                    (
+                        delivery,
+                        sorted(ref_key(ref) for ref in packet["content"]["refs"]),
+                    ),
+                ).fetchone()
+                if not before:
+                    raise _Failure("unavailable", "unavailable")
+                packet["remaining_before"] = before[0]
+                packet["previous_refs"] = known[0] if known else []
+                data, transport, observed, page = self._helper_reply(
+                    request, admission, start, packet, deadline
+                )
+                execute(
+                    "SELECT memoriesql.record_query_helper_disclosure_v1("
+                    "%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                    (
+                        delivery,
+                        artifact,
+                        hashlib.sha256(
+                            result_json_bytes(packet["content"])
+                        ).hexdigest(),
+                        Jsonb(sorted(ref_key(ref) for ref in page["refs"])),
+                        hashlib.sha256(data).hexdigest(),
+                        transport,
+                        observed,
+                        datetime.fromisoformat(
+                            packet["checked_at"].replace("Z", "+00:00")
+                        ),
+                        page["first"],
+                        page["count"],
+                        UUID(page["cursor"]) if page["cursor"] else None,
+                        page["next"],
+                    ),
+                )
+                self._remaining_ms(deadline)
+            return data
+        except Error as error:
+            if (
+                not error.sqlstate
+                or error.sqlstate.startswith("08")
+                or error.sqlstate == "55000"
+            ):
+                # Recovery keeps the full work reservation until the SAME
+                # backend has ended; a timeout/response never proves cessation.
+                raise _pending() from None
+            if error.sqlstate == "0A000":
+                raise _Failure("unsupported_query", "provenance") from None
+            if error.sqlstate == "22023":
+                code = (
+                    "cursor"
+                    if error.diag.message_primary == "query_helper_cursor_invalid"
+                    else "binding"
+                )
+                raise _Failure("invalid_request", code) from None
+            raise _disclosure_failure(error) from None
+
+    def _helper_reply(
+        self,
+        request: InspectRequest | HydrateRequest,
+        admission: dict[str, Any],
+        start: float,
+        packet: dict[str, Any],
+        deadline: float,
+    ) -> tuple[bytes, int, int, dict[str, Any]]:
+        from memoriesql.application.agent_sql_helpers import (
+            helper_content_page,
+            helper_item_count,
+        )
+
+        content = packet["content"]
+        total = helper_item_count(request, content)
+        first = packet.get("page_first", 1)
+        exact_count = packet.get("page_count")
+        maximum = total - first + 1
+        if type(first) is not int or first < 1 or maximum < 0:
+            raise _Failure("unavailable", "unavailable")
+        if exact_count is not None and (
+            type(exact_count) is not int or not 0 <= exact_count <= maximum
+        ):
+            raise _Failure("unavailable", "unavailable")
+        cursor = packet.get("page_cursor") or str(uuid4())
+        previous = set(packet["previous_refs"])
+        limit = min(MAX_RESPONSE_BYTES, int(admission["reserved_transport"]))
+
+        def encode(count: int) -> tuple[bytes, int, int, dict[str, Any]]:
+            self._remaining_ms(deadline)
+            more = count < maximum
+            page = helper_content_page(
+                request,
+                content,
+                first=first,
+                count=count,
+                cursor=cursor if more else None,
+            )
+            refs = {ref_key(ref): ref for ref in page["refs"]}
+            observed = math.ceil((time.monotonic() - start) * 1000)
+            data, transport = stable_reply_bytes(
+                lambda transport, remaining: reply(
+                    run_ref=request.run_ref,
+                    step_key=request.step_key,
+                    outcome="available",
+                    receipt_ref=admission["receipt_ref"],
+                    access_receipt_ref=admission["delivery_ref"],
+                    remaining=remaining,
+                    extra={
+                        **page["payload"],
+                        "visibility": {
+                            "new_refs": [
+                                refs[k] for k in sorted(refs.keys() - previous)
+                            ],
+                            "previous_refs": [
+                                refs[k] for k in sorted(refs.keys() & previous)
+                            ],
+                            "hydration_required": [
+                                refs[k]
+                                for k in sorted(refs)
+                                if refs[k]["kind"] == "source"
+                            ]
+                            if isinstance(request, InspectRequest)
+                            else [],
+                        },
+                        "work": {
+                            "reserved_ms": int(admission["reserved_db_ms"]),
+                            "observed_db_ms": observed,
+                            "charged_ms": observed,
+                            "transport_bytes": transport,
+                            "retained_bytes": packet["retained_bytes"],
+                            "allocation_profile_hash": ALLOCATION_PROFILE_HASH,
+                            "measured_physical_bytes": None,
+                            "measurement_state": "unavailable",
+                            "cancellation_state": "none",
+                        },
+                        "access_bases": [
+                            {**basis, "checked_at": packet["checked_at"]}
+                            for basis in content["access_bases"]
+                        ],
+                        "next_cursor": cursor if more else None,
+                        "has_more": more,
+                    },
+                ),
+                charge={"db_ms": observed},
+                remaining_before=packet["remaining_before"],
+            )
+            return (
+                data,
+                transport,
+                observed,
+                {
+                    "first": first,
+                    "count": count,
+                    "cursor": cursor if more else None,
+                    "next": first + count if more else None,
+                    "refs": page["refs"],
+                },
+            )
+
+        # Exact redelivery cannot silently change the previously recorded page.
+        candidate = encode(maximum if exact_count is None else exact_count)
+        if candidate[1] <= limit and (maximum == 0 or candidate[3]["count"] > 0):
+            return candidate
+        if exact_count is not None or maximum < 2:
+            raise _Failure("budget_exhausted", "transport")
+        # The complete page was checked first. All remaining candidates carry
+        # the same cursor; encoded size grows monotonically with complete atoms.
+        lower, upper = 1, maximum - 1
+        best = None
+        while lower <= upper:
+            count = (lower + upper) // 2
+            candidate = encode(count)
+            if candidate[1] <= limit:
+                best = candidate
+                lower = count + 1
+            else:
+                upper = count - 1
+        if best is None:
+            raise _Failure("budget_exhausted", "transport")
+        return best
 
     def _query(
         self,
@@ -985,8 +1386,9 @@ class PostgresAgentSqlResults:
                         binding = row[0] if row else None
                         if binding is None:
                             # Cleanup can remove a once-valid cursor. Classify
-                            # the requested result under the same authority fence
-                            # without recording disclosure for an invalid cursor.
+                            # its requested result under the existing whole
+                            # authority fence, without disclosing a page or
+                            # recording a disclosure for an invalid cursor.
                             usable = frame.execute(
                                 "SELECT memoriesql.check_query_result_closure_v2(%s,%s)",
                                 (
@@ -1242,7 +1644,7 @@ class PostgresAgentSqlResults:
 
     def _settle(
         self,
-        request: QueryRequest | ReuseRequest,
+        request: AccessRequest,
         admission: dict[str, Any],
         start: float,
         failure: _Failure,
@@ -1300,7 +1702,7 @@ class PostgresAgentSqlResults:
 
     @staticmethod
     def _pending_reply(
-        request: QueryRequest | ReuseRequest,
+        request: AccessRequest,
         admission: dict[str, Any],
         before: dict[str, Any] | None,
     ) -> bytes:
@@ -1325,8 +1727,13 @@ class PostgresAgentSqlResults:
         )
 
     def _admit(
-        self, request: QueryRequest | ReuseRequest, kind: str, fingerprint: str
+        self, request: AccessRequest, kind: str, fingerprint: str
     ) -> dict[str, Any]:
+        if (
+            isinstance(request, InspectRequest | HydrateRequest)
+            and not _helper_module_available()
+        ):
+            raise _Failure("unsupported_query", "feature", feature=request.kind)
         with self._control() as connection:
             with relation_projection_frame(
                 connection,
@@ -1334,6 +1741,12 @@ class PostgresAgentSqlResults:
                 workspace_id=self._workspace,
                 query_access=True,
             ) as frame:
+                if isinstance(request, InspectRequest | HydrateRequest):
+                    supported = frame.execute(_HELPER_BACKEND_CAPABILITY_SQL).fetchone()
+                    if not supported or supported[0] is not True:
+                        raise _Failure(
+                            "unsupported_query", "feature", feature=request.kind
+                        )
                 row = frame.execute(
                     "SELECT memoriesql.admit_query_delivery_v1(%s,%s,%s,%s,%s,%s)",
                     (
