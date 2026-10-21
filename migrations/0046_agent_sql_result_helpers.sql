@@ -171,6 +171,7 @@ RETURNS jsonb LANGUAGE plpgsql VOLATILE SECURITY DEFINER
 DECLARE d memoriesql.query_deliveries%ROWTYPE; o memoriesql.result_preparation_operations%ROWTYPE;
  a memoriesql.result_preparation_artifacts%ROWTYPE; s memoriesql.query_steps%ROWTYPE;
  body jsonb; deps jsonb; current_records jsonb; saved_records jsonb; record_pin jsonb; actual_record jsonb; item jsonb;
+ records_text text; pinned_records jsonb;
 BEGIN
  d:=memoriesql.query_helper_delivery_v1(delivery);
  SELECT * INTO o FROM memoriesql.result_preparation_operations WHERE tenant_id=d.tenant_id AND operation_ref=operation;
@@ -192,10 +193,15 @@ BEGIN
   OR jsonb_typeof(deps->'parts') IS DISTINCT FROM 'array' THEN
   RAISE EXCEPTION 'query_helper_unavailable' USING ERRCODE='42501'; END IF;
  FOR item IN SELECT value FROM jsonb_array_elements(deps->'frames') LOOP
-  IF jsonb_typeof(item->'manifest') IS DISTINCT FROM 'array' OR jsonb_typeof(item->'records') IS DISTINCT FROM 'array' THEN
+  IF jsonb_typeof(item->'manifest') IS DISTINCT FROM 'array' OR jsonb_typeof(item->'records_base64') IS DISTINCT FROM 'string' THEN
+   RAISE EXCEPTION 'query_helper_unavailable' USING ERRCODE='42501'; END IF;
+  records_text:=convert_from(decode(item->>'records_base64','base64'),'UTF8');
+  pinned_records:=records_text::jsonb;
+  IF jsonb_typeof(pinned_records) IS DISTINCT FROM 'array'
+   OR records_text IS DISTINCT FROM memoriesql.lifecycle_canonical_json_v1(pinned_records) THEN
    RAISE EXCEPTION 'query_helper_unavailable' USING ERRCODE='42501'; END IF;
   saved_records:='[]';
-  FOR record_pin IN SELECT value FROM jsonb_array_elements(item->'records') LOOP
+  FOR record_pin IN SELECT value FROM jsonb_array_elements(pinned_records) LOOP
    IF record_pin->>'kind'='unit_package' THEN
     -- This original immutable package is protected provenance. Store only its
     -- fixed-width digest; do not charge an agent for hidden raw metadata size.
@@ -655,7 +661,10 @@ BEGIN
   'relation_types',types,'relation_pairs',pairs,'evidence_pins',pins,'provenance',provenance)),'refs',visible,'access_bases',bases),
   'witnesses',jsonb_build_object('evidence_pins',pins,'native_provenance',native_graph),
   'dependencies',jsonb_build_object('frames',jsonb_build_array(jsonb_build_object('known_at',memoriesql.relation_packet_time(known),'view',view_mode,'manifest',(SELECT COALESCE(jsonb_agg(jsonb_build_object('kind',value->'kind','id',value->'id','content_sha256',memoriesql.lifecycle_hash_v1(value->'row')) ORDER BY value->>'kind',value->>'id'),'[]') FROM jsonb_array_elements(records)),
-    'records',(SELECT COALESCE(jsonb_agg(CASE WHEN value->>'kind'='unit_package' THEN jsonb_build_object('kind',value->'kind','id',value->'id','content_sha256',memoriesql.lifecycle_hash_v1(value->'row')) ELSE value END ORDER BY value->>'kind',value->>'id'),'[]') FROM jsonb_array_elements(records)))),
+    -- Retained rows keep exact SQL values (numeric author_confidence) as
+    -- canonical text, as saved query frames do; private partitions admit no
+    -- JSON floats.
+    'records_base64',translate(encode(convert_to(memoriesql.lifecycle_canonical_json_v1((SELECT COALESCE(jsonb_agg(CASE WHEN value->>'kind'='unit_package' THEN jsonb_build_object('kind',value->'kind','id',value->'id','content_sha256',memoriesql.lifecycle_hash_v1(value->'row')) ELSE value END ORDER BY value->>'kind',value->>'id'),'[]') FROM jsonb_array_elements(records))),'UTF8'),'base64'),E'\n',''))),
    'raw_sources',raw_sources,'parts',parts,'result_pins',result_pins),
   'checked_at',memoriesql.relation_packet_time(clock_timestamp()));
 END $$;

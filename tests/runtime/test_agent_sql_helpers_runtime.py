@@ -548,7 +548,9 @@ class AgentSqlHelperRuntime(unittest.TestCase):
 
             def execute(self, *args: Any, **kwargs: Any) -> Any:
                 result = super().execute(*args, **kwargs)
-                if "record_query_helper_disclosure_v1" in str(args[0]):
+                if str(args[0]).startswith(
+                    "SELECT memoriesql.record_query_helper_disclosure_v1("
+                ):
                     self.recorded = True
                 return result
 

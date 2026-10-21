@@ -195,6 +195,26 @@ class HelperMigrationTests(unittest.TestCase):
             body.index("RETURN jsonb"),
         )
 
+    def test_frame_records_are_canonical_text_not_json_numbers(self) -> None:
+        # Retained rows carry numeric SQL values (author_confidence); private
+        # preparation partitions refuse JSON floats, so rows stay opaque text.
+        prepared = compact(self.body("prepare_query_inspection_v1"))
+        self.assertIn(
+            "'records_base64',translate(encode(convert_to("
+            "memoriesql.lifecycle_canonical_json_v1(",
+            prepared,
+        )
+        self.assertNotIn("'records',(SELECT", prepared)
+        replay = compact(self.body("read_query_helper_artifact_v1"))
+        for predicate in (
+            "jsonb_typeof(item->'records_base64') IS DISTINCT FROM 'string'",
+            "records_text IS DISTINCT FROM "
+            "memoriesql.lifecycle_canonical_json_v1(pinned_records)",
+            "FOR record_pin IN SELECT value FROM jsonb_array_elements(pinned_records)",
+        ):
+            self.assertIn(predicate, replay)
+        self.assertNotIn("item->'records'", replay)
+
     def test_disclosure_publishes_receipt_refs_and_accounting_together(self) -> None:
         body = self.body("record_query_helper_disclosure_v1")
         for predicate in (
