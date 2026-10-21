@@ -523,7 +523,14 @@ class AutomaticCheckpointRuntime(unittest.TestCase):
         self.assertEqual(
             hydrated["hydration"]["slices"][0]["content"], self.h.TEXT[:512]
         )
-        self.assertEqual(hydrated["access_bases"][0]["context"], context)
+        # Exactly the explicit checkpoint basis, as inspection reports it.
+        self.assertEqual(
+            [
+                (b["context"], b["end_condition"], b["hold_ref"])
+                for b in hydrated["access_bases"]
+            ],
+            [(context, "checkpoint_expiry_or_prune", context["checkpoint_id"])],
+        )
         mixed = copy.deepcopy(inspection)
         mixed.update(
             step_key=str(uuid4()), observation_refs=[self.h.target(self.h.normalized)]
@@ -672,7 +679,8 @@ class AutomaticCheckpointRuntime(unittest.TestCase):
                 # Real existing journal reservations exhaust the workspace ledger;
                 # no fabricated result/manifest/disclosure or large byte body.
                 used = self.h.scalar(
-                    "SELECT COALESCE(sum(CASE WHEN state='reserved' THEN reservation_bytes ELSE allocation_bytes END),0) FROM memoriesql.result_preparation_operations WHERE workspace_id=%s",
+                    # sum(bigint) is numeric; the reserve call takes bigint.
+                    "SELECT COALESCE(sum(CASE WHEN state='reserved' THEN reservation_bytes ELSE allocation_bytes END),0)::bigint FROM memoriesql.result_preparation_operations WHERE workspace_id=%s",
                     (self.fixture.workspace,),
                 )
                 remaining = 536870912 - used
