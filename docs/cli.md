@@ -212,8 +212,22 @@ including `unsupported_query`, `invalid_request`, `budget_exhausted` and
 absence. The caller's own grants decide what is returned, and a missing
 capability is named in `result.coverage.gaps`, which the human view also prints
 on stderr. Observation tables need `memory.query` and `source.read` over the
-scope; the assessed relation tables also need `source.raw.read`, which only the
-personal-local owner holds. `--known-at` takes an ISO 8601 timestamp with a UTC
+scope. An eligible paired agent with those grants over every member of a
+relation's disclosed dependency closure may read whole rows from
+`assessed_relations`, `relation_statements`, `relation_evidence`, `relation_types`,
+`relation_corrections` and `relation_replacements`. An unreadable dependency
+withholds the entire relation from all agent-visible tables without revealing
+a gap, count or type pin for it; later re-disclosure of a retained result is
+`unavailable` if any member lapses. Withdrawn assertions remain ineligible and
+disputed assertions retain their uncertainty at the selected frame.
+`relation_events`, `relation_event_evidence` and `relation_pairs` stay owner-only;
+agents see the `relation_history (owner_only)` coverage gap when querying them.
+Other callers still require `memory.query` and owner-only `source.raw.read` for
+relation tables. Raw bytes, raw-source provenance and the legacy `inspect`,
+`source` and `relations` readers retain their owner-only limits. Readable relation
+rows grant no hydration or exact-source credit. These are the existing
+[AM-5 rules](approvals/pr-05-agent-relation-reads.md).
+`--known-at` takes an ISO 8601 timestamp with a UTC
 offset and is sent as UTC with a literal `Z`; without it the run's default
 cutoff applies.
 

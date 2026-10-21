@@ -20,6 +20,10 @@ from psycopg import sql
 from psycopg.conninfo import make_conninfo
 
 from memoriesql.application.agent_sql_catalog import SqlCatalog
+from memoriesql.application.agent_sql_results import (
+    AGENT_RELATION_TABLES,
+    RELATION_HISTORY_TABLES,
+)
 from memoriesql.application.authorization import LocalCredential
 from memoriesql.cli import main as cli_main
 from memoriesql.infrastructure.postgres.agent_sql_authority import (
@@ -34,9 +38,14 @@ from memoriesql.infrastructure.postgres.query_reader_provisioning import (
 
 if TYPE_CHECKING:
     from tests.runtime import test_query_result_commit as commit_tests
+    from tests.runtime.agent_relation_fixtures import (
+        assessed_relation_for_agent,
+        revoke_member,
+    )
     from tests.runtime.test_postgres_runtime import migrate
 else:
     import test_query_result_commit as commit_tests
+    from agent_relation_fixtures import assessed_relation_for_agent, revoke_member
     from test_postgres_runtime import migrate
 
 FIXTURE_SECRET = "fictional orchard session for public acceptance"
@@ -73,7 +82,7 @@ class CliQueryResults(unittest.TestCase):
         self.addCleanup(self.h.doCleanups)
         self.fixture = self.h.fixture
         self.db = self.h.db
-        migrate(self.db, expected_current_version=34, target_version=38)
+        migrate(self.db, expected_current_version=34, target_version=39)
         self.reader = "pr06_cli_" + uuid4().hex
         self.profile = provision_query_reader(self.db, self.reader, READER_PASSWORD)
         self.addCleanup(self.drop_reader)
@@ -121,9 +130,7 @@ class CliQueryResults(unittest.TestCase):
             }
             with (
                 patch.dict(os.environ, environment),
-                patch(
-                    "memoriesql.cli._results_transport", return_value=self.transport
-                ),
+                patch("memoriesql.cli._results_transport", return_value=self.transport),
                 redirect_stdout(output),
             ):
                 status = cli_main(arguments)
@@ -246,7 +253,10 @@ class CliQueryResults(unittest.TestCase):
         self.assertNotEqual(rotated["run_ref"], first_run)
         self.assertEqual(self.transport.runs_started, 2)
         self.assertTrue(
-            all(request["run_ref"] != first_run for request in self.transport.requests[1:])
+            all(
+                request["run_ref"] != first_run
+                for request in self.transport.requests[1:]
+            )
         )
 
     def test_trusted_host_environment_composes_the_reviewed_executor(self) -> None:
@@ -292,7 +302,10 @@ class CliQueryResults(unittest.TestCase):
             (status, missing),
             (
                 2,
-                {"outcome": "unavailable", "reason": "trusted_query_host_not_configured"},
+                {
+                    "outcome": "unavailable",
+                    "reason": "trusted_query_host_not_configured",
+                },
             ),
         )
 
@@ -313,7 +326,10 @@ class CliQueryResults(unittest.TestCase):
         }
 
     def request_cli(
-        self, arguments: list[str], payload: dict[str, object], environment: dict[str, str]
+        self,
+        arguments: list[str],
+        payload: dict[str, object],
+        environment: dict[str, str],
     ) -> tuple[int, dict[str, Any]]:
         path = self.root / f"request-{uuid4()}.json"
         path.write_text(json.dumps(payload), encoding="utf-8")
@@ -573,42 +589,133 @@ class CliQueryResults(unittest.TestCase):
         self.assertEqual(status, 0, pinned)
         self.assertEqual(pinned["result"]["total_rows"], reply["result"]["total_rows"])
 
-        # Relations keep raw-source provenance the paired role cannot hold; the
-        # human view names the gap on stderr instead of implying absence.
-        path = self.root / "relations.sql"
-        path.write_text(
-            "SELECT count(*) AS n FROM memory_v1.assessed_relations", encoding="utf-8"
-        )
-        errors = io.StringIO()
-        with redirect_stderr(errors):
-            status, output = self.cli(
-                [
-                    "query",
-                    "--file",
-                    str(path),
-                    "--intent",
-                    "enumerate",
-                    "--view",
-                    "resolved",
-                ],
-                agent_environment,
+        # Author a real accepted relation through the existing canonical fixture;
+        # its endpoint scopes and complete closure are granted to this agent.
+        # The fixture revises this pairing, so later revocation uses its revision.
+        baseline_relation_counts: dict[str, Any] = {}
+        for table in sorted(AGENT_RELATION_TABLES):
+            status, baseline, _ = self.query(
+                f"SELECT count(*) AS n FROM {table}", environment=agent_environment
             )
-        relations = json.loads(output)
-        self.assertEqual(status, 0, relations)
-        self.assertEqual(relations["page"]["rows"][0]["values"], ["0"])
-        self.assertIn(
-            "coverage gap: relation_tables (source_raw_read_required)",
-            errors.getvalue(),
+            self.assertEqual(status, 0, baseline)
+            baseline_relation_counts[table] = baseline["page"]["rows"][0]["values"]
+        grants = assessed_relation_for_agent(
+            self.db, self.fixture, UUID(paired["receipt"]["principal_id"])
         )
+        relation_sql = (
+            "SELECT r.relation_id FROM memory_v1.assessed_relations r "
+            "ORDER BY r.relation_id"
+        )
+        status, relation_reply, _ = self.query(
+            relation_sql, environment=agent_environment
+        )
+        self.assertEqual(status, 0, relation_reply)
+        self.assertIn(
+            str(grants.relation_id),
+            {row["values"][0] for row in relation_reply["page"]["rows"]},
+        )
+        self.assertEqual(relation_reply["result"]["coverage"]["gaps"], [])
+        retained_relation = relation_reply["result"]["result_id"]
+
+        # Six whole-row populations share AM-5 authorization. Comparing every
+        # population keeps empty correction/replacement tables from substituting
+        # for the actual positive assessed-relation assertion above.
+        for table in sorted(AGENT_RELATION_TABLES):
+            with self.subTest(authorized_table=table):
+                count_sql = f"SELECT count(*) AS n FROM {table}"
+                owner_status, owner_relation, _ = self.query(
+                    count_sql, environment=owner_environment
+                )
+                agent_status, agent_relation, _ = self.query(
+                    count_sql, environment=agent_environment
+                )
+                self.assertEqual((owner_status, agent_status), (0, 0))
+                self.assertEqual(
+                    [row["values"] for row in agent_relation["page"]["rows"]],
+                    [row["values"] for row in owner_relation["page"]["rows"]],
+                )
+                self.assertEqual(agent_relation["result"]["coverage"]["gaps"], [])
+
+        # History/pairs keep their owner-only coverage gap even with a readable
+        # relation. Exercise the CLI's human stderr as well as exact JSON data.
+        path = self.root / "relations.sql"
+        for table in sorted(RELATION_HISTORY_TABLES):
+            path.write_text(f"SELECT count(*) AS n FROM {table}", encoding="utf-8")
+            errors = io.StringIO()
+            with redirect_stderr(errors):
+                status, output = self.cli(
+                    [
+                        "query",
+                        "--file",
+                        str(path),
+                        "--intent",
+                        "enumerate",
+                        "--view",
+                        "resolved",
+                    ],
+                    agent_environment,
+                )
+            history = json.loads(output)
+            self.assertEqual(status, 0, history)
+            self.assertEqual(history["page"]["rows"][0]["values"], ["0"])
+            self.assertIn(
+                {"facet": "relation_history", "reason": "owner_only"},
+                history["result"]["coverage"]["gaps"],
+            )
+            self.assertIn(
+                "coverage gap: relation_history (owner_only)", errors.getvalue()
+            )
+
+        # Removing one real endpoint grant denies the whole disclosed closure.
+        # A fresh query reveals no relation/type/history existence through gaps;
+        # re-disclosure of an already retained relation must refuse instead.
+        revoke_member(self.db, self.fixture, grants, "remote_target")
+        for table in sorted(AGENT_RELATION_TABLES):
+            with self.subTest(denied_closure_table=table):
+                status, hidden, _ = self.query(
+                    f"SELECT count(*) AS n FROM {table}", environment=agent_environment
+                )
+                self.assertEqual(status, 0, hidden)
+                self.assertEqual(
+                    hidden["page"]["rows"][0]["values"], baseline_relation_counts[table]
+                )
+                self.assertEqual(hidden["result"]["coverage"]["gaps"], [])
+        status, hidden_relation, _ = self.query(
+            relation_sql, environment=agent_environment
+        )
+        self.assertEqual(status, 0, hidden_relation)
+        self.assertNotIn(
+            str(grants.relation_id),
+            {row["values"][0] for row in hidden_relation["page"]["rows"]},
+        )
+        status, owner_relation, _ = self.query(
+            relation_sql, environment=owner_environment
+        )
+        self.assertEqual(status, 0, owner_relation)
+        self.assertIn(
+            str(grants.relation_id),
+            {row["values"][0] for row in owner_relation["page"]["rows"]},
+        )
+        status, output = self.cli(
+            ["result", retained_relation, "--json"], agent_environment
+        )
+        unavailable = json.loads(output)
+        self.assertEqual((status, unavailable["outcome"]), (2, "unavailable"))
+        self.assertNotIn("page", unavailable)
+        self.assertNotIn("result", unavailable)
 
         revoke = self.root / "revoke.json"
         revoke.write_text(
             json.dumps(
                 {
                     "pairing_grant_id": paired["receipt"]["pairing_grant_id"],
-                    "expected_revision": 1,
+                    "expected_revision": grants.pairing_revision,
                     "capabilities": paired["receipt"]["capabilities"],
-                    "access_scope_ids": paired["receipt"]["access_scope_ids"],
+                    "access_scope_ids": [
+                        *paired["receipt"]["access_scope_ids"],
+                        str(grants.source_scope),
+                        str(grants.remote_scope),
+                    ],
                     "exact_revocation_confirmed": True,
                 }
             ),

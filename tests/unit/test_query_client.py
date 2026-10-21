@@ -11,6 +11,12 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
 
+from memoriesql.application.agent_sql_results import (
+    AGENT_RELATION_TABLES,
+    RELATION_HISTORY_TABLES,
+    RELATION_TABLES,
+    wire_coverage,
+)
 from memoriesql.query_client import (
     RUN_ROTATION_MARGIN,
     UNAVAILABLE_REPLY,
@@ -149,7 +155,10 @@ class WireFormatTests(unittest.TestCase):
             "result": {
                 "coverage": {
                     "gaps": [
-                        {"facet": "relation_tables", "reason": "source_raw_read_required"}
+                        {
+                            "facet": "relation_tables",
+                            "reason": "source_raw_read_required",
+                        }
                     ]
                 }
             },
@@ -170,13 +179,108 @@ class WireFormatTests(unittest.TestCase):
         self.assertEqual(
             authority["observation_tables"]["requires"], ["memory.query", "source.read"]
         )
-        self.assertIn("memory_v1.observations", authority["observation_tables"]["relations"])
+        self.assertIn(
+            "memory_v1.observations", authority["observation_tables"]["relations"]
+        )
         self.assertEqual(
-            authority["relation_tables"]["gap_reason"], "source_raw_read_required"
+            authority["relation_tables"]["requires"], ["memory.query", "source.read"]
+        )
+        self.assertEqual(
+            authority["relation_tables"]["caller"], "eligible_paired_agent"
+        )
+        self.assertEqual(
+            authority["relation_tables"]["gap_reason"], "source_read_required"
+        )
+        self.assertEqual(
+            set(authority["relation_tables"]["relations"]), AGENT_RELATION_TABLES
+        )
+        self.assertEqual(
+            set(authority["relation_history"]["relations"]), RELATION_HISTORY_TABLES
+        )
+        self.assertEqual(authority["relation_history"]["gap_reason"], "owner_only")
+        self.assertEqual(
+            authority["relation_history"]["requires"],
+            ["memory.query", "source.raw.read"],
         )
         self.assertIn(
             "memory_v1.assessed_relations", authority["relation_tables"]["relations"]
         )
+
+    def test_am5_schema_matches_actual_coverage_oracle_for_all_nine_tables(
+        self,
+    ) -> None:
+        authority = schema_description()["authority"]
+        self.assertEqual(len(AGENT_RELATION_TABLES), 6)
+        self.assertEqual(len(RELATION_HISTORY_TABLES), 3)
+        self.assertFalse(AGENT_RELATION_TABLES & RELATION_HISTORY_TABLES)
+        self.assertEqual(
+            AGENT_RELATION_TABLES | RELATION_HISTORY_TABLES, RELATION_TABLES
+        )
+        for table in RELATION_TABLES:
+            with self.subTest(table=table):
+                agent = wire_coverage(
+                    relations=[table],
+                    limited=False,
+                    recursion=False,
+                    relation_raw_authority=False,
+                    source_read_authority=True,
+                    relation_read_mode="agent",
+                )["gaps"]
+                expected = (
+                    [
+                        {
+                            "facet": "relation_history",
+                            "reason": authority["relation_history"]["gap_reason"],
+                        }
+                    ]
+                    if table in RELATION_HISTORY_TABLES
+                    else []
+                )
+                self.assertEqual(agent, expected)
+                no_read = wire_coverage(
+                    relations=[table],
+                    limited=False,
+                    recursion=False,
+                    relation_raw_authority=False,
+                    source_read_authority=False,
+                    relation_read_mode="agent",
+                )["gaps"]
+                self.assertIn(
+                    {
+                        "facet": "relation_tables",
+                        "reason": authority["relation_tables"]["gap_reason"],
+                    },
+                    no_read,
+                )
+                # source.read alone is not the paired-agent read mode.
+                other = wire_coverage(
+                    relations=[table],
+                    limited=False,
+                    recursion=False,
+                    relation_raw_authority=False,
+                    source_read_authority=True,
+                )["gaps"]
+                self.assertEqual(
+                    other,
+                    [
+                        {
+                            "facet": "relation_tables",
+                            "reason": authority[
+                                "relation_history"
+                                if table in RELATION_HISTORY_TABLES
+                                else "relation_tables"
+                            ]["other_callers"]["gap_reason"],
+                        }
+                    ],
+                )
+                raw = wire_coverage(
+                    relations=[table],
+                    limited=False,
+                    recursion=False,
+                    relation_raw_authority=True,
+                    source_read_authority=True,
+                )["gaps"]
+                self.assertEqual(raw, [])
 
 
 class LostConnectionExecutor:

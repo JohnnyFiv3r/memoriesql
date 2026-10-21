@@ -20,12 +20,13 @@ from uuid import UUID, uuid4
 
 from memoriesql.application.agent_sql_catalog import SqlCatalog
 from memoriesql.application.agent_sql_results import (
+    AGENT_RELATION_TABLES,
     BASELINE_POLICY,
     CONTRACT_ID,
     CONTRACT_VERSION,
     OBSERVATION_TABLES,
     PREPARED_RELATIONS,
-    RELATION_TABLES,
+    RELATION_HISTORY_TABLES,
 )
 from memoriesql.application.investigation_contracts import result_json_bytes
 from memoriesql.contracts import load_catalog
@@ -343,8 +344,8 @@ def schema_description() -> dict[str, Any]:
             "error": {"code": "feature", "feature": "unprepared_relation"},
         },
         "admission_rules": list(ADMISSION_RULES),
-        # The caller's own grants decide what is returned; a missing capability
-        # is disclosed as a coverage gap with this reason, never as absence.
+        # Coverage describes the caller's own grants/read mode. An individual
+        # unreadable relation closure is withheld without disclosing its existence.
         "authority": {
             "observation_tables": {
                 "relations": sorted(OBSERVATION_TABLES),
@@ -352,9 +353,30 @@ def schema_description() -> dict[str, Any]:
                 "gap_reason": "source_read_required",
             },
             "relation_tables": {
-                "relations": sorted(RELATION_TABLES),
+                "relations": sorted(AGENT_RELATION_TABLES),
+                "caller": "eligible_paired_agent",
+                "requires": ["memory.query", "source.read"],
+                "closure": "entire_disclosed_dependency_closure",
+                "gap_facet": "relation_tables",
+                "gap_reason": "source_read_required",
+                "other_callers": {
+                    "requires": ["memory.query", "source.raw.read"],
+                    "gap_facet": "relation_tables",
+                    "gap_reason": "source_raw_read_required",
+                },
+            },
+            "relation_history": {
+                "relations": sorted(RELATION_HISTORY_TABLES),
+                "caller": "owner_only",
                 "requires": ["memory.query", "source.raw.read"],
-                "gap_reason": "source_raw_read_required",
+                "gap_caller": "eligible_paired_agent",
+                "gap_facet": "relation_history",
+                "gap_reason": "owner_only",
+                "other_callers": {
+                    "requires": ["memory.query", "source.raw.read"],
+                    "gap_facet": "relation_tables",
+                    "gap_reason": "source_raw_read_required",
+                },
             },
         },
         "source_text": SOURCE_TEXT,
