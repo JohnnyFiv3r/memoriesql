@@ -164,3 +164,11 @@ protected `pypi` upload remain unchanged. This direction authorizes no version,
 tag, release, upload, publisher change or released product consumption. Eligible
 incremental merge and approved isolated candidate integration remain subject to
 the standing engineering and substantive gates above.
+
+The host/CLI refresh additionally requires the separately invoked
+`prove_query_host.py` on both supported interpreters after the four restart
+triplets and before proof completion. It runs both host acceptance modules;
+default installed discovery does not select them. Failure, skip or zero tests
+cannot satisfy host proof. This adds no runner, deadline, privilege or release
+route. The helper keeps its existing40-command cap; current host composition and
+actual complete-suite/host timing remain to be qualified at their exact head.

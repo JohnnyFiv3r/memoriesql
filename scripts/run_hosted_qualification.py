@@ -30,6 +30,7 @@ SCRIPTS = (
     "run_installed_acceptance.py",
     "prove_package_isolation.py",
     "prove_release_installation.py",
+    "prove_query_host.py",
     *RESTARTS,
 )
 RUNTIME_DEPS = (
@@ -412,6 +413,11 @@ def qualify(
                     restart_failures.append(str(error))
         if restart_failures:
             raise RuntimeError("; ".join(restart_failures))
+        runner.run(
+            "query-host",
+            [installed_python, "-I", "prove_query_host.py"],
+            test_root,
+        )
         metadata["proof_complete"] = True
     except BaseException as error:
         metadata["failure"] = f"{type(error).__name__}: {error}"
