@@ -15,6 +15,7 @@ import stat
 import subprocess
 import sys
 import time
+import zipfile
 from pathlib import Path
 from typing import Any
 
@@ -42,6 +43,59 @@ RUNTIME_DEPS = (
 )
 MAX_LOG_BYTES = 16 * 1024 * 1024
 MAX_COMMANDS = 40
+HOST_AUTHORITY_SHA256 = (
+    "83e3a3d63a1a8a9da88d1a0688e9241527726dd856be33a0b039a735cb5b504c"
+)
+HOST_ENV = (
+    "N1_TEST_CLI_IDENTITY_BINDING",
+    "N1_TEST_CLI_IDENTITY_BINDING_SHA256",
+    "N1_TEST_CLI_IDENTITY_AUTHORITY_SHA256",
+)
+MAX_HOST_BINDING = 65536
+# Executed once by the installed interpreter, without run-as or product imports.
+HOST_FACTS_PROBE = r"""
+import base64, hashlib, importlib.metadata, json, os, pwd, stat, sys
+from pathlib import Path
+def pin(path):
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+distribution = importlib.metadata.distribution("memoriesql")
+files = distribution.files
+if not files:
+    raise ValueError("missing installed RECORD")
+installed = []
+for entry in files:
+    path = Path(distribution.locate_file(entry)).absolute()
+    if entry.hash is not None:
+        if entry.hash.mode != "sha256" or path.is_symlink():
+            raise ValueError("unbound installed file")
+        actual = base64.urlsafe_b64encode(bytes.fromhex(pin(path))).rstrip(b"=").decode()
+        if actual != entry.hash.value or path.stat().st_size != entry.size:
+            raise ValueError("installed RECORD mismatch")
+    elif str(entry).endswith(".pyc") or str(entry).endswith(".dist-info/RECORD"):
+        continue
+    else:
+        raise ValueError("unhashed installed input")
+    if str(entry).startswith("memoriesql/"):
+        installed.append([str(entry), str(path), pin(path)])
+if not installed:
+    raise ValueError("missing installed product inputs")
+system = {}
+for name in ("sudo", "env"):
+    path = Path("/usr/bin") / name
+    info = path.lstat()
+    if info.st_uid != 0 or info.st_mode & 0o022 or not stat.S_ISREG(info.st_mode):
+        raise ValueError("unbound system launcher")
+    system[name + "_sha256"] = pin(path)
+print(json.dumps({
+    "service_uid": os.geteuid(), "client_uid": pwd.getpwnam("nobody").pw_uid,
+    "gid": os.getegid(), "groups": [os.getegid()],
+    "python": str(Path(sys.executable).absolute()),
+    "python_resolved": str(Path(sys.executable).resolve()),
+    "python_sha256": pin(Path(sys.executable).resolve()),
+    "helper_sha256": pin(Path("query_host_cli_identity.py")),
+    "import_roots": list(sys.path), "installed": installed, **system,
+}, sort_keys=True, separators=(",", ":")))
+"""
 
 
 def file_hash(path: Path) -> str:
@@ -66,10 +120,17 @@ class Commands:
         temporary.replace(self.evidence / "commands.json")
 
     def start(
-        self, name: str, args: list[str], cwd: Path
+        self,
+        name: str,
+        args: list[str],
+        cwd: Path,
+        *,
+        env: dict[str, str] | None = None,
     ) -> tuple[subprocess.Popen[bytes], dict[str, Any]]:
         if not re.fullmatch("[a-z0-9-]+", name) or len(self.rows) >= MAX_COMMANDS:
             raise ValueError("invalid or excessive qualification command")
+        if env is not None and set(env) != set(HOST_ENV):
+            raise ValueError("unexpected host child environment")
         log = self.evidence / (name + ".log")
         row: dict[str, Any] = {
             "name": name,
@@ -90,7 +151,8 @@ class Commands:
                 start_new_session=True,
                 preexec_fn=child_file_limit,
                 env={
-                    **os.environ,
+                    **{k: v for k, v in os.environ.items() if k not in HOST_ENV},
+                    **(env or {}),
                     "N1_QUALIFICATION_DEADLINE": repr(self.deadline),
                     "N1_QUALIFICATION_CLEANUP_DEADLINE": repr(self.cleanup_deadline),
                 },
@@ -136,9 +198,15 @@ class Commands:
                 process.wait(timeout=5)
 
     def run(
-        self, name: str, args: list[str], cwd: Path, *, cleanup: bool = False
+        self,
+        name: str,
+        args: list[str],
+        cwd: Path,
+        *,
+        cleanup: bool = False,
+        env: dict[str, str] | None = None,
     ) -> None:
-        if self.finish(self.start(name, args, cwd), cleanup=cleanup):
+        if self.finish(self.start(name, args, cwd, env=env), cleanup=cleanup):
             raise RuntimeError("qualification command failed: " + name)
 
     def capture(self, name: str, args: list[str], cwd: Path) -> str:
@@ -149,6 +217,143 @@ class Commands:
         for child in list(self.active):
             self.stop(child[0])
             self.finish(child)
+
+
+def prepare_host_binding(
+    runner: Commands, test_root: Path, python: str, sha: str, wheel: Path
+) -> dict[str, str]:
+    """Seal observed inputs; independent job admission supplies the authority pin.
+
+    This prepares no privilege. The unchanged C worker still proves/refuses all
+    effective-access, interpreter, path, identity and cleanup requirements.
+    """
+    authority = os.environ.get(HOST_ENV[2])
+    if authority != HOST_AUTHORITY_SHA256:
+        raise ValueError("independent host fixture authority missing or mismatched")
+    if (
+        os.environ.get("RUNNER_ENVIRONMENT") != "github-hosted"
+        or os.environ.get("RUNNER_OS") != "Linux"
+        or os.environ.get("SOURCE_SHA") != sha
+        or re.fullmatch("[0-9a-f]{40}", sha) is None
+    ):
+        raise ValueError("host fixture source or platform mismatch")
+    raw = runner.capture(
+        "query-host-facts", [python, "-I", "-c", HOST_FACTS_PROBE], test_root
+    )
+    if len(raw.encode()) > MAX_HOST_BINDING:
+        raise ValueError("host facts exceed frame limit")
+    facts = json.loads(raw)
+    for key in ("service_uid", "client_uid", "gid"):
+        if type(facts[key]) is not int or facts[key] <= 0:
+            raise ValueError("host identities must be actual nonroot integers")
+    if (
+        facts["service_uid"] != os.geteuid()
+        or facts["gid"] != os.getegid()
+        or facts["client_uid"] == facts["service_uid"]
+        or facts["groups"] != [facts["gid"]]
+        or facts["python"] != python
+        or facts["python_resolved"] != str(Path(python).resolve())
+        or facts["python_sha256"] != file_hash(Path(python).resolve())
+        or facts["helper_sha256"] != file_hash(test_root / "query_host_cli_identity.py")
+    ):
+        raise ValueError("host fixture identity or executable substitution")
+    roots = facts["import_roots"]
+    if (
+        not isinstance(roots, list)
+        or not roots
+        or any(
+            not isinstance(p, str)
+            or not p
+            or not Path(p).is_absolute()
+            or ".." in Path(p).parts
+            for p in roots
+        )
+    ):
+        raise ValueError("incomplete absolute installed import roots")
+    inputs = [
+        ["@installed-python", facts["python_sha256"]],
+        ["@copied-helper", facts["helper_sha256"]],
+    ]
+    installed = facts["installed"]
+    if not isinstance(installed, list) or not installed:
+        raise ValueError("missing installed inputs")
+    with zipfile.ZipFile(wheel) as archive:
+        expected = {
+            n
+            for n in archive.namelist()
+            if n.startswith("memoriesql/") and not n.endswith("/")
+        }
+        if {entry[0] for entry in installed} != expected or len(installed) != len(
+            expected
+        ):
+            raise ValueError("installed and reviewed wheel inputs differ")
+        for name, path, pin in installed:
+            if (
+                not Path(path).is_absolute()
+                or ".." in Path(path).parts
+                or not any(Path(path).is_relative_to(Path(root)) for root in roots)
+                or file_hash(Path(path)) != pin
+                or hashlib.sha256(archive.read(name)).hexdigest() != pin
+            ):
+                raise ValueError("installed wheel input substitution")
+            inputs.append([path, pin])
+    for key in ("sudo_sha256", "env_sha256"):
+        name = key.removesuffix("_sha256")
+        path = Path("/usr/bin") / name
+        info = path.lstat()
+        if (
+            info.st_uid != 0
+            or info.st_mode & 0o022
+            or not stat.S_ISREG(info.st_mode)
+            or file_hash(path) != facts[key]
+        ):
+            raise ValueError("system launcher substitution")
+    plan = {
+        **{
+            key: facts[key]
+            for key in (
+                "service_uid",
+                "client_uid",
+                "gid",
+                "groups",
+                "import_roots",
+                "sudo_sha256",
+                "env_sha256",
+            )
+        },
+        "authority_sha256": authority,
+        "source_sha": sha,
+        "root": "@fresh-fixture",
+        "python": "@installed-python",
+        "helper": "@copied-helper",
+        "inputs": inputs,
+    }
+    data = json.dumps(plan, sort_keys=True, separators=(",", ":")).encode()
+    if len(data) > MAX_HOST_BINDING:
+        raise ValueError("host binding exceeds frame limit")
+    path = test_root / "query-host-cli-binding.json"
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, "wb") as stream:
+        stream.write(data)
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    try:
+        info = os.fstat(fd)
+        actual = os.read(fd, MAX_HOST_BINDING + 1)
+    finally:
+        os.close(fd)
+    if (
+        info.st_uid != plan["service_uid"]
+        or not stat.S_ISREG(info.st_mode)
+        or info.st_nlink != 1
+        or info.st_mode & 0o077
+        or actual != data
+    ):
+        raise ValueError("sealed host binding substituted")
+    return {
+        HOST_ENV[0]: str(path),
+        HOST_ENV[1]: hashlib.sha256(data).hexdigest(),
+        HOST_ENV[2]: HOST_AUTHORITY_SHA256,
+    }
 
 
 def identity_inventory(value: object) -> dict[str, dict[str, int]]:
@@ -457,10 +662,15 @@ def qualify(
                     restart_failures.append(str(error))
         if restart_failures:
             raise RuntimeError("; ".join(restart_failures))
+        host_environment = prepare_host_binding(
+            runner, test_root, installed_python, sha, wheel
+        )
+        metadata["host_binding_sha256"] = host_environment[HOST_ENV[1]]
         runner.run(
             "query-host",
             [installed_python, "-I", "prove_query_host.py"],
             test_root,
+            env=host_environment,
         )
         metadata["proof_complete"] = True
     except BaseException as error:
