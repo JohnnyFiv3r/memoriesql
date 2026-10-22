@@ -53,6 +53,7 @@ from memoriesql.application.investigation_contracts import (
     InvestigationRequestError,
     QueryRequest,
     ReadCheckpointRequest,
+    ReadSourceTextRequest,
     ReuseRequest,
     parse_investigation_request,
     request_fingerprint,
@@ -81,11 +82,11 @@ from memoriesql.infrastructure.postgres.result_preparation import (
 )
 
 ConnectionFactory = Callable[[], Connection[Any]]
+HelperRequest = InspectRequest | HydrateRequest | ReadSourceTextRequest
 AccessRequest = (
     QueryRequest
     | ReuseRequest
-    | InspectRequest
-    | HydrateRequest
+    | HelperRequest
     | CheckpointRequest
     | ReadCheckpointRequest
 )
@@ -168,6 +169,16 @@ _HELPER_BACKEND_CAPABILITY_SQL = (
     "WHERE tgrelid=to_regclass('memoriesql.query_steps') "
     "AND NOT tgisinternal AND tgenabled IN ('O','A') "
     "AND tgname IN ('query_helper_clear_pin','query_helper_purge'))"
+)
+# The source text view is a separate kind; its absence never disables the others.
+_SOURCE_TEXT_BACKEND_CAPABILITY_SQL = (
+    "SELECT to_regprocedure('memoriesql.prepare_query_source_text_v1(uuid,jsonb)') "
+    "IS NOT NULL AND to_regprocedure("
+    "'memoriesql.query_unit_source_text_v1(uuid,uuid)') IS NOT NULL "
+    "AND EXISTS (SELECT 1 FROM pg_catalog.pg_constraint "
+    "WHERE conrelid=to_regclass('memoriesql.query_steps') "
+    "AND conname='query_steps_helper_kind_check' AND contype='c' AND convalidated "
+    "AND pg_catalog.pg_get_constraintdef(oid) LIKE '%''read_source_text''%')"
 )
 
 
@@ -640,8 +651,7 @@ class PostgresAgentSqlResults:
             request,
             QueryRequest
             | ReuseRequest
-            | InspectRequest
-            | HydrateRequest
+            | HelperRequest
             | CheckpointRequest
             | ReadCheckpointRequest,
         ):
@@ -759,7 +769,7 @@ class PostgresAgentSqlResults:
                     raise _Failure(step["outcome"], step["error_code"])
                 if isinstance(request, CheckpointRequest | ReadCheckpointRequest):
                     return self._checkpoint(request, admission, start, deadline, owner)
-                if isinstance(request, InspectRequest | HydrateRequest):
+                if isinstance(request, HelperRequest):
                     return self._helper(
                         request, fingerprint, admission, start, deadline, owner
                     )
@@ -1010,7 +1020,7 @@ class PostgresAgentSqlResults:
 
     def _helper(
         self,
-        request: InspectRequest | HydrateRequest,
+        request: HelperRequest,
         fingerprint: str,
         admission: dict[str, Any],
         start: float,
@@ -1211,7 +1221,7 @@ class PostgresAgentSqlResults:
 
     def _helper_reply(
         self,
-        request: InspectRequest | HydrateRequest,
+        request: HelperRequest,
         admission: dict[str, Any],
         start: float,
         packet: dict[str, Any],
@@ -1246,6 +1256,7 @@ class PostgresAgentSqlResults:
                 first=first,
                 count=count,
                 cursor=cursor if more else None,
+                witnesses=packet.get("witnesses"),
             )
             refs = {ref_key(ref): ref for ref in page["refs"]}
             observed = math.ceil((time.monotonic() - start) * 1000)
@@ -2116,10 +2127,7 @@ class PostgresAgentSqlResults:
     def _admit(
         self, request: AccessRequest, kind: str, fingerprint: str
     ) -> dict[str, Any]:
-        if (
-            isinstance(request, InspectRequest | HydrateRequest)
-            and not _helper_module_available()
-        ):
+        if isinstance(request, HelperRequest) and not _helper_module_available():
             raise _Failure("unsupported_query", "feature", feature=request.kind)
         with self._control() as connection:
             with relation_projection_frame(
@@ -2156,8 +2164,12 @@ class PostgresAgentSqlResults:
                         raise _Failure(
                             "unsupported_query", "feature", feature=request.kind
                         )
-                if isinstance(request, InspectRequest | HydrateRequest):
+                if isinstance(request, HelperRequest):
                     supported = frame.execute(_HELPER_BACKEND_CAPABILITY_SQL).fetchone()
+                    if supported and isinstance(request, ReadSourceTextRequest):
+                        supported = frame.execute(
+                            _SOURCE_TEXT_BACKEND_CAPABILITY_SQL
+                        ).fetchone()
                     if not supported or supported[0] is not True:
                         raise _Failure(
                             "unsupported_query", "feature", feature=request.kind
