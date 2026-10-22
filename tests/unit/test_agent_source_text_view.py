@@ -620,6 +620,12 @@ class SourceTextMigration(unittest.TestCase):
         # Delivered in THIS run only.
         self.assertIn("run_ref=d.run_ref", resolve)
         self.assertIn("zd.run_ref=d.run_ref", resolve)
+        # The helper delivery lookup keeps 0046's ACL statement (0051 redefines
+        # it without restating it).
+        self.assertIn(
+            "REVOKE ALL ON FUNCTION memoriesql.query_helper_delivery_v1(uuid) FROM PUBLIC;",
+            SQL,
+        )
 
     def test_checkpoint_contexts_are_served_only_under_their_own_context(self) -> None:
         # Case 33 (frozen Context item 2): checkpoints (0051) precede the view, so

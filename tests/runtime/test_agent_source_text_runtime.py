@@ -2112,45 +2112,79 @@ class AgentSourceTextRuntime(unittest.TestCase):
     def test_checkpoint_context_audit_is_checked_once_per_result_and_context(
         self,
     ) -> None:
-        # Case 42/43 under a checkpoint context (owner over an assessed relation):
-        # eight entries from one (result, context) write no more audit than one.
+        # Cases 42 and 43 under a checkpoint context (owner over an assessed
+        # relation), both ways and charged, as the standalone case 42 does:
+        # every audit row written during a checkpoint-context read names that
+        # delivery and none is written unattributed or for another; rows are
+        # kept 30 days and charged per row to the separate audit allowance,
+        # which alone refuses the next read; eight entries from one (result,
+        # context) write no more than one. Under a checkpoint context "one
+        # check" covers every root of the checkpoint (0051); this one has one.
         owner = self.fixture.secret_hash
         run = self.r.start()
         delivering, _ = self.cited(run, secret=owner)
         _, context, units = self.checkpointed(run, delivering, secret=owner)
         unit = units[self.unit_of(self.normalized)]
         origin = {"result": self.pin(delivering), "access": context}
-        raw, one = self.send(
-            self.request(run, self.entry(unit, 0, 8, origin)), secret=owner
-        )
-        self.available(raw, one)
-        raw, eight = self.send(
-            self.request(
-                run, *(self.entry(unit, i * 8, i * 8 + 8, origin) for i in range(8))
+        reads: dict[str, list[tuple[Any, ...]]] = {}
+        for name, entries in (
+            ("one_entry", [self.entry(unit, 0, 8, origin)]),
+            (
+                "eight_entries",
+                [self.entry(unit, i * 8, i * 8 + 8, origin) for i in range(8)],
             ),
-            secret=owner,
-        )
-        self.available(raw, eight)
-        single = self.attributed(one["access_receipt_ref"])
-        many = self.attributed(eight["access_receipt_ref"])
+        ):
+            before = self.audit_rows()
+            raw, reply = self.send(self.request(run, *entries), secret=owner)
+            self.available(raw, reply)
+            self.assert_checkpoint_basis(reply, context)
+            rows = self.attributed(reply["access_receipt_ref"])
+            self.assertGreater(len(rows), 0, name)
+            # Both ways: every row this delivery wrote is attributed to it.
+            self.assertEqual(self.audit_rows() - before, len(rows), name)
+            for *_head, recorded, delivery, space, expires in rows:
+                self.assertEqual(str(delivery), reply["access_receipt_ref"])
+                self.assertEqual(space, self.fixture.workspace)
+                self.assertEqual(expires - recorded, timedelta(days=30))
+            reads[name] = rows
         print(
             json.dumps(
                 {
                     "checkpoint_source_text_audit_rows": {
-                        "one_entry": len(single),
-                        "eight_entries": len(many),
+                        name: len(rows) for name, rows in reads.items()
                     }
                 }
             )
         )
-        self.assertGreater(len(single), 0)
-        self.assertEqual(len(many), len(single))
-        for *_head, recorded, delivery, space, expires in single + many:
-            self.assertIn(
-                str(delivery), {one["access_receipt_ref"], eight["access_receipt_ref"]}
-            )
-            self.assertEqual(space, self.fixture.workspace)
-            self.assertEqual(expires - recorded, timedelta(days=30))
+        self.assertEqual(len(reads["eight_entries"]), len(reads["one_entry"]))
+        # Charged to the separate audit allowance, per retained row.
+        retained = len(self.attributed())
+        row_bytes = int(self.scalar("SELECT memoriesql.query_audit_row_bytes_v1()"))
+        status = json.loads(self.r.service().cleanup_status())["audit_retention"]
+        self.assertEqual(
+            status["retained"],
+            {"audit_rows": retained, "charged_bytes": retained * row_bytes},
+        )
+        # The allowance, not the content allocation, bounds it: shrink it to
+        # what is retained and the next checkpoint-context read is refused
+        # before admission, writing no audit and disclosing nothing.
+        self.db.execute(
+            "CREATE OR REPLACE FUNCTION memoriesql.query_audit_allowance_bytes_v1() "
+            "RETURNS bigint LANGUAGE sql IMMUTABLE SET search_path=pg_catalog "
+            f"AS $$ SELECT {retained * row_bytes}::bigint $$"
+        )
+        audit = self.audit_rows()
+        _, refused = self.send(
+            self.request(run, self.entry(unit, 0, 8, origin)), secret=owner
+        )
+        self.assertEqual(
+            (refused["outcome"], refused["error"]),
+            ("budget_exhausted", {"code": "storage"}),
+            refused,
+        )
+        self.assertIsNone(refused["access_receipt_ref"])
+        self.assertNotIn("source_text", refused)
+        self.assertEqual(self.audit_rows(), audit)
 
     def test_checkpoint_context_reads_touch_no_part_row(self) -> None:
         # N-2 under a checkpoint context: reading the checkpoint, re-delivering

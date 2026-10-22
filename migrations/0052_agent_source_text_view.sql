@@ -144,6 +144,7 @@ BEGIN
   RAISE EXCEPTION 'query_delivery_work_exhausted' USING ERRCODE='54000'; END IF;
  RETURN d;
 END $$;
+REVOKE ALL ON FUNCTION memoriesql.query_helper_delivery_v1(uuid) FROM PUBLIC;
 
 CREATE OR REPLACE FUNCTION memoriesql.purge_query_helper_step_v1() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,memoriesql SET row_security=off AS $$

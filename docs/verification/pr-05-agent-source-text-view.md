@@ -89,6 +89,9 @@ Other outcomes:
   refused before admission (`budget_exhausted/storage`), writing nothing.
 - Each distinct delivering result and context is rechecked once per call, so
   eight entries from one result and context write no more audit than one.
+  Under a checkpoint context that one check covers every root of the
+  checkpoint (0051's semantics). Its audit rows per call therefore scale with
+  the checkpoint's root count, not with the number of entries.
 
 ## Migration and composition
 
@@ -128,6 +131,12 @@ Other outcomes:
   refs under their context through 0051's own `query_result_access_v1`, and
   adds no storage, kind or capability. The executor admits a checkpoint origin
   only with the checkpoint backend present.
+- Checkpoint ownership (`checkpoint_identity_v1`) is enforced when a root is
+  re-delivered under its context: 0051's reuse identity-checks it, and so does
+  every later context check. Another principal's run never holds a disclosure
+  made under someone else's checkpoint context, so the view's exact-context
+  match (Erratum 2) refuses such a read before the identity check is reached.
+  The outcome is the same one `unavailable` shape.
 
 ## Tests
 
