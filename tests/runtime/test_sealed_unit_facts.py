@@ -295,6 +295,7 @@ class SealedUnitFacts(hidden.HiddenPackageLength):
                 return known[values[0]]
             return lookup(statement, values)
 
+        windows: list[tuple[int, int]] = []
         for case in self.worlds:
             with (
                 self.subTest(world=case.identity),
@@ -330,9 +331,21 @@ class SealedUnitFacts(hidden.HiddenPackageLength):
                     credential_sha256=case.agent,
                     workspace_id=self.fixture.workspace,
                 ).inspect(InspectStoredBead(bead_id=case.identity))
-                self.assertIsNotNone(inspected.bead)
+                # Stored-bead inspection is raw-gated (0043): a non-raw agent is
+                # refused at revisiting authority before any record is built.
+                self.assertEqual(
+                    (inspected.outcome, inspected.bead), ("unavailable", None)
+                )
                 self.assertTrue(exact)
-                self.assertEqual(self.settled_blocks(relations), before)
+                after = self.settled_blocks(relations)
+                windows.append((before, after))
+                self.assertEqual(after, before)
+        # Every world's window was measured: a refused or empty step can never
+        # leave a world's zero-block equality unrun.
+        self.assertEqual(len(windows), len(self.worlds))
+        for before, after in windows:
+            self.assertIsInstance(before, int)
+            self.assertIsInstance(after, int)
 
     def test_normalized_text_costs_only_its_visible_length(self) -> None:
         self.upgrade()
