@@ -86,6 +86,7 @@ WORKER_FAILURE_CODES = frozenset(
         "unapproved_cli_action",
         "unapproved_query_arguments",
         "unapproved_result_arguments",
+        "unbound_mapped_object",
         "unbound_or_cyclic_input_path",
         "unexpected_real_effective_saved_gid",
         "unexpected_real_effective_saved_uid",
@@ -482,6 +483,38 @@ def check_trusted_path(
         child_info = info
 
 
+def mapped_objects() -> list[str]:
+    """Files mapped into this process, from Linux /proc/self/maps."""
+    rows = (
+        line.split(None, 5) for line in Path("/proc/self/maps").read_text().splitlines()
+    )
+    return sorted({row[5] for row in rows if len(row) == 6 and row[5].startswith("/")})
+
+
+def check_mapped_objects(plan: dict[str, Any], deadline: float) -> None:
+    """Every mapped file lies in the bound interpreter copy, venv or import roots
+    (under the trusted-path rule) or in root-owned, non-writable system trees."""
+    python = Path(plan["python"])
+    trees = [python.resolve().parents[1], python.parents[1]]
+    trees += [Path(raw) for raw in plan["import_roots"]]
+    for raw in mapped_objects():
+        path = Path(raw)
+        if any(path == tree or tree in path.parents for tree in trees):
+            check_trusted_path(path, plan, deadline)
+            continue
+        for entry in (path, *path.parents):
+            try:
+                info = os.lstat(entry)
+            except FileNotFoundError:
+                raise ContainmentFatal("unbound_mapped_object") from None
+            if (
+                info.st_uid != 0
+                or stat.S_ISLNK(info.st_mode)
+                or stat.S_IMODE(info.st_mode) & 0o022
+            ):
+                raise ContainmentFatal("unbound_mapped_object")
+
+
 def check_worker(plan: dict[str, Any], cleanup_phase: bool = False) -> None:
     # Execute only after the separately approved transition, never during import.
     os.closerange(3, int(os.sysconf("SC_OPEN_MAX")))
@@ -517,6 +550,8 @@ def check_worker(plan: dict[str, Any], cleanup_phase: bool = False) -> None:
             check_trusted_path(entry, plan, deadline, allow_missing=entry == root)
             if entry.is_symlink():
                 raise ContainmentFatal("caller_writable_or_unbound_import")
+    # Nothing this worker loaded may come from outside its bound inputs.
+    check_mapped_objects(plan, deadline)
 
 
 def cli_arguments(args: list[str], plan: dict[str, Any]) -> None:

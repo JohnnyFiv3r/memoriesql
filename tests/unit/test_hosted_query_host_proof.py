@@ -5,9 +5,11 @@ import hashlib
 import io
 import json
 import os
+import secrets
 import shutil
 import signal
 import stat
+import struct
 import subprocess
 import sys
 import tempfile
@@ -25,6 +27,55 @@ from scripts.run_hosted_qualification import SCRIPTS, Commands
 from tests.runtime import query_host_cli_identity as identity
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def elf_object(
+    strings: bytes, dynamic: list[tuple[int, int]], symbols: tuple[int, ...] = ()
+) -> bytes:
+    """A minimal ELF64 little-endian shared object: one identity PT_LOAD, a
+    PT_DYNAMIC segment and its string table, optionally symbols with DT_HASH."""
+    strtab = 64 + 2 * 56
+    body = bytearray(strings)
+    while (strtab + len(body)) % 8:
+        body.append(0)
+    tags = [*dynamic, (5, strtab), (10, len(strings))]
+    if symbols:
+        symtab = strtab + len(body)
+        for name in (0, *symbols):
+            body += struct.pack("<IBBHQQ", name, 0, 0, 0, 0, 0)
+        table = strtab + len(body)
+        count = len(symbols) + 1
+        body += struct.pack(f"<II{1 + count}I", 1, count, *([0] * (1 + count)))
+        while (strtab + len(body)) % 8:
+            body.append(0)
+        tags += [(6, symtab), (11, 24), (4, table)]
+    at = strtab + len(body)
+    entries = b"".join(struct.pack("<qQ", tag, value) for tag, value in (*tags, (0, 0)))
+    size = at + len(entries)
+    header = struct.pack(
+        "<4sBBBB8xHHIQQQIHHHHHH",
+        b"\x7fELF",
+        2,
+        1,
+        1,
+        0,
+        3,
+        62,
+        1,
+        0,
+        64,
+        0,
+        0,
+        64,
+        56,
+        2,
+        64,
+        0,
+        0,
+    )
+    load = struct.pack("<IIQQQQQQ", 1, 5, 0, 0, 0, size, size, 8)
+    segment = struct.pack("<IIQQQQQQ", 2, 6, at, at, at, len(entries), len(entries), 8)
+    return header + load + segment + bytes(body) + entries
 
 
 class HostedQueryHostProof(unittest.TestCase):
@@ -553,6 +604,211 @@ class HostedQueryHostProof(unittest.TestCase):
         self.assertEqual(events[0], ("umask", 0o022))
         self.assertEqual(events[1], ("mkdir", "/fictional/root"))
         self.assertEqual(events[-1], ("qualify", None))
+
+    def test_search_path_rewrite_is_exactly_its_prefix_and_never_shared(self) -> None:
+        lib = "/opt/hostedtoolcache/Python/3.13.16/x64/lib"
+        new = b"/tmp/mqh-abcdefghijk"
+        self.assertEqual(len(new), 20)
+        strings = b"\0" + lib.encode() + b"\0libc.so.6\0"
+        runpath, needed = 1, 2 + len(lib)
+        data = elf_object(strings, [(1, needed), (29, runpath)])
+        rewritten = bytearray(data)
+        offsets = hosted.relocate_search_path(rewritten, lib, new)
+        self.assertEqual(len(offsets), 1)
+        self.assertEqual(len(rewritten), len(data))
+        differing = [i for i, (a, b) in enumerate(zip(data, rewritten)) if a != b]
+        self.assertTrue(set(differing) <= set(range(offsets[0], offsets[0] + 20)))
+        view = hosted.DynamicView(bytes(rewritten))
+        self.assertEqual(
+            [value for _, value in view.search_paths()],
+            ["/tmp/mqh-abcdefghijk/Python/3.13.16/x64/lib"],
+        )
+        # A string sharing only the untouched tail is kept.
+        tail = elf_object(strings, [(1, runpath + 25), (29, runpath)])
+        self.assertTrue(hosted.relocate_search_path(bytearray(tail), lib, new))
+        # Another dynamic or symbol string inside the prefix, or running into it.
+        spanning = b"\0zz" + lib.encode() + b"\0"
+        for blob, dynamic, symbols in (
+            (strings, [(1, runpath + 5), (29, runpath)], ()),
+            (strings, [(29, runpath)], (runpath + 3,)),
+            (spanning, [(1, 1), (29, 3)], ()),
+        ):
+            with self.subTest(dynamic=dynamic, symbols=symbols):
+                with self.assertRaisesRegex(ValueError, "shares its bytes"):
+                    hosted.relocate_search_path(
+                        bytearray(elf_object(blob, dynamic, symbols)), lib, new
+                    )
+        # Only an exact source search path is rewritten; R4 judges the rest.
+        other = b"\0" + lib.encode() + b":/usr/local/lib\0"
+        self.assertEqual(
+            hosted.relocate_search_path(
+                bytearray(elf_object(other, [(29, 1)])), lib, new
+            ),
+            [],
+        )
+
+    def toolcache(self, top: Path) -> tuple[Path, Path]:
+        """A world-writable synthetic toolcache whose ELF objects search its lib."""
+        base = top / "tc/Python/3.13.16/x64"
+        lib = str(base / "lib").encode()
+        for folder in ("bin", "lib/python3.13/lib-dynload"):
+            (base / folder).mkdir(parents=True)
+        objects = {
+            "bin/python3.13": elf_object(b"\0" + lib + b"\0", [(29, 1)]),
+            "lib/libpython3.13.so.1.0": elf_object(b"\0" + lib + b"\0", [(29, 1)]),
+            "lib/python3.13/lib-dynload/_x.so": elf_object(
+                b"\0" + lib + b"\0", [(29, 1)]
+            ),
+        }
+        for name, data in objects.items():
+            (base / name).write_bytes(data)
+            (base / name).chmod(0o777)
+        (base / "lib/python3.13/os.py").write_bytes(b"# stdlib")
+        (base / "lib/python3.13/os.py").chmod(0o666)
+        (base / "bin/python3").symlink_to("python3.13")
+        for directory in [base, *base.rglob("*")]:
+            if directory.is_dir() and not directory.is_symlink():
+                directory.chmod(0o777)
+        root = top / "rr"  # the same byte length as top / "tc"
+        root.mkdir(mode=0o755)
+        return base, root
+
+    def test_private_copy_relocates_and_normalizes_a_world_writable_toolcache(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            base, root = self.toolcache(Path(directory))
+            with patch.object(hosted, "private_root", return_value=root):
+                made, copy, record = hosted.private_interpreter(base)
+            self.assertEqual(made, root)
+            self.assertEqual(copy, root / "Python/3.13.16/x64")
+            self.assertEqual(
+                record["normalized_copy_tree_sha256"], record["source_tree_sha256"]
+            )
+            self.assertNotEqual(
+                record["copy_tree_sha256"], record["source_tree_sha256"]
+            )
+            self.assertEqual(
+                [o["path"] for o in record["rewritten_objects"]],
+                [
+                    "bin/python3.13",
+                    "lib/libpython3.13.so.1.0",
+                    "lib/python3.13/lib-dynload/_x.so",
+                ],
+            )
+            for entry in [copy, *copy.rglob("*")]:
+                info = entry.lstat()
+                if entry.is_symlink():
+                    continue
+                mode = stat.S_IMODE(info.st_mode)
+                self.assertIn(mode, (0o755,) if entry.is_dir() else (0o644, 0o755))
+            self.assertEqual(
+                stat.S_IMODE((copy / "lib/python3.13/os.py").stat().st_mode), 0o644
+            )
+            view = hosted.DynamicView((copy / "bin/python3.13").read_bytes())
+            self.assertEqual([v for _, v in view.search_paths()], [str(copy / "lib")])
+            hosted.check_private_copy(copy)
+
+    def test_private_copy_refuses_escaping_links_paths_and_entries(self) -> None:
+        cases: list[tuple[str, Any]] = [
+            ("link leaves the copy", lambda b: (b / "bin/escape").symlink_to("/etc")),
+            (
+                "search path leaves the copy",
+                lambda b: (b / "lib/extra.so").write_bytes(
+                    elf_object(
+                        b"\0" + str(b / "lib").encode() + b":/usr/local/lib\0",
+                        [(29, 1)],
+                    )
+                ),
+            ),
+            (
+                "search path leaves the copy",
+                lambda b: (b / "lib/origin.so").write_bytes(
+                    elf_object(b"\0$ORIGIN/../../../../..\0", [(29, 1)])
+                ),
+            ),
+            ("unsupported entry", lambda b: os.mkfifo(b / "lib/pipe")),
+        ]
+        for reason, change in cases:
+            with self.subTest(reason), tempfile.TemporaryDirectory() as directory:
+                base, root = self.toolcache(Path(directory))
+                change(base)
+                with (
+                    patch.object(hosted, "private_root", return_value=root),
+                    self.assertRaisesRegex(ValueError, reason),
+                ):
+                    hosted.private_interpreter(base)
+
+    def test_private_root_is_fresh_exclusive_and_the_prefix_length(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            sticky = SimpleNamespace(st_mode=stat.S_IFDIR | 0o1777, st_uid=0)
+            prefix = "x" * (len(str(parent)) + len("/mqh-") + 11)
+            original = Path.lstat
+            names = iter("aaaaaaaaaaa" + "bbbbbbbbbbb")
+            (parent / "mqh-aaaaaaaaaaa").mkdir()  # a taken name is never adopted
+            with (
+                patch.object(
+                    Path,
+                    "lstat",
+                    autospec=True,
+                    side_effect=lambda p: sticky if p == parent else original(p),
+                ),
+                patch.object(secrets, "choice", side_effect=lambda _: next(names)),
+            ):
+                root = hosted.private_root(prefix, parent)
+            self.assertEqual(root, parent / "mqh-bbbbbbbbbbb")
+            self.assertEqual(len(str(root)), len(prefix))
+            self.assertEqual(stat.S_IMODE(root.stat().st_mode), 0o755)
+            with self.assertRaisesRegex(ValueError, "root-owned sticky"):
+                hosted.private_root(prefix, parent)
+
+    def test_precheck_refusals_name_a_category_and_numbers_never_a_path(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "installed"
+            root.mkdir()
+            python, helper = root / "python", root / "helper.py"
+            for item in (python, helper):
+                item.write_bytes(b"x")
+                item.chmod(0o755)
+            root.chmod(0o755)
+            gid = root.stat().st_gid
+            client = os.geteuid() + 1
+            root.chmod(0o777)
+            with self.assertRaises(ValueError) as raised:
+                hosted.check_client_unwritable(str(python), helper, [], client, gid)
+            message = str(raised.exception)
+            self.assertIn("category=ancestor", message)
+            self.assertIn("mode=0o40777", message)
+            self.assertNotIn(directory, message)
+            root.chmod(0o755)
+            planted = Path(directory) / "planted.so"
+            planted.write_bytes(b"x")
+            with self.assertRaisesRegex(
+                ValueError, "maps an unbound object: category=library"
+            ):
+                hosted.check_client_unwritable(
+                    str(python), helper, [], client, gid, (str(planted),), (root,)
+                )
+            hosted.check_client_unwritable(
+                str(python), helper, [], client, gid, (str(python),), (root,)
+            )
+
+    def test_qualify_runs_everything_from_the_venv_on_on_the_private_copy(self) -> None:
+        source = (ROOT / "scripts/run_hosted_qualification.py").read_text()
+        body = source[source.index("def qualify(") :]
+        copy = body.index("private_interpreter(base)")
+        cleared = body.index(
+            'for name in ("LD_LIBRARY_PATH", "LD_PRELOAD", "PYTHONHOME", "PYTHONPATH")'
+        )
+        venv = body.index('"venv", [str(copy_python), "-m", "venv"')
+        mapped = body.index('"installed-mapped-objects"')
+        acceptance = body.index('f"acceptance-{i}"')
+        self.assertLess(copy, cleared)
+        self.assertLess(cleared, venv)
+        self.assertLess(venv, mapped)
+        self.assertLess(mapped, acceptance)
+        self.assertIn('test_root = private / "installed"', body)
 
 
 if __name__ == "__main__":

@@ -82,6 +82,7 @@ class QueryHostCliIdentity(unittest.TestCase):
             return stat_info(st_uid=1001, st_mode=mode | 0o555)
 
         stack.enter_context(patch.object(os, "closerange"))
+        stack.enter_context(patch.object(identity, "mapped_objects", return_value=[]))
         stack.enter_context(patch.object(os, "getpid", return_value=123))
         stack.enter_context(
             patch.object(identity, "process", return_value=self.process)
@@ -388,6 +389,7 @@ class QueryHostCliIdentity(unittest.TestCase):
             "private_state",
             "check_trusted_path",
             "check_worker",
+            "check_mapped_objects",
             "cli_arguments",
             "worker",
             "cleanup",
@@ -425,6 +427,79 @@ class QueryHostCliIdentity(unittest.TestCase):
             found | {"unexpected_worker_error"}, identity.WORKER_FAILURE_CODES
         )
         self.assertNotIn("launcher_stderr_nonempty", identity.WORKER_FAILURE_CODES)
+
+    def test_worker_refuses_objects_mapped_outside_its_bound_trees(self) -> None:
+        plan = {
+            **self.plan,
+            "python": "/venv/bin/python",
+            "import_roots": [
+                "/copy/lib/python3.14",
+                "/venv/lib/python3.14/site-packages",
+            ],
+        }
+        system = stat_info(st_uid=0, st_mode=stat.S_IFDIR | 0o755)
+
+        def resolve(path: Path, **kwargs: object) -> Path:
+            return (
+                Path("/copy/bin/python3.14")
+                if str(path) == "/venv/bin/python"
+                else path
+            )
+
+        bound = ["/copy/bin/python3.14", "/copy/lib/libpython3.14.so.1.0"]
+        cases: list[tuple[list[str], dict[str, int | None], str | None]] = [
+            ([*bound, "/usr/lib/libc.so.6"], {}, None),
+            (
+                ["/opt/toolcache/lib/libpython3.14.so.1.0"],
+                {"/opt/toolcache": 0o777},
+                "unbound_mapped_object",
+            ),
+            (
+                ["/srv/client/libplanted.so"],
+                {"/srv/client/libplanted.so": -1},
+                "unbound_mapped_object",
+            ),
+            (
+                ["/usr/lib/absent.so"],
+                {"/usr/lib/absent.so": None},
+                "unbound_mapped_object",
+            ),
+        ]
+        for mapped, owners, expected in cases:
+
+            def lstat(
+                path: object, owners: dict[str, int | None] = owners
+            ) -> os.stat_result:
+                change = owners.get(str(path), 0)
+                if change is None:
+                    raise FileNotFoundError(str(path))
+                if change == -1:
+                    return stat_info(st_uid=1001, st_mode=stat.S_IFREG | 0o644)
+                if change:
+                    return stat_info(st_uid=0, st_mode=stat.S_IFDIR | change)
+                return system
+
+            checked: list[str] = []
+            with (
+                self.subTest(mapped=mapped[-1]),
+                patch.object(identity, "mapped_objects", return_value=mapped),
+                patch.object(Path, "resolve", autospec=True, side_effect=resolve),
+                patch.object(os, "lstat", side_effect=lstat),
+                patch.object(
+                    identity,
+                    "check_trusted_path",
+                    side_effect=lambda path, *a, **k: checked.append(str(path)),
+                ),
+                self.assertRaises(identity.ContainmentFatal)
+                if expected
+                else nullcontext() as raised,
+            ):
+                identity.check_mapped_objects(plan, 1)
+            if expected:
+                assert raised is not None
+                self.assertEqual(str(raised.exception), expected)
+            else:
+                self.assertEqual(checked, bound)
 
     def test_controller_records_only_listed_worker_codes(self) -> None:
         unlisted = "worker_unlisted_failure"

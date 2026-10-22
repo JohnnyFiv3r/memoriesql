@@ -179,6 +179,25 @@ client-writable (world-writable, or group-writable by the shared group, other th
 a sticky non-client directory over a non-client child), and any symlink inside an
 import root. The worker's own check stays authoritative.
 
+The hosted runner image leaves its setup-python toolcache world-writable (`chmod
+-R 777 /opt`), and that build's interpreter, `libpython` and extension modules
+search `<toolcache>/lib` through an absolute RUNPATH. So the driver runs every
+step from the venv on from a private copy: under a fresh, exclusive, S-owned 0755
+directory below sticky `/tmp` whose path has the toolcache prefix's byte length,
+it copies the build with modes normalized (directories and executables 0755, other
+files 0644) and internal links only, and rewrites exactly the first 20 bytes of
+each RUNPATH equal to `<toolcache>/lib` so it names the copy's own `lib`. Before
+each rewrite it proves, through the dynamic segment, that no other dynamic, symbol
+or version string shares those bytes; afterwards every search path must stay
+inside the copy. The source digest must equal the copy digest with each rewrite
+reset; both digests and each rewritten object's offsets and hashes are recorded in
+`qualification.json`. `LD_LIBRARY_PATH`, `LD_PRELOAD`, `PYTHONHOME` and
+`PYTHONPATH` are cleared for every command on the copy, the installed test root
+sits under the same private directory, and both the precheck and the run-as worker
+refuse any mapped object outside the bound copy, venv and import roots that is not
+in root-owned, non-writable system directories (`unbound_mapped_object`). Earlier
+runs used the pristine toolcache; their results do not transfer.
+
 Stop reception and acknowledgement use the original shared cleanup deadline,
 including when the normal deadline has expired; new CLI work retains the normal
 deadline. CLI stdout and stderr are drained separately under the same existing
