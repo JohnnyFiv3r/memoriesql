@@ -756,7 +756,9 @@ BEGIN
   IF part_row.part_id IS NULL THEN RAISE EXCEPTION 'query_helper_unavailable' USING ERRCODE='42501'; END IF;
   all_deps:=jsonb_set(all_deps,'{parts}',(all_deps->'parts')||jsonb_build_array(jsonb_build_object(
    'part_id',part_row.part_id,'package_id',part_row.package_id,'inventory_sha256',pin#>'{package,inventory_sha256}','inventory',part_row.inventory)));
-  bases:=bases||resolved->'access_bases';
+  -- || and -> share one precedence level; without parentheses this is
+  -- (bases||resolved)->'access_bases', NULL, and every basis is lost.
+  bases:=bases||(resolved->'access_bases');
  END LOOP;
 
  FOR resolved IN SELECT value FROM jsonb_array_elements(planned) LOOP
@@ -781,6 +783,9 @@ BEGIN
     OR (chosen->>'representation'='raw_bytes' AND octet_length(body_bytes)<>end_at-start_at) THEN
     RAISE EXCEPTION 'query_helper_unavailable' USING ERRCODE='42501'; END IF;
   END IF;
+  -- Normalized offsets are characters, but each selected span is at most
+  -- 16 KiB of UTF-8 or raw bytes too (binary byte units, approved packet).
+  IF octet_length(body_bytes)>16384 THEN RAISE EXCEPTION 'invalid_query_helper_interval' USING ERRCODE='22023'; END IF;
   amount:=amount+octet_length(body_bytes);
   slices:=slices||jsonb_build_array(jsonb_build_object('evidence_pin',pin,'representation',chosen->'representation',
    'start',start_at,'end',end_at,'content',content,'bytes_base64',CASE WHEN chosen->>'representation'='raw_bytes' THEN replace(encode(body_bytes,'base64'),chr(10),'') END,
@@ -790,7 +795,10 @@ BEGIN
  END LOOP;
  IF amount>(request->>'max_bytes')::integer THEN RAISE EXCEPTION 'query_helper_transport_exhausted' USING ERRCODE='54000'; END IF;
  SELECT COALESCE(jsonb_agg(value ORDER BY value->>'ref'),'[]') INTO visible FROM (SELECT DISTINCT value FROM jsonb_array_elements(visible)) x;
- SELECT COALESCE(jsonb_agg(value),'[]') INTO bases FROM (SELECT DISTINCT value FROM jsonb_array_elements(bases)) x;
+ -- One basis per context, expiry and hold. Each resolution stamps its own
+ -- check time, and the reply restamps every basis with the packet's.
+ SELECT COALESCE(jsonb_agg(value ORDER BY value-'checked_at'),'[]') INTO bases FROM (SELECT DISTINCT ON (value-'checked_at') value
+  FROM jsonb_array_elements(bases) ORDER BY value-'checked_at',value->>'checked_at') x;
  RETURN jsonb_build_object('content',jsonb_build_object('kind','hydrate_source','payload',jsonb_build_object('hydration',jsonb_build_object('slices',slices,'selection_complete',true)),
   'refs',visible,'access_bases',bases),'witnesses',jsonb_build_object('evidence_pins',pins),'dependencies',all_deps,
   'checked_at',memoriesql.relation_packet_time(clock_timestamp()));
