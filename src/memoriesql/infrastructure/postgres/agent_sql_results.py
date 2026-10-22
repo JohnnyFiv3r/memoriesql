@@ -17,6 +17,7 @@ import importlib.util
 import math
 import time
 from collections.abc import Callable
+from contextvars import ContextVar
 from datetime import datetime
 from typing import Any
 from uuid import UUID, uuid4
@@ -77,6 +78,18 @@ from memoriesql.infrastructure.postgres.result_preparation import (
 
 ConnectionFactory = Callable[[], Connection[Any]]
 AccessRequest = QueryRequest | ReuseRequest | InspectRequest | HydrateRequest
+# The admitted delivery whose work runs in this context (M0047). Connections
+# opened for it name it; the kernel's audit writer attributes a row to it only
+# while it is a live, reserved delivery of the same principal.
+_AUDIT_DELIVERY: ContextVar[str | None] = ContextVar(
+    "memoriesql_query_audit_delivery", default=None
+)
+# Attributed audit rows one governed expiry call removes at most.
+_AUDIT_EXPIRY_ROWS = 4096
+# Earlier schemas have no audit retention; their cleanup and status are as before.
+_AUDIT_RETENTION_SQL = (
+    "SELECT to_regprocedure('memoriesql.query_audit_retention_v1()') IS NOT NULL"
+)
 
 # Presence is a fail-closed capability check, never authorization or SQL proof.
 # A registered, reviewed forward migration and installed tests remain required.
@@ -122,6 +135,27 @@ _HELPER_BACKEND_CAPABILITY_SQL = (
     "AND NOT tgisinternal AND tgenabled IN ('O','A') "
     "AND tgname IN ('query_helper_clear_pin','query_helper_purge'))"
 )
+
+
+def _attributed(factory: ConnectionFactory) -> ConnectionFactory:
+    """Control connections that name the current delivery, if any, for audit."""
+
+    def connect() -> Connection[Any]:
+        connection = factory()
+        delivery = _AUDIT_DELIVERY.get()
+        if delivery is not None:
+            try:
+                with connection.transaction():
+                    connection.execute(
+                        "SELECT set_config('memoriesql.query_audit_delivery',%s,false)",
+                        (delivery,),
+                    )
+            except BaseException:
+                connection.close()
+                raise
+        return connection
+
+    return connect
 
 
 def _helper_module_available() -> bool:
@@ -300,12 +334,12 @@ class PostgresAgentSqlResults:
         credential_sha256: str,
         workspace_id: UUID,
     ) -> None:
-        self._control = control_factory
+        self._control = _attributed(control_factory)
         self._credential = credential_sha256
         self._workspace = workspace_id
         self._executor = PostgresRestrictedQuery(
             reader_factory=reader_factory,
-            control_factory=control_factory,
+            control_factory=self._control,
             authority_profile=authority_profile,
             credential_sha256=credential_sha256,
             workspace_id=workspace_id,
@@ -440,6 +474,7 @@ class PostgresAgentSqlResults:
         if not 1 <= batch_size <= 256 or not 1 <= max_batches <= 1024:
             raise ValueError("invalid cleanup bounds")
         totals = {"runs": 0, "results": 0, "tombstones": 0}
+        audits = {"audit_rows": 0, "released_bytes": 0}
         pending = failed = batches = 0
         try:
             with self._control() as connection:
@@ -461,6 +496,23 @@ class PostgresAgentSqlResults:
                     failed = int(data.get("failed", 0))
                     if not any(int(purged.get(key, 0)) for key in totals):
                         break
+                # Governed expiry of query-attributed audit rows (M0047).
+                with connection.transaction():
+                    retained = connection.execute(_AUDIT_RETENTION_SQL).fetchone()
+                for _ in range(max_batches if retained and retained[0] else 0):
+                    with connection.transaction():
+                        connection.execute("SET LOCAL lock_timeout='500ms'")
+                        connection.execute("SET LOCAL statement_timeout='10000ms'")
+                        connection.execute("SET LOCAL ROLE memoriesql_application")
+                        row = connection.execute(
+                            "SELECT memoriesql.expire_query_audits_v1(%s)",
+                            (_AUDIT_EXPIRY_ROWS,),
+                        ).fetchone()
+                    expired: dict[str, Any] = row[0] if row else {}
+                    for key in audits:
+                        audits[key] += int(expired.get(key, 0))
+                    if not int(expired.get("audit_rows", 0)):
+                        break
         except Error as error:
             busy = _busy(error)
             return result_json_bytes(
@@ -473,6 +525,7 @@ class PostgresAgentSqlResults:
                         "pending": pending,
                         "failed": failed,
                         "batches": batches,
+                        "audits": audits,
                     },
                 }
             )
@@ -485,6 +538,7 @@ class PostgresAgentSqlResults:
                     "pending": pending,
                     "failed": failed,
                     "batches": batches,
+                    "audits": audits,
                 },
             }
         )
@@ -501,6 +555,13 @@ class PostgresAgentSqlResults:
                     row = frame.execute(
                         "SELECT memoriesql.query_cleanup_status_v1()"
                     ).fetchone()
+                    audit = (
+                        frame.execute(
+                            "SELECT memoriesql.query_audit_retention_v1()"
+                        ).fetchone()
+                        if frame.execute(_AUDIT_RETENTION_SQL).fetchone() == (True,)
+                        else None
+                    )
         except (PermissionError, Error) as error:
             outcome, code = _refusal(error)
             return result_json_bytes(
@@ -515,6 +576,7 @@ class PostgresAgentSqlResults:
                 "contract_version": CONTRACT_VERSION,
                 "outcome": "available",
                 "cleanup": row[0] if row else None,
+                "audit_retention": audit[0] if audit else None,
             }
         )
 
@@ -599,6 +661,21 @@ class PostgresAgentSqlResults:
     # -- delivery --------------------------------------------------------------
 
     def _deliver(
+        self,
+        request: AccessRequest,
+        kind: str,
+        fingerprint: str,
+        admission: dict[str, Any],
+        start: float,
+    ) -> bytes:
+        # Every connection opened for this delivery's work names it (M0047).
+        token = _AUDIT_DELIVERY.set(str(admission["delivery_ref"]))
+        try:
+            return self._owned_delivery(request, kind, fingerprint, admission, start)
+        finally:
+            _AUDIT_DELIVERY.reset(token)
+
+    def _owned_delivery(
         self,
         request: AccessRequest,
         kind: str,
@@ -1792,6 +1869,19 @@ class PostgresAgentSqlResults:
                     connection.execute(
                         "SELECT memoriesql.purge_workspace_query_state_v1(8)"
                     )
+                with connection.transaction():
+                    connection.execute("SET LOCAL lock_timeout='500ms'")
+                    connection.execute("SET LOCAL statement_timeout='10000ms'")
+                    connection.execute("SET LOCAL ROLE memoriesql_application")
+                    PostgresAuthorizationPort(connection).begin_context(
+                        credential_sha256=self._credential,
+                        requested_workspace_id=self._workspace,
+                    )
+                    if connection.execute(_AUDIT_RETENTION_SQL).fetchone() == (True,):
+                        connection.execute(
+                            "SELECT memoriesql.expire_workspace_query_audits_v1(%s)",
+                            (_AUDIT_EXPIRY_ROWS,),
+                        )
         except (PermissionError, Error):
             pass
 

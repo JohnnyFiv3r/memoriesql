@@ -244,6 +244,7 @@ class AgentSqlRefusals(unittest.TestCase):
                         "pending": 0,
                         "failed": 0,
                         "batches": 0,
+                        "audits": {"audit_rows": 0, "released_bytes": 0},
                     },
                 )
 
