@@ -192,6 +192,16 @@ PR-05's `cleanup_status()` for the workspace shows anything overdue. A run is
 refused (`budget_exhausted` / `settlement`) once cleanup is more than 24 hours
 overdue.
 
+**Query audit retention (schema 47).** The same pass deletes authorization
+audit rows written by query work 30 days after they were recorded, which
+releases their workspace charge. It reports them as `cleanup.audits`, and
+`cleanup_status()` reports what is retained as `audit_retention`. The executor
+names each admitted delivery on the control connections it opens for that
+delivery, and clears the name on any still open when the delivery ends. A
+host's control factory must therefore open a fresh connection for every call
+and never hand out pooled ones. `TrustedHost.control` does this. See
+[query audit retention](verification/query-audit-retention.md).
+
 **Crash recovery.** Before every run or query admission the host runs PR-05's
 recovery. A delivery whose owning session ended is settled only once its
 restricted reader backend and transaction are confirmed gone, charged at least

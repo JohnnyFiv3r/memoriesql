@@ -33,7 +33,10 @@ from memoriesql.infrastructure.postgres.agent_sql_results import (
     _attributed,
     _Failure,
 )
+from memoriesql.infrastructure.results_broker.server import TrustedHost
+from memoriesql.query_client import TrustedHostTransport
 from tests.unit.test_agent_sql_helpers import hydration_fixture
+from tests.unit.test_results_broker import fictional_config, short_directory
 
 
 class HelperDispatch(unittest.TestCase):
@@ -734,6 +737,36 @@ class QueryAuditAttribution(unittest.TestCase):
         finally:
             _AUDIT_DELIVERY.reset(token)
         control.return_value.execute.assert_called_once_with(self.CLAIM, (delivery,))
+
+    def test_host_compositions_open_a_fresh_control_connection_per_call(
+        self,
+    ) -> None:
+        # The claim is session-level: the broker's and the local trusted
+        # host's control factories must never hand out a pooled connection.
+        host = TrustedHost(
+            fictional_config(short_directory(self)), cast(QueryAuthorityProfile, None)
+        )
+        transport = TrustedHostTransport(
+            control_url="postgresql://fictional-control",
+            reader_url="postgresql://fictional-reader",
+            reader_role="fictional_reader",
+            pinned_profile_sha256=None,
+            credential_sha256="0" * 64,
+            workspace_id=uuid4(),
+        )
+        opened: list[MagicMock] = []
+
+        def connect(*_args: Any, **_kwargs: Any) -> MagicMock:
+            opened.append(MagicMock())
+            return opened[-1]
+
+        with patch("psycopg.connect", side_effect=connect):
+            for factory in (
+                host.executor("0" * 64)._control,
+                transport._connect_control,
+            ):
+                self.assertIsNot(factory(), factory())
+        self.assertEqual(len(opened), 4)
 
 
 class HelperBackendBoundary(unittest.TestCase):
