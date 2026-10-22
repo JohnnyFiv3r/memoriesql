@@ -1,9 +1,10 @@
 -- Bounded, charged retention of query-originated authorization audit rows
--- (owner decision 2026-10-22, option A, 30 days). The trusted executor names
--- its admitted delivery; the kernel writer attributes a row only while that
--- delivery is live, reserved and owned by the same principal. Attributed rows
--- are charged to the workspace allocation and deleted by the governed expiry
--- 30 days after they were recorded. Every other audit row is unchanged and
+-- (owner decisions 2026-10-22: option A, 30 days; a separate per-workspace
+-- audit allowance). The trusted executor names its admitted delivery; the
+-- kernel writer attributes a row only while that delivery is live, reserved
+-- and owned by the same principal. Attributed rows are charged to the
+-- workspace's audit allowance, apart from its 512 MiB content allocation, and
+-- deleted by the governed expiry 30 days after they were recorded. Every other audit row is unchanged and
 -- stays append-only. Within one delivery and statement an identical decision
 -- is recorded once (C1). Row content and granularity are otherwise unchanged.
 
@@ -13,6 +14,13 @@
 CREATE FUNCTION memoriesql.query_audit_row_bytes_v1() RETURNS bigint
 LANGUAGE sql IMMUTABLE SET search_path=pg_catalog AS $$ SELECT 2048::bigint $$;
 REVOKE ALL ON FUNCTION memoriesql.query_audit_row_bytes_v1() FROM PUBLIC;
+
+-- Retained query audit each workspace may hold: its own allowance, apart from
+-- the 512 MiB content allocation. Admission refuses new query work once the
+-- retained charge reaches it; expiry releases it.
+CREATE FUNCTION memoriesql.query_audit_allowance_bytes_v1() RETURNS bigint
+LANGUAGE sql IMMUTABLE SET search_path=pg_catalog AS $$ SELECT 2147483648::bigint $$;
+REVOKE ALL ON FUNCTION memoriesql.query_audit_allowance_bytes_v1() FROM PUBLIC;
 
 -- Write-time attribution of one audit row to its query delivery. Insert-only:
 -- a delivery's concurrent transactions never wait on a shared row.
@@ -214,28 +222,17 @@ BEFORE UPDATE OR DELETE ON memoriesql.authorization_audit_events
 FOR EACH ROW EXECUTE FUNCTION memoriesql.authorization_audit_retention_guard_v1();
 
 -- Governed expiry, oldest first: at most max_rows attributed audit rows past
--- their 30-day window go, and with them their charge. The workspaces' charge
--- locks serialize it with reservations, which count what is retained.
+-- their 30-day window go, and with them their charge on the audit allowance.
 CREATE FUNCTION memoriesql.expire_query_audits_v1(max_rows integer,
  only_tenant uuid DEFAULT NULL,only_workspace uuid DEFAULT NULL) RETURNS jsonb
 LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,memoriesql
  SET row_security=off SET lock_timeout='500ms' AS $$
-DECLARE started timestamptz:=clock_timestamp(); w record; removed bigint;
+DECLARE started timestamptz:=clock_timestamp(); removed bigint;
 BEGIN
  IF max_rows IS NULL OR max_rows NOT BETWEEN 1 AND 65536
   OR (only_tenant IS NULL)<>(only_workspace IS NULL) THEN
   RAISE EXCEPTION 'invalid_query_cleanup' USING ERRCODE='22023';
  END IF;
- -- No temporary tables in a definer: select the same oldest due rows twice.
- FOR w IN SELECT DISTINCT due.tenant_id,due.workspace_id FROM (SELECT e.tenant_id,e.workspace_id
-   FROM memoriesql.query_audit_events e WHERE e.expires_at<=started
-    AND (only_tenant IS NULL OR (e.tenant_id=only_tenant AND e.workspace_id=only_workspace))
-   ORDER BY e.expires_at,e.tenant_id,e.authorization_audit_event_id LIMIT max_rows) due
-  ORDER BY due.tenant_id,due.workspace_id LOOP
-  PERFORM pg_advisory_xact_lock(hashtextextended(w.tenant_id::text||':result-preparation:'||w.workspace_id::text,0));
-  INSERT INTO memoriesql.result_preparation_allocators VALUES(w.tenant_id,w.workspace_id,1)
-  ON CONFLICT(tenant_id,workspace_id) DO UPDATE SET revision=memoriesql.result_preparation_allocators.revision+1;
- END LOOP;
  PERFORM set_config('memoriesql.query_audit_expiry','on',true);
  -- Attribution rows go with their audit rows (ON DELETE CASCADE).
  WITH due AS (SELECT e.tenant_id,e.authorization_audit_event_id FROM memoriesql.query_audit_events e
@@ -279,6 +276,7 @@ BEGIN
   min(expires_at) AS next_expiry INTO s
   FROM memoriesql.query_audit_events WHERE tenant_id=c.tenant_id AND workspace_id=c.workspace_id;
  RETURN jsonb_build_object('retention_days',30,'row_charge_bytes',memoriesql.query_audit_row_bytes_v1(),
+  'allowance_bytes',memoriesql.query_audit_allowance_bytes_v1(),
   'retained',jsonb_build_object('audit_rows',s.audit_rows,
    'charged_bytes',s.audit_rows*memoriesql.query_audit_row_bytes_v1()),
   'due_rows',s.due,'overdue_rows',s.overdue,
@@ -287,63 +285,100 @@ END $$;
 REVOKE ALL ON FUNCTION memoriesql.query_audit_retention_v1() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION memoriesql.query_audit_retention_v1() TO memoriesql_application;
 
-CREATE OR REPLACE FUNCTION memoriesql.reserve_result_preparation_v1(
- run_id uuid,step_id uuid,fingerprint text,capacity bigint
-) RETURNS jsonb LANGUAGE plpgsql VOLATILE SECURITY DEFINER
- SET search_path=pg_catalog,memoriesql SET row_security=off SET lock_timeout='500ms' AS $$
-DECLARE c memoriesql.authorization_contexts%ROWTYPE;
- o memoriesql.result_preparation_operations%ROWTYPE; used bigint; run_used bigint;
+CREATE OR REPLACE FUNCTION memoriesql.admit_query_delivery_v1(run uuid,step uuid,requested_kind text,
+ fingerprint text,operation_ms integer,response_bytes integer) RETURNS jsonb
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,memoriesql
+ SET row_security=off SET lock_timeout='500ms' AS $$
+DECLARE c memoriesql.authorization_contexts%ROWTYPE; r memoriesql.query_runs%ROWTYPE;
+ s memoriesql.query_steps%ROWTYPE; d memoriesql.query_deliveries%ROWTYPE;
+ blocking memoriesql.query_deliveries%ROWTYPE; now_at timestamptz:=clock_timestamp();
+ remaining jsonb; used_db bigint; used_transport bigint; used_accesses bigint;
+ window_db bigint; window_transport bigint; reserve_ms bigint; reserve_bytes bigint; replay boolean;
 BEGIN
- IF run_id IS NULL OR step_id IS NULL OR fingerprint IS NULL OR fingerprint !~ '^[a-f0-9]{64}$'
-  OR capacity IS NULL OR capacity NOT BETWEEN 8192 AND 67108864 THEN
-  RAISE EXCEPTION 'invalid_preparation' USING ERRCODE='22023';
+ IF run IS NULL OR step IS NULL OR requested_kind NOT IN ('query','reuse_result','inspect','hydrate_source')
+  OR fingerprint IS NULL OR fingerprint !~ '^[a-f0-9]{64}$'
+  OR operation_ms IS NULL OR operation_ms NOT BETWEEN 1 AND 30000
+  OR response_bytes IS NULL OR response_bytes NOT BETWEEN 1024 AND 262144 THEN
+  RAISE EXCEPTION 'invalid_query_delivery' USING ERRCODE='22023';
  END IF;
  c:=memoriesql.result_preparation_authority_v1();
- PERFORM pg_advisory_xact_lock(hashtextextended(c.tenant_id::text||':result-preparation-operation:'||run_id::text||':'||step_id::text,0));
- -- One allocation lock covers reservations, sealing and discarding across runs.
- PERFORM pg_advisory_xact_lock(hashtextextended(c.tenant_id::text||':result-preparation:'||c.workspace_id::text,0));
- -- A changed allocator row makes a pre-wait RR snapshot serialize-fail, rather
- -- than using stale sums after acquiring the advisory lock. Recover/retry the
- -- same private command in a NEW authority-fenced snapshot; never execute SQL.
- INSERT INTO memoriesql.result_preparation_allocators VALUES(c.tenant_id,c.workspace_id,1)
- ON CONFLICT(tenant_id,workspace_id) DO UPDATE SET revision=memoriesql.result_preparation_allocators.revision+1;
- c:=memoriesql.result_preparation_authority_v1();
- SELECT * INTO o FROM memoriesql.result_preparation_operations
-  WHERE tenant_id=c.tenant_id AND run_ref=run_id AND step_key=step_id;
+ PERFORM pg_advisory_xact_lock(hashtextextended(c.tenant_id::text||':query-access:'||c.workspace_id::text,0));
+ SELECT * INTO r FROM memoriesql.query_runs WHERE tenant_id=c.tenant_id AND run_ref=run FOR UPDATE;
+ IF NOT FOUND OR NOT memoriesql.query_run_owner_v1(r,c) THEN
+  RETURN jsonb_build_object('refused','unavailable');
+ END IF;
+ remaining:=memoriesql.query_run_remaining_v1(r);
+ IF now_at>=r.expires_at OR EXISTS(SELECT 1 FROM memoriesql.query_run_closures
+   WHERE tenant_id=c.tenant_id AND run_ref=run) THEN
+  RETURN jsonb_build_object('refused','run_expired','remaining',remaining);
+ END IF;
+ SELECT * INTO s FROM memoriesql.query_steps WHERE tenant_id=c.tenant_id AND run_ref=run
+  AND step_key=step FOR UPDATE;
+ replay:=FOUND;
+ IF replay AND (s.kind<>requested_kind OR s.request_fingerprint IS DISTINCT FROM fingerprint) THEN
+  RETURN jsonb_build_object('refused','idempotency','remaining',remaining);
+ END IF;
+ -- One executing operation per workspace; unsettled or uncertain earlier work
+ -- blocks new admission until owned settlement or recovery confirms it.
+ SELECT * INTO blocking FROM memoriesql.query_deliveries WHERE tenant_id=c.tenant_id
+  AND workspace_id=c.workspace_id AND state<>'settled'
+  ORDER BY admitted_at LIMIT 1;
  IF FOUND THEN
-  IF o.workspace_id<>c.workspace_id OR o.principal_id<>c.principal_id
-   OR o.owner_user_id IS DISTINCT FROM COALESCE(c.on_behalf_of_user_id,c.user_id) THEN
-   RAISE EXCEPTION 'result_preparation_unavailable' USING ERRCODE='42501';
-  END IF;
-  -- Cleanup removes the protected binding digest. A discarded key is never a
-  -- reservation replay or new execution grant, even for the original inputs.
-  IF o.state='discarded' THEN
-   RAISE EXCEPTION 'result_preparation_unavailable' USING ERRCODE='42501';
-  END IF;
-  IF o.request_fingerprint<>fingerprint OR o.reservation_bytes<>capacity THEN
-   RAISE EXCEPTION 'idempotency_conflict' USING ERRCODE='23505';
-  END IF;
-  RETURN memoriesql.result_preparation_receipt_v1(o,true);
+  RETURN jsonb_build_object('refused',CASE
+    WHEN blocking.run_ref=run AND blocking.step_key=step THEN 'pending_self'
+    WHEN blocking.state='settlement_pending' OR blocking.deadline<=now_at
+     OR memoriesql.query_delivery_owner_gone_v1(blocking.delivery_ref) THEN 'settlement'
+    ELSE 'busy' END,
+   'blocking_delivery',CASE WHEN blocking.run_ref=run AND blocking.step_key=step
+    THEN to_jsonb(blocking.delivery_ref) ELSE 'null'::jsonb END,
+   'remaining',remaining);
  END IF;
- IF EXISTS(SELECT 1 FROM memoriesql.result_preparation_operations WHERE tenant_id=c.tenant_id
-  AND run_ref=run_id AND (workspace_id<>c.workspace_id OR principal_id<>c.principal_id
-   OR owner_user_id IS DISTINCT FROM COALESCE(c.on_behalf_of_user_id,c.user_id))) THEN
-  RAISE EXCEPTION 'result_preparation_unavailable' USING ERRCODE='42501'; END IF;
- SELECT COALESCE(sum(CASE WHEN state='reserved' THEN reservation_bytes ELSE allocation_bytes END),0),
-  COALESCE(sum(CASE WHEN run_ref=run_id THEN CASE WHEN state='reserved' THEN reservation_bytes ELSE new_allocation_bytes END ELSE 0 END),0)
- INTO used,run_used FROM memoriesql.result_preparation_operations
- WHERE tenant_id=c.tenant_id AND workspace_id=c.workspace_id;
- -- Retained query audit rows are charged to the same workspace allocation.
- used:=used+memoriesql.query_audit_row_bytes_v1()*(SELECT count(*) FROM memoriesql.query_audit_events
-  WHERE tenant_id=c.tenant_id AND workspace_id=c.workspace_id);
- IF used+capacity>536870912 OR run_used+capacity>134217728 THEN
-  RAISE EXCEPTION 'preparation_storage_exhausted' USING ERRCODE='54000';
+ SELECT count(*),COALESCE(sum(COALESCE(charged_db_ms,reserved_db_ms)),0),
+  COALESCE(sum(COALESCE(charged_transport,reserved_transport)),0)
+  INTO used_accesses,used_db,used_transport
+  FROM memoriesql.query_deliveries WHERE tenant_id=c.tenant_id AND run_ref=run;
+ SELECT COALESCE(sum(COALESCE(charged_db_ms,reserved_db_ms)),0),
+  COALESCE(sum(COALESCE(charged_transport,reserved_transport)),0)
+  INTO window_db,window_transport
+  FROM memoriesql.query_deliveries WHERE tenant_id=c.tenant_id AND workspace_id=c.workspace_id
+   AND admitted_at>now_at-interval '24 hours';
+ IF used_accesses>=128 THEN
+  RETURN jsonb_build_object('refused','accesses','remaining',remaining);
  END IF;
- -- Opaque journal ownership is allocated once and is never taken over on retry.
- INSERT INTO memoriesql.result_preparation_operations(
-  tenant_id,workspace_id,principal_id,owner_user_id,run_ref,step_key,operation_ref,
-  ownership_ref,request_fingerprint,state,reservation_bytes)
- VALUES(c.tenant_id,c.workspace_id,c.principal_id,COALESCE(c.on_behalf_of_user_id,c.user_id),
-  run_id,step_id,uuidv7(),uuidv7(),fingerprint,'reserved',capacity) RETURNING * INTO o;
- RETURN memoriesql.result_preparation_receipt_v1(o,false);
+ reserve_ms:=LEAST(operation_ms,300000-used_db,1800000-window_db,
+  floor(extract(epoch FROM (r.expires_at-now_at))*1000));
+ IF reserve_ms<1 THEN RETURN jsonb_build_object('refused','time','remaining',remaining); END IF;
+ -- 16 KiB of the run's transport stays reserved for terminal diagnostics.
+ reserve_bytes:=LEAST(response_bytes,16777216-16384-used_transport,268435456-window_transport);
+ IF reserve_bytes<1024 THEN
+  RETURN jsonb_build_object('refused','transport','remaining',remaining);
+ END IF;
+ -- Retained query audit draws on its own workspace allowance, apart from the
+ -- content allocation (owner decision 2026-10-22). Work admitted adds its audit.
+ IF memoriesql.query_audit_row_bytes_v1()*(SELECT count(*) FROM memoriesql.query_audit_events
+   WHERE tenant_id=c.tenant_id AND workspace_id=c.workspace_id)
+   >=memoriesql.query_audit_allowance_bytes_v1() THEN
+  RETURN jsonb_build_object('refused','audit','remaining',remaining);
+ END IF;
+ IF NOT replay THEN
+  INSERT INTO memoriesql.query_steps(tenant_id,run_ref,step_key,kind,request_fingerprint,state,created_at)
+  VALUES(c.tenant_id,run,step,requested_kind,fingerprint,'executing',now_at) RETURNING * INTO s;
+ END IF;
+ INSERT INTO memoriesql.query_deliveries(tenant_id,delivery_ref,run_ref,step_key,workspace_id,
+  delivery_number,state,reserved_db_ms,reserved_transport,admitted_at,deadline)
+ VALUES(c.tenant_id,uuidv7(),run,step,c.workspace_id,
+  COALESCE((SELECT max(delivery_number) FROM memoriesql.query_deliveries
+   WHERE tenant_id=c.tenant_id AND run_ref=run AND step_key=step),0)+1,
+  'reserved',reserve_ms,reserve_bytes,now_at,
+  LEAST(now_at+reserve_ms*interval '1 millisecond',r.expires_at)) RETURNING * INTO d;
+ RETURN jsonb_build_object('delivery_ref',d.delivery_ref,'delivery_number',d.delivery_number,
+  'receipt_ref',(SELECT delivery_ref FROM memoriesql.query_deliveries WHERE tenant_id=c.tenant_id
+    AND run_ref=run AND step_key=step AND delivery_number=1),
+  'replay',replay,'step',jsonb_build_object('state',s.state,'outcome',s.outcome,
+   'error_code',s.error_code,'result_id',s.result_id,'content_digest',s.content_digest,
+   'first_row',s.first_row,'row_count',s.row_count,'page_size',s.page_size),
+  'reserved_db_ms',d.reserved_db_ms,'reserved_transport',d.reserved_transport,
+  'deadline',to_char(d.deadline AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+  -- Remaining before this access; the executor subtracts its own settled charge.
+  'remaining',remaining,'owner_lock_key',hashtextextended(c.tenant_id::text||':query-delivery:'||d.delivery_ref::text,0));
 END $$;

@@ -1,11 +1,13 @@
 # Governed retention of query authorization audit (schema 47)
 
 **Primary claim: authorization audit rows written by query work are charged to
-the workspace allocation while retained and deleted by a governed expiry 30
-days after they were recorded.** This implements owner decision 2026-10-22
-(option A, 30 days). Every other audit row, and the content and granularity of
-every row, is unchanged. Not chosen: option B (a permanent separate store) and
-option C2 (one row per closure authorization).
+a separate per-workspace audit allowance while retained, and deleted by a
+governed expiry 30 days after they were recorded.** This implements the owner
+decisions of 2026-10-22: option A with 30 days, and a separate audit allowance
+of about 2 GiB that keeps the 512 MiB content allocation unchanged. Every
+other audit row, and the content and granularity of every row, is unchanged.
+Not chosen: option B (a permanent separate store) and option C2 (one row per
+closure authorization).
 
 ## Which rows
 
@@ -57,17 +59,19 @@ same way once it lands.
   heap, indexes and attribution, with margin. A first installed measurement
   found about 1.5 KB per retained row once expired rows' index pages were
   awaiting reuse. That exceeded the first value, 1024 bytes, so the charge
-  was raised before release. Reservations add the workspace's retained audit
-  charge to the 512 MiB workspace allocation (`reserve_result_preparation_v1`,
-  otherwise unchanged). The installed capacity case measures the whole
+  was raised before release. The installed capacity case measures the whole
   footprint against this charge over repeated expiry and VACUUM cycles.
-- **When it counts.** The charge is post-hoc. It is counted by the next
-  reservation, not reserved before execution, and it is not part of the
-  128 MiB per-run allocation. Queries, inspections and hydrations are refused
-  once the retained charge leaves too little allocation. Work already admitted
-  still adds its audit first, and page reads and reuse are never refused for
-  audit. The charged total can therefore exceed the allocation, bounded by the
-  access, time and transport budgets and the 30-day window.
+- **A separate allowance.** The charge draws on each workspace's own query
+  audit allowance (`query_audit_allowance_bytes_v1`, 2 GiB), not on the
+  512 MiB content allocation, which reservations check as before.
+- **When it is spent.** Admission refuses every new query access (query,
+  page or reuse, inspection, hydration) with `budget_exhausted` / `storage`
+  once the retained charge reaches the allowance. The refusal comes before
+  any work, so it writes no audit and discloses nothing. Expiry releases the
+  charge. Every attributed row belongs to an admitted delivery, and one
+  operation executes per workspace at a time, so the retained charge exceeds
+  the allowance by at most the audit of the one delivery admitted just before
+  the refusal.
 - **Expiry.** `expire_query_audits_v1` deletes due rows oldest first, bounded
   per call. Their attribution goes with them, and so does their charge. The
   host's `cleanup_expired` runs it after the query-state pass, and run start
@@ -81,10 +85,6 @@ same way once it lands.
 
 ## Limits
 
-- **Reads are never refused for audit.** Page reads and reuse reserve no
-  allocation, so their audit is charged but does not refuse them. It is
-  bounded by run and workspace access, time and transport budgets, and by
-  expiry.
 - **Overdue rows.** Overdue audit rows are reported in status but do not
   gate admission. Their charge still bounds storage.
 - **Vacuum.** The charge tracks physical size only while autovacuum keeps up.
@@ -127,7 +127,9 @@ Installed runtime cases (`tests/runtime/test_query_audit_retention.py`):
 - one row per decision and statement;
 - expiry and release;
 - every refused update and delete;
-- the reservation decision flipping on the retained charge;
+- admission refused, content-free and before any work, once the audit
+  allowance is spent, and admitted again after expiry;
+- the content allocation not counting retained audit;
 - a capacity check over five waves of at least 256 rows. Each later wave
   follows the previous wave's expiry and two VACUUMs. At every wave the whole
   footprint of both tables with all indexes stays within what the retained

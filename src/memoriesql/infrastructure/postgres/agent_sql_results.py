@@ -193,6 +193,8 @@ _REFUSALS = {
     "accesses": ("budget_exhausted", "database"),
     "time": ("budget_exhausted", "time"),
     "transport": ("budget_exhausted", "transport"),
+    # The workspace's query audit allowance is spent until expiry (M0047).
+    "audit": ("budget_exhausted", "storage"),
 }
 _STATE_CODES = {
     "22003": "arithmetic",

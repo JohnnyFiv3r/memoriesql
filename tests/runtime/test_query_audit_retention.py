@@ -304,22 +304,50 @@ class QueryAuditRetention(unittest.TestCase):
             1,
         )
 
-    def test_retained_audit_counts_against_the_workspace_allocation_until_expiry(
-        self,
-    ) -> None:
+    def test_retained_audit_has_its_own_allowance_spent_until_expiry(self) -> None:
         run = self.r.start()
         delivery = self.inspect(run, self.h.normalized)["access_receipt_ref"]
         charged = len(self.attributed()) * ROW_BYTES
         self.assertGreater(charged, 0)
+        # Shrink the 2 GiB allowance to what is retained, rather than write a
+        # million rows: new query work is then refused, content-free, before it
+        # starts, and writes nothing.
+        self.db.execute(
+            "CREATE OR REPLACE FUNCTION memoriesql.query_audit_allowance_bytes_v1() "
+            "RETURNS bigint LANGUAGE sql IMMUTABLE SET search_path=pg_catalog "
+            f"AS $$ SELECT {int(charged)}::bigint $$"
+        )
+        audit = self.audit_rows()
+        _, refused = self.h.send(
+            self.h.inspection(
+                run, beads=(self.h.normalized,), facets=("evidence_metadata",)
+            )
+        )
+        self.assertEqual(
+            (refused["outcome"], refused["error"]),
+            ("budget_exhausted", {"code": "storage"}),
+            refused,
+        )
+        self.assertIsNone(refused["access_receipt_ref"])
+        self.assertEqual(self.audit_rows(), audit)
+        status = self.retention()
+        self.assertEqual(status["allowance_bytes"], charged)
+        self.assertEqual(status["retained"]["charged_bytes"], charged)
+        # Expiry releases the allowance: the same work is admitted again.
+        self.age(delivery)
+        cleanup = json.loads(self.r.service().cleanup_expired())
+        self.assertEqual(cleanup["cleanup"]["audits"]["released_bytes"], charged)
+        self.inspect(run, self.h.normalized)
+        # The 512 MiB content allocation does not count retained audit: a
+        # reservation that fills it exactly is still admitted.
+        self.assertGreater(len(self.attributed()), 0)
         used = self.scalar(
             "SELECT COALESCE(sum(CASE WHEN state='reserved' THEN reservation_bytes "
             "ELSE allocation_bytes END),0) FROM memoriesql.result_preparation_operations "
             "WHERE workspace_id=%s",
             (self.fixture.workspace,),
         )
-        # Fill the workspace allocation so that a minimal reservation fits only
-        # without the retained audit charge.
-        padding = WORKSPACE_BYTES - 8192 - charged + ROW_BYTES - used
+        padding = WORKSPACE_BYTES - 8192 - used
         while padding > 0:
             amount = min(padding, 67108864)
             self.db.execute(
@@ -341,27 +369,17 @@ class QueryAuditRetention(unittest.TestCase):
                 ),
             )
             padding -= amount
-
-        def reserve() -> None:
-            with self.fixture.connection() as connection:
-                PostgresResultPreparation(
-                    connection,
-                    credential_sha256=self.fixture.secret_hash,
-                    workspace_id=self.fixture.workspace,
-                ).reserve(
-                    run_ref=UUID(run["run_ref"]),
-                    step_key=uuid4(),
-                    request_fingerprint="e" * 64,
-                    reservation_bytes=8192,
-                )
-
-        with self.assertRaises(psycopg.Error) as caught:
-            reserve()
-        self.assertEqual(caught.exception.sqlstate, "54000")
-        self.age(delivery)
-        cleanup = json.loads(self.r.service().cleanup_expired())
-        self.assertEqual(cleanup["cleanup"]["audits"]["released_bytes"], charged)
-        reserve()
+        with self.fixture.connection() as connection:
+            PostgresResultPreparation(
+                connection,
+                credential_sha256=self.fixture.secret_hash,
+                workspace_id=self.fixture.workspace,
+            ).reserve(
+                run_ref=UUID(run["run_ref"]),
+                step_key=uuid4(),
+                request_fingerprint="e" * 64,
+                reservation_bytes=8192,
+            )
 
     def test_audit_growth_is_charged_at_least_its_physical_size_and_released(
         self,

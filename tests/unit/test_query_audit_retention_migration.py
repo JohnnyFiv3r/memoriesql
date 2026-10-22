@@ -80,26 +80,36 @@ class QueryAuditRetentionMigration(unittest.TestCase):
             self.assertIn(argument, values)
         self.assertIn(") IS FALSE THEN RETURN allowed; END IF;", compact(block))
 
-    def test_reservation_adds_only_the_retained_audit_charge(self) -> None:
+    def test_admission_refuses_only_on_the_separate_audit_allowance(self) -> None:
         before = definition(
-            (MIGRATIONS / "0031_result_preparation_journal.sql").read_text(),
-            "reserve_result_preparation_v1",
+            (MIGRATIONS / "0046_agent_sql_result_helpers.sql").read_text(),
+            "admit_query_delivery_v1",
         )
-        after = definition(SQL, "reserve_result_preparation_v1")
-        charge = (
-            " -- Retained query audit rows are charged to the same workspace allocation.\n"
-            " used:=used+memoriesql.query_audit_row_bytes_v1()*(SELECT count(*) "
+        after = definition(SQL, "admit_query_delivery_v1")
+        check = (
+            " -- Retained query audit draws on its own workspace allowance, apart from the\n"
+            " -- content allocation (owner decision 2026-10-22). Work admitted adds its audit.\n"
+            " IF memoriesql.query_audit_row_bytes_v1()*(SELECT count(*) "
             "FROM memoriesql.query_audit_events\n"
-            "  WHERE tenant_id=c.tenant_id AND workspace_id=c.workspace_id);\n"
+            "   WHERE tenant_id=c.tenant_id AND workspace_id=c.workspace_id)\n"
+            "   >=memoriesql.query_audit_allowance_bytes_v1() THEN\n"
+            "  RETURN jsonb_build_object('refused','audit','remaining',remaining);\n"
+            " END IF;\n"
         )
-        self.assertEqual(after.count(charge), 1)
+        self.assertEqual(after.count(check), 1)
+        self.assertEqual(after.replace(check, ""), before)
+        # Every budget refusal precedes the step and delivery it would admit.
+        self.assertLess(after.index("'refused','transport'"), after.index(check))
+        self.assertLess(
+            after.index(check), after.index("INSERT INTO memoriesql.query_steps")
+        )
+        self.assertIn("SELECT 2147483648::bigint", compact(SQL))
+        # The 512 MiB content allocation is unchanged: no reservation change.
+        self.assertNotIn("reserve_result_preparation", SQL)
         self.assertEqual(
-            after.replace("CREATE OR REPLACE FUNCTION", "CREATE FUNCTION", 1).replace(
-                charge, ""
-            ),
-            before,
+            re.findall(r"CREATE OR REPLACE FUNCTION memoriesql\.([a-z0-9_]+)", SQL),
+            ["application_authorize_resource", "admit_query_delivery_v1"],
         )
-        self.assertLess(after.index(charge), after.index("IF used+capacity>536870912"))
 
     def test_one_append_only_exception_for_the_governed_expiry(self) -> None:
         body = compact(self.body("authorization_audit_retention_guard_v1"))
@@ -310,7 +320,7 @@ class QueryAuditRetentionMigration(unittest.TestCase):
         )
         own = set(functions(SQL)) - {
             "application_authorize_resource",
-            "reserve_result_preparation_v1",
+            "admit_query_delivery_v1",
         }
         for name in sorted(own):
             settings = functions(SQL)[name][1]
