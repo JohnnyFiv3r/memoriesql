@@ -185,6 +185,10 @@
     {
       "filename": "0046_agent_sql_result_helpers.sql",
       "sha256": "5fec1d180b11c8e5593c97745b9d36d08f64249d6bd3abfa646844057aec9c03"
+    },
+    {
+      "filename": "0047_query_audit_retention.sql",
+      "sha256": "7e9b1f3bc4b9e259264ae6514598c3bffde8d57a51a9373c473952b55c99d7c4"
     }
   ]
 }

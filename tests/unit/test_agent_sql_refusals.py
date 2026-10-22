@@ -244,6 +244,7 @@ class AgentSqlRefusals(unittest.TestCase):
                         "pending": 0,
                         "failed": 0,
                         "batches": 0,
+                        "audits": {"audit_rows": 0, "released_bytes": 0},
                     },
                 )
 
@@ -351,6 +352,19 @@ class AgentSqlUnknownSettlement(unittest.TestCase):
                 executor(control).handle(reuse_request())
             )
         return reply
+
+    def test_a_spent_audit_allowance_is_a_content_free_storage_refusal(self) -> None:
+        # M0047: admission refuses new query work while the workspace's query
+        # audit allowance is spent; expiry releases it.
+        reply = self.handle(MagicMock(), {"refused": "audit", "remaining": REMAINING})
+        self.assertEqual(
+            (reply["outcome"], reply["error"]),
+            ("budget_exhausted", {"code": "storage"}),
+        )
+        self.assertIsNone(reply["access_receipt_ref"])
+        self.assertEqual(reply["remaining"], REMAINING)
+        for field in ("result", "page", "inspection", "hydration", "visibility"):
+            self.assertNotIn(field, reply)
 
     def test_an_unconfirmed_abandonment_stays_pending(self) -> None:
         open_step = {
