@@ -109,6 +109,39 @@ class CheckpointReviewRegressions(unittest.TestCase):
 
         return evaluate(query.args["where"].this)
 
+    def test_admission_keeps_the_earlier_audit_allowance_refusal(self) -> None:
+        # A later CREATE OR REPLACE wins at runtime: the checkpoint copy must
+        # carry audit retention's allowance refusal, adding only its kinds.
+        pattern = re.compile(
+            r"CREATE (?:OR REPLACE )?FUNCTION memoriesql\.admit_query_delivery_v1\(.*?\$\$;\n",
+            re.S,
+        )
+        checkpoint = sorted(
+            (ROOT / "migrations").glob(
+                "[0-9][0-9][0-9][0-9]_automatic_investigation_checkpoints.sql"
+            )
+        )[0]
+        earlier = ""
+        for path in sorted((ROOT / "migrations").glob("*.sql")):
+            if path.name >= checkpoint.name:
+                break
+            found = pattern.findall(path.read_text())
+            earlier = found[-1] if found else earlier
+        (current,) = pattern.findall(checkpoint.read_text())
+        self.assertIn("memoriesql.query_audit_allowance_bytes_v1()", earlier)
+        kinds = (
+            "requested_kind NOT IN ('query','reuse_result','inspect','hydrate_source')"
+        )
+        self.assertEqual(earlier.count(kinds), 1)
+        self.assertEqual(
+            current,
+            earlier.replace(
+                kinds,
+                "requested_kind NOT IN ('query','reuse_result','inspect',"
+                "'hydrate_source','checkpoint','read_checkpoint')",
+            ),
+        )
+
     def test_actual_overdue_predicate_uses_last_required_hold_end(self) -> None:
         now = datetime(2026, 10, 21, tzinfo=UTC)
         for label, end, expected in (
