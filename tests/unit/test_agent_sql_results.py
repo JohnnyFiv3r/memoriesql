@@ -11,7 +11,7 @@ import unittest
 from collections.abc import Iterator
 from contextlib import contextmanager, nullcontext
 from typing import Any, cast
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, Mock, call, patch
 from uuid import uuid4
 
 from psycopg import OperationalError
@@ -24,11 +24,19 @@ from memoriesql.application.investigation_contracts import (
     InspectRequest,
     parse_investigation_request,
 )
+from memoriesql.infrastructure.postgres.agent_sql_authority import (
+    QueryAuthorityProfile,
+)
 from memoriesql.infrastructure.postgres.agent_sql_results import (
+    _AUDIT_DELIVERY,
     PostgresAgentSqlResults,
+    _attributed,
     _Failure,
 )
+from memoriesql.infrastructure.results_broker.server import TrustedHost
+from memoriesql.query_client import TrustedHostTransport
 from tests.unit.test_agent_sql_helpers import hydration_fixture
+from tests.unit.test_results_broker import fictional_config, short_directory
 
 
 class HelperDispatch(unittest.TestCase):
@@ -622,6 +630,143 @@ EXPECTED_BACKEND_SIGNATURES = {
     "memoriesql.prepare_query_hydration_v1(uuid,jsonb)",
     "memoriesql.purge_query_helper_step_v1()",
 }
+
+
+class QueryAuditAttribution(unittest.TestCase):
+    """M0047: connections opened for a delivery's work name it; no others do."""
+
+    CLAIM = "SELECT set_config('memoriesql.query_audit_delivery',%s,false)"
+
+    def test_only_connections_opened_for_a_delivery_name_it(self) -> None:
+        opened: list[MagicMock] = []
+
+        def factory() -> Any:
+            opened.append(MagicMock())
+            return opened[-1]
+
+        service: Any = object.__new__(PostgresAgentSqlResults)
+        service._control = _attributed(factory)
+
+        def work(*_args: Any) -> bytes:
+            with service._control():
+                pass
+            return b"delivered"
+
+        service._owned_delivery = Mock(side_effect=work)
+        delivery = str(uuid4())
+        request = parse_investigation_request(
+            json.dumps(HelperDispatch().request("inspect")).encode()
+        )
+        admission = {"delivery_ref": delivery}
+        delivered = service._deliver(request, "inspect", "f" * 64, admission, 0.0)
+        self.assertEqual(delivered, b"delivered")
+        with service._control():
+            pass
+        self.assertEqual(
+            opened[0].execute.call_args_list, [call(self.CLAIM, (delivery,))]
+        )
+        opened[0].transaction.assert_called_once_with()
+        opened[1].execute.assert_not_called()
+        self.assertIsNone(_AUDIT_DELIVERY.get())
+
+    def deliver_opening(self, *connections: MagicMock) -> str:
+        """Run one delivery whose work opens these connections and leaves them."""
+        service: Any = object.__new__(PostgresAgentSqlResults)
+        service._control = _attributed(Mock(side_effect=list(connections)))
+
+        def work(*_args: Any) -> bytes:
+            for _ in connections:
+                service._control()
+            return b"delivered"
+
+        service._owned_delivery = Mock(side_effect=work)
+        delivery = str(uuid4())
+        request = parse_investigation_request(
+            json.dumps(HelperDispatch().request("inspect")).encode()
+        )
+        admission = {"delivery_ref": delivery}
+        delivered = service._deliver(request, "inspect", "f" * 64, admission, 0.0)
+        self.assertEqual(delivered, b"delivered")
+        return delivery
+
+    def test_a_connection_still_open_when_its_delivery_ends_stops_naming_it(
+        self,
+    ) -> None:
+        kept, closed = MagicMock(closed=False), MagicMock(closed=True)
+        delivery = self.deliver_opening(kept, closed)
+        self.assertEqual(
+            kept.execute.call_args_list,
+            [call(self.CLAIM, (delivery,)), call(self.CLAIM, ("",))],
+        )
+        self.assertEqual(closed.execute.call_args_list, [call(self.CLAIM, (delivery,))])
+        kept.close.assert_not_called()
+
+    def test_a_connection_that_cannot_stop_naming_its_delivery_is_closed(
+        self,
+    ) -> None:
+        broken = MagicMock(closed=False)
+        broken.execute.side_effect = [None, OperationalError("fictional lost")]
+        self.deliver_opening(broken)
+        broken.close.assert_called_once_with()
+
+    def test_a_connection_that_cannot_name_its_delivery_is_closed(self) -> None:
+        connection = MagicMock()
+        connection.execute.side_effect = OperationalError("fictional lost connection")
+        token = _AUDIT_DELIVERY.set((str(uuid4()), []))
+        try:
+            with self.assertRaises(OperationalError):
+                _attributed(lambda: connection)()
+        finally:
+            _AUDIT_DELIVERY.reset(token)
+        connection.close.assert_called_once_with()
+
+    def test_restricted_query_work_opens_the_same_attributed_connections(self) -> None:
+        control = Mock(return_value=MagicMock())
+        service = PostgresAgentSqlResults(
+            control_factory=control,
+            reader_factory=Mock(),
+            authority_profile=cast(QueryAuthorityProfile, None),
+            credential_sha256="0" * 64,
+            workspace_id=uuid4(),
+        )
+        self.assertIs(service._executor._control_factory, service._control)
+        delivery = str(uuid4())
+        token = _AUDIT_DELIVERY.set((delivery, []))
+        try:
+            service._executor._control_factory()
+        finally:
+            _AUDIT_DELIVERY.reset(token)
+        control.return_value.execute.assert_called_once_with(self.CLAIM, (delivery,))
+
+    def test_host_compositions_open_a_fresh_control_connection_per_call(
+        self,
+    ) -> None:
+        # The claim is session-level: the broker's and the local trusted
+        # host's control factories must never hand out a pooled connection.
+        host = TrustedHost(
+            fictional_config(short_directory(self)), cast(QueryAuthorityProfile, None)
+        )
+        transport = TrustedHostTransport(
+            control_url="postgresql://fictional-control",
+            reader_url="postgresql://fictional-reader",
+            reader_role="fictional_reader",
+            pinned_profile_sha256=None,
+            credential_sha256="0" * 64,
+            workspace_id=uuid4(),
+        )
+        opened: list[MagicMock] = []
+
+        def connect(*_args: Any, **_kwargs: Any) -> MagicMock:
+            opened.append(MagicMock())
+            return opened[-1]
+
+        with patch("psycopg.connect", side_effect=connect):
+            for factory in (
+                host.executor("0" * 64)._control,
+                transport._connect_control,
+            ):
+                self.assertIsNot(factory(), factory())
+        self.assertEqual(len(opened), 4)
 
 
 class HelperBackendBoundary(unittest.TestCase):
