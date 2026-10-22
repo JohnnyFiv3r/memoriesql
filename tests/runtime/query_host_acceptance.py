@@ -39,6 +39,7 @@ from memoriesql.application.stored_bead_inspection import InspectStoredBead
 from memoriesql.infrastructure.postgres.agent_sql_results import (
     PostgresAgentSqlResults,
 )
+from memoriesql.infrastructure.postgres.migration_runner import discover_migrations
 from memoriesql.infrastructure.results_broker import admin
 from memoriesql.infrastructure.results_broker.client import BrokerTransport
 from memoriesql.infrastructure.results_broker.config import (
@@ -229,7 +230,12 @@ class QueryHostHarness(unittest.TestCase):
         self.addCleanup(self.h.doCleanups)
         self.fixture = self.h.fixture
         self.db = self.h.db
-        migrate(self.db, expected_current_version=34, target_version=39)
+        # The shipped head schema: every installed definition the host depends on.
+        migrate(
+            self.db,
+            expected_current_version=34,
+            target_version=discover_migrations()[-1].version,
+        )
         self.root = _short_root()
         self.addCleanup(shutil.rmtree, self.root, True)
         (self.root / "config").mkdir(mode=0o700)
