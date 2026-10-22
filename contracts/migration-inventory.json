@@ -189,6 +189,10 @@
     {
       "filename": "0047_query_audit_retention.sql",
       "sha256": "7e9b1f3bc4b9e259264ae6514598c3bffde8d57a51a9373c473952b55c99d7c4"
+    },
+    {
+      "filename": "0048_pairing_revision_fence_order.sql",
+      "sha256": "c85a5fd030b16ace07c619093bf07e605919046cc4788e02c6eb94998b63e909"
     }
   ]
 }
