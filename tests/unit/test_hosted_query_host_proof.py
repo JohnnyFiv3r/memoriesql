@@ -51,6 +51,7 @@ class HostedQueryHostProof(unittest.TestCase):
             ],
             "sudo_sha256": "a" * 64,
             "env_sha256": "a" * 64,
+            "setpriv_sha256": "a" * 64,
         }
         return python, wheel, facts
 
@@ -59,7 +60,7 @@ class HostedQueryHostProof(unittest.TestCase):
     ) -> dict[str, str]:
         original_hash = hosted.file_hash
         original_stat = Path.lstat
-        system = {Path("/usr/bin/sudo"), Path("/usr/bin/env")}
+        system = {Path("/usr/bin/sudo"), Path("/usr/bin/env"), Path("/usr/bin/setpriv")}
         runner = Mock()
         runner.capture.return_value = json.dumps(facts)
         with (
@@ -129,6 +130,7 @@ class HostedQueryHostProof(unittest.TestCase):
             ("helper_sha256", "0" * 64),
             ("python", "/substituted"),
             ("sudo_sha256", "0" * 64),
+            ("setpriv_sha256", "0" * 64),
             ("import_roots", []),
             ("import_roots", ["relative"]),
             ("import_roots", ["/other"]),
@@ -174,7 +176,11 @@ class HostedQueryHostProof(unittest.TestCase):
             distribution.locate_file.side_effect = lambda p: root / str(p)
             original_read = Path.read_bytes
             original_stat = Path.lstat
-            system = {Path("/usr/bin/sudo"), Path("/usr/bin/env")}
+            system = {
+                Path("/usr/bin/sudo"),
+                Path("/usr/bin/env"),
+                Path("/usr/bin/setpriv"),
+            }
             search = [str(root), str(root / "missing.zip")]
 
             def read(p: Path) -> bytes:

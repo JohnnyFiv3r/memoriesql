@@ -229,6 +229,7 @@ class QueryHostCliIdentity(unittest.TestCase):
                 "inputs": [],
                 "sudo_sha256": hashlib.sha256(b"immutable").hexdigest(),
                 "env_sha256": hashlib.sha256(b"immutable").hexdigest(),
+                "setpriv_sha256": hashlib.sha256(b"immutable").hexdigest(),
             }
             if field == "__omitted__":
                 del plan["authority_sha256"]
@@ -267,6 +268,108 @@ class QueryHostCliIdentity(unittest.TestCase):
                 self.assertIsInstance(session, identity.Session)
             spawn.assert_not_called()
 
+    def test_actual_prepare_refuses_missing_or_substituted_setpriv(self) -> None:
+        immutable = hashlib.sha256(b"immutable").hexdigest()
+        system = SimpleNamespace(st_uid=0, st_mode=stat.S_IFREG | 0o555)
+
+        def missing_setpriv(raw: object) -> SimpleNamespace:
+            if raw == "/usr/bin/setpriv":
+                raise FileNotFoundError(raw)
+            return system
+
+        for pin, lstat in ((immutable, missing_setpriv), ("0" * 64, None)):
+            plan = {
+                **self.plan,
+                "source_sha": "source",
+                "root": "@fresh-fixture",
+                "authority_sha256": "a" * 64,
+                "python": "@installed-python",
+                "helper": "@copied-helper",
+                "inputs": [],
+                "sudo_sha256": immutable,
+                "env_sha256": immutable,
+                "setpriv_sha256": pin,
+            }
+            env = {
+                "N1_TEST_CLI_IDENTITY_BINDING": "/safe/binding",
+                "N1_TEST_CLI_IDENTITY_BINDING_SHA256": "a" * 64,
+                "N1_TEST_CLI_IDENTITY_AUTHORITY_SHA256": "a" * 64,
+                "RUNNER_ENVIRONMENT": "github-hosted",
+                "RUNNER_OS": "Linux",
+                "SOURCE_SHA": "source",
+                identity.NORMAL_ENV: "1",
+                identity.CLEANUP_ENV: "121",
+            }
+            with (
+                self.subTest(missing=lstat is not None),
+                patch.dict(os.environ, env, clear=True),
+                patch.object(identity, "read_binding", return_value=plan),
+                patch.object(os, "geteuid", return_value=1001),
+                patch.object(os, "getegid", return_value=1001),
+                patch.object(time, "monotonic", return_value=0),
+                patch.object(Path, "read_bytes", return_value=b"immutable"),
+                patch.object(Path, "chmod"),
+                patch.object(Path, "mkdir"),
+                patch.object(os, "lstat", side_effect=lstat, return_value=system),
+                patch.object(subprocess, "Popen") as spawn,
+                self.assertRaises(identity.ContainmentFatal),
+            ):
+                identity.Session.prepare(
+                    Path("/safe/root"), "fictional", "fictional", "fictional"
+                )
+            spawn.assert_not_called()
+
+    def test_any_launcher_stderr_byte_is_fatal_and_never_kept(self) -> None:
+        frame = b'{"identity": {}}\n'
+        for noise in (b"sudo: a password is required\n", b" ", b"\n"):
+            out_r, out_w = os.pipe()
+            err_r, err_w = os.pipe()
+            with (
+                self.subTest(noise=noise),
+                open(out_r, "rb", buffering=0) as stdout,
+                open(err_r, "rb", buffering=0) as stderr,
+            ):
+                os.write(err_w, noise)
+                os.write(out_w, frame)
+                os.close(err_w)
+                os.close(out_w)
+                channel = identity.Channel(stdout, time.monotonic() + 5, stderr)
+                with self.assertRaises(identity.LauncherStderr) as raised:
+                    channel.read()
+                self.assertEqual(str(raised.exception), "launcher_stderr_nonempty")
+        # Clean EOF on stderr is not output; a byte after the last frame still fails.
+        for late in (b"", b"x"):
+            out_r, out_w = os.pipe()
+            err_r, err_w = os.pipe()
+            with (
+                self.subTest(late=late),
+                open(out_r, "rb", buffering=0) as stdout,
+                open(err_r, "rb", buffering=0) as stderr,
+            ):
+                os.write(out_w, frame)
+                os.close(out_w)
+                channel = identity.Channel(stdout, time.monotonic() + 5, stderr)
+                self.assertEqual(channel.read(), {"identity": {}})
+                os.write(err_w, late)
+                os.close(err_w)
+                with (
+                    self.assertRaises(identity.LauncherStderr)
+                    if late
+                    else nullcontext()
+                ):
+                    channel.finish_stderr()
+
+    def test_launcher_stderr_latches_a_fixed_content_free_code(self) -> None:
+        session = identity.Session(self.plan, "fictional", "fictional", "fictional")
+        failure = identity.LauncherStderr("launcher_stderr_nonempty")
+        with (
+            patch.object(session, "launch", side_effect=failure),
+            patch.object(identity, "latch") as latch,
+            self.assertRaises(identity.ContainmentFatal),
+        ):
+            session.start()
+        latch.assert_called_once_with("LauncherStderr_before_worker_registration", [])
+
     def test_actual_close_ack_uses_original_cleanup_deadline(self) -> None:
         session = identity.Session(
             {**self.plan, "deadline": 1, "cleanup_deadline": 121},
@@ -277,7 +380,11 @@ class QueryHostCliIdentity(unittest.TestCase):
         session.monitor = Mock()
         session.monitor.wait.return_value = 0
         session.state_identity = [7, 8]
-        session.channel = SimpleNamespace(deadline=1)
+        finished: list[float] = []
+        session.channel = SimpleNamespace(
+            deadline=1,
+            finish_stderr=lambda: finished.append(session.channel.deadline),
+        )
         seen: list[float] = []
 
         def acknowledgement() -> dict[str, bool]:
@@ -305,6 +412,8 @@ class QueryHostCliIdentity(unittest.TestCase):
         ):
             session.close()
         self.assertEqual(seen, [121])
+        self.assertEqual(finished, [121])
+        cleanup_channel.finish_stderr.assert_called_once_with()
         self.assertTrue(session.ledger.complete())
 
     def worker_output(
@@ -533,14 +642,15 @@ class QueryHostCliIdentity(unittest.TestCase):
                 plan, action, Path("/approved/manifest"), "a" * 64
             )
             self.assertEqual(
-                argv[:10],
+                argv[:11],
                 [
                     "/usr/bin/sudo",
                     "-n",
-                    "-u",
-                    "#65534",
-                    "-g",
-                    "#1001",
+                    "--",
+                    "/usr/bin/setpriv",
+                    "--reuid=65534",
+                    "--regid=1001",
+                    "--clear-groups",
                     "--",
                     "/usr/bin/env",
                     "-i",
@@ -548,6 +658,22 @@ class QueryHostCliIdentity(unittest.TestCase):
                 ],
             )
             self.assertNotIn("sh", argv)
+            self.assertFalse({"-u", "-g", "-E", "-H"} & set(argv[:3]))
+            self.assertFalse(
+                [
+                    a
+                    for a in argv
+                    if a.startswith(
+                        (
+                            "--init-groups",
+                            "--keep-groups",
+                            "--groups",
+                            "--inh-caps",
+                            "--ambient-caps",
+                        )
+                    )
+                ]
+            )
         with self.assertRaises(identity.ContainmentFatal):
             identity.sudo_argv(plan, "child", Path("/approved/manifest"), "a" * 64)
 

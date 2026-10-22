@@ -126,15 +126,15 @@ by this source change. No local UID probe or privileged execution has occurred.
 Before execution, the owner and Root must approve and review the exact external
 binding, source and launcher. The S-owned, C-nonwritable JSON binding is supplied
 through `N1_TEST_CLI_IDENTITY_BINDING` and its SHA-256 environment variable. It
-pins `source_sha`, `authority_sha256`, distinct nonroot `service_uid`/`client_uid`,
-the service `gid`, permitted supplementary `groups`, system `sudo_sha256` and
-`env_sha256`, every executable/helper input hash, and the installed interpreter's
-complete `import_roots`. The only executable placeholders are
-`@installed-python` and `@copied-helper`; `root` must be `@fresh-fixture`.
-`N1_TEST_CLI_IDENTITY_AUTHORITY_SHA256` must independently match that approved
-record. Missing bindings fail before a process launch. Actual hosted image,
-account availability, ownership, import closure and successful cleanup remain
-unverified prerequisites, not evidence established by a JSON field.
+pins `source_sha`, `authority_sha256`, distinct nonroot
+`service_uid`/`client_uid`, the service `gid`, permitted supplementary `groups`,
+system `sudo_sha256`, `env_sha256` and `setpriv_sha256`, every executable/helper
+input hash, and the installed interpreter's complete `import_roots`. The only
+executable placeholders are `@installed-python` and `@copied-helper`; `root` must
+be `@fresh-fixture`. `N1_TEST_CLI_IDENTITY_AUTHORITY_SHA256` must independently
+match that approved record. Missing bindings fail before a process launch. Actual
+hosted image, account availability, ownership, import closure and successful
+cleanup remain unverified prerequisites, not evidence established by a JSON field.
 
 `import_roots` binds the complete ordered, absolute import search list, including
 nonexistent zip or directory candidates. The check covers each root itself,
@@ -146,16 +146,26 @@ entry from creation. Authority pins must each independently be present and be
 matching lowercase 64-hex SHA-256 values; matching nulls are refused. These
 metadata checks still do not confer authority.
 
-The controller permits at most two fixed invocations: noninteractive sudo as
-C:G, an empty environment, the bound installed Python and copied helper, and
-`run-case` or `cleanup` with the bound manifest. It sends the paired credential
-only over a pipe after registration; the CLI receives no database login. The
-parent's existing normal deadline and 120-second cleanup deadline are inherited,
-never reset. CLI output, protocol frames, state identity and PID/start-time
-registrations are bounded and checked. An unknown birth, lineage, monitor or
-cleanup latches a private S-owned failure record and stops later tests/proofs.
-Only bounded known-resource cleanup and evidence retention may follow. Disposable
-hosted VM destruction is a failed-job fallback, never successful cleanup proof.
+The controller permits at most two fixed invocations. Each is `sudo -n --
+/usr/bin/setpriv --reuid=C --regid=G --clear-groups --`, then an empty
+environment, the bound installed Python and copied helper, and `run-case` or
+`cleanup` with the bound manifest. sudo runs only the bound `setpriv` as root;
+`setpriv` drops to C:G with no supplementary groups before the interpreter starts.
+No group- or capability-keeping option is passed. This uses the hosted runner's
+existing run-as-users rule: that rule refuses sudo's own `-g`, and sudo's `-u C -g
+G` would add C's own groups, which the identity check rejects. `sudo`, `env` and
+`setpriv` must each be root-owned, not group- or world-writable, and match the
+binding, or the controller refuses before launch. The launcher's stderr is a
+separate pipe from its protocol frames. Any stderr byte from sudo, `setpriv` or
+the worker, at any point, latches the fixed `LauncherStderr` code; the text is
+discarded, never parsed or kept. It sends the paired credential only over a pipe
+after registration; the CLI receives no database login. The parent's existing
+normal deadline and 120-second cleanup deadline are inherited, never reset. CLI
+output, protocol frames, state identity and PID/start-time registrations are
+bounded and checked. An unknown birth, lineage, monitor or cleanup latches a
+private S-owned failure record and stops later tests/proofs. Only bounded
+known-resource cleanup and evidence retention may follow. Disposable hosted VM
+destruction is a failed-job fallback, never successful cleanup proof.
 
 Stop reception and acknowledgement use the original shared cleanup deadline,
 including when the normal deadline has expired; new CLI work retains the normal

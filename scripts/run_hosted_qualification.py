@@ -80,7 +80,7 @@ for entry in files:
 if not installed:
     raise ValueError("missing installed product inputs")
 system = {}
-for name in ("sudo", "env"):
+for name in ("sudo", "env", "setpriv"):
     path = Path("/usr/bin") / name
     info = path.lstat()
     if info.st_uid != 0 or info.st_mode & 0o022 or not stat.S_ISREG(info.st_mode):
@@ -297,7 +297,7 @@ def prepare_host_binding(
             ):
                 raise ValueError("installed wheel input substitution")
             inputs.append([path, pin])
-    for key in ("sudo_sha256", "env_sha256"):
+    for key in ("sudo_sha256", "env_sha256", "setpriv_sha256"):
         name = key.removesuffix("_sha256")
         path = Path("/usr/bin") / name
         info = path.lstat()
@@ -319,6 +319,7 @@ def prepare_host_binding(
                 "import_roots",
                 "sudo_sha256",
                 "env_sha256",
+                "setpriv_sha256",
             )
         },
         "authority_sha256": authority,

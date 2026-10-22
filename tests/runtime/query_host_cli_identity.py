@@ -35,6 +35,10 @@ class ContainmentFatal(RuntimeError):
     fatal_containment = True
 
 
+class LauncherStderr(ContainmentFatal):
+    """Any stderr byte from sudo, setpriv or the worker; its text is never kept."""
+
+
 def remaining(deadline: float) -> float:
     value = deadline - time.monotonic()
     if not math.isfinite(value) or value <= 0:
@@ -189,16 +193,38 @@ class Ledger:
 
 
 class Channel:
-    def __init__(self, stream: Any, deadline: float) -> None:
+    def __init__(self, stream: Any, deadline: float, stderr: Any = None) -> None:
         self.stream = stream
         self.deadline = deadline
+        self.stderr = stderr
         self.buffer = bytearray()
         self.total = 0
 
+    def check_stderr(self, timeout: float = 0) -> None:
+        """Any byte fails; EOF ends the watch. Bytes are discarded, never kept."""
+        if self.stderr is None:
+            return
+        if not select.select([self.stderr], [], [], timeout)[0]:
+            return
+        if os.read(self.stderr.fileno(), 1):
+            raise LauncherStderr("launcher_stderr_nonempty")
+        self.stderr = None
+
+    def finish_stderr(self) -> None:
+        """After the launcher exits, its stderr must reach EOF without a byte."""
+        while self.stderr is not None:
+            self.check_stderr(remaining(self.deadline))
+
     def read(self) -> dict[str, Any]:
         while b"\n" not in self.buffer:
-            if not select.select([self.stream], [], [], remaining(self.deadline))[0]:
+            pipes = [self.stream] if self.stderr is None else [self.stream, self.stderr]
+            ready = select.select(pipes, [], [], remaining(self.deadline))[0]
+            if not ready:
                 raise ContainmentFatal("protocol_deadline")
+            if self.stderr is not None and self.stderr in ready:
+                self.check_stderr()
+            if self.stream not in ready:
+                continue
             data = os.read(self.stream.fileno(), 4096)
             if not data:
                 raise ContainmentFatal("worker_eof_or_partial_registration")
@@ -206,6 +232,7 @@ class Channel:
             self.buffer.extend(data)
             if self.total > MAX_OUTPUT or len(self.buffer) > MAX_FRAME:
                 raise ContainmentFatal("protocol_output_limit")
+        self.check_stderr()
         line, _, tail = self.buffer.partition(b"\n")
         self.buffer = bytearray(tail)
         value = json.loads(line)
@@ -231,13 +258,16 @@ def send(stream: Any, value: dict[str, Any], deadline: float) -> None:
 def sudo_argv(plan: dict[str, Any], action: str, path: Path, digest: str) -> list[str]:
     if action not in ("run-case", "cleanup"):
         raise ContainmentFatal("unapproved_privileged_action")
+    # sudo runs only the pinned setpriv as root; setpriv drops to C:G with no
+    # supplementary groups before the empty-environment interpreter starts.
     return [
         "/usr/bin/sudo",
         "-n",
-        "-u",
-        f"#{plan['client_uid']}",
-        "-g",
-        f"#{plan['gid']}",
+        "--",
+        "/usr/bin/setpriv",
+        f"--reuid={plan['client_uid']}",
+        f"--regid={plan['gid']}",
+        "--clear-groups",
         "--",
         "/usr/bin/env",
         "-i",
@@ -692,6 +722,7 @@ class Session:
         for raw, pin in (
             ("/usr/bin/sudo", plan["sudo_sha256"]),
             ("/usr/bin/env", plan["env_sha256"]),
+            ("/usr/bin/setpriv", plan["setpriv_sha256"]),
         ):
             info = os.lstat(raw)
             if (
@@ -725,7 +756,7 @@ class Session:
             argv,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
+            stderr=subprocess.PIPE,
             close_fds=True,
         )
         observed_monitor = process(monitor.pid)
@@ -734,12 +765,13 @@ class Session:
         self.ledger.monitors.append(observed_monitor)
         if action == "run-case":
             self.monitor = monitor
-        assert monitor.stdout is not None
+        assert monitor.stdout is not None and monitor.stderr is not None
         channel = Channel(
             monitor.stdout,
             self.plan["cleanup_deadline"]
             if action == "cleanup"
             else self.plan["deadline"],
+            monitor.stderr,
         )
         hello = channel.read()
         self.ledger.register(hello["identity"], self.plan)
@@ -811,6 +843,7 @@ class Session:
                     != 0
                 ):
                     self.fail("first_monitor_failed")
+                self.channel.finish_stderr()
             self.plan["targets"] = self.ledger.identities.copy()
             self.plan["state_identity"] = self.state_identity
             monitor, channel = self.launch("cleanup")
@@ -821,6 +854,7 @@ class Session:
                 self.fail("cleanup_unknown")
             if monitor.wait(timeout=remaining(self.plan["cleanup_deadline"])) != 0:
                 self.fail("cleanup_monitor_or_state_unclosed")
+            channel.finish_stderr()
             if self.monitor.wait(timeout=remaining(self.plan["cleanup_deadline"])) != 0:
                 self.fail("first_monitor_not_successfully_reaped")
             for identity in self.ledger.identities:
