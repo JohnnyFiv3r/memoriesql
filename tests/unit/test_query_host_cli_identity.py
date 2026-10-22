@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import io
 import json
 import os
+import runpy
 import select
 import stat
 import subprocess
 import sys
+import tempfile
 import time
 import unittest
 from contextlib import ExitStack, nullcontext
@@ -369,6 +372,143 @@ class QueryHostCliIdentity(unittest.TestCase):
         ):
             session.start()
         latch.assert_called_once_with("LauncherStderr_before_worker_registration", [])
+
+    def test_worker_failure_codes_are_exactly_the_workers_own_literals(self) -> None:
+        # Functions the sudo-launched run-case/cleanup worker executes.
+        worker_side = {
+            "remaining",
+            "check_identity",
+            "check_entry",
+            "read_binding",
+            "read_plan",
+            "Channel.read",
+            "send",
+            "check_credential_absent",
+            "cli_reply",
+            "private_state",
+            "check_trusted_path",
+            "check_worker",
+            "cli_arguments",
+            "worker",
+            "cleanup",
+            "main",
+        }
+        found: set[str] = set()
+        seen: set[str] = set()
+
+        def visit(node: ast.AST, prefix: str = "") -> None:
+            for child in ast.iter_child_nodes(node):
+                if isinstance(child, ast.ClassDef):
+                    visit(child, child.name + ".")
+                elif (
+                    isinstance(child, ast.FunctionDef)
+                    and prefix + child.name in worker_side
+                ):
+                    seen.add(prefix + child.name)
+                    for call in ast.walk(child):
+                        if not (
+                            isinstance(call, ast.Call)
+                            and isinstance(call.func, ast.Name)
+                            and call.func.id == "ContainmentFatal"
+                            and call.args
+                        ):
+                            continue
+                        code = call.args[0]
+                        if isinstance(code, ast.Constant) and isinstance(
+                            code.value, str
+                        ):
+                            found.add(code.value)
+
+        visit(ast.parse(Path(identity.__file__).read_text()))
+        self.assertEqual(seen, worker_side)
+        self.assertEqual(
+            found | {"unexpected_worker_error"}, identity.WORKER_FAILURE_CODES
+        )
+        self.assertNotIn("launcher_stderr_nonempty", identity.WORKER_FAILURE_CODES)
+
+    def test_controller_records_only_listed_worker_codes(self) -> None:
+        unlisted = "worker_unlisted_failure"
+        cases: list[tuple[object, str]] = [
+            (
+                {"fatal": "caller_writable_or_replaceable_input"},
+                "worker_caller_writable_or_replaceable_input",
+            ),
+            ({"fatal": "unexpected_worker_error"}, "worker_unexpected_worker_error"),
+            ({"fatal": "sudo: a password is required"}, unlisted),
+            ({"fatal": "launcher_stderr_nonempty"}, unlisted),
+            ({"fatal": "CALLER_OWNED_INPUT_PATH"}, unlisted),
+            ({"fatal": "caller_owned_input_path", "path": "/home/runner"}, unlisted),
+            ({"fatal": 7}, unlisted),
+            ({"fatal": None}, unlisted),
+            ({"fatal": ["caller_owned_input_path"]}, unlisted),
+            ({"fatal": "x" * 4096}, unlisted),
+        ]
+        for frame, code in cases:
+            out_r, out_w = os.pipe()
+            with (
+                self.subTest(frame=str(frame)[:60]),
+                open(out_r, "rb", buffering=0) as stdout,
+            ):
+                os.write(out_w, json.dumps(frame).encode() + b"\n")
+                os.close(out_w)
+                channel = identity.Channel(
+                    stdout, time.monotonic() + 5, worker_failures=True
+                )
+                with self.assertRaises(identity.WorkerFailure) as raised:
+                    channel.read()
+                self.assertEqual(str(raised.exception), code)
+                self.assertIsInstance(raised.exception, identity.ContainmentFatal)
+        # Channels reading the controller or a CLI child never interpret frames.
+        out_r, out_w = os.pipe()
+        with open(out_r, "rb", buffering=0) as stdout:
+            os.write(out_w, b'{"fatal": "caller_owned_input_path"}\n')
+            os.close(out_w)
+            self.assertEqual(
+                identity.Channel(stdout, time.monotonic() + 5).read(),
+                {"fatal": "caller_owned_input_path"},
+            )
+
+    def test_worker_failure_latches_its_fixed_code_in_the_phase(self) -> None:
+        session = identity.Session(self.plan, "fictional", "fictional", "fictional")
+        failure = identity.WorkerFailure({"fatal": "unexpected_supplementary_groups"})
+        with (
+            patch.object(session, "launch", side_effect=failure),
+            patch.object(identity, "latch") as latch,
+            self.assertRaises(identity.ContainmentFatal),
+        ):
+            session.start()
+        latch.assert_called_once_with(
+            "worker_unexpected_supplementary_groups_before_worker_registration", []
+        )
+
+    def test_only_the_run_as_worker_reports_and_only_a_listed_code(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = Path(directory) / "manifest.json"
+            manifest.write_bytes(b"{}")
+            for action, raw, expected in (
+                ("run-case", manifest, b'{"fatal": "manifest_binding_mismatch"}\n'),
+                ("cleanup", manifest, b'{"fatal": "manifest_binding_mismatch"}\n'),
+                (
+                    "run-case",
+                    Path(directory) / "absent",
+                    b'{"fatal": "unexpected_worker_error"}\n',
+                ),
+                ("child", manifest, None),
+            ):
+                written: list[tuple[int, bytes]] = []
+                with (
+                    self.subTest(action=action, raw=raw.name),
+                    patch.object(sys, "argv", ["helper", action, str(raw), "a" * 64]),
+                    patch.object(
+                        os,
+                        "write",
+                        side_effect=lambda fd, data: written.append((fd, data)),
+                    ),
+                    self.assertRaises(SystemExit) as exited,
+                ):
+                    runpy.run_path(identity.__file__, run_name="__main__")
+                self.assertEqual(exited.exception.code, 1)
+                self.assertEqual(written, [] if expected is None else [(1, expected)])
 
     def test_actual_close_ack_uses_original_cleanup_deadline(self) -> None:
         session = identity.Session(

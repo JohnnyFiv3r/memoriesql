@@ -158,14 +158,26 @@ G` would add C's own groups, which the identity check rejects. `sudo`, `env` and
 binding, or the controller refuses before launch. The launcher's stderr is a
 separate pipe from its protocol frames. Any stderr byte from sudo, `setpriv` or
 the worker, at any point, latches the fixed `LauncherStderr` code; the text is
-discarded, never parsed or kept. It sends the paired credential only over a pipe
-after registration; the CLI receives no database login. The parent's existing
-normal deadline and 120-second cleanup deadline are inherited, never reset. CLI
-output, protocol frames, state identity and PID/start-time registrations are
-bounded and checked. An unknown birth, lineage, monitor or cleanup latches a
-private S-owned failure record and stops later tests/proofs. Only bounded
-known-resource cleanup and evidence retention may follow. Disposable hosted VM
-destruction is a failed-job fallback, never successful cleanup proof.
+discarded, never parsed or kept. A failing worker may send one terminal frame
+naming a code from the fixed `WORKER_FAILURE_CODES` list (its own literal failure
+codes); the controller records only such a listed code, maps any other frame to
+`worker_unlisted_failure`, never copies worker text, and still latches a
+containment failure. A CLI child never reports. It sends the paired credential
+only over a pipe after registration; the CLI receives no database login. The
+parent's existing normal deadline and 120-second cleanup deadline are inherited,
+never reset. CLI output, protocol frames, state identity and PID/start-time
+registrations are bounded and checked. An unknown birth, lineage, monitor or
+cleanup latches a private S-owned failure record and stops later tests/proofs.
+Only bounded known-resource cleanup and evidence retention may follow. Disposable
+hosted VM destruction is a failed-job fallback, never successful cleanup proof.
+
+The driver sets umask 022 before creating its test root, venv and copied inputs,
+because the run-as client shares the job's group. Right after installation, before
+the default acceptance, it refuses with a fixed code any interpreter, copied
+helper or import-root path, ancestor or link target that is client-owned or
+client-writable (world-writable, or group-writable by the shared group, other than
+a sticky non-client directory over a non-client child), and any symlink inside an
+import root. The worker's own check stays authoritative.
 
 Stop reception and acknowledgement use the original shared cleanup deadline,
 including when the normal deadline has expired; new CLI work retains the normal

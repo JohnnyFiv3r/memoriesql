@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import platform
+import pwd
 import re
 import resource
 import shutil
@@ -371,6 +372,80 @@ def identity_inventory(value: object) -> dict[str, dict[str, int]]:
     return value
 
 
+def client_writable(info: os.stat_result, gid: int) -> bool:
+    """By mode, may the run-as client (sole group: the job's own) write here?"""
+    return bool(
+        info.st_mode & stat.S_IWOTH
+        or (info.st_mode & stat.S_IWGRP and info.st_gid == gid)
+    )
+
+
+def check_client_unwritable(
+    python: str, helper: Path, roots: list[str], client_uid: int, gid: int
+) -> None:
+    """Fail fast, before the long acceptance, on inputs the run-as worker refuses.
+
+    From S's side, mirror the worker's rule for the interpreter, the copied
+    helper and every import root: no path, ancestor or link target may be
+    client-owned or client-writable, except a sticky non-client directory over a
+    non-client child, and import roots hold no symlinks. Fixed codes only; the
+    worker's own check stays authoritative.
+    """
+    passed: dict[Path, os.stat_result] = {}  # neither client-owned nor -writable
+
+    def check(path: Path, allow_missing: bool = False, depth: int = 0) -> None:
+        if depth >= 40:
+            raise ValueError("bound input links do not resolve")
+        child: os.stat_result | None = None
+        for entry in (path, *path.parents):
+            if entry in passed:
+                child = passed[entry]
+                continue
+            try:
+                info = entry.lstat()
+            except FileNotFoundError:
+                if not allow_missing:
+                    raise ValueError("bound input missing") from None
+                child = None
+                continue
+            if info.st_uid == client_uid:
+                raise ValueError("bound input is client-owned")
+            if stat.S_ISLNK(info.st_mode):
+                target = Path(os.readlink(entry))
+                check(
+                    target if target.is_absolute() else entry.parent / target,
+                    allow_missing,
+                    depth + 1,
+                )
+            elif not client_writable(info, gid):
+                passed[entry] = info
+            elif not (
+                entry != path
+                and stat.S_ISDIR(info.st_mode)
+                and info.st_mode & stat.S_ISVTX
+                and child is not None
+                and child.st_uid != client_uid
+            ):
+                raise ValueError("bound input is client-writable")
+            child = info
+
+    check(Path(python))
+    check(helper)
+    for raw in roots:
+        root = Path(raw)
+        check(root, allow_missing=True)
+        if not root.is_dir():
+            if root.is_symlink():
+                raise ValueError("import root holds a symlink")
+            continue
+        for base, directories, files in os.walk(root):
+            for name in (*directories, *files):
+                entry = Path(base) / name
+                if entry.is_symlink():
+                    raise ValueError("import root holds a symlink")
+                check(entry)
+
+
 def check_shards(root: Path, count: int = 3) -> None:
     discovered: dict[str, int] | None = None
     identities: dict[str, dict[str, int]] | None = None
@@ -601,6 +676,28 @@ def qualify(
                 test_root,
             )
         )
+        # The run-as host worker refuses client-writable inputs; learn that now,
+        # not after the complete acceptance and restart proofs.
+        roots = json.loads(
+            runner.capture(
+                "installed-import-roots",
+                [
+                    installed_python,
+                    "-I",
+                    "-c",
+                    "import json,sys;print(json.dumps(sys.path))",
+                ],
+                test_root,
+            )
+        )
+        check_client_unwritable(
+            installed_python,
+            test_root / "query_host_cli_identity.py",
+            roots,
+            pwd.getpwnam("nobody").pw_uid,
+            os.getegid(),
+        )
+        metadata["client_unwritable_inputs"] = True
         runner.run(
             "package-isolation",
             [installed_python, "-I", "prove_package_isolation.py"],
@@ -727,6 +824,9 @@ def main() -> None:
         raise RuntimeError(f"qualification interrupted by signal {signum}")
 
     signal.signal(signal.SIGTERM, interrupted)
+    # The run-as client shares this job's group: create nothing it could write,
+    # whatever umask the job inherited. Children inherit this umask.
+    os.umask(0o022)
     # Created by this job, not a reusable local qualification environment.
     args.root.mkdir()
     args.evidence.mkdir(parents=True, exist_ok=True)

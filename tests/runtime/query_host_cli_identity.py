@@ -39,6 +39,80 @@ class LauncherStderr(ContainmentFatal):
     """Any stderr byte from sudo, setpriv or the worker; its text is never kept."""
 
 
+# The closed set of fixed codes a run-as worker may name in its one terminal
+# frame: its own ContainmentFatal literals plus a generic code for any other
+# error. S maps everything else to worker_unlisted_failure; no worker text.
+WORKER_FAILURE_CODES = frozenset(
+    (
+        "birth_not_authorized",
+        "caller_owned_input_path",
+        "caller_writable_or_replaceable_input",
+        "caller_writable_or_unbound_import",
+        "changed_case_page_size",
+        "changed_shared_cleanup_budget",
+        "child_not_registered",
+        "cleanup_not_registered",
+        "cli_argument_limit",
+        "cli_output_limit",
+        "cli_output_or_eof_deadline",
+        "credential_in_cli_output",
+        "credential_oracle_missing",
+        "critical_input_binding_missing",
+        "duplicate_result_flag",
+        "identities_not_distinct_nonroot",
+        "import_root_binding_mismatch",
+        "input_substitution",
+        "invalid_cli_reply",
+        "invalid_identity_binding",
+        "invalid_protocol_frame",
+        "invalid_result_pin",
+        "invalid_state_nonce",
+        "manifest_binding_mismatch",
+        "missing_bound_input",
+        "missing_result_pin",
+        "nonempty_cli_stderr",
+        "protocol_broken_pipe",
+        "protocol_deadline",
+        "protocol_frame_limit",
+        "protocol_output_limit",
+        "protocol_write_deadline",
+        "retained_capabilities",
+        "shared_deadline_exhausted",
+        "state_changed_during_cleanup",
+        "state_parent_substitution",
+        "state_substitution",
+        "substituted_executable_or_helper",
+        "substituted_manifest_or_evidence",
+        "unapproved_cli_action",
+        "unapproved_query_arguments",
+        "unapproved_result_arguments",
+        "unbound_or_cyclic_input_path",
+        "unexpected_real_effective_saved_gid",
+        "unexpected_real_effective_saved_uid",
+        "unexpected_supplementary_groups",
+        "unexpected_worker_error",
+        "unknown_action",
+        "unsafe_state_cleanup_platform",
+        "worker_eof_or_partial_registration",
+        "worker_identity_unavailable",
+        "writable_manifest_or_evidence",
+    )
+)
+
+
+class WorkerFailure(ContainmentFatal):
+    """A worker's terminal frame. Only a listed fixed code is ever recorded."""
+
+    def __init__(self, frame: dict[str, Any]) -> None:
+        named = frame.get("fatal")
+        listed = [c for c in WORKER_FAILURE_CODES if len(frame) == 1 and c == named]
+        super().__init__("worker_" + (listed[0] if listed else "unlisted_failure"))
+
+
+def failure_code(error: BaseException) -> str:
+    return str(error) if isinstance(error, WorkerFailure) else type(error).__name__
+
+
 def remaining(deadline: float) -> float:
     value = deadline - time.monotonic()
     if not math.isfinite(value) or value <= 0:
@@ -193,10 +267,17 @@ class Ledger:
 
 
 class Channel:
-    def __init__(self, stream: Any, deadline: float, stderr: Any = None) -> None:
+    def __init__(
+        self,
+        stream: Any,
+        deadline: float,
+        stderr: Any = None,
+        worker_failures: bool = False,
+    ) -> None:
         self.stream = stream
         self.deadline = deadline
         self.stderr = stderr
+        self.worker_failures = worker_failures
         self.buffer = bytearray()
         self.total = 0
 
@@ -238,6 +319,8 @@ class Channel:
         value = json.loads(line)
         if not isinstance(value, dict):
             raise ContainmentFatal("invalid_protocol_frame")
+        if self.worker_failures and "fatal" in value:
+            raise WorkerFailure(value)
         return value
 
 
@@ -772,6 +855,7 @@ class Session:
             if action == "cleanup"
             else self.plan["deadline"],
             monitor.stderr,
+            worker_failures=True,
         )
         hello = channel.read()
         self.ledger.register(hello["identity"], self.plan)
@@ -794,7 +878,7 @@ class Session:
             self.monitor, self.channel = self.launch("run-case")
             send(self.monitor.stdin, {"env": self.environment}, self.plan["deadline"])
         except Exception as error:
-            self.fail(type(error).__name__ + "_before_worker_registration")
+            self.fail(failure_code(error) + "_before_worker_registration")
 
     def cli(self, args: list[str]) -> tuple[int, dict[str, Any]]:
         try:
@@ -822,7 +906,7 @@ class Session:
             )
             return reply["code"], reply["reply"]
         except Exception as error:
-            self.fail(type(error).__name__ + "_during_cli")
+            self.fail(failure_code(error) + "_during_cli")
 
     def close(self) -> None:
         if self.closed:
@@ -868,7 +952,7 @@ class Session:
             if self.ledger.fatal or self.ledger.birth_pending:
                 self.fail("fatal_cannot_be_cleared_by_cleanup")
         except Exception as error:
-            self.fail(type(error).__name__ + "_cleanup_unknown")
+            self.fail(failure_code(error) + "_cleanup_unknown")
 
 
 def main() -> int:
@@ -884,9 +968,24 @@ def main() -> int:
     raise ContainmentFatal("unknown_action")
 
 
+def report_worker_failure(code: str) -> None:
+    """The run-as worker's one bounded terminal frame: a listed fixed code only."""
+    listed = code if code in WORKER_FAILURE_CODES else "unexpected_worker_error"
+    try:
+        os.write(1, json.dumps({"fatal": listed}).encode() + b"\n")
+    except OSError:
+        pass
+
+
 if __name__ == "__main__":
     try:
         raise SystemExit(main())
-    except Exception:
+    except Exception as error:
         # No credential, environment, provider/server diagnostic or source data.
+        # Only the sudo-launched worker reports, and only a listed fixed code; a
+        # CLI child stays silent so its failure can never pass as a CLI reply.
+        if sys.argv[1:2] in (["run-case"], ["cleanup"]):
+            report_worker_failure(
+                str(error) if isinstance(error, ContainmentFatal) else ""
+            )
         raise SystemExit(1) from None

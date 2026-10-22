@@ -6,6 +6,8 @@ import io
 import json
 import os
 import shutil
+import signal
+import stat
 import subprocess
 import sys
 import tempfile
@@ -437,6 +439,120 @@ class HostedQueryHostProof(unittest.TestCase):
                     self.assertTrue(
                         (root / "query-host-containment-fatal.json").exists()
                     )
+
+    def test_client_writable_is_world_or_shared_group_write(self) -> None:
+        def info(mode: int, gid: int) -> os.stat_result:
+            return os.stat_result((mode, 0, 0, 1, 0, gid, 0, 0, 0, 0))
+
+        for mode, gid, expected in (
+            (stat.S_IFREG | 0o644, 1001, False),
+            (stat.S_IFREG | 0o646, 7, True),
+            (stat.S_IFREG | 0o664, 1001, True),
+            (stat.S_IFREG | 0o664, 7, False),
+            (stat.S_IFDIR | 0o775, 1001, True),
+            (stat.S_IFDIR | 0o755, 1001, False),
+        ):
+            with self.subTest(mode=oct(mode), gid=gid):
+                self.assertIs(hosted.client_writable(info(mode, gid), 1001), expected)
+
+    def test_precheck_refuses_inputs_the_run_as_worker_refuses(self) -> None:
+        def tree(root: Path) -> tuple[str, Path, list[str], int]:
+            (root / "bin").mkdir(mode=0o755)
+            python = root / "bin/python"
+            python.write_bytes(b"interpreter")
+            python.chmod(0o755)
+            helper = root / "query_host_cli_identity.py"
+            helper.write_bytes(b"helper")
+            helper.chmod(0o644)
+            lib = root / "lib"
+            (lib / "pkg").mkdir(mode=0o755, parents=True)
+            lib.chmod(0o755)
+            (lib / "a.py").write_bytes(b"a")
+            (lib / "pkg/b.py").write_bytes(b"b")
+            for item in (lib / "a.py", lib / "pkg/b.py"):
+                item.chmod(0o644)
+            root.chmod(0o755)
+            roots = [str(lib), str(root / "missing.zip")]
+            return str(python), helper, roots, lib.stat().st_gid
+
+        client = os.geteuid() + 1
+        changes: list[tuple[str, Any]] = [
+            ("world-writable module", lambda r: (r / "lib/a.py").chmod(0o666)),
+            ("shared-group directory", lambda r: (r / "lib/pkg").chmod(0o775)),
+            ("world-writable ancestor", lambda r: r.chmod(0o777)),
+            ("symlink in import root", lambda r: (r / "lib/c.py").symlink_to("a.py")),
+            ("missing helper", lambda r: (r / "query_host_cli_identity.py").unlink()),
+        ]
+        for label, change in [("clean", None), *changes]:
+            with self.subTest(label), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory) / "installed"
+                root.mkdir()
+                python, helper, roots, gid = tree(root)
+                if change is None:
+                    hosted.check_client_unwritable(python, helper, roots, client, gid)
+                    continue
+                change(root)
+                with self.assertRaises(ValueError):
+                    hosted.check_client_unwritable(python, helper, roots, client, gid)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "installed"
+            root.mkdir()
+            python, helper, roots, gid = tree(root)
+            with self.assertRaisesRegex(ValueError, "client-owned"):
+                hosted.check_client_unwritable(python, helper, roots, os.geteuid(), gid)
+            # A sticky, non-client directory over a non-client child stays usable,
+            # but cannot protect a missing search entry from creation.
+            root.chmod(0o1777)
+            hosted.check_client_unwritable(python, helper, roots[:1], client, gid)
+            with self.assertRaisesRegex(ValueError, "client-writable"):
+                hosted.check_client_unwritable(python, helper, roots, client, gid)
+
+    def test_driver_sets_umask_022_before_creating_anything(self) -> None:
+        events: list[tuple[str, object]] = []
+
+        def umask(mask: int) -> int:
+            events.append(("umask", mask))
+            return 0o002
+
+        argv = [
+            "run_hosted_qualification.py",
+            "--artifacts",
+            "/fictional/artifacts",
+            "--evidence",
+            "/fictional/evidence",
+            "--root",
+            "/fictional/root",
+            "--source-sha",
+            "a" * 40,
+        ]
+        env = {
+            "GITHUB_ACTIONS": "true",
+            "RUNNER_OS": "Linux",
+            "N1_TEST_DATABASE_URL": (
+                "postgresql://postgres:synthetic@127.0.0.1:5432/postgres"
+            ),
+        }
+        with (
+            patch.dict(os.environ, env),
+            patch.object(sys, "argv", argv),
+            patch.object(signal, "signal"),
+            patch.object(os, "umask", side_effect=umask),
+            patch.object(
+                Path,
+                "mkdir",
+                autospec=True,
+                side_effect=lambda path, *a, **k: events.append(("mkdir", str(path))),
+            ),
+            patch.object(
+                hosted,
+                "qualify",
+                side_effect=lambda *a: events.append(("qualify", None)),
+            ),
+        ):
+            hosted.main()
+        self.assertEqual(events[0], ("umask", 0o022))
+        self.assertEqual(events[1], ("mkdir", "/fictional/root"))
+        self.assertEqual(events[-1], ("qualify", None))
 
 
 if __name__ == "__main__":
