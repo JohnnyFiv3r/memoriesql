@@ -184,6 +184,15 @@ jobs:
           python -c 'import json; s=json.load(open("build/qualification/postgres-state.json")); assert s["Running"] is False and s["Pid"] == 0' || failed=1
           echo "$failed" > build/qualification/postgres-cleanup-exit.txt
           test "$failed" -eq 0
+      # Shown as skipped on push and pull-request runs without the independent
+      # authority, whose driver records the host proof as not run (no
+      # qualification); dispatched candidates always require it.
+      - name: Require the completed query host proof
+        if: github.event_name == 'workflow_dispatch' || vars.N1_TEST_CLI_IDENTITY_AUTHORITY_SHA256 != ''
+        run: >-
+          python -c 'import json;
+          q = json.load(open("build/qualification/qualification.json"));
+          assert q.get("host_proof") == {"outcome": "passed"} and q["proof_complete"] is True, q.get("host_proof")'
       - name: Retain complete proof exits and failures
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

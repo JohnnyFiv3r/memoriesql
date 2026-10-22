@@ -176,6 +176,18 @@ This adds no runner, deadline, privilege or release
 route. The helper keeps its existing40-command cap; current host composition and
 actual complete-suite/host timing remain to be qualified at their exact head.
 
+Push-to-main and qualifying pull-request runs run that host proof only when the
+independent `N1_TEST_CLI_IDENTITY_AUTHORITY_SHA256` authority is set. Without it
+the driver skips only the host proof: `qualification.json` records `host_proof:
+{"outcome": "not_run", "reason": "authority_not_granted"}` with `proof_complete:
+false`, the run carries a "Host proof not run" annotation and step summary, and
+each interpreter job's "Require the completed query host proof" step shows as
+skipped. Such a run is never a qualification: no outcome link, custody record or
+acceptance may cite it. A dispatched candidate or release always requires the host
+proof and still fails without the authority; on every admitted run that step
+requires the recorded host proof to have passed. The host proof itself, its cases,
+containment checks and authority pin are unchanged.
+
 The prepared two-identity CLI fixture remains disabled without its separately
 approved exact source/launcher/authority binding. This source preparation grants
 no sudo, account, group, capability or workflow privilege. Unknown process birth,

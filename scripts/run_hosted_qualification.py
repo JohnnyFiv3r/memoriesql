@@ -223,6 +223,19 @@ class Commands:
             self.finish(child)
 
 
+def host_proof_admitted() -> bool:
+    """Whether this run must run the query host proof.
+
+    A dispatched candidate or release always must: without the independent
+    authority, prepare_host_binding refuses it exactly as before. Push and
+    pull-request runs run the proof only once that authority is granted;
+    otherwise the proof is recorded as not run and the run is no qualification.
+    """
+    return os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch" or bool(
+        os.environ.get(HOST_ENV[2])
+    )
+
+
 def prepare_host_binding(
     runner: Commands, test_root: Path, python: str, sha: str, wheel: Path
 ) -> dict[str, str]:
@@ -1185,6 +1198,21 @@ def qualify(
                     restart_failures.append(str(error))
         if restart_failures:
             raise RuntimeError("; ".join(restart_failures))
+        if not host_proof_admitted():
+            metadata["host_proof"] = {
+                "outcome": "not_run",
+                "reason": "authority_not_granted",
+            }
+            notice = (
+                "Host proof NOT RUN: authority not granted. "
+                "This run is not a qualification."
+            )
+            print(f"::notice title=Host proof not run::{notice}", flush=True)
+            summary = os.environ.get("GITHUB_STEP_SUMMARY")
+            if summary:
+                with open(summary, "a") as stream:
+                    stream.write(f"**{notice}**\n")
+            return
         host_environment = prepare_host_binding(
             runner, test_root, installed_python, sha, wheel
         )
@@ -1195,6 +1223,7 @@ def qualify(
             test_root,
             env=host_environment,
         )
+        metadata["host_proof"] = {"outcome": "passed"}
         metadata["proof_complete"] = True
     except BaseException as error:
         metadata["failure"] = f"{type(error).__name__}: {error}"

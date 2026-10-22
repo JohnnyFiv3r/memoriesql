@@ -135,6 +135,9 @@ be `@fresh-fixture`. `N1_TEST_CLI_IDENTITY_AUTHORITY_SHA256` must independently
 match that approved record. Missing bindings fail before a process launch. Actual
 hosted image, account availability, ownership, import closure and successful
 cleanup remain unverified prerequisites, not evidence established by a JSON field.
+Push and pull-request runs without that authority record the host proof as not run
+and are no qualification (see `docs/ci-policy.md`); dispatched candidates still
+refuse without it.
 
 `import_roots` binds the complete ordered, absolute import search list, including
 nonexistent zip or directory candidates. The check covers each root itself,
