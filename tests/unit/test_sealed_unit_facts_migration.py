@@ -105,6 +105,7 @@ class SealedUnitFactsMigration(unittest.TestCase):
             "memoriesql.record_unit_query_facts();",
             "PRIMARY KEY(tenant_id,source_unit_id)",
             "record_sha256 text NOT NULL CHECK(record_sha256 ~ '^[a-f0-9]{64}$')",
+            "normalized_text text, CHECK((normalized IS TRUE)=(normalized_text IS NOT NULL)),",
         ):
             with self.subTest(statement=statement[:60]):
                 self.assertIn(statement, text)
@@ -134,6 +135,15 @@ class SealedUnitFactsMigration(unittest.TestCase):
             "FROM memoriesql.query_unit_package_record_v1(t,id) AS q(pkg)", facts
         )
         self.assertIn("WHERE q.pkg IS NOT NULL", facts)
+        # The sealed text is exactly the closure's text, read once by the writer.
+        text = (
+            "CASE WHEN (q.pkg->>'normalized')::boolean THEN (SELECT "
+            "string_agg(pp.content,'' ORDER BY pp.ordinal) FROM "
+            "memoriesql.evidence_package_parts pp WHERE pp.tenant_id=t AND "
+            "pp.package_id=(q.pkg->>'package_id')::uuid) END"
+        )
+        self.assertIn(text, package)
+        self.assertIn(text, facts)
 
     def test_trigger_and_backfill_share_the_one_definition(self) -> None:
         trigger = compact(functions(SQL)["record_unit_query_facts"][2])
@@ -157,22 +167,16 @@ class SealedUnitFactsMigration(unittest.TestCase):
             outside.index(backfill),
         )
 
-    def test_query_paths_read_no_part_row_except_normalized_text(self) -> None:
+    def test_query_paths_read_no_part_row(self) -> None:
         installed = latest()
         for name in ("query_unit_records_v1", "query_unit_package_v1"):
-            self.assertEqual(installed[name][0], MIGRATION.name)
-        records = compact(installed["query_unit_records_v1"][1])
-        self.assertNotIn("evidence_package_parts", records)
-        self.assertNotIn("query_unit_package_record_v1", records)
+            with self.subTest(function=name):
+                self.assertEqual(installed[name][0], MIGRATION.name)
+                body = compact(installed[name][1])
+                self.assertNotIn("evidence_package_parts", body)
+                self.assertNotIn("query_unit_package_record_v1", body)
         package = compact(installed["query_unit_package_v1"][1])
-        self.assertNotIn("query_unit_package_record_v1", package)
-        self.assertEqual(package.count("evidence_package_parts"), 1)
-        self.assertIn(
-            "'text',CASE WHEN f.normalized THEN (SELECT string_agg(pp.content,'' "
-            "ORDER BY pp.ordinal) FROM memoriesql.evidence_package_parts pp "
-            "WHERE pp.tenant_id=t AND pp.package_id=p.package_id) END)",
-            package,
-        )
+        self.assertIn("'normalized',f.normalized, 'text',f.normalized_text)", package)
         self.assertIn(
             "FROM memoriesql.logical_unit_query_facts f JOIN "
             "memoriesql.logical_unit_materializations m ON m.tenant_id=f.tenant_id "
@@ -189,6 +193,15 @@ class SealedUnitFactsMigration(unittest.TestCase):
                 if "query_unit_package_record_v1(" in body
             },
             {"unit_query_facts_v1"},
+        )
+        # Of this migration's functions, only the writer-time definition reads parts.
+        self.assertEqual(
+            [
+                n
+                for n, (_, _, body) in functions(SQL).items()
+                if "evidence_package_parts" in body
+            ],
+            ["unit_query_facts_v1"],
         )
 
     def test_records_differ_from_the_closure_only_in_the_digest_source(self) -> None:

@@ -2,16 +2,21 @@
 -- After hidden_package_length, a caller without source.raw.read is charged no
 -- bytes that vary with what is hidden, and no raw content is read; but every
 -- query still aggregated each part's inventory, raw lineage included, so time
--- tracked the hidden part count and lineage size. The digest and normalized
--- flag of a unit's pinned package are fixed once the unit is materialized:
--- the package is sealed and immutable, and the materialization pin is
--- insert-only. Record them once, there, and let queries read one row.
--- Digest values equal hidden_package_length's, so its saved results stay valid.
+-- tracked the hidden part count and lineage size, and a normalized unit's
+-- text was gathered part by part. The digest, the normalized flag and the
+-- normalized text of a unit's pinned package are fixed once the unit is
+-- materialized: the package is sealed and immutable, and the materialization
+-- pin is insert-only. Record them once, there; queries read one row and no
+-- part row at all. Values equal hidden_package_length's, so its saved results
+-- stay valid.
 
 CREATE TABLE memoriesql.logical_unit_query_facts (
  tenant_id uuid NOT NULL, source_unit_id uuid NOT NULL, package_id uuid NOT NULL,
  record_sha256 text NOT NULL CHECK(record_sha256 ~ '^[a-f0-9]{64}$'),
  normalized boolean,
+ -- Disclosable normalized text only; a raw or mixed package keeps none.
+ normalized_text text,
+ CHECK((normalized IS TRUE)=(normalized_text IS NOT NULL)),
  PRIMARY KEY(tenant_id,source_unit_id),
  FOREIGN KEY(tenant_id,source_unit_id) REFERENCES memoriesql.logical_unit_materializations(tenant_id,source_unit_id),
  FOREIGN KEY(tenant_id,package_id) REFERENCES memoriesql.evidence_packages(tenant_id,package_id)
@@ -23,12 +28,15 @@ CREATE TRIGGER unit_query_facts_immutable BEFORE UPDATE OR DELETE ON memoriesql.
  FOR EACH ROW EXECUTE FUNCTION memoriesql.guard_materialization_identity();
 
 -- The one definition of a unit's facts: exactly hidden_package_length's
--- record digest and text gate, computed from its full provenance record.
+-- record digest, text gate and text, computed from its full provenance record.
 CREATE FUNCTION memoriesql.unit_query_facts_v1(t uuid,id uuid) RETURNS memoriesql.logical_unit_query_facts
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog,memoriesql SET row_security=off AS $$
  SELECT t,id,(q.pkg->>'package_id')::uuid,
   memoriesql.lifecycle_hash_v1(q.pkg||jsonb_build_object('source_unit_id',id)),
-  (q.pkg->>'normalized')::boolean
+  (q.pkg->>'normalized')::boolean,
+  CASE WHEN (q.pkg->>'normalized')::boolean
+   THEN (SELECT string_agg(pp.content,'' ORDER BY pp.ordinal) FROM memoriesql.evidence_package_parts pp
+    WHERE pp.tenant_id=t AND pp.package_id=(q.pkg->>'package_id')::uuid) END
  FROM memoriesql.query_unit_package_record_v1(t,id) AS q(pkg)
  WHERE q.pkg IS NOT NULL
 $$;
@@ -79,10 +87,10 @@ BEGIN
   jsonb_build_object('kind','source_object','id',u.source_object_id::text,'row',jsonb_build_object('source_object_id',u.source_object_id)));
 END $$;
 
--- The population's package view: one facts row, the pin and the package row.
--- Parts are read only for normalized text, which the caller may see. The
--- unread provenance 'parts' list is no longer built; every other value is
--- hidden_package_length's.
+-- The population's package view: one facts row, the pin and the package row,
+-- never a part row; normalized text is the sealed copy, so reading it costs
+-- its visible length only. The unread provenance 'parts' list is no longer
+-- built; every other value is hidden_package_length's.
 CREATE OR REPLACE FUNCTION memoriesql.query_unit_package_v1(t uuid,id uuid) RETURNS jsonb
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog,memoriesql SET row_security=off AS $$
  SELECT jsonb_build_object(
@@ -94,9 +102,7 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog,memoriesql SET r
   'exclusions',COALESCE(p.declaration#>'{qualification,exclusions}','[]'::jsonb),
   'unresolved_coverage',COALESCE(p.declaration#>'{qualification,unresolved_coverage}','[]'::jsonb),
   'normalized',f.normalized,
-  'text',CASE WHEN f.normalized
-   THEN (SELECT string_agg(pp.content,'' ORDER BY pp.ordinal) FROM memoriesql.evidence_package_parts pp
-    WHERE pp.tenant_id=t AND pp.package_id=p.package_id) END)
+  'text',f.normalized_text)
  FROM memoriesql.logical_unit_query_facts f
  JOIN memoriesql.logical_unit_materializations m ON m.tenant_id=f.tenant_id AND m.source_unit_id=f.source_unit_id
  JOIN memoriesql.evidence_packages p ON p.tenant_id=m.tenant_id AND p.package_id=m.package_id
