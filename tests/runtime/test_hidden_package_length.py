@@ -242,6 +242,31 @@ class HiddenPackageLength(unittest.TestCase):
         self.assertIsNotNone(unit)
         return unit
 
+    def hidden_shape(self, world: World) -> tuple[int, int, int]:
+        """Parts, captured raw bytes and the widest raw-lineage offset behind a world."""
+        row = self.db.execute(
+            "SELECT count(DISTINCT pp.part_id),"
+            "sum((l->>'byte_end_exclusive')::bigint-(l->>'byte_start')::bigint),"
+            "max((l->>'byte_end_exclusive')::bigint) "
+            "FROM memoriesql.logical_unit_materializations m "
+            "JOIN memoriesql.evidence_package_parts pp "
+            "ON pp.tenant_id=m.tenant_id AND pp.package_id=m.package_id "
+            "CROSS JOIN LATERAL jsonb_array_elements(pp.inventory->'lineage') l "
+            "WHERE m.bead_id=ANY(%s)",
+            ([world.ledger, world.normalized, world.identity],),
+        ).fetchone()
+        assert row is not None
+        return int(row[0]), int(row[1]), int(row[2])
+
+    def unclosed_charge(self, world: World) -> int:
+        """What the same agent query retains before the closure is installed."""
+        run = self.r.start(world.agent)
+        _, reply = self.r.query(run, QUERY, page_size=50, secret=world.agent)
+        self.assertEqual(reply["outcome"], "available", reply)
+        self.assertEqual(reply["result"]["total_rows"], "3")
+        self.r.close(run, secret=world.agent)
+        return int(reply["work"]["retained_bytes"])
+
     def part_count(self, bead: UUID) -> int:
         count: int = self.scalar(
             "SELECT count(*) FROM memoriesql.logical_unit_materializations m "
@@ -467,6 +492,17 @@ class HiddenPackageLength(unittest.TestCase):
     def test_a_non_raw_agent_is_charged_the_same_whatever_raw_is_hidden(
         self,
     ) -> None:
+        # Pre-closure control: the worlds really differ behind their equal
+        # visible notes, and before the closure that difference is charged.
+        # Equality after it therefore cannot pass vacuously.
+        shapes = [self.hidden_shape(world) for world in self.worlds]
+        self.assertEqual([shape[0] for shape in shapes], [3, 3, 2 + self.PARTS])
+        self.assertLess(shapes[0][1], shapes[1][1])
+        self.assertEqual(shapes[1][1], shapes[2][1])
+        self.assertLess(len(str(shapes[0][2])), len(str(shapes[1][2])))
+        unclosed = [self.unclosed_charge(world) for world in self.worlds]
+        self.assertLess(unclosed[0], unclosed[1])
+        self.assertLess(unclosed[1], unclosed[2])
         self.upgrade()
         self.assertEqual(
             [self.part_count(world.identity) for world in self.worlds],
