@@ -384,6 +384,12 @@ class InspectRequest(Request):
         return self
 
 
+# At most 16 KiB per selected span, in binary byte units. Raw offsets are
+# bytes; normalized offsets are characters, so a request can bound only its
+# interval and the UTF-8 bytes are checked where the content is read.
+HYDRATION_SPAN_BYTES = 16384
+
+
 class HydrationSelection(FrozenContractModel):
     evidence_ref: Ref
     part_id: Ref
@@ -399,7 +405,8 @@ class HydrationSelection(FrozenContractModel):
             raise ValueError("reversed half-open interval")
         if self.representation == "raw_bytes" and self.lineage_ordinal is None:
             raise ValueError("raw selection requires recorded lineage ordinal")
-        if self.end - self.start > 16384:
+        # A span of more characters than this is always more bytes too.
+        if self.end - self.start > HYDRATION_SPAN_BYTES:
             raise ValueError("selected span allocation exceeded")
         return self
 

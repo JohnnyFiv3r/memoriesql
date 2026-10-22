@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import re
 import time
@@ -19,6 +20,7 @@ from psycopg.errors import InsufficientPrivilege
 from memoriesql.application.agent_sql_catalog import SqlCatalog
 from memoriesql.application.agent_sql_helpers import validate_helper_content
 from memoriesql.application.investigation_contracts import (
+    HydrateRequest,
     InspectRequest,
     parse_investigation_request,
 )
@@ -26,6 +28,7 @@ from memoriesql.infrastructure.postgres.agent_sql_results import (
     PostgresAgentSqlResults,
     _Failure,
 )
+from tests.unit.test_agent_sql_helpers import hydration_fixture
 
 
 class HelperDispatch(unittest.TestCase):
@@ -208,13 +211,45 @@ class HelperExecution(HelperDispatch):
             raise AssertionError(statement)
         return Mock(fetchone=Mock(return_value=(result,)))
 
-    def run_helper(self) -> dict[str, Any]:
+    def hydration(self, *texts: str) -> HydrateRequest:
+        """Make the prepared packet one normalized slice per text."""
+        request, content = hydration_fixture()
+        template = content["payload"]["hydration"]["slices"][0]
+        slices, selections = [], []
+        for text in texts:
+            item = copy.deepcopy(template)
+            item["evidence_pin"]["ref"] = str(uuid4())
+            item["evidence_pin"]["part"]["part_id"] = str(uuid4())
+            item.update(
+                end=len(text),
+                content=text,
+                returned_sha256=hashlib.sha256(text.encode()).hexdigest(),
+            )
+            slices.append(item)
+            selections.append(
+                request.selections[0].model_copy(
+                    update={
+                        "evidence_ref": item["evidence_pin"]["ref"],
+                        "part_id": item["evidence_pin"]["part"]["part_id"],
+                        "end": len(text),
+                    }
+                )
+            )
+        content["payload"]["hydration"]["slices"] = slices
+        self.packet["content"] = content
+        return request.model_copy(
+            update={"selections": tuple(selections), "max_bytes": 65536}
+        )
+
+    def run_helper(
+        self, request: InspectRequest | HydrateRequest | None = None
+    ) -> dict[str, Any]:
         start = time.monotonic()
         with patch(
             MODULE + ".relation_projection_frame", return_value=nullcontext(self.owner)
         ) as fence:
             data = self.service._helper(
-                self.request_value,
+                request or self.request_value,
                 "0" * 64,
                 self.admission,
                 start,
@@ -416,6 +451,56 @@ class HelperExecution(HelperDispatch):
             result["visibility"]["new_refs"][0]["ref"],
             original["observation"]["bead_id"],
         )
+
+    def disclosed_transport(self) -> list[int]:
+        return [
+            values[5]
+            for statement, values in self.sql
+            if "record_query_helper_disclosure_v1" in statement
+        ]
+
+    def test_hydration_delivers_64_kib_of_content_in_one_reply_under_the_cap(
+        self,
+    ) -> None:
+        # Hydration's 64 KiB per response is selected content (W4: sixteen
+        # calls carry 1 MiB plus metadata). Escaped, these four astral spans are
+        # about 196 KiB: still one reply under the 256 KiB whole-response cap.
+        texts = ("🙂" * 4096, "🍐" * 4096, "🌳" * 4096, "🚀" * 4096)
+        request = self.hydration(*texts)
+        self.assertEqual(sum(len(t.encode()) for t in texts), request.max_bytes)
+        result = self.run_helper(request)
+        self.assertFalse(result["has_more"])
+        self.assertEqual(
+            [item["content"] for item in result["hydration"]["slices"]], list(texts)
+        )
+        (transport,) = self.disclosed_transport()
+        self.assertEqual(transport, result["work"]["transport_bytes"])
+        self.assertGreater(transport, 65536)
+        self.assertLessEqual(transport, 262144)
+
+    def test_hydration_encoded_past_the_cap_pages_whole_spans(self) -> None:
+        # 64 KiB of control characters escapes six-fold, to about 384 KiB.
+        texts = tuple(chr(code) * 16384 for code in (1, 2, 3, 4))
+        result = self.run_helper(self.hydration(*texts))
+        self.assertTrue(result["has_more"])
+        self.assertEqual(
+            [item["content"] for item in result["hydration"]["slices"]],
+            list(texts[:2]),
+        )
+        (transport,) = self.disclosed_transport()
+        self.assertLessEqual(transport, 262144)
+
+    def test_a_span_that_cannot_fit_its_reserved_transport_is_never_truncated(
+        self,
+    ) -> None:
+        self.admission["reserved_transport"] = 65536
+        with self.assertRaises(_Failure) as caught:
+            self.run_helper(self.hydration("\x01" * 16384))
+        self.assertEqual(
+            (caught.exception.outcome, caught.exception.code),
+            ("budget_exhausted", "transport"),
+        )
+        self.assertEqual(self.disclosed_transport(), [])
 
     def test_replay_preserves_exact_page_even_when_a_smaller_page_would_fit(
         self,
@@ -643,6 +728,8 @@ class HelperBackendBoundary(unittest.TestCase):
             call = frame.execute.call_args
             self.assertIn("admit_query_delivery_v1", call.args[0])
             self.assertEqual(call.args[1][2:4], (kind, "b" * 64))
+            # Hydration's 64 KiB is content; its whole reply has the general cap.
+            self.assertEqual(call.args[1][5], 262144)
             self.assertEqual(frame.execute.call_count, 2)
 
     def test_authorization_failure_cannot_reach_helper_delivery_or_leak_details(

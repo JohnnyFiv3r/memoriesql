@@ -264,6 +264,37 @@ class HelperPayloadChecks(unittest.TestCase):
         self.assertEqual(base64.b64decode(item["bytes_base64"]), bytes([0, 255, 128]))
         self.assertIsNone(item["content"])
 
+    def test_selected_span_is_at_most_16_kib_of_actual_bytes(self) -> None:
+        # Normalized offsets are characters; the per-span limit is bytes.
+        for representation, data, accepted in (
+            ("normalized_text", ("é" * 8192).encode(), True),
+            ("normalized_text", ("🙂" * 4096).encode(), True),
+            ("normalized_text", ("a" + "é" * 8192).encode(), False),
+            ("normalized_text", ("🙂" * 4096 + "a").encode(), False),
+            ("raw_bytes", bytes(range(256)) * 64, True),
+        ):
+            text = data.decode() if representation == "normalized_text" else None
+            with self.subTest(representation=representation, size=len(data)):
+                request, content = hydration_fixture(representation)
+                end = len(data) if text is None else len(text)
+                selection = request.selections[0].model_copy(update={"end": end})
+                request = request.model_copy(
+                    update={"selections": (selection,), "max_bytes": 65536}
+                )
+                content["payload"]["hydration"]["slices"][0].update(
+                    end=end,
+                    content=text,
+                    bytes_base64=None
+                    if text is not None
+                    else base64.b64encode(data).decode(),
+                    returned_sha256=hashlib.sha256(data).hexdigest(),
+                )
+                if accepted:
+                    self.assertEqual(len(validate_helper_content(request, content)), 1)
+                else:
+                    with self.assertRaises(ValueError):
+                        validate_helper_content(request, content)
+
     def test_wrong_pin_representation_range_or_digest_refuses_whole_payload(
         self,
     ) -> None:
