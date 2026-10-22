@@ -159,6 +159,7 @@ jobs:
         shell: bash
         env:
           SOURCE_SHA: ${{ needs.package.outputs.source_sha }}
+          N1_TEST_CLI_IDENTITY_AUTHORITY_SHA256: ${{ vars.N1_TEST_CLI_IDENTITY_AUTHORITY_SHA256 }}
           PROOF_ROOT: ${{ runner.temp }}/qualification-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.python-version }}
         run: |
           unset PYTHONPATH
