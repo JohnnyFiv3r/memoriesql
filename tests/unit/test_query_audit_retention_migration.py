@@ -180,7 +180,7 @@ class QueryAuditRetentionMigration(unittest.TestCase):
         self.assertIn(
             "ON CONFLICT(tenant_id,decision_key) DO NOTHING; RETURN FOUND;", record
         )
-        self.assertIn("SELECT 1024::bigint", compact(SQL))
+        self.assertIn("SELECT 2048::bigint", compact(SQL))
 
     def test_duplicate_key_omits_only_each_rows_own_identifiers(self) -> None:
         create = re.search(

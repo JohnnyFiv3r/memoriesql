@@ -8,8 +8,10 @@
 -- is recorded once (C1). Row content and granularity are otherwise unchanged.
 
 -- Heap, index and attribution bytes of one retained audit row, with margin.
+-- Measured about 1.5 KB per row once expired rows' index pages are awaiting
+-- reuse, so the charge also covers that steady state.
 CREATE FUNCTION memoriesql.query_audit_row_bytes_v1() RETURNS bigint
-LANGUAGE sql IMMUTABLE SET search_path=pg_catalog AS $$ SELECT 1024::bigint $$;
+LANGUAGE sql IMMUTABLE SET search_path=pg_catalog AS $$ SELECT 2048::bigint $$;
 REVOKE ALL ON FUNCTION memoriesql.query_audit_row_bytes_v1() FROM PUBLIC;
 
 -- Write-time attribution of one audit row to its query delivery. Insert-only:

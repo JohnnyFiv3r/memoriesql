@@ -53,12 +53,14 @@ same way once it lands.
 
 ## Charge and expiry
 
-- **Charge.** Each retained attributed row is charged 1024 bytes, covering
-  heap, indexes and attribution, with margin. Reservations add the workspace's
-  retained audit charge to the 512 MiB workspace allocation
-  (`reserve_result_preparation_v1`, otherwise unchanged). The installed
-  capacity case measures physical growth against this charge at peak, and
-  again after expiry plus VACUUM.
+- **Charge.** Each retained attributed row is charged 2048 bytes, covering
+  heap, indexes and attribution, with margin. A first installed measurement
+  found about 1.5 KB per retained row once expired rows' index pages were
+  awaiting reuse. That exceeded the first value, 1024 bytes, so the charge
+  was raised before release. Reservations add the workspace's retained audit
+  charge to the 512 MiB workspace allocation (`reserve_result_preparation_v1`,
+  otherwise unchanged). The installed capacity case measures physical growth
+  against this charge at peak, and again after expiry plus VACUUM.
 - **When it counts.** The charge is post-hoc. It is counted by the next
   reservation, not reserved before execution, and it is not part of the
   128 MiB per-run allocation. A workspace can therefore exceed its

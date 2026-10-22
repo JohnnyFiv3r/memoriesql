@@ -33,7 +33,7 @@ else:
     import test_agent_sql_helpers_runtime as helpers
     from test_postgres_runtime import migrate
 
-ROW_BYTES = 1024
+ROW_BYTES = 2048
 WORKSPACE_BYTES = 536870912
 ATTRIBUTED = (
     "SELECT a.authorization_audit_event_id,a.resource_id,a.capability_key,a.decision,"
@@ -370,6 +370,19 @@ class QueryAuditRetention(unittest.TestCase):
             "SELECT pg_total_relation_size('memoriesql.authorization_audit_events')"
             "+pg_total_relation_size('memoriesql.query_audit_events')"
         )
+        relations = (
+            "SELECT c.relname,pg_relation_size(c.oid) FROM pg_class c "
+            "WHERE c.oid=ANY(%(tables)s::regclass[]) OR c.oid IN "
+            "(SELECT indexrelid FROM pg_index WHERE indrelid=ANY(%(tables)s::regclass[])) "
+            "ORDER BY c.relname"
+        )
+        tables = [
+            "memoriesql.authorization_audit_events",
+            "memoriesql.query_audit_events",
+        ]
+
+        def breakdown() -> dict[str, int]:
+            return dict(self.db.execute(relations, {"tables": tables}).fetchall())
 
         def pins(run: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
             private = self.inspect(run, self.h.normalized)
@@ -416,31 +429,37 @@ class QueryAuditRetention(unittest.TestCase):
         # Warm the attribution table's and its indexes' first pages.
         wave(1)
         expire_all()
-        base = self.scalar(size)
+        base, base_parts = self.scalar(size), breakdown()
         first = wave(256)
-        peak = self.scalar(size) - base
-        self.assertGreaterEqual(first, 256)
-        self.assertLessEqual(peak, first * ROW_BYTES, (peak, first))
-        self.assertEqual(expire_all(), first * ROW_BYTES)
+        peak, peak_parts = self.scalar(size) - base, breakdown()
+        released = expire_all()
         # Expired rows' space is reused once vacuumed (twice, so emptied index
-        # pages are recycled too): the whole footprint since the baseline stays
-        # within what the rows retained now are charged.
+        # pages can be recycled too); the whole footprint since the baseline
+        # must stay within what the rows retained now are charged.
         for _ in range(2):
             self.db.execute(
                 "VACUUM memoriesql.authorization_audit_events,memoriesql.query_audit_events"
             )
         second = wave(256)
-        steady = self.scalar(size) - base
-        self.assertGreaterEqual(second, 256)
-        self.assertLessEqual(steady, second * ROW_BYTES, (steady, second))
+        steady, steady_parts = self.scalar(size) - base, breakdown()
         self.capacity = {
             "row_charge_bytes": ROW_BYTES,
+            "relations_bytes": {
+                "baseline": base_parts,
+                "after_first_wave": peak_parts,
+                "after_expiry_vacuum_and_second_wave": steady_parts,
+            },
             "first_wave": {"rows": first, "physical_bytes": peak},
             "second_wave_after_expiry_and_vacuum": {
                 "rows": second,
                 "physical_bytes_since_baseline": steady,
             },
         }
+        self.assertGreaterEqual(first, 256)
+        self.assertGreaterEqual(second, 256)
+        self.assertLessEqual(peak, first * ROW_BYTES, (peak, first))
+        self.assertEqual(released, first * ROW_BYTES)
+        self.assertLessEqual(steady, second * ROW_BYTES, (steady, second))
 
 
 if __name__ == "__main__":
