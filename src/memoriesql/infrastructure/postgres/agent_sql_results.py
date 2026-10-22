@@ -78,12 +78,14 @@ from memoriesql.infrastructure.postgres.result_preparation import (
 
 ConnectionFactory = Callable[[], Connection[Any]]
 AccessRequest = QueryRequest | ReuseRequest | InspectRequest | HydrateRequest
-# The admitted delivery whose work runs in this context (M0047). Connections
-# opened for it name it; the kernel's audit writer attributes a row to it only
-# while it is a live, reserved delivery of the same principal.
-_AUDIT_DELIVERY: ContextVar[str | None] = ContextVar(
+# The admitted delivery whose work runs in this context, and the connections
+# opened for it (M0047). They name it for the session; the kernel's audit
+# writer attributes a row only while it is a live, reserved delivery of the
+# same principal, and any still open when it ends stop naming it.
+_AUDIT_DELIVERY: ContextVar[tuple[str, list[Connection[Any]]] | None] = ContextVar(
     "memoriesql_query_audit_delivery", default=None
 )
+_AUDIT_CLAIM = "SELECT set_config('memoriesql.query_audit_delivery',%s,false)"
 # Attributed audit rows one governed expiry call removes at most.
 _AUDIT_EXPIRY_ROWS = 4096
 # Earlier schemas have no audit retention; their cleanup and status are as before.
@@ -142,20 +144,31 @@ def _attributed(factory: ConnectionFactory) -> ConnectionFactory:
 
     def connect() -> Connection[Any]:
         connection = factory()
-        delivery = _AUDIT_DELIVERY.get()
-        if delivery is not None:
+        claim = _AUDIT_DELIVERY.get()
+        if claim is not None:
+            delivery, opened = claim
             try:
                 with connection.transaction():
-                    connection.execute(
-                        "SELECT set_config('memoriesql.query_audit_delivery',%s,false)",
-                        (delivery,),
-                    )
+                    connection.execute(_AUDIT_CLAIM, (delivery,))
             except BaseException:
                 connection.close()
                 raise
+            opened.append(connection)
         return connection
 
     return connect
+
+
+def _end_audit_claims(opened: list[Connection[Any]]) -> None:
+    """A connection still open when its delivery ends stops naming it."""
+    for connection in opened:
+        if connection.closed:
+            continue
+        try:
+            with connection.transaction():
+                connection.execute(_AUDIT_CLAIM, ("",))
+        except Error:
+            connection.close()
 
 
 def _helper_module_available() -> bool:
@@ -669,11 +682,13 @@ class PostgresAgentSqlResults:
         start: float,
     ) -> bytes:
         # Every connection opened for this delivery's work names it (M0047).
-        token = _AUDIT_DELIVERY.set(str(admission["delivery_ref"]))
+        opened: list[Connection[Any]] = []
+        token = _AUDIT_DELIVERY.set((str(admission["delivery_ref"]), opened))
         try:
             return self._owned_delivery(request, kind, fingerprint, admission, start)
         finally:
             _AUDIT_DELIVERY.reset(token)
+            _end_audit_claims(opened)
 
     def _owned_delivery(
         self,

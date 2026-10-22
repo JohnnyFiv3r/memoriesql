@@ -15,7 +15,11 @@ row to a query, so attribution is explicit and recorded at write time:
 
 - **The claim.** The trusted executor names its admitted delivery on every
   connection it opens for that delivery's work (session setting
-  `memoriesql.query_audit_delivery`).
+  `memoriesql.query_audit_delivery`). The restricted query executor opens
+  its connections the same way. Any connection still open when the delivery
+  ends stops naming it, and one that cannot is closed. A host composition
+  must keep this: delivery work runs only on connections opened through the
+  executor's factory, never on pooled connections the clearing cannot reach.
 - **The verification.** The kernel writer `application_authorize_resource`
   attributes a row only while that delivery is reserved and unexpired, and its
   run is owned by the exact current principal tuple. These are the checks that
@@ -36,7 +40,12 @@ same way once it lands.
   statement time and every audit column except the row's own event id and the
   caller's per-call request id.
 - **What is preserved.** Every distinct decision, and at least one row per
-  resource and statement, is kept.
+  resource and statement, is kept. The number of times one statement
+  repeated an identical check is not recorded, and neither are the dropped
+  rows' unreferenced per-call request ids.
+- **Scope.** Only query-attributed rows are deduplicated; every other
+  decision is written exactly as before. Widening the key, for example
+  across statements, would need a new owner decision.
 - **Readers.** The only readers that match rows are row-security policies in
   M0013/M0014. They use `EXISTS` on a request id that their own functions set,
   outside query work. No later migration sets such a request id. A DB-free test
@@ -47,7 +56,14 @@ same way once it lands.
 - **Charge.** Each retained attributed row is charged 1024 bytes, covering
   heap, indexes and attribution, with margin. Reservations add the workspace's
   retained audit charge to the 512 MiB workspace allocation
-  (`reserve_result_preparation_v1`, otherwise unchanged).
+  (`reserve_result_preparation_v1`, otherwise unchanged). The installed
+  capacity case measures physical growth against this charge at peak, and
+  again after expiry plus VACUUM.
+- **When it counts.** The charge is post-hoc. It is counted by the next
+  reservation, not reserved before execution, and it is not part of the
+  128 MiB per-run allocation. A workspace can therefore exceed its
+  allocation by at most one run's audit growth before further reservations
+  are refused.
 - **Expiry.** `expire_query_audits_v1` deletes due rows oldest first, bounded
   per call. Their attribution goes with them, and so does their charge. The
   host's `cleanup_expired` runs it after the query-state pass, and run start
@@ -61,10 +77,12 @@ same way once it lands.
 
 ## Limits
 
-- **Post-hoc charges.** Charges are accounted after the fact, like transport.
-  Page reads and reuse reserve no allocation, so their audit is charged but
-  never refused. It is bounded by run and workspace access, time and transport
-  budgets, and by expiry.
+- **Reads are never refused for audit.** Page reads and reuse reserve no
+  allocation, so their audit is charged but does not refuse them. It is
+  bounded by run and workspace access, time and transport budgets, and by
+  expiry.
+- **Overdue rows.** Overdue audit rows are reported in status but do not
+  gate admission. Their charge still bounds storage.
 - **Erasure.** Governed erasure does not yet remove attributed rows before
   their window ends.
 - **Trust in the host.** The claim is a trusted-host statement checked against
@@ -86,14 +104,19 @@ DB-free (`tests/unit/test_query_audit_retention_migration.py`):
 Executor (`tests/unit/test_agent_sql_results.py`):
 
 - only connections opened for a delivery carry its claim, including
-  restricted-query connections.
+  restricted-query connections;
+- a connection still open at the delivery's end stops naming it, and one
+  that cannot is closed.
 
 Installed runtime cases (`tests/runtime/test_query_audit_retention.py`):
 
-- attribution and non-attribution;
+- every audit row of a query (population, commit and page), a page re-read
+  (reuse), an inspection and a hydration is attributed to its own delivery;
+- claims outside a live delivery attribute nothing;
 - one row per decision and statement;
 - expiry and release;
 - every refused update and delete;
 - the reservation decision flipping on the retained charge;
-- a small capacity check that audit growth stays at or below its charge and is
-  released.
+- a capacity check over two waves of at least 256 rows. Physical growth of
+  both tables with all indexes stays at or below the charge at peak. After
+  expiry and VACUUM, the whole footprint stays within what is charged again.

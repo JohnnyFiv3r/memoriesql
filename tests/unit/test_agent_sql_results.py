@@ -666,10 +666,50 @@ class QueryAuditAttribution(unittest.TestCase):
         opened[1].execute.assert_not_called()
         self.assertIsNone(_AUDIT_DELIVERY.get())
 
+    def deliver_opening(self, *connections: MagicMock) -> str:
+        """Run one delivery whose work opens these connections and leaves them."""
+        service: Any = object.__new__(PostgresAgentSqlResults)
+        service._control = _attributed(Mock(side_effect=list(connections)))
+
+        def work(*_args: Any) -> bytes:
+            for _ in connections:
+                service._control()
+            return b"delivered"
+
+        service._owned_delivery = Mock(side_effect=work)
+        delivery = str(uuid4())
+        request = parse_investigation_request(
+            json.dumps(HelperDispatch().request("inspect")).encode()
+        )
+        admission = {"delivery_ref": delivery}
+        delivered = service._deliver(request, "inspect", "f" * 64, admission, 0.0)
+        self.assertEqual(delivered, b"delivered")
+        return delivery
+
+    def test_a_connection_still_open_when_its_delivery_ends_stops_naming_it(
+        self,
+    ) -> None:
+        kept, closed = MagicMock(closed=False), MagicMock(closed=True)
+        delivery = self.deliver_opening(kept, closed)
+        self.assertEqual(
+            kept.execute.call_args_list,
+            [call(self.CLAIM, (delivery,)), call(self.CLAIM, ("",))],
+        )
+        self.assertEqual(closed.execute.call_args_list, [call(self.CLAIM, (delivery,))])
+        kept.close.assert_not_called()
+
+    def test_a_connection_that_cannot_stop_naming_its_delivery_is_closed(
+        self,
+    ) -> None:
+        broken = MagicMock(closed=False)
+        broken.execute.side_effect = [None, OperationalError("fictional lost")]
+        self.deliver_opening(broken)
+        broken.close.assert_called_once_with()
+
     def test_a_connection_that_cannot_name_its_delivery_is_closed(self) -> None:
         connection = MagicMock()
         connection.execute.side_effect = OperationalError("fictional lost connection")
-        token = _AUDIT_DELIVERY.set(str(uuid4()))
+        token = _AUDIT_DELIVERY.set((str(uuid4()), []))
         try:
             with self.assertRaises(OperationalError):
                 _attributed(lambda: connection)()
@@ -688,7 +728,7 @@ class QueryAuditAttribution(unittest.TestCase):
         )
         self.assertIs(service._executor._control_factory, service._control)
         delivery = str(uuid4())
-        token = _AUDIT_DELIVERY.set(delivery)
+        token = _AUDIT_DELIVERY.set((delivery, []))
         try:
             service._executor._control_factory()
         finally:

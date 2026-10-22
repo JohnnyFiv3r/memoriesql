@@ -139,33 +139,50 @@ class QueryAuditRetention(unittest.TestCase):
 
     # -- cases -------------------------------------------------------------
 
-    def test_query_work_is_attributed_to_its_live_delivery_and_nothing_else(
+    def test_every_query_operation_attributes_all_its_audit_and_nothing_else_does(
         self,
     ) -> None:
+        # Both ways: every audit row a query (population, commit and its page),
+        # a page re-read (reuse), an inspection and a hydration write is
+        # attributed to its own delivery, and no row outside a live one is.
         before = self.audit_rows()
         run = self.r.start()
-        reply = self.inspect(run, self.h.normalized)
-        delivery = reply["access_receipt_ref"]
-        pin = reply["inspection"]["evidence_pins"][0]
-        rows = self.attributed(delivery)
-        self.assertTrue(rows)
-        for (
-            _event,
-            _resource,
-            _capability,
-            _decision,
-            recorded,
-            ref,
-            space,
-            expires,
-        ) in rows:
-            self.assertEqual((str(ref), space), (delivery, self.fixture.workspace))
+        _, result = self.r.query(
+            run,
+            "SELECT s.statement_id,s.bead_id,e.evidence_ref FROM memory_v1.statements s "
+            "JOIN memory_v1.statement_sources e ON e.statement_id=s.statement_id "
+            "ORDER BY s.statement_id,e.evidence_ref",
+            page_size=50,
+        )
+        self.assertEqual(result["outcome"], "available", result)
+        reused = self.r.reuse(run, result["result"], page_size=50)
+        self.assertEqual(reused["outcome"], "available", reused)
+        inspected = self.inspect(run, self.h.normalized)
+        pin = inspected["inspection"]["evidence_pins"][0]
+        raw, hydrated = self.h.send(self.h.hydration(run, pin))
+        self.h.available(raw, hydrated)
+        operations = {
+            name: reply["access_receipt_ref"]
+            for name, reply in (
+                ("query", result),
+                ("reuse", reused),
+                ("inspect", inspected),
+                ("hydrate", hydrated),
+            )
+        }
+        rows = self.attributed()
+        per_delivery = Counter(str(row[5]) for row in rows)
+        for name, delivery in operations.items():
+            self.assertGreater(per_delivery[delivery], 0, name)
+        self.assertEqual(set(per_delivery), set(operations.values()))
+        for *_head, recorded, _ref, space, expires in rows:
+            self.assertEqual(space, self.fixture.workspace)
             self.assertEqual(expires - recorded, timedelta(days=30))
         self.assertEqual(self.audit_rows() - before, len(rows))
         # The same principal's own decisions are kept as before: a claim that
         # names no live, reserved delivery attributes nothing.
         source = self.source_of(pin)
-        for claim in ("not-a-delivery", str(uuid4()), delivery):
+        for claim in ("not-a-delivery", str(uuid4()), operations["hydrate"]):
             self.authorize_outside_query_work(source, claim)
         self.assertEqual(self.audit_rows() - before, len(rows) + 3)
         self.assertEqual(len(self.attributed()), len(rows))
@@ -362,39 +379,68 @@ class QueryAuditRetention(unittest.TestCase):
                 visible["inspection"]["evidence_pins"][0],
             )
 
-        run = self.r.start()
-        private, visible = pins(run)
-        start_size, start_rows = self.scalar(size), len(self.attributed())
-        runs = accesses = 0
-        while len(self.attributed()) - start_rows < 256 and runs < 3:
-            if accesses >= 120:
-                # Stay inside one run's 128 accesses; at most two runs are active.
-                self.r.close(run)
-                run, accesses, runs = self.r.start(), 0, runs + 1
-                private, visible = pins(run)
-            request = self.h.hydration(run, private)
-            request["selections"].append(
-                dict(self.h.hydration(run, visible)["selections"][0], end=20)
+        def wave(target: int) -> int:
+            """Hydrate two sources per delivery until `target` rows are added."""
+            start, runs, accesses = len(self.attributed()), 0, 0
+            run = self.r.start()
+            private, visible = pins(run)
+            while len(self.attributed()) - start < target and runs < 3:
+                if accesses >= 120:
+                    # Stay inside one run's 128 accesses.
+                    self.r.close(run)
+                    run, accesses, runs = self.r.start(), 0, runs + 1
+                    private, visible = pins(run)
+                request = self.h.hydration(run, private)
+                request["selections"].append(
+                    dict(self.h.hydration(run, visible)["selections"][0], end=20)
+                )
+                raw, hydrated = self.h.send(request)
+                self.h.available(raw, hydrated)
+                accesses += 1
+            self.r.close(run)
+            return len(self.attributed()) - start
+
+        def expire_all() -> int:
+            self.db.execute(
+                "UPDATE memoriesql.query_audit_events "
+                "SET expires_at=clock_timestamp()-interval '1 second'"
             )
-            raw, hydrated = self.h.send(request)
-            self.h.available(raw, hydrated)
-            accesses += 1
-        grown = self.scalar(size) - start_size
-        rows = len(self.attributed()) - start_rows
-        self.assertGreaterEqual(rows, 256)
-        self.assertLessEqual(grown, rows * ROW_BYTES, (grown, rows, grown / rows))
-        retained = self.retention()["retained"]
-        self.assertEqual(retained["charged_bytes"], len(self.attributed()) * ROW_BYTES)
-        self.db.execute(
-            "UPDATE memoriesql.query_audit_events SET expires_at=clock_timestamp()-interval '1 second'"
-        )
-        cleanup = json.loads(self.r.service().cleanup_expired())
-        self.assertEqual(
-            cleanup["cleanup"]["audits"]["released_bytes"], retained["charged_bytes"]
-        )
-        self.assertEqual(
-            self.retention()["retained"], {"audit_rows": 0, "charged_bytes": 0}
-        )
+            cleanup = json.loads(self.r.service().cleanup_expired())
+            self.assertEqual(cleanup["outcome"], "available", cleanup)
+            released: int = cleanup["cleanup"]["audits"]["released_bytes"]
+            self.assertEqual(
+                self.retention()["retained"], {"audit_rows": 0, "charged_bytes": 0}
+            )
+            return released
+
+        # Warm the attribution table's and its indexes' first pages.
+        wave(1)
+        expire_all()
+        base = self.scalar(size)
+        first = wave(256)
+        peak = self.scalar(size) - base
+        self.assertGreaterEqual(first, 256)
+        self.assertLessEqual(peak, first * ROW_BYTES, (peak, first))
+        self.assertEqual(expire_all(), first * ROW_BYTES)
+        # Expired rows' space is reused once vacuumed (twice, so emptied index
+        # pages are recycled too): the whole footprint since the baseline stays
+        # within what the rows retained now are charged.
+        for _ in range(2):
+            self.db.execute(
+                "VACUUM memoriesql.authorization_audit_events,memoriesql.query_audit_events"
+            )
+        second = wave(256)
+        steady = self.scalar(size) - base
+        self.assertGreaterEqual(second, 256)
+        self.assertLessEqual(steady, second * ROW_BYTES, (steady, second))
+        self.capacity = {
+            "row_charge_bytes": ROW_BYTES,
+            "first_wave": {"rows": first, "physical_bytes": peak},
+            "second_wave_after_expiry_and_vacuum": {
+                "rows": second,
+                "physical_bytes_since_baseline": steady,
+            },
+        }
 
 
 if __name__ == "__main__":
