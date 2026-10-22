@@ -32,6 +32,7 @@ from memoriesql.infrastructure.postgres.agent_sql_authority import (
 from memoriesql.infrastructure.postgres.agent_sql_results import (
     PostgresAgentSqlResults,
 )
+from memoriesql.infrastructure.postgres.migration_runner import discover_migrations
 from memoriesql.infrastructure.postgres.query_reader_provisioning import (
     provision_query_reader,
 )
@@ -82,7 +83,12 @@ class CliQueryResults(unittest.TestCase):
         self.addCleanup(self.h.doCleanups)
         self.fixture = self.h.fixture
         self.db = self.h.db
-        migrate(self.db, expected_current_version=34, target_version=39)
+        # The shipped head schema: every installed definition the CLI depends on.
+        migrate(
+            self.db,
+            expected_current_version=34,
+            target_version=discover_migrations()[-1].version,
+        )
         self.reader = "pr06_cli_" + uuid4().hex
         self.profile = provision_query_reader(self.db, self.reader, READER_PASSWORD)
         self.addCleanup(self.drop_reader)
