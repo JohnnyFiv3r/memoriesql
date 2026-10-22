@@ -63,9 +63,11 @@ same way once it lands.
   footprint against this charge over repeated expiry and VACUUM cycles.
 - **When it counts.** The charge is post-hoc. It is counted by the next
   reservation, not reserved before execution, and it is not part of the
-  128 MiB per-run allocation. A workspace can therefore exceed its
-  allocation by at most one run's audit growth before further reservations
-  are refused.
+  128 MiB per-run allocation. Queries, inspections and hydrations are refused
+  once the retained charge leaves too little allocation. Work already admitted
+  still adds its audit first, and page reads and reuse are never refused for
+  audit. The charged total can therefore exceed the allocation, bounded by the
+  access, time and transport budgets and the 30-day window.
 - **Expiry.** `expire_query_audits_v1` deletes due rows oldest first, bounded
   per call. Their attribution goes with them, and so does their charge. The
   host's `cleanup_expired` runs it after the query-state pass, and run start
@@ -85,6 +87,13 @@ same way once it lands.
   expiry.
 - **Overdue rows.** Overdue audit rows are reported in status but do not
   gate admission. Their charge still bounds storage.
+- **Vacuum.** The charge tracks physical size only while autovacuum keeps up.
+  Expired rows' space, including emptied index pages, is reused only after
+  VACUUM, and only when no long-lived snapshot holds back the transaction
+  horizon. The expiry pass itself does not vacuum.
+- **Measured scale and pattern.** The capacity case measured 256-row waves,
+  each expiring everything. Larger volumes, and the rolling 30-day expiry of
+  production, were not executed.
 - **Erasure.** Governed erasure does not yet remove attributed rows before
   their window ends.
 - **Trust in the host.** The claim is a trusted-host statement checked against
