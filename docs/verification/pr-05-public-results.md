@@ -74,10 +74,33 @@ authorized agent now receives its normalized projection, within these bounds:
   package's own declared limits (`package_exclusion:…`, `package_unresolved:…`).
   It is never described as raw evidence or as sanitized.
 - **Closure.** The pin, its parts' hashes and derivations, and their raw lineage
-  join the sealed dependency closure as a `unit_package` record. Reuse
+  are bound into the sealed dependency closure by a `unit_package` record. Reuse
   reauthorizes it whole, and the disclosure receipt binds the exact delivered
   response. The raw lineage is noncontent provenance that is never disclosed to
   agents; raw bytes stay owner-only.
+- **Hidden length (forward migration `hidden_package_length`).** For a
+  caller without `source.raw.read`, retained bytes, remaining allocation, the
+  `max_result_bytes` threshold and the visible rows no longer vary with hidden
+  raw content, part count or raw-lineage offsets. Database time no longer
+  reads raw content, but it still tracks the part count and lineage size (see
+  the residual below):
+  - Package text is concatenated only for a normalized package. An identity or
+    mixed package's raw parts are never read, and every package value is
+    unchanged.
+  - The `unit_package` record holds only the fixed-width digest
+    `content_sha256` of the full record. The full record is built internally
+    to be hashed, so every frame still binds it, and reuse compares digests.
+    The population estimate, the stored dependency records, their charge and
+    the `max_result_bytes` threshold therefore do not vary with what is
+    hidden.
+  - A result saved before this migration keeps the full record, no longer
+    rebuilds equal, and refuses as unavailable. Results last at most 30 days,
+    so there is no dual acceptance.
+  - Residual, a recorded privacy release blocker: package reads still visit
+    every part row's inventory, raw lineage included, so database time tracks
+    the part count (at most 256) and lineage size, though never the raw byte
+    length. The fix stores per-materialization facts (the record digest and
+    the normalized flag) once at seal time, so queries read one row per unit.
 
 Units that retain their own text (not materialized) return it as before.
 
