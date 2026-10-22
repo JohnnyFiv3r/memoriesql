@@ -20,6 +20,7 @@ from memoriesql.application.assessed_relation_lifecycle import ProjectedAssertio
 from memoriesql.application.authored_relations import RelationTypeDefinition
 from memoriesql.application.evidence_packages import NativeFacts, SourceQualification
 from memoriesql.application.investigation_contracts import (
+    HYDRATION_SPAN_BYTES,
     AccessContext,
     HydrateRequest,
     InspectRequest,
@@ -757,6 +758,8 @@ def validate_helper_content(
                 raw = base64.b64decode(item["bytes_base64"], validate=True)
                 if len(raw) != selection.end - selection.start:
                     raise ValueError("helper raw interval mismatch")
+            if len(raw) > HYDRATION_SPAN_BYTES:
+                raise ValueError("helper hydration span allocation exceeded")
             if hashlib.sha256(raw).hexdigest() != item["returned_sha256"]:
                 raise ValueError("helper span digest mismatch")
             amount += len(raw)
