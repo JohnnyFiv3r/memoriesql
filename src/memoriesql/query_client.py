@@ -1,0 +1,452 @@
+"""CLI client for `memoriesql.agent-sql-results.v1` through a trusted executor.
+
+The executor is the sole holder of the trusted control and restricted reader
+connections. This client only assembles closed request bytes, persists the
+caller's current run reference and prints the executor's closed reply; it never
+executes SQL, repairs a refusal or retries a budgeted operation.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import sys
+from collections.abc import Callable, Mapping
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from typing import Any, Protocol
+from uuid import UUID, uuid4
+
+from memoriesql.application.agent_sql_catalog import SqlCatalog
+from memoriesql.application.agent_sql_results import (
+    AGENT_RELATION_TABLES,
+    BASELINE_POLICY,
+    CONTRACT_ID,
+    CONTRACT_VERSION,
+    OBSERVATION_TABLES,
+    PREPARED_RELATIONS,
+    RELATION_HISTORY_TABLES,
+)
+from memoriesql.application.investigation_contracts import result_json_bytes
+from memoriesql.contracts import load_catalog
+
+# The executor's own canonical unavailable reply; transports return it verbatim.
+UNAVAILABLE_REPLY = result_json_bytes(
+    {
+        "contract_version": CONTRACT_VERSION,
+        "outcome": "unavailable",
+        "error": {"code": "unavailable"},
+    }
+)
+
+# Rotate before the database refuses an expired run; never retry a refusal.
+RUN_ROTATION_MARGIN = timedelta(seconds=60)
+MAX_SQL_BYTES = 32768
+MAX_PARAMETER_FILE_BYTES = 65536 + 4096
+EVALUATION_RELATION = "evaluation_v1.candidates"
+ADMISSION_RULES = (
+    "Every value is a `$n` typed parameter; SQL literals are refused except "
+    "structural ones such as LIMIT/OFFSET and date_trunc units. Parameters may "
+    "be written without spaces, as in `IN ($1,$2)`.",
+    "Bind an identifier with its column's reference type, never `uuid`: the "
+    "parameter type is the column's reference_kind, with `[]` for an array. "
+    "`WHERE ss.statement_id = ANY($1::uuid[])` takes `statement_ref[]`; the cast "
+    "in the SQL stays the physical type, and a scalar needs none. "
+    "`relation_type_key` is text and `relation_type_revision` is bigint. A plain "
+    "`uuid` or `uuid[]` replies invalid_request with error "
+    '{"code": "type", "feature": "reference_type", "position": N}.',
+    "An identifier the caller cannot see, typically one no earlier result "
+    'returned, replies unavailable with {"code": "unavailable"}, and nothing '
+    "says which one.",
+    "These comparisons work: `=` on every type; all six comparisons on bigint "
+    "and numeric; `<>` against a boolean parameter (`flag <> $1`, and "
+    "`NOT (flag = $1)`); `= ANY` and `IN` with 1 to 64 values on every type; "
+    "negated membership (`NOT IN`, `NOT (x = ANY(...))`) with 9 to 64 values on "
+    "every type, and at any size on bigint and numeric. A comparison with a "
+    "NULL parameter matches no rows and is never refused, so "
+    "`$1 IS NULL OR kind = $1` switches a filter off with a NULL.",
+    "Operators the reader cannot run reply unsupported_query with error "
+    '{"code": "feature", "feature": "unreviewed_operator", "position": N}: '
+    "`<>`, `<`, `<=`, `>` and `>=` on text, identifiers and timestamps (so no "
+    "time ranges) and `NOT (a = b)` on those types; `<>` between two booleans "
+    "and `<`, `<=`, `>` and `>=` on booleans; LIKE, ILIKE, NOT LIKE and NOT "
+    "ILIKE; unary minus; and `NOT IN` or `NOT (x = ANY(...))` with 2 to 8 values "
+    "on text, identifiers, booleans or timestamps.",
+    "Parenthesize a comparison or IS test that is a comparison's operand: "
+    "PostgreSQL reads `x = y IS NULL` as `(x = y) IS NULL` and never chains "
+    "`a = b = $1`, so both reply unsupported_query with error "
+    '{"code": "feature", "feature": "comparison_grouping", "position": N} at the '
+    "comparison's first operand. `(x = y) IS NULL` runs as written.",
+    "`position` is the 0-based character offset, in the SQL as sent, of the "
+    "first operand of the refused operator, or of the `$` of a parameter.",
+    "Aggregate window functions need an explicit ROWS frame.",
+    "`memoriesql query` sends no recursion declaration in this release, so a "
+    "query using `WITH RECURSIVE` never runs through it: it replies "
+    'invalid_request with error {"code": "binding"}, without a feature or a '
+    "position.",
+    "Other refused constructs reply invalid_request or unsupported_query with a "
+    "code and position; project a column instead of `EXISTS (SELECT 1 ...)`.",
+)
+# The unit text agents receive, as the executor labels it in coverage gaps.
+SOURCE_TEXT = (
+    "memory_v1.source_units.search_text is the normalized text of an authorized "
+    "source unit: for a materialized unit, the pinned package's normalized "
+    "projection when every part is producer-normalized; otherwise text_state is "
+    "unsupported and only the citation is returned. It is never raw bytes, "
+    "exact source or a clause-level citation."
+)
+
+
+class ResultsTransport(Protocol):
+    """Closed bytes in, closed bytes out; implemented by the trusted executor."""
+
+    def start_run(self) -> bytes: ...
+
+    def handle(self, request: bytes) -> bytes: ...
+
+
+class TrustedHostTransport:
+    """Direct executor for a credential-isolated trusted host process only.
+
+    It holds the trusted control login and the restricted reader login, builds
+    the reviewed reader profile at process start, refuses a pinned-profile
+    mismatch and settles abandoned deliveries once. Never compose it inside an
+    agent's shell: the agent must receive neither connection credential.
+    """
+
+    def __init__(
+        self,
+        *,
+        control_url: str,
+        reader_url: str,
+        reader_role: str,
+        pinned_profile_sha256: str | None,
+        credential_sha256: str,
+        workspace_id: UUID,
+    ) -> None:
+        self._control_url = control_url
+        self._reader_url = reader_url
+        self._reader_role = reader_role
+        self._pin = pinned_profile_sha256
+        self._credential = credential_sha256
+        self._workspace = workspace_id
+        self._executor: Any = None
+
+    def _connect_control(self) -> Any:
+        import psycopg
+
+        return psycopg.connect(self._control_url, autocommit=True)
+
+    def _connect_reader(self) -> Any:
+        import psycopg
+
+        return psycopg.connect(self._reader_url, autocommit=True)
+
+    def _service(self) -> Any:
+        if self._executor is not None:
+            return self._executor
+        from memoriesql.infrastructure.postgres.agent_sql_authority import (
+            qualify_query_authority,
+        )
+        from memoriesql.infrastructure.postgres.agent_sql_results import (
+            PostgresAgentSqlResults,
+        )
+        from memoriesql.infrastructure.postgres.query_reader_provisioning import (
+            reviewed_query_reader_profile,
+        )
+
+        with self._connect_control() as control:
+            profile = reviewed_query_reader_profile(control, self._reader_role)
+            if (
+                self._pin is not None
+                and qualify_query_authority(control, profile).profile_sha256
+                != self._pin
+            ):
+                raise PermissionError("reviewed reader profile drifted")
+        executor = PostgresAgentSqlResults(
+            control_factory=self._connect_control,
+            reader_factory=self._connect_reader,
+            authority_profile=profile,
+            credential_sha256=self._credential,
+            workspace_id=self._workspace,
+        )
+        executor.recover_abandoned()
+        self._executor = executor
+        return executor
+
+    def start_run(self) -> bytes:
+        try:
+            return bytes(self._service().start_run())
+        except Exception:
+            # Configuration, drift and lost-connection failures disclose no
+            # connection detail. A delivery admitted before its connection
+            # failed is settled as abandoned when an executor next starts.
+            return UNAVAILABLE_REPLY
+
+    def handle(self, request: bytes) -> bytes:
+        try:
+            return bytes(self._service().handle(request))
+        except Exception:
+            return UNAVAILABLE_REPLY
+
+
+class RunStore:
+    """One persisted run per principal and workspace, never a credential."""
+
+    def __init__(self, root: Path, *, credential_sha256: str, workspace_id: UUID):
+        key = hashlib.sha256(f"{workspace_id}:{credential_sha256}".encode()).hexdigest()
+        self._path = root / "runs" / f"{key[:32]}.json"
+
+    def current(
+        self, transport: ResultsTransport, *, now: datetime, fresh: bool = False
+    ) -> dict[str, Any] | bytes:
+        """Return the reusable run, or the executor's refusal bytes.
+
+        `fresh` drops the stored reference and asks for a new run; the old run
+        still counts against the workspace cap until it ends.
+        """
+
+        self._path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        lock = os.open(
+            self._path.with_suffix(".lock"),
+            os.O_RDWR | os.O_CREAT | getattr(os, "O_CLOEXEC", 0),
+            0o600,
+        )
+        try:
+            _lock_exclusive(lock)
+            run = None if fresh else self._load()
+            if run is not None and _expires(run) - RUN_ROTATION_MARGIN > now:
+                return run
+            reply = transport.start_run()
+            data = json.loads(reply)
+            if data.get("outcome") != "available" or not isinstance(
+                data.get("run"), dict
+            ):
+                return reply
+            self._save(data["run"])
+            return dict(data["run"])
+        finally:
+            os.close(lock)
+
+    def forget_ended(self, reply: bytes, *, now: datetime) -> None:
+        """Clear a stored run the executor reports as ended; never retry here."""
+
+        try:
+            data = json.loads(reply)
+            ends = data["remaining"]["run_expires_at"]
+        except (ValueError, KeyError, TypeError):
+            return
+        if data.get("outcome") == "available":
+            return
+        stored = self._load()
+        if (
+            stored is not None
+            and stored.get("run_ref") == data.get("run_ref")
+            and _expires({"expires_at": ends}) <= now
+        ):
+            self._path.unlink(missing_ok=True)
+
+    def _load(self) -> dict[str, Any] | None:
+        try:
+            data = json.loads(self._path.read_bytes())
+        except (FileNotFoundError, ValueError):
+            return None
+        return data if isinstance(data, dict) and "run_ref" in data else None
+
+    def _save(self, run: Mapping[str, Any]) -> None:
+        temporary = self._path.with_suffix(".tmp")
+        descriptor = os.open(
+            temporary,
+            os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_CLOEXEC", 0),
+            0o600,
+        )
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(json.dumps(dict(run), sort_keys=True).encode())
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, self._path)
+
+
+def _lock_exclusive(descriptor: int) -> None:
+    """Serialize run-store updates; the lock ends when the descriptor closes.
+
+    The platform lock is imported here, so importing the CLI never depends on
+    a Unix-only module.
+    """
+
+    if sys.platform == "win32":
+        import msvcrt
+
+        msvcrt.locking(descriptor, msvcrt.LK_LOCK, 1)
+    else:
+        import fcntl
+
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+
+
+def _expires(run: Mapping[str, Any]) -> datetime:
+    return datetime.fromisoformat(str(run["expires_at"]).replace("Z", "+00:00"))
+
+
+def wire_time(value: datetime) -> str:
+    """The results contract accepts UTC with a literal `Z`, never an offset."""
+
+    return value.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+
+
+def coverage_gaps(payload: Mapping[str, Any]) -> list[str]:
+    """Name each disclosed coverage gap; a gap is never evidence of absence."""
+
+    result = payload.get("result")
+    coverage = result.get("coverage") if isinstance(result, dict) else None
+    gaps = coverage.get("gaps") if isinstance(coverage, dict) else None
+    if not isinstance(gaps, list):
+        return []
+    return [
+        f"{gap.get('facet')} ({gap.get('reason')})"
+        for gap in gaps
+        if isinstance(gap, dict)
+    ]
+
+
+def default_state_root(environment: Mapping[str, str]) -> Path:
+    configured = environment.get("MEMORIESQL_STATE_DIR")
+    if configured:
+        return Path(configured)
+    base = environment.get("XDG_STATE_HOME") or str(Path.home() / ".local/state")
+    return Path(base) / "memoriesql"
+
+
+def schema_description() -> dict[str, Any]:
+    """Describe the installed logical catalog; no database or run is used."""
+
+    catalog = SqlCatalog.installed()
+    logical = load_catalog("sql-recall-operations").get("logical_catalog")
+    assert isinstance(logical, dict)
+    relations = {}
+    for name in sorted(catalog.relations):
+        if name in PREPARED_RELATIONS:
+            status = "prepared"
+        elif name == EVALUATION_RELATION:
+            status = "reserved_evaluation_only"
+        else:
+            status = "not_prepared"
+        relations[name] = status
+    return {
+        "outcome": "available",
+        "contract": CONTRACT_ID,
+        "contract_version": CONTRACT_VERSION,
+        "catalog_hash": catalog.hash,
+        "relation_status": relations,
+        "not_prepared_reply": {
+            "outcome": "unsupported_query",
+            "error": {"code": "feature", "feature": "unprepared_relation"},
+        },
+        "admission_rules": list(ADMISSION_RULES),
+        # Coverage describes the caller's own grants/read mode. An individual
+        # unreadable relation closure is withheld without disclosing its existence.
+        "authority": {
+            "observation_tables": {
+                "relations": sorted(OBSERVATION_TABLES),
+                "requires": ["memory.query", "source.read"],
+                "gap_reason": "source_read_required",
+            },
+            "relation_tables": {
+                "relations": sorted(AGENT_RELATION_TABLES),
+                "caller": "eligible_paired_agent",
+                "requires": ["memory.query", "source.read"],
+                "closure": "entire_disclosed_dependency_closure",
+                "gap_facet": "relation_tables",
+                "gap_reason": "source_read_required",
+                "other_callers": {
+                    "requires": ["memory.query", "source.raw.read"],
+                    "gap_facet": "relation_tables",
+                    "gap_reason": "source_raw_read_required",
+                },
+            },
+            "relation_history": {
+                "relations": sorted(RELATION_HISTORY_TABLES),
+                "caller": "owner_only",
+                "requires": ["memory.query", "source.raw.read"],
+                "gap_caller": "eligible_paired_agent",
+                "gap_facet": "relation_history",
+                "gap_reason": "owner_only",
+                "other_callers": {
+                    "requires": ["memory.query", "source.raw.read"],
+                    "gap_facet": "relation_tables",
+                    "gap_reason": "source_raw_read_required",
+                },
+            },
+        },
+        "source_text": SOURCE_TEXT,
+        "delivery": dict(BASELINE_POLICY["delivery"]),
+        "run": dict(BASELINE_POLICY["run"]),
+        "logical_catalog": logical,
+    }
+
+
+def query_request(
+    run: Mapping[str, Any],
+    *,
+    sql: str,
+    parameters: list[Any],
+    intent: str,
+    view: str,
+    known_at: datetime | None,
+    page_size: int,
+    step_key: Callable[[], UUID] = uuid4,
+) -> bytes:
+    request = {
+        "contract_version": CONTRACT_VERSION,
+        "run_ref": run["run_ref"],
+        "step_key": str(step_key()),
+        "kind": "query",
+        "catalog_hash": SqlCatalog.installed().hash,
+        "sql": sql,
+        "parameters": parameters,
+        "inputs": [],
+        "parents": [],
+        "scope": {
+            "source_refs": [],
+            "known_at": (
+                wire_time(known_at) if known_at is not None else run["default_known_at"]
+            ),
+            "view": view,
+        },
+        "intent": intent,
+        "max_result_bytes": BASELINE_POLICY["result"]["allocation_bytes"],
+        "page_size": page_size,
+    }
+    return json.dumps(request).encode()
+
+
+def reuse_request(
+    run: Mapping[str, Any],
+    *,
+    result_id: UUID,
+    content_digest: str,
+    cursor: str | None,
+    page_size: int,
+    step_key: Callable[[], UUID] = uuid4,
+) -> bytes:
+    request: dict[str, Any] = {
+        "contract_version": CONTRACT_VERSION,
+        "run_ref": run["run_ref"],
+        "step_key": str(step_key()),
+        "kind": "reuse_result",
+        "result": {"result_id": str(result_id), "content_digest": content_digest},
+        "access": {"kind": "standalone"},
+        "page_size": page_size,
+    }
+    if cursor is not None:
+        request["cursor"] = cursor
+    return json.dumps(request).encode()
+
+
+def read_bounded(path: Path, limit: int) -> bytes:
+    with path.open("rb") as stream:
+        data = stream.read(limit + 1)
+    if len(data) > limit:
+        raise ValueError("input file exceeds its bound")
+    return data
