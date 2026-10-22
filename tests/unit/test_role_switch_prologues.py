@@ -25,6 +25,7 @@ NEVER_SWITCHED = {"infrastructure/postgres/migration_runner.py:migrate"}
 # Each once ran a function before, or without, switching role.
 GUARDED = (
     "infrastructure/jobs/integrated_semantic_worker.py",
+    "infrastructure/postgres/agent_sql_results.py",
     "infrastructure/postgres/evidence_packages.py",
     "infrastructure/postgres/local_client_pairing.py",
     "infrastructure/postgres/logical_unit_materialization.py",

@@ -5,11 +5,14 @@ memoriesql_application or memoriesql_worker that does not inherit their
 privileges can therefore execute nothing until its transaction runs SET LOCAL
 ROLE. Each case reruns an existing acceptance test at the newest packaged schema
 with its product connections made by such a login; the administrator still builds
-the fixtures.
+the fixtures. The query host's control login must inherit, so only its audit-claim
+and retention-probe transactions are driven directly, on such a member's connection.
 """
 
 from __future__ import annotations
 
+import json
+import os
 import unittest
 import uuid
 from typing import TYPE_CHECKING, Any
@@ -18,6 +21,11 @@ import psycopg
 from psycopg import sql
 from psycopg.conninfo import make_conninfo
 
+from memoriesql.infrastructure.postgres.agent_sql_results import (
+    _AUDIT_DELIVERY,
+    _attributed,
+    _end_audit_claims,
+)
 from memoriesql.infrastructure.postgres.complete_input_execution import (
     PostgresCompleteInput,
 )
@@ -48,6 +56,7 @@ if TYPE_CHECKING:
     from tests.runtime import test_authored_relations as authored_tests
     from tests.runtime import test_local_client_pairing as pairing_tests
     from tests.runtime import test_personal_local_initialization as initialization_tests
+    from tests.runtime import test_query_audit_retention as retention_tests
     from tests.runtime import test_relation_assessment as assessment_tests
     from tests.runtime import test_source_enrollment as enrollment_tests
     from tests.runtime import test_stored_bead_inspection as inspection_tests
@@ -56,6 +65,7 @@ else:
     import test_authored_relations as authored_tests
     import test_local_client_pairing as pairing_tests
     import test_personal_local_initialization as initialization_tests
+    import test_query_audit_retention as retention_tests
     import test_relation_assessment as assessment_tests
     import test_source_enrollment as enrollment_tests
     import test_stored_bead_inspection as inspection_tests
@@ -281,6 +291,48 @@ class NoninheritingRelationAssessment(assessment_tests.RelationAssessment):
         return psycopg.connect(self.member_url, autocommit=True)
 
 
+class NoninheritingQueryAuditControl(retention_tests.QueryAuditRetention):
+    """The query host's audit claims and retention probe switch role first."""
+
+    def claim(self, connection: psycopg.Connection[Any]) -> Any:
+        with connection.transaction():
+            connection.execute("SET LOCAL ROLE memoriesql_application")
+            row = connection.execute(
+                "SELECT pg_catalog.current_setting("
+                "'memoriesql.query_audit_delivery', true)"
+            ).fetchone()
+        return None if row is None else row[0]
+
+    def test_audit_claims_and_expiry_run_as_a_noninheriting_member(self) -> None:
+        at_newest_schema(self.db)
+        url = noninheriting_member(
+            self, os.environ["N1_TEST_DATABASE_URL"], self.db.info.dbname, APPLICATION
+        )
+
+        def member() -> psycopg.Connection[Any]:
+            return psycopg.connect(url, autocommit=True)
+
+        delivery = str(uuid.uuid4())
+        opened: list[psycopg.Connection[Any]] = []
+        token = _AUDIT_DELIVERY.set((delivery, opened))
+        try:
+            connection = _attributed(member)()
+        finally:
+            _AUDIT_DELIVERY.reset(token)
+        self.addCleanup(connection.close)
+        self.assertEqual(opened, [connection])
+        self.assertEqual(self.claim(connection), delivery)
+        _end_audit_claims(opened)
+        self.assertFalse(connection.closed)
+        self.assertEqual(self.claim(connection), "")
+        # The governed expiry, retention probe included, runs on this login.
+        run = self.r.start()
+        expired = self.age(self.inspect(run, self.h.normalized)["access_receipt_ref"])
+        cleanup = json.loads(self.r.service(control=member).cleanup_expired())
+        self.assertEqual(cleanup["outcome"], "available", cleanup)
+        self.assertEqual(cleanup["cleanup"]["audits"]["audit_rows"], len(expired))
+
+
 def load_tests(
     loader: unittest.TestLoader, tests: unittest.TestSuite, pattern: str | None
 ) -> unittest.TestSuite:
@@ -304,6 +356,9 @@ def load_tests(
             ),
             NoninheritingRelationAssessment(
                 "test_same_bead_endpoints_with_a_separate_basis_are_accepted_on_agreement"
+            ),
+            NoninheritingQueryAuditControl(
+                "test_audit_claims_and_expiry_run_as_a_noninheriting_member"
             ),
         ]
     )
