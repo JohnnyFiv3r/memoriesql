@@ -74,6 +74,7 @@ PARTS = "memoriesql.evidence_package_parts"
 AUDITED = {
     "test_source_text_audit_is_attributed_both_ways_and_charged_to_its_allowance",
     "test_entries_sharing_a_delivering_result_check_its_closure_once",
+    "test_checkpoint_context_audit_is_checked_once_per_result_and_context",
 }
 
 
@@ -173,6 +174,10 @@ class AgentSourceTextRuntime(unittest.TestCase):
             run, SOURCES, page_size=50, secret=secret or self.agent, view=view
         )
         self.assertEqual(reply["outcome"], "available", reply)
+        return reply, self.units_of(reply)
+
+    def units_of(self, reply: dict[str, Any]) -> dict[str, dict[str, Any]]:
+        """The source refs a statement_sources page delivered, by unit."""
         self.assertFalse(reply["page"]["has_more"], reply)
         units: dict[str, dict[str, Any]] = {}
         for row in reply["page"]["rows"]:
@@ -187,7 +192,7 @@ class AgentSourceTextRuntime(unittest.TestCase):
                 "text_state": state,
                 "search_text": text,
             }
-        return reply, units
+        return units
 
     def request(
         self,
@@ -833,7 +838,7 @@ class AgentSourceTextRuntime(unittest.TestCase):
         self.assertNotIn("NEWER", json.dumps(reply))
 
     def test_run_expiry_expired_results_and_checkpoint_origins(self) -> None:
-        # Cases 24, 32 and 33.
+        # Cases 24, 32 and 34 (a checkpoint origin that delivered nothing here).
         run = self.r.start(self.agent)
         delivering, units = self.cited(run)
         unit = units[self.unit_of(self.normalized)]
@@ -854,8 +859,7 @@ class AgentSourceTextRuntime(unittest.TestCase):
             },
         }
         _, reply = self.send(self.request(run, self.entry(unit, 0, 4, checkpoint)))
-        self.assertEqual(reply["outcome"], "unsupported_query", reply)
-        self.assertNotIn("source_text", reply)
+        self.unavailable(reply)
         self.expire_results(run)
         _, reply = self.send(self.request(run, self.entry(unit, 0, 4)))
         self.unavailable(reply)
@@ -1790,3 +1794,406 @@ class AgentSourceTextRuntime(unittest.TestCase):
             one["source_text"]["source_text_labels"],
             many["source_text"]["source_text_labels"],
         )
+
+    # -- checkpoint contexts (case 33; checkpoints 0051 precede this view) ---------
+
+    @staticmethod
+    def pin(reply: dict[str, Any]) -> dict[str, str]:
+        return {key: reply["result"][key] for key in ("result_id", "content_digest")}
+
+    def checkpoint(
+        self,
+        run: dict[str, Any],
+        delivering: dict[str, Any],
+        *,
+        secret: str | None = None,
+        previous: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Append an automatic checkpoint rooted at the delivering result."""
+        _, reply = self.send(
+            {
+                "contract_version": 1,
+                "run_ref": run["run_ref"],
+                "step_key": str(uuid4()),
+                "kind": "checkpoint",
+                "investigation_id": previous["checkpoint"]["investigation_id"]
+                if previous
+                else None,
+                "branch_id": previous["checkpoint"]["branch_id"] if previous else None,
+                "expected_head": previous["branch"]["head"] if previous else None,
+                "question": "fictional source text investigation",
+                "progress": {"status": "paused", "note": "explicit continuation"},
+                "findings": [],
+                "roots": [
+                    {"result": self.pin(delivering), "access": {"kind": "standalone"}}
+                ],
+            },
+            secret=secret,
+        )
+        self.assertEqual(reply["outcome"], "available", reply)
+        return reply
+
+    def root_context(
+        self,
+        run: dict[str, Any],
+        published: dict[str, Any],
+        *,
+        secret: str | None = None,
+    ) -> dict[str, Any]:
+        """Read the checkpoint back in run (which delivers no source ref)."""
+        _, reply = self.send(
+            {
+                "contract_version": 1,
+                "run_ref": run["run_ref"],
+                "step_key": str(uuid4()),
+                "kind": "read_checkpoint",
+                "access": {
+                    "checkpoint": published["branch"]["head"],
+                    "basis": {"kind": "automatic"},
+                },
+            },
+            secret=secret,
+        )
+        self.assertEqual(reply["outcome"], "available", reply)
+        (context,) = reply["root_contexts"]
+        return dict(context)
+
+    def through(
+        self,
+        run: dict[str, Any],
+        delivering: dict[str, Any],
+        context: dict[str, Any],
+        *,
+        secret: str | None = None,
+    ) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+        """Re-deliver the root's refs in run under its checkpoint context."""
+        _, reply = self.send(
+            {
+                "contract_version": 1,
+                "run_ref": run["run_ref"],
+                "step_key": str(uuid4()),
+                "kind": "reuse_result",
+                "result": self.pin(delivering),
+                "access": context,
+                "page_size": 50,
+            },
+            secret=secret,
+        )
+        self.assertEqual(reply["outcome"], "available", reply)
+        self.assertEqual(reply["access_bases"][0]["context"], context)
+        return reply, self.units_of(reply)
+
+    def checkpointed(
+        self, run: dict[str, Any], delivering: dict[str, Any], **kwargs: Any
+    ) -> tuple[dict[str, Any], dict[str, Any], dict[str, dict[str, Any]]]:
+        """Publish, read back and re-deliver in run: (published, context, units)."""
+        published = self.checkpoint(run, delivering, **kwargs)
+        context = self.root_context(run, published, **kwargs)
+        _, units = self.through(run, delivering, context, **kwargs)
+        return published, context, units
+
+    def assert_checkpoint_basis(
+        self, reply: dict[str, Any], context: dict[str, Any]
+    ) -> None:
+        (basis,) = reply["access_bases"]
+        self.assertEqual(
+            (basis["context"], basis["end_condition"], basis["hold_ref"]),
+            (context, "checkpoint_expiry_or_prune", context["checkpoint_id"]),
+        )
+        self.assertIsNotNone(basis["valid_until"])
+
+    def test_a_checkpoint_delivered_ref_is_served_only_under_its_context(
+        self,
+    ) -> None:
+        # Case 33 positive and the context rule: origin null takes the first
+        # delivery's receipted checkpoint context; an explicit origin must name
+        # exactly the context its disclosure in this run was made under.
+        run = self.r.start(self.agent)
+        delivering, _ = self.cited(run)
+        published = self.checkpoint(run, delivering)
+        self.r.close(run, self.agent)
+        later = self.r.start(self.agent)
+        context = self.root_context(later, published)
+        _, units = self.through(later, delivering, context)
+        unit = units[self.unit_of(self.normalized)]
+        raw, reply = self.send(self.request(later, self.entry(unit, 0, 40)))
+        self.available(raw, reply)
+        self.assertEqual(
+            reply["source_text"]["slices"][0]["text"], unit["search_text"][:40]
+        )
+        self.assert_checkpoint_basis(reply, context)
+        origin = {"result": self.pin(delivering), "access": context}
+        raw, explicit = self.send(self.request(later, self.entry(unit, 0, 40, origin)))
+        self.available(raw, explicit)
+        self.assertEqual(explicit["source_text"], reply["source_text"])
+        self.assert_checkpoint_basis(explicit, context)
+        refusals = []
+        for access in (
+            # The same result standalone did not deliver this ref in this run.
+            {"kind": "standalone"},
+            # Another context of the same root that this run never used.
+            dict(context, manifest_digest="0" * 64),
+        ):
+            _, refused = self.send(
+                self.request(
+                    later,
+                    self.entry(
+                        unit, 0, 40, {"result": self.pin(delivering), "access": access}
+                    ),
+                )
+            )
+            self.unavailable(refused)
+            refusals.append(refused)
+        self.assertEqual(len({frozenset(r) for r in refusals}), 1)
+
+    def test_a_pruned_or_expired_checkpoint_refuses_without_standalone_fallback(
+        self,
+    ) -> None:
+        # Case 33 ("released or pruned": the one unavailable shape). The ref's
+        # live standalone delivery in the same run is never a fallback.
+        run = self.r.start(self.agent)
+        delivering, _ = self.cited(run)
+        published, context, units = self.checkpointed(run, delivering)
+        unit, wide = (
+            units[self.unit_of(self.normalized)],
+            units[self.unit_of(self.wide)],
+        )
+        origin = {"result": self.pin(delivering), "access": context}
+        request = self.request(run, self.entry(unit, 0, 40, origin))
+        raw, first = self.send(request)
+        self.available(raw, first)
+        paged = self.request(
+            run, self.entry(unit, 0, 40, origin), self.entry(wide, 0, 40, origin)
+        )
+        single = max(
+            len(self.send(self.request(run, self.entry(each, 0, 40, origin)))[0])
+            for each in (unit, wide)
+        )
+        with patch.object(results_module, "MAX_RESPONSE_BYTES", single + 400):
+            raw, page = self.send(paged)
+            self.available(raw, page)
+            self.assertTrue(page["has_more"], page)
+        # Twenty further appends keep twenty contexts: the first is pruned.
+        current = published
+        for _ in range(20):
+            current = self.checkpoint(run, delivering, previous=current)
+        _, missing = self.send(
+            self.request(
+                run,
+                {
+                    "source": dict(unit["source"], ref=str(uuid4())),
+                    "start": 0,
+                    "end": 4,
+                    "origin": None,
+                },
+            )
+        )
+        replay = self.send(request)[1]
+        fresh = self.send(dict(request, step_key=str(uuid4())))[1]
+        with patch.object(results_module, "MAX_RESPONSE_BYTES", single + 400):
+            cursor_page = self.send(
+                dict(paged, step_key=str(uuid4()), cursor=page["next_cursor"])
+            )[1]
+        for reply in (replay, fresh, cursor_page):
+            self.unavailable(reply)
+            self.assertEqual(set(reply), set(missing))
+        # Origin null here takes the first delivery: the live standalone query.
+        raw, standalone = self.send(self.request(run, self.entry(unit, 0, 40)))
+        self.available(raw, standalone)
+        self.assertEqual(
+            standalone["access_bases"][0]["context"], {"kind": "standalone"}
+        )
+        # An expired (not pruned) context: the same shape.
+        later_context = self.root_context(run, current)
+        _, later_units = self.through(run, delivering, later_context)
+        later_origin = {"result": self.pin(delivering), "access": later_context}
+        raw, live = self.send(self.request(run, self.entry(unit, 0, 40, later_origin)))
+        self.available(raw, live)
+        # Boundary-only fixture clock control, as the checkpoint suite does.
+        self.db.execute(
+            "UPDATE memoriesql.query_checkpoints SET created_at=created_at-interval '31 days',"
+            "expires_at=expires_at-interval '31 days' WHERE checkpoint_id=%s",
+            (later_context["checkpoint_id"],),
+        )
+        _, expired = self.send(self.request(run, self.entry(unit, 0, 40, later_origin)))
+        self.unavailable(expired)
+        self.assertEqual(set(expired), set(missing))
+
+    def test_a_checkpoint_keeps_a_root_readable_after_its_standalone_expiry(
+        self,
+    ) -> None:
+        # The checkpoint's hold, and only under its context: no standalone read.
+        run = self.r.start(self.agent)
+        delivering, _ = self.cited(run)
+        published = self.checkpoint(run, delivering)
+        self.r.age(run["run_ref"], timedelta(days=32))
+        later = self.r.start(self.agent)
+        context = self.root_context(later, published)
+        _, units = self.through(later, delivering, context)
+        unit = units[self.unit_of(self.normalized)]
+        raw, reply = self.send(self.request(later, self.entry(unit, 0, 40)))
+        self.available(raw, reply)
+        self.assert_checkpoint_basis(reply, context)
+        _, refused = self.send(
+            self.request(
+                later,
+                self.entry(
+                    unit,
+                    0,
+                    40,
+                    {"result": self.pin(delivering), "access": {"kind": "standalone"}},
+                ),
+            )
+        )
+        self.unavailable(refused)
+
+    def test_a_checkpoint_never_carries_refs_to_a_run_that_did_not_receive_them(
+        self,
+    ) -> None:
+        # D2 across runs: reading a checkpoint delivers no source ref; only a run
+        # that re-delivered the root under its context reads through it.
+        run = self.r.start(self.agent)
+        delivering, _ = self.cited(run)
+        published = self.checkpoint(run, delivering)
+        self.r.close(run, self.agent)
+        reader = self.r.start(self.agent)
+        context = self.root_context(reader, published)
+        _, units = self.through(reader, delivering, context)
+        unit = units[self.unit_of(self.normalized)]
+        raw, reply = self.send(self.request(reader, self.entry(unit, 0, 40)))
+        self.available(raw, reply)
+        self.r.close(reader, self.agent)
+        other = self.r.start(self.agent)
+        self.assertEqual(self.root_context(other, published), context)
+        origin = {"result": self.pin(delivering), "access": context}
+        for entry in (self.entry(unit, 0, 40), self.entry(unit, 0, 40, origin)):
+            _, refused = self.send(self.request(other, entry))
+            self.unavailable(refused)
+
+    def test_another_principal_never_reads_through_an_agents_checkpoint(
+        self,
+    ) -> None:
+        run = self.r.start(self.agent)
+        delivering, _ = self.cited(run)
+        _, context, units = self.checkpointed(run, delivering)
+        unit_ref = units[self.unit_of(self.normalized)]["source"]["unit_ref"]
+        self.r.close(run, self.agent)
+        owner = self.fixture.secret_hash
+        theirs = self.r.start()
+        _, owner_units = self.cited(theirs, secret=owner)
+        origin = {"result": self.pin(delivering), "access": context}
+        _, refused = self.send(
+            self.request(theirs, self.entry(owner_units[unit_ref], 0, 40, origin)),
+            secret=owner,
+        )
+        self.unavailable(refused)
+
+    def test_revocation_under_a_checkpoint_context_refuses_the_whole_reply(
+        self,
+    ) -> None:
+        # Cases 11 and 35 under a checkpoint: a checkpoint never pins authority.
+        run = self.r.start(self.agent)
+        delivering, _ = self.cited(run)
+        _, context, units = self.checkpointed(run, delivering)
+        unit = units[self.unit_of(self.normalized)]
+        origin = {"result": self.pin(delivering), "access": context}
+        request = self.request(run, self.entry(unit, 0, 40, origin))
+        raw, first = self.send(request)
+        self.available(raw, first)
+        before = self.disclosures()
+        self.revoke_source(self.identity)
+        for reply in (
+            self.send(request)[1],
+            self.send(dict(request, step_key=str(uuid4())))[1],
+        ):
+            self.unavailable(reply)
+        self.assertEqual(self.disclosures(), before)
+
+    def test_checkpoint_context_audit_is_checked_once_per_result_and_context(
+        self,
+    ) -> None:
+        # Case 42/43 under a checkpoint context (owner over an assessed relation):
+        # eight entries from one (result, context) write no more audit than one.
+        owner = self.fixture.secret_hash
+        run = self.r.start()
+        delivering, _ = self.cited(run, secret=owner)
+        _, context, units = self.checkpointed(run, delivering, secret=owner)
+        unit = units[self.unit_of(self.normalized)]
+        origin = {"result": self.pin(delivering), "access": context}
+        raw, one = self.send(
+            self.request(run, self.entry(unit, 0, 8, origin)), secret=owner
+        )
+        self.available(raw, one)
+        raw, eight = self.send(
+            self.request(
+                run, *(self.entry(unit, i * 8, i * 8 + 8, origin) for i in range(8))
+            ),
+            secret=owner,
+        )
+        self.available(raw, eight)
+        single = self.attributed(one["access_receipt_ref"])
+        many = self.attributed(eight["access_receipt_ref"])
+        print(
+            json.dumps(
+                {
+                    "checkpoint_source_text_audit_rows": {
+                        "one_entry": len(single),
+                        "eight_entries": len(many),
+                    }
+                }
+            )
+        )
+        self.assertGreater(len(single), 0)
+        self.assertEqual(len(many), len(single))
+        for *_head, recorded, delivery, space, expires in single + many:
+            self.assertIn(
+                str(delivery), {one["access_receipt_ref"], eight["access_receipt_ref"]}
+            )
+            self.assertEqual(space, self.fixture.workspace)
+            self.assertEqual(expires - recorded, timedelta(days=30))
+
+    def test_checkpoint_context_reads_touch_no_part_row(self) -> None:
+        # N-2 under a checkpoint context: reading the checkpoint, re-delivering
+        # its root and reading normalized and identity units (with an exact
+        # replay) fetch no block of any part relation; the record builder does.
+        self.db.execute(
+            f"ALTER TABLE {PARTS} SET (autovacuum_enabled=false,"
+            "toast.autovacuum_enabled=false)"
+        )
+        relations = self.part_relations()
+        run = self.r.start(self.agent)
+        delivering, _ = self.cited(run)
+        published = self.checkpoint(run, delivering)
+        self.r.close(run, self.agent)
+        normalized, identity = (
+            self.unit_of(self.normalized),
+            self.unit_of(self.identity),
+        )
+        before = self.settled_blocks(relations)
+        with psycopg.connect(
+            make_conninfo(self.fixture.admin, dbname=self.fixture.database),
+            autocommit=True,
+        ) as probe:
+            probe.execute(
+                "SELECT memoriesql.query_unit_package_record_v1(%s,%s)",
+                (self.fixture.tenant, identity),
+            )
+        self.assertGreater(self.settled_blocks(relations), before)
+        before = self.settled_blocks(relations)
+        later = self.r.start(self.agent)
+        context = self.root_context(later, published)
+        _, units = self.through(later, delivering, context)
+        request = self.request(
+            later,
+            self.entry(units[normalized], 0, 16),
+            self.entry(units[identity], 0, 16),
+        )
+        first = self.send(request)
+        replay = self.send(request)
+        self.r.close(later, self.agent)
+        self.assertEqual(self.settled_blocks(relations), before)
+        # Checked only after the window: these read part rows themselves.
+        for raw, reply in (first, replay):
+            self.available(raw, reply)
+            self.assert_checkpoint_basis(reply, context)
+        self.assertEqual(replay[1]["source_text"], first[1]["source_text"])

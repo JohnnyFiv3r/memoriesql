@@ -4,10 +4,10 @@
 -- No raw bytes, raw lineage, package/part identity or native metadata is read
 -- or disclosed, and source revisiting authority is never consulted. Existing
 -- delivery, disclosure, preparation, cursor, purge and audit mechanics are
--- reused. A ref delivered under a checkpoint context is refused explicitly
--- (unsupported_query), never served as standalone. Each helper-kind
--- redefinition below is the latest earlier definition with only the new kind
--- added:
+-- reused. A ref delivered under a checkpoint context (0051) is served only
+-- under that context and its access basis, never as standalone. Each
+-- helper-kind redefinition below is the latest earlier definition with only
+-- the new kind added:
 --   query_steps_helper_kind_check: 0051_automatic_investigation_checkpoints.sql
 --   query_steps_helper_complete_check: 0051_automatic_investigation_checkpoints.sql
 --   admit_query_delivery_v1: 0051_automatic_investigation_checkpoints.sql
@@ -196,13 +196,16 @@ REVOKE ALL ON FUNCTION memoriesql.query_unit_source_text_v1(uuid,uuid) FROM PUBL
 
 -- The delivering disclosure of one source ref: only the exact ref (unit and
 -- content hash included) that THIS run received, under the context receipted
--- for its first delivery or an explicit origin that delivered it in this run.
--- Stricter than hydrate_source's origin; never another run's disclosure.
+-- for its first delivery, or an explicit origin whose result delivered it in
+-- this run under exactly that context. Stricter than hydrate_source's origin;
+-- never another run's disclosure. The context is standalone or a checkpoint
+-- context (0051): a checkpoint-delivered ref is never read as standalone, nor a
+-- standalone-delivered ref through a checkpoint.
 CREATE FUNCTION memoriesql.resolve_query_source_text_v1(delivery uuid,source jsonb,origin jsonb)
 RETURNS jsonb LANGUAGE plpgsql VOLATILE SECURITY DEFINER
  SET search_path=pg_catalog,memoriesql SET row_security=off AS $$
 DECLARE d memoriesql.query_deliveries%ROWTYPE; v memoriesql.query_visible_refs%ROWTYPE;
- x memoriesql.query_disclosures%ROWTYPE;
+ x memoriesql.query_disclosures%ROWTYPE; effective jsonb;
 BEGIN
  d:=memoriesql.query_helper_delivery_v1(delivery);
  IF jsonb_typeof(source) IS DISTINCT FROM 'object' OR source->>'kind' IS DISTINCT FROM 'source' THEN
@@ -212,24 +215,23 @@ BEGIN
  IF v.first_delivery_ref IS NULL THEN RAISE EXCEPTION 'query_helper_unavailable' USING ERRCODE='42501'; END IF;
  IF origin IS NULL OR origin='null'::jsonb THEN
   SELECT * INTO x FROM memoriesql.query_disclosures WHERE tenant_id=d.tenant_id AND delivery_ref=v.first_delivery_ref;
+  effective:=x.access_context;
  ELSE
-  -- Checkpoint contexts need the checkpoint migration; never treat one as standalone.
-  IF origin#>>'{access,kind}' IS DISTINCT FROM 'standalone' THEN
-   RAISE EXCEPTION 'helper_checkpoint_access_unimplemented' USING ERRCODE='0A000'; END IF;
+  effective:=origin->'access';
   SELECT z.* INTO x FROM memoriesql.query_disclosures z JOIN memoriesql.query_deliveries zd
    ON zd.tenant_id=z.tenant_id AND zd.delivery_ref=z.delivery_ref
    WHERE z.tenant_id=d.tenant_id AND zd.run_ref=d.run_ref
     AND z.result_id=(origin#>>'{result,result_id}')::uuid AND z.content_digest=origin#>>'{result,content_digest}'
+    AND z.access_context=effective
     AND EXISTS(SELECT 1 FROM jsonb_array_elements_text(z.delivered_refs) AS r(ref_key) WHERE r.ref_key::jsonb=source)
    ORDER BY zd.admitted_at,zd.delivery_ref LIMIT 1;
  END IF;
  -- A ref first delivered by a helper reply (owner evidence metadata) has no
  -- delivering result to bind; v1 serves result-delivered refs only.
- IF x.delivery_ref IS NULL OR x.result_id IS NULL THEN
+ IF x.delivery_ref IS NULL OR x.result_id IS NULL
+  OR NOT (effective='{"kind":"standalone"}'::jsonb OR effective->>'kind'='checkpoint') THEN
   RAISE EXCEPTION 'query_helper_unavailable' USING ERRCODE='42501'; END IF;
- IF x.access_context IS DISTINCT FROM '{"kind":"standalone"}'::jsonb THEN
-  RAISE EXCEPTION 'helper_checkpoint_access_unimplemented' USING ERRCODE='0A000'; END IF;
- RETURN jsonb_build_object('result_id',x.result_id,'content_digest',x.content_digest);
+ RETURN jsonb_build_object('result_id',x.result_id,'content_digest',x.content_digest,'access',effective);
 END $$;
 REVOKE ALL ON FUNCTION memoriesql.resolve_query_source_text_v1(uuid,jsonb,jsonb) FROM PUBLIC;
 
@@ -238,7 +240,8 @@ REVOKE ALL ON FUNCTION memoriesql.resolve_query_source_text_v1(uuid,jsonb,jsonb)
 -- and bead-version authorization and the 0037 bead/unit records (bead event
 -- memory.query; unit event memory.query and source.read). The unit's package
 -- must be exactly the one recorded in that result's closure. Callers recheck
--- the result's whole closure first; source revisiting is never consulted.
+-- the result's whole closure, under its context, first; source revisiting is
+-- never consulted.
 CREATE FUNCTION memoriesql.bind_query_source_text_v1(t uuid,source jsonb,result_ref uuid)
 RETURNS jsonb LANGUAGE plpgsql VOLATILE SECURITY DEFINER
  SET search_path=pg_catalog,memoriesql SET row_security=off AS $$
@@ -281,10 +284,7 @@ BEGIN
   OR saved_package IS DISTINCT FROM current_package THEN
   RAISE EXCEPTION 'query_helper_unavailable' USING ERRCODE='42501'; END IF;
  RETURN jsonb_build_object('unit_ref',su.source_unit_id,'known_at',body#>'{frame,known_at}',
-  'view',body#>'{frame,view}','records',records,
-  'basis',jsonb_build_object('context','{"kind":"standalone"}'::jsonb,
-   'checked_at',memoriesql.relation_packet_time(clock_timestamp()),
-   'valid_until',memoriesql.relation_packet_time(q.expires_at),'end_condition','standalone_expiry','hold_ref',NULL));
+  'view',body#>'{frame,view}','records',records);
 END $$;
 REVOKE ALL ON FUNCTION memoriesql.bind_query_source_text_v1(uuid,jsonb,uuid) FROM PUBLIC;
 
@@ -296,6 +296,7 @@ RETURNS jsonb LANGUAGE plpgsql VOLATILE SECURITY DEFINER
  SET search_path=pg_catalog,memoriesql SET row_security=off AS $$
 DECLARE d memoriesql.query_deliveries%ROWTYPE; entry jsonb; item jsonb; ordinal integer;
  resolved jsonb:='[]'; bound jsonb:='[]'; checked jsonb:='[]'; frames jsonb:='[]'; records jsonb;
+ contexts jsonb:='[]';
  slices jsonb:='[]'; visible jsonb:='[]'; bases jsonb:='[]'; slice_labels jsonb:='[]'; labels jsonb:='[]';
  unit jsonb; served text; piece text; piece_bytes bytea; start_at integer; end_at integer; total integer;
  amount bigint:=0; complete boolean:=true; frame_key jsonb;
@@ -309,9 +310,14 @@ BEGIN
  FOR entry IN SELECT value FROM jsonb_array_elements(request->'entries') LOOP
   resolved:=resolved||jsonb_build_array(memoriesql.resolve_query_source_text_v1(delivery,entry->'source',entry->'origin'));
  END LOOP;
- -- Each distinct delivering result's whole closure, once per call.
+ -- Each distinct delivering result's whole closure, once per call, under the
+ -- context it was delivered in: query_result_access_v1 rechecks the closure
+ -- (0051's check_query_result_bytes_v1; a checkpoint context also checks its
+ -- owner, retention and every root) and returns that context's access basis.
+ -- A pruned or expired checkpoint refuses; there is no standalone fallback.
  FOR item IN SELECT DISTINCT value FROM jsonb_array_elements(resolved) LOOP
-  PERFORM memoriesql.check_query_result_closure_v2((item->>'result_id')::uuid,item->>'content_digest');
+  contexts:=contexts||jsonb_build_array(jsonb_build_object('pin',item,'basis',
+   memoriesql.query_result_access_v1((item->>'result_id')::uuid,item->>'content_digest',item->'access')));
   checked:=checked||jsonb_build_array(item);
  END LOOP;
  FOR ordinal IN 0..jsonb_array_length(resolved)-1 LOOP
@@ -346,7 +352,8 @@ BEGIN
    labels:=labels||(unit->'labels');
   END IF;
   visible:=visible||jsonb_build_array(entry->'source');
-  bases:=bases||jsonb_build_array(item->'basis');
+  bases:=bases||(SELECT jsonb_agg(value->'basis') FROM jsonb_array_elements(contexts)
+   WHERE value->'pin'=resolved->ordinal);
  END LOOP;
  IF amount>(request->>'max_bytes')::bigint THEN
   RAISE EXCEPTION 'query_helper_transport_exhausted' USING ERRCODE='54000'; END IF;

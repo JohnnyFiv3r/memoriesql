@@ -577,7 +577,7 @@ class SourceTextMigration(unittest.TestCase):
         body = function(SQL, "prepare_query_source_text_v1")
         authorized = max(
             body.index("memoriesql.resolve_query_source_text_v1("),
-            body.index("memoriesql.check_query_result_closure_v2("),
+            body.index("memoriesql.query_result_access_v1("),
             body.index("memoriesql.bind_query_source_text_v1("),
         )
         for measurement in (
@@ -588,13 +588,17 @@ class SourceTextMigration(unittest.TestCase):
             "query_helper_transport_exhausted",
         ):
             self.assertLess(authorized, body.index(measurement), measurement)
-        # Case 43: each distinct delivering result's closure once per call.
+        # Case 43: each distinct delivering (result, context) is checked once
+        # per call, under that context; there is no other closure check.
         self.assertIn(
             "FOR item IN SELECT DISTINCT value FROM jsonb_array_elements(resolved) LOOP\n"
-            "  PERFORM memoriesql.check_query_result_closure_v2(",
+            "  contexts:=contexts||jsonb_build_array(jsonb_build_object('pin',item,'basis',\n"
+            "   memoriesql.query_result_access_v1((item->>'result_id')::uuid,"
+            "item->>'content_digest',item->'access')));",
             body,
         )
-        self.assertEqual(body.count("check_query_result_closure_v2("), 1)
+        self.assertEqual(body.count("query_result_access_v1("), 1)
+        self.assertNotIn("check_query_result_closure_v2(", body)
         # Unsupported text branches off before anything is measured (N-5).
         self.assertLess(
             body.index("IF served IS NULL THEN"), body.index("char_length(")
@@ -613,10 +617,78 @@ class SourceTextMigration(unittest.TestCase):
         ):
             self.assertIn(check, bind)
         resolve = function(SQL, "resolve_query_source_text_v1")
-        # Delivered in THIS run only; checkpoint contexts are refused here.
+        # Delivered in THIS run only.
         self.assertIn("run_ref=d.run_ref", resolve)
         self.assertIn("zd.run_ref=d.run_ref", resolve)
-        self.assertEqual(resolve.count("helper_checkpoint_access_unimplemented"), 2)
+
+    def test_checkpoint_contexts_are_served_only_under_their_own_context(self) -> None:
+        # Case 33 (frozen Context item 2): checkpoints (0051) precede the view, so
+        # a ref delivered under a checkpoint context is served under exactly that
+        # context, never as standalone; there is no unsupported_query path left.
+        self.assertTrue(
+            any(
+                p.name.endswith("_automatic_investigation_checkpoints.sql")
+                for p in EARLIER
+            )
+        )
+        resolve = function(SQL, "resolve_query_source_text_v1")
+        self.assertNotIn("helper_checkpoint_access_unimplemented", SQL)
+        # 0051's hydrate_source context rule, origin null and explicit alike.
+        self.assertIn(
+            "effective_access:=CASE WHEN origin IS NULL OR origin='null'::jsonb "
+            "THEN x.access_context ELSE origin->'access' END;",
+            latest("resolve_query_helper_evidence_v1"),
+        )
+        for check in (
+            "SELECT * INTO x FROM memoriesql.query_disclosures WHERE tenant_id=d.tenant_id "
+            "AND delivery_ref=v.first_delivery_ref;\n  effective:=x.access_context;",
+            "effective:=origin->'access';",
+            # Stricter than hydrate_source (D2): the disclosure in this run must
+            # have been made under exactly the named context.
+            "AND z.access_context=effective",
+            "OR NOT (effective='{\"kind\":\"standalone\"}'::jsonb OR effective->>'kind'='checkpoint') THEN",
+            "RETURN jsonb_build_object('result_id',x.result_id,'content_digest',x.content_digest,'access',effective);",
+        ):
+            self.assertIn(check, resolve)
+        # The basis is the context check's own; bind builds none.
+        bind = function(SQL, "bind_query_source_text_v1")
+        for absent in ("standalone_expiry", "'basis'", "access_context"):
+            self.assertNotIn(absent, bind)
+        body = function(SQL, "prepare_query_source_text_v1")
+        self.assertIn(
+            "bases:=bases||(SELECT jsonb_agg(value->'basis') FROM jsonb_array_elements(contexts)\n"
+            "   WHERE value->'pin'=resolved->ordinal);",
+            body,
+        )
+        self.assertIn("'result_pins',checked", body)
+        # The context check the view relies on: an exact root, the checkpoint's
+        # owner, retention and every root, or the standalone closure.
+        access = re.sub(r"\s+", "", latest("query_result_access_v1"))
+        for check in (
+            "PERFORMmemoriesql.check_query_result_bytes_v1(result_ref,digest,false);",
+            "access->'root'ISDISTINCTFROMjsonb_build_object('result_id',result_ref,'content_digest',digest)",
+            "memoriesql.read_automatic_checkpoint_v1(",
+            "'end_condition','checkpoint_expiry_or_prune','hold_ref',access->'checkpoint_id'",
+        ):
+            self.assertIn(check, access)
+        # Redelivery and cursor pages recheck each pin under its own context.
+        self.assertIn(
+            "PERFORM memoriesql.query_result_access_v1((item->>'result_id')::uuid,"
+            "item->>'content_digest',COALESCE(item->'access','{\"kind\":\"standalone\"}'::jsonb));",
+            latest("read_query_helper_artifact_v1"),
+        )
+        # The executor admits a checkpoint origin only with the checkpoint backend.
+        executor = (
+            ROOT / "src/memoriesql/infrastructure/postgres/agent_sql_results.py"
+        ).read_text()
+        self.assertIn(
+            "isinstance(request, ReadSourceTextRequest)\n"
+            "                        and any(\n"
+            "                            e.origin is not None\n"
+            "                            and isinstance(e.origin.access, CheckpointResultAccess)\n"
+            "                            for e in request.entries\n",
+            executor,
+        )
 
     def test_no_part_row_is_reachable_once_unit_facts_are_sealed(self) -> None:
         # N-2 (sealed-facts review): every function the view's prepare reaches,

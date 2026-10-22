@@ -2155,6 +2155,14 @@ class PostgresAgentSqlResults:
                             for s in request.selections
                         )
                     )
+                    or (
+                        isinstance(request, ReadSourceTextRequest)
+                        and any(
+                            e.origin is not None
+                            and isinstance(e.origin.access, CheckpointResultAccess)
+                            for e in request.entries
+                        )
+                    )
                 )
                 if checkpoint_access:
                     supported = frame.execute(

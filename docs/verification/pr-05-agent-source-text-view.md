@@ -35,12 +35,22 @@ failure withholds the whole reply as `unavailable`.
 1. **Delivered here.** The exact ref (ref, unit, content hash) is in this run's
    delivered refs. A ref first delivered by a helper reply (owner evidence
    metadata) has no delivering result to bind, so it is not served.
-2. **Context.** It uses the context receipted for the ref's first delivery, or
-   an explicit standalone origin whose result delivered it in this run.
-   A ref delivered under a checkpoint context (0051), or a checkpoint origin,
-   is refused as `unsupported_query`. It is never served as standalone.
-3. **Whole closure.** The delivering result's whole closure is rechecked, once
-   per distinct result per call.
+2. **Context.** It uses the context receipted for the ref's first delivery,
+   as `hydrate_source` does (0051). An explicit origin works too, if its result
+   delivered the ref in this run under exactly the named context, which is
+   stricter than `hydrate_source`. The context is standalone or a checkpoint
+   context (case 33). A checkpoint-delivered ref is served only under that
+   context and its access basis, never as standalone. A standalone-delivered
+   ref is never read through a checkpoint.
+3. **Whole closure, under the context.** `query_result_access_v1` runs once per
+   distinct delivering result and context per call:
+   - Standalone: the closure recheck, followed by standalone expiry.
+   - Checkpoint: the checkpoint's owner, exact root, retention and every root,
+     with the results it holds kept past their standalone expiry.
+
+   Each reply's `access_bases` are those checks' own. A pruned or expired
+   checkpoint refuses with the one `unavailable` shape, as do exact replays and
+   cursor pages. There is no standalone fallback.
 4. **Binding and authority now.** The statement/unit binding comes from that
    result. Statement and bead-version authorization, and the 0037 bead and unit
    records (bead event `memory.query`; unit event `memory.query` and
@@ -77,8 +87,8 @@ Other outcomes:
   `query_audit_row_bytes_v1()` against the workspace's separate audit
   allowance, never the content allocation. A workspace at its allowance is
   refused before admission (`budget_exhausted/storage`), writing nothing.
-- Each distinct delivering result's closure is rechecked once per call, so
-  eight entries from one result write no more audit than one.
+- Each distinct delivering result and context is rechecked once per call, so
+  eight entries from one result and context write no more audit than one.
 
 ## Migration and composition
 
@@ -114,9 +124,10 @@ Other outcomes:
     reading part rows;
   - byte-identical slices;
   - equal sealed bytes and allocation.
-- Automatic checkpoints (0051) precede the view. This version refuses
-  checkpoint-delivered refs and checkpoint origins explicitly. Serving them
-  under their checkpoint context is a separate later change.
+- Automatic checkpoints (0051) precede the view. It serves checkpoint-delivered
+  refs under their context through 0051's own `query_result_access_v1`, and
+  adds no storage, kind or capability. The executor admits a checkpoint origin
+  only with the checkpoint backend present.
 
 ## Tests
 
