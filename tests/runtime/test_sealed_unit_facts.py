@@ -12,6 +12,7 @@ once and immutably. No model or provider is called.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import time
 import unittest
@@ -420,6 +421,66 @@ class SealedUnitFacts(hidden.HiddenPackageLength):
                 (unit,),
             ).fetchall()
             self.assertEqual(sealed_rows, [(True, True, True)])
+
+    def test_a_repointed_pin_refuses_whole(self) -> None:
+        """Defense in depth: facts bind the package they were sealed from.
+
+        A pin cannot change through 0016/0017; this one is repointed with the
+        guards bypassed, as the source-text view's case 23 does. Neither the
+        sealed text nor a newer package's label may then be served.
+        """
+        self.upgrade()
+        world = self.worlds[1]
+        unit = self.unit(world.normalized)
+        run = self.r.start(world.agent)
+        _, saved = self.r.query(run, hidden.QUERY, page_size=50, secret=world.agent)
+        self.assertEqual(saved["outcome"], "available", saved)
+        self.assertEqual(saved["result"]["total_rows"], "3")
+        newer = self.r.newer_representation(
+            "Fictional newer projection that must never replace the pin.",
+            "w2-harvest",
+            world.source,
+            world.scope,
+        )
+        with self.db.transaction():
+            self.db.execute("SET LOCAL session_replication_role=replica")
+            self.db.execute(
+                "UPDATE memoriesql.logical_unit_materializations SET package_id=%s "
+                "WHERE source_unit_id=%s",
+                (newer.package_id, unit),
+            )
+        for statement in (
+            "SELECT memoriesql.query_unit_records_v1(%s,%s,clock_timestamp())",
+            "SELECT memoriesql.query_unit_package_v1(%s,%s)",
+        ):
+            with (
+                self.subTest(statement=statement[18:40]),
+                self.assertRaises(psycopg.errors.InsufficientPrivilege),
+                self.db.transaction(),
+            ):
+                self.fixture.begin()
+                self.db.execute("RESET ROLE")
+                self.db.execute(statement, (self.fixture.tenant, unit))
+        # The saved result no longer reauthorizes, so nothing of it is served.
+        again = self.r.reuse(run, saved["result"], page_size=50, secret=world.agent)
+        self.assertEqual(
+            (again["outcome"], again["error"]), ("unavailable", {"code": "unavailable"})
+        )
+        self.assertNotIn("result", again)
+        # A fresh population withholds the unit's whole family, label and all.
+        _, fresh = self.r.query(run, hidden.QUERY, page_size=50, secret=world.agent)
+        self.assertEqual(fresh["outcome"], "available", fresh)
+        self.assertEqual(
+            [row["values"] for row in fresh["page"]["rows"]],
+            [
+                [self.IDENTITY, "unsupported", None],
+                [self.LEDGER, "available", self.LEDGER],
+            ],
+        )
+        text = json.dumps(fresh)
+        self.assertNotIn(self.TEXT, text)
+        self.assertNotIn("normalized_projection:orchard.normalization.v2", text)
+        self.r.close(run, secret=world.agent)
 
     def test_the_application_role_can_neither_read_nor_write_facts(self) -> None:
         self.upgrade()

@@ -181,10 +181,22 @@ class SealedUnitFactsMigration(unittest.TestCase):
             "FROM memoriesql.logical_unit_query_facts f JOIN "
             "memoriesql.logical_unit_materializations m ON m.tenant_id=f.tenant_id "
             "AND m.source_unit_id=f.source_unit_id JOIN memoriesql.evidence_packages p "
-            "ON p.tenant_id=m.tenant_id AND p.package_id=m.package_id "
-            "WHERE f.tenant_id=t AND f.source_unit_id=id",
+            "ON p.tenant_id=f.tenant_id AND p.package_id=f.package_id "
+            "WHERE f.tenant_id=t AND f.source_unit_id=id;",
             package,
         )
+        # The package is the one the facts were sealed from, never the current
+        # pin's; a pin that names another package refuses both paths whole.
+        self.assertNotIn("p.package_id=m.package_id", package)
+        refusal = (
+            "IF {} IS NOT NULL AND pinned IS NOT TRUE THEN RAISE EXCEPTION "
+            "'dependency_unavailable' USING ERRCODE='42501'; END IF;"
+        )
+        self.assertIn("f.package_id=m.package_id INTO result,pinned", package)
+        self.assertIn(refusal.format("result"), package)
+        records = compact(installed["query_unit_records_v1"][1])
+        self.assertIn("f.package_id=m.package_id INTO digest,pinned", records)
+        self.assertIn(refusal.format("digest"), records)
         # Only the facts definition, the trigger and the backfill build the record.
         self.assertEqual(
             {
@@ -208,11 +220,19 @@ class SealedUnitFactsMigration(unittest.TestCase):
         closure = compact(functions(CLOSURE_SQL)["query_unit_records_v1"][2])
         facts = compact(functions(SQL)["query_unit_records_v1"][2])
         edits = (
-            ("DECLARE u record; pkg jsonb;", "DECLARE u record; digest text;"),
+            (
+                "DECLARE u record; pkg jsonb;",
+                "DECLARE u record; digest text; pinned boolean;",
+            ),
             (
                 "pkg:=memoriesql.query_unit_package_record_v1(t,id);",
-                "SELECT f.record_sha256 INTO digest FROM memoriesql.logical_unit_query_facts f "
-                "WHERE f.tenant_id=t AND f.source_unit_id=id;",
+                "SELECT f.record_sha256,f.package_id=m.package_id INTO digest,pinned "
+                "FROM memoriesql.logical_unit_query_facts f "
+                "JOIN memoriesql.logical_unit_materializations m ON m.tenant_id=f.tenant_id "
+                "AND m.source_unit_id=f.source_unit_id "
+                "WHERE f.tenant_id=t AND f.source_unit_id=id; "
+                "IF digest IS NOT NULL AND pinned IS NOT TRUE THEN RAISE EXCEPTION "
+                "'dependency_unavailable' USING ERRCODE='42501'; END IF;",
             ),
             ("CASE WHEN pkg IS NULL THEN", "CASE WHEN digest IS NULL THEN"),
             (
@@ -228,9 +248,13 @@ class SealedUnitFactsMigration(unittest.TestCase):
         before, after = functions(CLOSURE_SQL), functions(SQL)
         for name in ("query_unit_records_v1", "query_unit_package_v1"):
             with self.subTest(function=name):
+                # Only the package view's language changes, to refuse a stray pin.
+                replaced = compact(after[name][1]).replace(
+                    "LANGUAGE plpgsql STABLE", "LANGUAGE sql STABLE"
+                )
                 self.assertEqual(
                     tuple(map(compact, before[name][:2])),
-                    tuple(map(compact, after[name][:2])),
+                    (compact(after[name][0]), replaced),
                 )
 
     def test_package_value_keeps_every_key_but_the_unread_parts(self) -> None:

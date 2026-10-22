@@ -65,10 +65,12 @@ INSERT INTO memoriesql.logical_unit_query_facts
  WHERE f.source_unit_id IS NOT NULL;
 SET LOCAL row_security = on;
 
--- The unit's record holds its sealed digest. No part row is read.
+-- The unit's record holds its sealed digest. No part row is read. Facts
+-- describe the package sealed for the pin; a pin that no longer names that
+-- package (impossible through 0016/0017, so defense in depth) refuses whole.
 CREATE OR REPLACE FUNCTION memoriesql.query_unit_records_v1(t uuid,id uuid,known timestamptz) RETURNS jsonb
 LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,memoriesql SET row_security=off AS $$
-DECLARE u record; digest text;
+DECLARE u record; digest text; pinned boolean;
 BEGIN
  SELECT su.*,ev.source_object_id,ev.recorded_at,ev.content_hash event_content_hash INTO u
   FROM memoriesql.source_units su JOIN memoriesql.source_events ev ON ev.tenant_id=su.tenant_id AND ev.event_id=su.event_id
@@ -77,8 +79,13 @@ BEGIN
   OR NOT memoriesql.current_context_event_authorized(u.access_scope_id,u.event_id,'source.read','read') THEN
   RAISE EXCEPTION 'dependency_unavailable' USING ERRCODE='42501';
  END IF;
- SELECT f.record_sha256 INTO digest FROM memoriesql.logical_unit_query_facts f
+ SELECT f.record_sha256,f.package_id=m.package_id INTO digest,pinned
+  FROM memoriesql.logical_unit_query_facts f
+  JOIN memoriesql.logical_unit_materializations m ON m.tenant_id=f.tenant_id AND m.source_unit_id=f.source_unit_id
   WHERE f.tenant_id=t AND f.source_unit_id=id;
+ IF digest IS NOT NULL AND pinned IS NOT TRUE THEN
+  RAISE EXCEPTION 'dependency_unavailable' USING ERRCODE='42501';
+ END IF;
  RETURN CASE WHEN digest IS NULL THEN '[]'::jsonb ELSE jsonb_build_array(jsonb_build_object(
   'kind','unit_package','id',id::text,'row',jsonb_build_object('content_sha256',digest)))
  END || jsonb_build_array(
@@ -87,12 +94,16 @@ BEGIN
   jsonb_build_object('kind','source_object','id',u.source_object_id::text,'row',jsonb_build_object('source_object_id',u.source_object_id)));
 END $$;
 
--- The population's package view: one facts row, the pin and the package row,
--- never a part row; normalized text is the sealed copy, so reading it costs
--- its visible length only. The unread provenance 'parts' list is no longer
--- built; every other value is hidden_package_length's.
+-- The population's package view: one facts row, the pin and the package the
+-- facts were sealed from, never a part row; normalized text is the sealed
+-- copy, so reading it costs its visible length only. A pin that no longer
+-- names that package refuses, as the unit's records do. The unread
+-- provenance 'parts' list is no longer built; every other value is
+-- hidden_package_length's.
 CREATE OR REPLACE FUNCTION memoriesql.query_unit_package_v1(t uuid,id uuid) RETURNS jsonb
-LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog,memoriesql SET row_security=off AS $$
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=pg_catalog,memoriesql SET row_security=off AS $$
+DECLARE result jsonb; pinned boolean;
+BEGIN
  SELECT jsonb_build_object(
   'package_id',p.package_id,'sealed_receipt_id',p.sealed_receipt_id,
   'inventory_sha256',p.inventory_hash,
@@ -102,9 +113,13 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog,memoriesql SET r
   'exclusions',COALESCE(p.declaration#>'{qualification,exclusions}','[]'::jsonb),
   'unresolved_coverage',COALESCE(p.declaration#>'{qualification,unresolved_coverage}','[]'::jsonb),
   'normalized',f.normalized,
-  'text',f.normalized_text)
+  'text',f.normalized_text),f.package_id=m.package_id INTO result,pinned
  FROM memoriesql.logical_unit_query_facts f
  JOIN memoriesql.logical_unit_materializations m ON m.tenant_id=f.tenant_id AND m.source_unit_id=f.source_unit_id
- JOIN memoriesql.evidence_packages p ON p.tenant_id=m.tenant_id AND p.package_id=m.package_id
- WHERE f.tenant_id=t AND f.source_unit_id=id
-$$;
+ JOIN memoriesql.evidence_packages p ON p.tenant_id=f.tenant_id AND p.package_id=f.package_id
+ WHERE f.tenant_id=t AND f.source_unit_id=id;
+ IF result IS NOT NULL AND pinned IS NOT TRUE THEN
+  RAISE EXCEPTION 'dependency_unavailable' USING ERRCODE='42501';
+ END IF;
+ RETURN result;
+END $$;
