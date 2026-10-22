@@ -28,10 +28,12 @@ from unittest.mock import patch
 from uuid import UUID, uuid4
 
 if TYPE_CHECKING:
+    from tests.runtime import agent_relation_fixtures as relation_agents
     from tests.runtime import test_agent_sql_helpers_runtime as helpers
     from tests.runtime import test_agent_sql_results as fixtures
     from tests.runtime.test_postgres_runtime import migrate
 else:
+    import agent_relation_fixtures as relation_agents
     import test_agent_sql_helpers_runtime as helpers
     import test_agent_sql_results as fixtures
     from test_postgres_runtime import migrate
@@ -182,7 +184,8 @@ class HiddenPackageLength(unittest.TestCase):
         return bead
 
     def world(self, label: str, size: int, *, parts: int = 1) -> World:
-        scope, source, _ = self.fixture.remote_scope()
+        # remote_scope() may run only once per database; each world needs its own.
+        scope, source = relation_agents.explicit_scope(self.db, self.fixture)
         # The ledger's raw capture comes first in the source, so it sets the
         # width of every later raw-lineage offset.
         ledger = self.r.normalized_bead(
