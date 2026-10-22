@@ -430,36 +430,50 @@ class QueryAuditRetention(unittest.TestCase):
         wave(1)
         expire_all()
         base, base_parts = self.scalar(size), breakdown()
-        first = wave(256)
-        peak, peak_parts = self.scalar(size) - base, breakdown()
-        released = expire_all()
-        # Expired rows' space is reused once vacuumed (twice, so emptied index
-        # pages can be recycled too); the whole footprint since the baseline
-        # must stay within what the rows retained now are charged.
-        for _ in range(2):
-            self.db.execute(
-                "VACUUM memoriesql.authorization_audit_events,memoriesql.query_audit_events"
+        # A first wave, then four more, each after the previous wave's rows
+        # expired and both tables were vacuumed twice. Index pages emptied by
+        # expiry are recycled only once later transactions pass them, so one
+        # post-expiry wave cannot show that the footprint stops growing.
+        waves: list[dict[str, Any]] = []
+        for _ in range(5):
+            if waves:
+                released = expire_all()
+                self.assertEqual(released, waves[-1]["rows"] * ROW_BYTES)
+                for _ in range(2):
+                    self.db.execute(
+                        "VACUUM memoriesql.authorization_audit_events,"
+                        "memoriesql.query_audit_events"
+                    )
+            rows = wave(256)
+            waves.append(
+                {
+                    "rows": rows,
+                    "footprint_bytes": self.scalar(size) - base,
+                    "relations_bytes": breakdown(),
+                }
             )
-        second = wave(256)
-        steady, steady_parts = self.scalar(size) - base, breakdown()
         self.capacity = {
             "row_charge_bytes": ROW_BYTES,
-            "relations_bytes": {
-                "baseline": base_parts,
-                "after_first_wave": peak_parts,
-                "after_expiry_vacuum_and_second_wave": steady_parts,
-            },
-            "first_wave": {"rows": first, "physical_bytes": peak},
-            "second_wave_after_expiry_and_vacuum": {
-                "rows": second,
-                "physical_bytes_since_baseline": steady,
-            },
+            "baseline_relations_bytes": base_parts,
+            "waves": waves,
         }
-        self.assertGreaterEqual(first, 256)
-        self.assertGreaterEqual(second, 256)
-        self.assertLessEqual(peak, first * ROW_BYTES, (peak, first))
-        self.assertEqual(released, first * ROW_BYTES)
-        self.assertLessEqual(steady, second * ROW_BYTES, (steady, second))
+        # The whole footprint since the baseline stays within what the rows
+        # retained now are charged, at every wave.
+        for number, measured in enumerate(waves):
+            self.assertGreaterEqual(measured["rows"], 256, number)
+            self.assertLessEqual(
+                measured["footprint_bytes"],
+                measured["rows"] * ROW_BYTES,
+                (number, measured["footprint_bytes"], measured["rows"]),
+            )
+        # And it has stopped growing: over the last two waves at most one new
+        # 8 KiB page per relation, the allocation granularity.
+        growth = waves[-1]["footprint_bytes"] - waves[-2]["footprint_bytes"]
+        self.assertLessEqual(
+            growth,
+            8192 * len(base_parts),
+            [measured["footprint_bytes"] for measured in waves],
+        )
 
 
 if __name__ == "__main__":

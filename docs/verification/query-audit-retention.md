@@ -59,8 +59,8 @@ same way once it lands.
   awaiting reuse. That exceeded the first value, 1024 bytes, so the charge
   was raised before release. Reservations add the workspace's retained audit
   charge to the 512 MiB workspace allocation (`reserve_result_preparation_v1`,
-  otherwise unchanged). The installed capacity case measures physical growth
-  against this charge at peak, and again after expiry plus VACUUM.
+  otherwise unchanged). The installed capacity case measures the whole
+  footprint against this charge over repeated expiry and VACUUM cycles.
 - **When it counts.** The charge is post-hoc. It is counted by the next
   reservation, not reserved before execution, and it is not part of the
   128 MiB per-run allocation. A workspace can therefore exceed its
@@ -119,6 +119,8 @@ Installed runtime cases (`tests/runtime/test_query_audit_retention.py`):
 - expiry and release;
 - every refused update and delete;
 - the reservation decision flipping on the retained charge;
-- a capacity check over two waves of at least 256 rows. Physical growth of
-  both tables with all indexes stays at or below the charge at peak. After
-  expiry and VACUUM, the whole footprint stays within what is charged again.
+- a capacity check over five waves of at least 256 rows. Each later wave
+  follows the previous wave's expiry and two VACUUMs. At every wave the whole
+  footprint of both tables with all indexes stays within what the retained
+  rows are charged. Over the last two waves it grows by at most one 8 KiB
+  page per relation, so emptied index pages are being reused.
