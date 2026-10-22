@@ -197,6 +197,10 @@
     {
       "filename": "0049_hidden_package_length.sql",
       "sha256": "1c1a509cf8529680387886d1a1642c857faccc4e4f00602c6c4d868caee59e99"
+    },
+    {
+      "filename": "0050_sealed_unit_query_facts.sql",
+      "sha256": "7c71add0e010202cdd652081fdc88e552b33a9f91f023fb855921c85b6a58c5d"
     }
   ]
 }

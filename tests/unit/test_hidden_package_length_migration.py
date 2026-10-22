@@ -139,8 +139,9 @@ class HiddenPackageLengthMigration(unittest.TestCase):
 
     def test_every_installed_unit_package_record_is_fixed_width(self) -> None:
         installed = latest()
-        self.assertEqual(installed["query_unit_records_v1"][0], MIGRATION.name)
-        self.assertEqual(installed["query_unit_package_v1"][0], MIGRATION.name)
+        # This closure or a later forward one (sealed unit facts) installs them.
+        self.assertGreaterEqual(installed["query_unit_records_v1"][0], MIGRATION.name)
+        self.assertGreaterEqual(installed["query_unit_package_v1"][0], MIGRATION.name)
         self.assertEqual(
             {name for name, (_, body) in installed.items() if "'unit_package'" in body},
             {
@@ -150,14 +151,16 @@ class HiddenPackageLengthMigration(unittest.TestCase):
                 "read_query_helper_artifact_v1",
             },
         )
-        self.assertEqual(
-            {
-                name
-                for name, (_, body) in installed.items()
-                if "query_unit_package_record_v1(" in body
-            },
-            {"query_unit_package_v1", "query_unit_records_v1"},
-        )
+        # The full record is only ever hashed, or gates the population's text.
+        builders = {
+            name
+            for name, (_, body) in installed.items()
+            if "query_unit_package_record_v1(" in body
+        }
+        self.assertTrue(builders)
+        for name in builders - {"query_unit_package_v1"}:
+            with self.subTest(builder=name):
+                self.assertIn("lifecycle_hash_v1(", installed[name][1])
         # Only the population asks for package text, and only when normalized.
         readers = {
             name

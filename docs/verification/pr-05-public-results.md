@@ -96,11 +96,23 @@ authorized agent now receives its normalized projection, within these bounds:
   - A result saved before this migration keeps the full record, no longer
     rebuilds equal, and refuses as unavailable. Results last at most 30 days,
     so there is no dual acceptance.
-  - Residual, a recorded privacy release blocker: package reads still visit
-    every part row's inventory, raw lineage included, so database time tracks
-    the part count (at most 256) and lineage size, though never the raw byte
-    length. The fix stores per-materialization facts (the record digest and
-    the normalized flag) once at seal time, so queries read one row per unit.
+  - Its residual, database time tracking the part count and lineage size, is
+    closed by the next item.
+- **Sealed unit facts (forward migration `sealed_unit_query_facts`).** A
+  unit's package digest and normalized flag are fixed once it is
+  materialized. The package is sealed and immutable, and the pin is
+  insert-only.
+  - **Recorded once.** An insert-only facts table holds them. The
+    materializing writer records them under its own authority, and existing
+    units are backfilled.
+  - **Query paths.** Unit records, the population's package view, saved-result
+    rebuilds, inspection and helper reads now read one facts row per unit,
+    and no part row of a hidden package. Database time for a caller without
+    `source.raw.read` no longer tracks hidden part count or lineage size.
+    Parts are read only for normalized text, which the caller may see.
+  - **Same digests.** The digests equal the previous migration's, so results
+    saved under it still reuse. The population's package view no longer
+    builds the unread provenance `parts` list.
 
 Units that retain their own text (not materialized) return it as before.
 
