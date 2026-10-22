@@ -125,10 +125,9 @@ class PostgresRelationLifecycle:
         with self._connection.transaction():
             self._connection.execute("SET TRANSACTION ISOLATION LEVEL READ COMMITTED")
             self._connection.execute(
-                "SELECT set_config('statement_timeout',%s,true), "
-                "set_config('lock_timeout','500',true)",
-                (str(statement_timeout_ms),),
+                f"SET LOCAL statement_timeout='{int(statement_timeout_ms)}ms'"
             )
+            self._connection.execute("SET LOCAL lock_timeout='500ms'")
             self._connection.execute("SET LOCAL ROLE memoriesql_application")
             PostgresAuthorizationPort(self._connection).begin_context(
                 credential_sha256=self._credential,
