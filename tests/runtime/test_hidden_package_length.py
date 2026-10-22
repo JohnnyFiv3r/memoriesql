@@ -16,16 +16,18 @@ suite does.
 from __future__ import annotations
 
 import base64
+import functools
 import hashlib
 import json
 import os
 import re
 import unittest
 from dataclasses import dataclass
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 from uuid import UUID, uuid4
+
+from memoriesql.infrastructure.postgres.migration_runner import discover_migrations
 
 if TYPE_CHECKING:
     from tests.runtime import agent_relation_fixtures as relation_agents
@@ -38,17 +40,16 @@ else:
     import test_agent_sql_results as fixtures
     from test_postgres_runtime import migrate
 
-MIGRATIONS = Path(__file__).resolve().parents[2] / "migrations"
-# The forward number is the next free one at landing; find it by name.
-CLOSURE = int(
-    sorted(MIGRATIONS.glob("[0-9][0-9][0-9][0-9]_hidden_package_length.sql"))[0].name[
-        :4
-    ]
-)
 QUERY = (
     "SELECT s.text,u.text_state,u.search_text FROM memory_v1.statements s "
     "JOIN memory_v1.statement_sources ss ON ss.statement_id=s.statement_id "
     "JOIN memory_v1.source_units u ON u.source_unit_id=ss.source_unit_id "
+    "ORDER BY s.text"
+)
+# Source refs are delivered only for a selected evidence_ref column.
+CITED = (
+    "SELECT s.text,ss.evidence_ref FROM memory_v1.statements s "
+    "JOIN memory_v1.statement_sources ss ON ss.statement_id=s.statement_id "
     "ORDER BY s.text"
 )
 # A bound, not a proof: equal work still varies with scheduling.
@@ -61,6 +62,21 @@ def hidden(label: str, size: int) -> str:
     while sum(map(len, blocks)) < size:
         blocks.append(hashlib.sha256(f"{label}:{len(blocks)}".encode()).hexdigest())
     return ("Fictional RAW " + "".join(blocks))[:size]
+
+
+@functools.cache
+def installed(name: str) -> tuple[int, str]:
+    """An installed migration's version and SQL, found by name.
+
+    Read from the installed package, never a checkout: installed acceptance
+    copies these tests flat. The closure's number is assigned at landing.
+    """
+    (found,) = [m for m in discover_migrations() if m.name == name]
+    return found.version, found.sql
+
+
+def closure() -> int:
+    return installed("hidden_package_length")[0]
 
 
 @dataclass(frozen=True)
@@ -95,10 +111,12 @@ class HiddenPackageLength(unittest.TestCase):
             self.world("w2", self.LARGE),
             self.world("w3", self.LARGE, parts=self.PARTS),
         )
-        migrate(self.db, expected_current_version=43, target_version=CLOSURE - 1)
+        migrate(self.db, expected_current_version=43, target_version=closure() - 1)
 
     def upgrade(self) -> None:
-        migrate(self.db, expected_current_version=CLOSURE - 1, target_version=CLOSURE)
+        migrate(
+            self.db, expected_current_version=closure() - 1, target_version=closure()
+        )
 
     def scalar(self, statement: str, values: tuple[Any, ...] = ()) -> Any:
         return self.r.h.scalar(statement, values)
@@ -236,7 +254,8 @@ class HiddenPackageLength(unittest.TestCase):
 
     def original_package_function(self) -> None:
         """0037's package value, as installed before the closure, in pg_temp."""
-        text = (MIGRATIONS / "0037_observation_sql_population.sql").read_text()
+        version, text = installed("observation_sql_population")
+        self.assertEqual(version, 37)
         match = re.search(
             r"CREATE FUNCTION memoriesql\.query_unit_package_v1\(t uuid,id uuid\)"
             r".*? AS \$\$(.*?)\$\$;",
@@ -328,6 +347,19 @@ class HiddenPackageLength(unittest.TestCase):
         again = self.r.reuse(run, first["result"], page_size=50, secret=world.agent)
         self.assertEqual(again["outcome"], "available", again)
         record("reuse", again)
+        # Every world must show exactly its three visible notes, page by page
+        # and whole, before any comparison: an empty world proves nothing.
+        expected = [
+            [self.IDENTITY, "unsupported", None],
+            [self.TEXT, "available", self.TEXT],
+            [self.LEDGER, "available", self.LEDGER],
+        ]
+        self.assertEqual(first["result"]["total_rows"], "3")
+        self.assertEqual([row["values"] for row in again["page"]["rows"]], expected)
+        self.assertEqual(
+            [rows for rows in exact if isinstance(rows, list)],
+            [[row] for row in expected],
+        )
         inspection = self.r.send(
             {
                 "contract_version": 1,
@@ -350,13 +382,26 @@ class HiddenPackageLength(unittest.TestCase):
         )
         self.assertEqual(inspection["outcome"], "available", inspection)
         record("inspect", inspection)
-        source = next(
+        _, cited = self.r.query(run, CITED, page_size=50, secret=world.agent)
+        self.assertEqual(cited["outcome"], "available", cited)
+        record("cited", cited)
+        # Each result mints its own evidence refs: compare the rest exactly.
+        for row in cited["page"]["rows"]:
+            self.assertEqual(str(UUID(row["values"][1])), row["values"][1])
+        self.assertEqual(
+            [row["values"][0] for row in cited["page"]["rows"]],
+            [self.IDENTITY, self.TEXT, self.LEDGER],
+        )
+        exact.append([row["values"][0] for row in cited["page"]["rows"]])
+        sources = [
             ref
-            for row in again["page"]["rows"]
+            for row in cited["page"]["rows"]
             if row["values"][0] == self.TEXT
             for ref in row["evidence_refs"]
             if ref["kind"] == "source"
-        )
+        ]
+        self.assertEqual(len(sources), 1, cited["page"]["rows"])
+        (source,) = sources
         part = self.scalar(
             "SELECT pp.part_id FROM memoriesql.logical_unit_materializations m "
             "JOIN memoriesql.evidence_package_parts pp "
@@ -380,7 +425,7 @@ class HiddenPackageLength(unittest.TestCase):
                         "end": 32,
                         "origin": {
                             "result": {
-                                k: first["result"][k]
+                                k: cited["result"][k]
                                 for k in ("result_id", "content_digest")
                             },
                             "access": {"kind": "standalone"},
@@ -400,6 +445,21 @@ class HiddenPackageLength(unittest.TestCase):
             request, world.agent, int(first["work"]["retained_bytes"])
         )
         exact.append(("threshold", least, steps))
+        self.assertEqual(
+            [item[0] for item in exact if isinstance(item, tuple)],
+            [
+                "population",
+                "page",
+                "page",
+                "reuse",
+                "inspect",
+                "cited",
+                "hydrate",
+                "threshold",
+            ],
+        )
+        # Six available replies always carry work; a refusal may not.
+        self.assertGreaterEqual(len(times), 6)
         # Two runs may be active per workspace; each world uses one in turn.
         self.r.close(run, secret=world.agent)
         return exact, times
@@ -412,7 +472,12 @@ class HiddenPackageLength(unittest.TestCase):
             [self.part_count(world.identity) for world in self.worlds],
             [1, 1, self.PARTS],
         )
-        (first, first_times), *others = map(self.measure, self.worlds)
+        # An explicit loop: a StopIteration inside map() would end it silently.
+        measured = []
+        for world in self.worlds:
+            measured.append(self.measure(world))
+        (first, first_times), *others = measured
+        self.assertEqual(len(others), 2)
         for exact, times in others:
             self.assertEqual(exact, first)
             self.assertEqual(len(times), len(first_times))
@@ -568,7 +633,7 @@ class HelpersWithClosure(helpers.AgentSqlHelperRuntime):
 
     def setUp(self) -> None:
         super().setUp()
-        migrate(self.db, expected_current_version=46, target_version=CLOSURE)
+        migrate(self.db, expected_current_version=46, target_version=closure())
 
 
 if __name__ == "__main__":
