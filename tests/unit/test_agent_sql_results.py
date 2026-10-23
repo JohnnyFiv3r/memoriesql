@@ -15,7 +15,7 @@ from unittest.mock import MagicMock, Mock, call, patch
 from uuid import uuid4
 
 from psycopg import OperationalError
-from psycopg.errors import InsufficientPrivilege
+from psycopg.errors import InsufficientPrivilege, SerializationFailure
 
 from memoriesql.application.agent_sql_catalog import SqlCatalog
 from memoriesql.application.agent_sql_helpers import validate_helper_content
@@ -29,6 +29,7 @@ from memoriesql.infrastructure.postgres.agent_sql_authority import (
 )
 from memoriesql.infrastructure.postgres.agent_sql_results import (
     _AUDIT_DELIVERY,
+    ADMISSION_REFUSAL,
     PostgresAgentSqlResults,
     _attributed,
     _Failure,
@@ -630,6 +631,50 @@ EXPECTED_BACKEND_SIGNATURES = {
     "memoriesql.prepare_query_hydration_v1(uuid,jsonb)",
     "memoriesql.purge_query_helper_step_v1()",
 }
+
+
+class AdmissionRefusalReason(unittest.TestCase):
+    """The owner's log learns which construct refused; the reply stays conflated."""
+
+    REMAINING = {"accesses": 7, "db_ms": 1000}
+
+    def refuse(self, admission: Any) -> dict[str, Any]:
+        service: Any = object.__new__(PostgresAgentSqlResults)
+        service._admit = admission
+        service._deliver = Mock(side_effect=AssertionError("never delivered"))
+        ADMISSION_REFUSAL.set("left over from an earlier request")
+        reply: dict[str, Any] = json.loads(
+            service.handle(json.dumps(HelperDispatch().request("inspect")).encode())
+        )
+        return reply
+
+    def test_busy_and_spent_runs_share_one_reply_but_not_one_reason(self) -> None:
+        for refused in ("busy", "accesses"):
+            with self.subTest(refused=refused):
+                reply = self.refuse(
+                    Mock(return_value={"refused": refused, "remaining": self.REMAINING})
+                )
+                self.assertEqual(
+                    (reply["outcome"], reply["error"], reply["access_receipt_ref"]),
+                    ("budget_exhausted", {"code": "database"}, None),
+                )
+                self.assertEqual(reply["remaining"], self.REMAINING)
+                self.assertEqual(ADMISSION_REFUSAL.get(), refused)
+
+    def test_a_serialization_conflict_names_its_sqlstate(self) -> None:
+        reply = self.refuse(Mock(side_effect=SerializationFailure("fictional")))
+        self.assertEqual(
+            (reply["outcome"], reply["error"]), ("budget_exhausted", {"code": "settlement"})
+        )
+        self.assertEqual(ADMISSION_REFUSAL.get(), "sqlstate:40001")
+
+    def test_admitted_work_clears_any_earlier_reason(self) -> None:
+        service: Any = object.__new__(PostgresAgentSqlResults)
+        service._admit = Mock(return_value={})
+        service._deliver = Mock(return_value=b"delivered")
+        ADMISSION_REFUSAL.set("busy")
+        service.handle(json.dumps(HelperDispatch().request("inspect")).encode())
+        self.assertIsNone(ADMISSION_REFUSAL.get())
 
 
 class QueryAuditAttribution(unittest.TestCase):

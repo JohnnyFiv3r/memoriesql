@@ -183,6 +183,11 @@ def _helper_module_available() -> bool:
         return False
 
 
+# The construct admission refused for, for the trusted host's owner-only request
+# log. Replies keep the conflated, agent-visible code from _REFUSALS.
+ADMISSION_REFUSAL: ContextVar[str | None] = ContextVar(
+    "memoriesql_admission_refusal", default=None
+)
 # Admission refusals write nothing and disclose no other principal's work.
 _REFUSALS = {
     "unavailable": ("unavailable", "unavailable"),
@@ -239,6 +244,11 @@ def _busy(error: BaseException) -> str | None:
     """
     code = _state_code(error)
     return code if code in ("time", "storage", "settlement") else None
+
+
+def _refused_state(error: BaseException) -> str:
+    """The SQLSTATE a refused control call failed with, for the owner's log."""
+    return "sqlstate:" + (getattr(error, "sqlstate", None) or "none")
 
 
 def _refusal(error: BaseException) -> tuple[str, str]:
@@ -374,6 +384,7 @@ class PostgresAgentSqlResults:
         workspace's admission lock, is `budget_exhausted` / `time` and starts
         nothing.
         """
+        ADMISSION_REFUSAL.set(None)
         self._cleanup_workspace()
         try:
             with self._control() as connection:
@@ -389,6 +400,7 @@ class PostgresAgentSqlResults:
                     ).fetchone()
         except (PermissionError, Error) as error:
             outcome, code = _refusal(error)
+            ADMISSION_REFUSAL.set(_refused_state(error))
             return result_json_bytes(
                 {
                     "contract_version": CONTRACT_VERSION,
@@ -398,6 +410,7 @@ class PostgresAgentSqlResults:
             )
         data: dict[str, Any] = row[0] if row else {"refused": "unavailable"}
         if "run" not in data:
+            ADMISSION_REFUSAL.set(str(data.get("refused")))
             code = "settlement" if data.get("refused") == "cleanup" else "database"
             return result_json_bytes(
                 {
@@ -617,6 +630,7 @@ class PostgresAgentSqlResults:
         kind = request.kind
         fingerprint = request_fingerprint(request)
         admission: dict[str, Any] = {}
+        ADMISSION_REFUSAL.set(None)
         for attempt in range(2):
             try:
                 admission = self._admit(request, kind, fingerprint)
@@ -632,6 +646,7 @@ class PostgresAgentSqlResults:
                 # Nothing was admitted or charged: a timed-out admission is a
                 # budget refusal, not missing authority.
                 outcome, code = _refusal(error)
+                ADMISSION_REFUSAL.set(_refused_state(error))
                 return self._bare(
                     request.run_ref,
                     request.step_key,
@@ -640,6 +655,8 @@ class PostgresAgentSqlResults:
                     None,
                 )
             refused = admission.get("refused")
+            if refused:
+                ADMISSION_REFUSAL.set(str(refused))
             if refused == "pending_self" and attempt == 0:
                 # The same step is open. Only a confirmed-dead owner may be
                 # abandoned (full reservation charged); a live one stays pending,
