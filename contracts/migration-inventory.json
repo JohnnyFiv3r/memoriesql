@@ -201,6 +201,10 @@
     {
       "filename": "0050_sealed_unit_query_facts.sql",
       "sha256": "2c39a4ada8de634a13b146316852d75b2f7fe7b80fad0eab5ff5913304a44f08"
+    },
+    {
+      "filename": "0051_supervised_reapproval.sql",
+      "sha256": "c95bcac87641a80abd1283cdc08c9545b647e246215c342dfb10db02f94cede5"
     }
   ]
 }
