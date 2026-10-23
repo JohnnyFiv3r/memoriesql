@@ -72,17 +72,28 @@ audit (2026-10-23).
 
 ## Options
 
-**A. Writers poll instead of queueing** (no semantic change).
+**A. Writers poll instead of queueing** — **owner decision: a revocation can
+be starved.**
 - **How.** Authority writers take the key with `pg_try_advisory_xact_lock` in a
   short bounded loop before their first row, instead of blocking in the queue.
-  Readers then never queue behind a waiting writer. A writer still commits
-  only after in-flight shared holders finish, so the guarantee holds.
-- **Cost.**
-  - Under constant read load a writer can fail after its bound (`busy`) rather
-    than eventually win. That is visible to the owner and retryable.
-  - Every writer needs an explicit pre-fence call, because the trigger cannot
-    poll before the row is locked. That also fixes rule 1 for the two
-    remaining row-first writers.
+  Readers then never queue behind a waiting writer. A writer still commits only
+  after in-flight shared holders finish, so no read or settlement observes a
+  half-applied change.
+- **Starvation.** A polling writer never holds a place in the queue. So read
+  frames that overlap one another, each holding the key shared for up to 30 s,
+  can keep it shared indefinitely. A revocation then fails `busy` at every
+  bound, and the authority it revokes stays in force while reads continue.
+  - Today a waiting revocation instead blocks new readers and is granted as
+    soon as the in-flight ones end.
+  - A must not ship without a bound on that starvation, for example:
+    - fall back to queueing after the polling bound;
+    - or have new readers decline the key while a revocation is pending, which
+      is writer preference without the convoy.
+  - How long a revocation may wait behind reads is a trust decision for the
+    owner.
+- **Cost.** Every writer needs an explicit pre-fence call, because the trigger
+  cannot poll before the row is locked. That also fixes rule 1 for the two
+  remaining row-first writers.
 
 **B. Two levels: tenant key, then a principal key** (keeps the guarantee per
 principal).
@@ -119,20 +130,24 @@ the trip point; it does not remove the convoy.
 ## Recommendation
 
 1. **Now:** the bounded retry (done in this change). It turns most brief
-   overlaps into short waits instead of failures.
-2. **Next, as engineering:** A, writers poll. It removes the convoy without
-   changing what a revocation guarantees, and closes rule 1 for
-   `revise_access_grant` and the trigger-only writers.
-3. **Then, if one tenant's queries must survive another principal's changes:**
-   B, principal-scoped keys. It needs its own source audit and database proofs.
-4. **Not without the owner:** C.
+   overlaps into short waits instead of failures, and changes no queueing.
+2. **For the owner:** A or B. Both narrow who stalls whom; each needs its own
+   change, source audit and database proofs.
+   - **A, writers poll,** removes the convoy for every caller. It is only
+     acceptable with a bound on revocation starvation that the owner agrees.
+   - **B, principal-scoped keys,** keeps today's queueing, so a revocation is
+     never starved. It confines the stall to the affected principal's work, at
+     the cost of every shared caller naming its principals correctly.
+3. **Not without the owner:** C.
 
 ## What a database proof would need
 
 - **For A:**
   - a writer that polls while a long shared holder runs;
   - a new reader that is admitted during the poll;
-  - a writer that still commits after the holder.
+  - a writer that still commits after the holder;
+  - overlapping readers that hold the key continuously, and the revocation
+    still taking effect within its agreed bound.
 - **For B, per caller family:**
   - a change to principal P waits for P's frame and not for Q's;
   - a tenant-wide change still waits for every frame;
