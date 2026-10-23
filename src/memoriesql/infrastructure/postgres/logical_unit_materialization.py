@@ -31,6 +31,7 @@ from memoriesql.application.source_stable_identity import (
     SourceStableMaterializationReceipt,
 )
 from memoriesql.infrastructure.postgres.authorization import PostgresAuthorizationPort
+from memoriesql.infrastructure.postgres.transient_retry import run_owned
 
 
 class PostgresLogicalUnitMaterialization:
@@ -87,23 +88,32 @@ class PostgresLogicalUnitMaterialization:
             raise ValueError("materialization command exceeds byte bound")
         if self._connection.info.transaction_status != TransactionStatus.IDLE:
             raise RuntimeError("materialization requires transaction ownership")
-        with self._connection.transaction():
-            # Authorization fences must observe revocations committed during waits.
-            # Do not inherit a caller-configured repeatable-read snapshot.
-            self._connection.execute("SET TRANSACTION ISOLATION LEVEL READ COMMITTED")
-            self._connection.execute(
-                "SELECT set_config('statement_timeout', %s, true), set_config('lock_timeout', %s, true)",
-                (str(OPERATION_TIMEOUT_MS), str(LOCK_TIMEOUT_MS)),
-            )
-            self._connection.execute("SET LOCAL ROLE memoriesql_application")
-            PostgresAuthorizationPort(self._connection).begin_context(
-                credential_sha256=self._credential,
-                requested_workspace_id=self._workspace,
-            )
-            row = self._connection.execute(query, (Jsonb(payload),)).fetchone()
-            if row is None or row[0] is None:
-                raise PermissionError("materialization unavailable")
-            if len(canonical_json_bytes(row[0])) > MATERIALIZATION_COMMAND_MAX_BYTES:
-                raise ValueError("materialization response exceeds byte bound")
-            result = response_type.model_validate(row[0])
-        return result
+
+        def attempt() -> ResultT:
+            with self._connection.transaction():
+                # Authorization fences must observe revocations committed during waits.
+                # Do not inherit a caller-configured repeatable-read snapshot.
+                self._connection.execute(
+                    "SET TRANSACTION ISOLATION LEVEL READ COMMITTED"
+                )
+                self._connection.execute(
+                    "SELECT set_config('statement_timeout', %s, true), set_config('lock_timeout', %s, true)",
+                    (str(OPERATION_TIMEOUT_MS), str(LOCK_TIMEOUT_MS)),
+                )
+                self._connection.execute("SET LOCAL ROLE memoriesql_application")
+                PostgresAuthorizationPort(self._connection).begin_context(
+                    credential_sha256=self._credential,
+                    requested_workspace_id=self._workspace,
+                )
+                row = self._connection.execute(query, (Jsonb(payload),)).fetchone()
+                if row is None or row[0] is None:
+                    raise PermissionError("materialization unavailable")
+                if (
+                    len(canonical_json_bytes(row[0]))
+                    > MATERIALIZATION_COMMAND_MAX_BYTES
+                ):
+                    raise ValueError("materialization response exceeds byte bound")
+                result = response_type.model_validate(row[0])
+            return result
+
+        return run_owned(attempt)

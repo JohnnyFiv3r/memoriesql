@@ -113,8 +113,10 @@ Malformed/stale selection raises a request error; missing/corrupt retained evide
 raises `fold_recovery_unavailable` (`P0002`); absent/revoked authority fails closed;
 lock/work/response limits raise explicit database errors. There is no truncated
 success result or fallback to filesystem/provider access. SQL failures roll back
-that operation's transaction and audit work. Callers may retry a bounded operation
-with current credentials; recovery owns no maintenance or retry machinery.
+that operation's transaction and audit work. The adapter re-runs an operation
+that lock contention alone stopped, at most four times
+(`docs/verification/owned-transaction-retry.md`). Callers may retry any other
+bounded failure with current credentials; recovery owns no maintenance machinery.
 
 ## Compatibility and dependent work
 
