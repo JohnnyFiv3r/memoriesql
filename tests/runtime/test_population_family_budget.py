@@ -79,7 +79,8 @@ class PopulationFamilyBudget(unittest.TestCase):
             LINEAGE - 1,
         )
         # An accepted assessed relation whose evidence is the lineage head's.
-        fixture.activate_relations(head, (target,))
+        # Its own activation key: assertion() already used the default one.
+        fixture.activate_relations(head, (target,), key="orchard.assess.deep")
         fixture.propose(
             lambda packet: [
                 fixture.proposal(
