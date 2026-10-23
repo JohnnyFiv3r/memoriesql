@@ -38,6 +38,9 @@ from memoriesql.infrastructure.postgres.canonical_transactions import (
     PostgresCanonicalTransactions,
 )
 from memoriesql.infrastructure.postgres.migration_runner import discover_migrations
+from memoriesql.infrastructure.postgres.relation_sql_population import (
+    prepare_query_population,
+)
 
 if TYPE_CHECKING:
     from tests.runtime.test_postgres_runtime import PostgresRuntime, migrate
@@ -303,30 +306,49 @@ class PartialObservationAcceptance(PostgresRuntime):
             )[0]
         )
 
+    def agent_rows(self, secret: str, bead: Any) -> dict[str, tuple[Any, ...]]:
+        """The agent's own SQL population rows that name `bead`, per relation."""
+        with prepare_query_population(
+            self.db,
+            credential_sha256=secret,
+            workspace_id=self.workspace,
+            known_at=None,
+            view="resolved",
+            byte_budget=64 * 1024 * 1024,
+        ) as population:
+            return {
+                name: tuple(row for row in rows if any(str(v) == str(bead) for v in row))
+                for name, rows in population.rows.items()
+            }
+
     def test_a_withheld_bead_reads_as_never_authored(self) -> None:
         secret = self.pair_agent()
-        readers = {"owner": None, "agent": secret}
-        before = {
-            (name, bead): self.inspected(bead, credential)
-            for name, credential in readers.items()
-            for bead in self.beads
-        }
-        # Both readers can read the beads, so neither comparison below is vacuous.
-        for name in readers:
-            with self.subTest(reader=name):
-                self.assertEqual(before[name, self.gate]["outcome"], "available")
-                self.assertEqual(before[name, self.gate]["bead"]["lifecycle"], "thin")
+        # The owner's stored-bead inspection: available and thin before.
+        owner = {bead: self.inspected(bead) for bead in self.beads}
+        self.assertEqual(owner[self.gate]["outcome"], "available")
+        self.assertEqual(owner[self.gate]["bead"]["lifecycle"], "thin")
+        # The agent's surface is its SQL population. Stored-bead inspection
+        # needs source.raw.read on the bead's source (evidence_package_authorize),
+        # which a paired agent never holds, so it is unavailable to the agent
+        # before and after, by design and not as a vacuous pass.
+        agent = {bead: self.agent_rows(secret, bead) for bead in self.beads}
+        refused = {bead: self.inspected(bead, secret) for bead in self.beads}
+        for bead in self.beads:
+            self.assertEqual(refused[bead]["outcome"], "unavailable")
         self.persist(self.result((0,), ((self.gate, "withheld.pin_mismatch"),)))
-        for name, credential in readers.items():
-            with self.subTest(reader=name):
-                # The withheld bead reads exactly as before it was authored.
-                self.assertEqual(self.inspected(self.gate, credential), before[name, self.gate])
-        # Not a vacuous comparison: for each reader the accepted bead did change.
-        for name, credential in readers.items():
-            with self.subTest(reader=name):
-                accepted = self.inspected(self.trees, credential)
-                self.assertNotEqual(accepted, before[name, self.trees])
-                self.assertEqual(accepted["bead"]["lifecycle"], "accepted")
+        # The withheld bead reads exactly as before it was authored, to both.
+        self.assertEqual(self.inspected(self.gate), owner[self.gate])
+        self.assertEqual(self.agent_rows(secret, self.gate), agent[self.gate])
+        self.assertEqual(self.inspected(self.gate, secret), refused[self.gate])
+        # Not a vacuous comparison: each reader sees the accepted bead change,
+        # the agent through statements it can now read.
+        accepted = self.inspected(self.trees)
+        self.assertNotEqual(accepted, owner[self.trees])
+        self.assertEqual(accepted["bead"]["lifecycle"], "accepted")
+        visible = self.agent_rows(secret, self.trees)
+        self.assertNotEqual(visible, agent[self.trees])
+        self.assertTrue(visible["statements"])
+        self.assertFalse(agent[self.trees]["statements"])
 
     def test_hidden_state_never_yields_partial_acceptance(self) -> None:
         # A refusal that depends on database state (here a revoked source)
@@ -405,6 +427,25 @@ class PartialObservationAcceptance(PostgresRuntime):
         with self.assertRaises(psycopg.Error):
             with self.db.transaction():
                 self.db.execute(f"UPDATE {TABLE} SET reason_code='withheld.duplicated'")
+
+    def test_function_grants_are_exactly_the_documented_ones(self) -> None:
+        # Custody B-6: the effective EXECUTE privileges after 0052. Apply stays
+        # reachable only through its wrapper; the recorder is the worker's and
+        # the owner read the application's.
+        grants = {
+            "memoriesql.apply_semantic_annotations_schema29(jsonb,text,text,timestamptz)": (),
+            "memoriesql.record_withheld_semantic_output_v1(uuid,uuid,uuid,bigint,text,text,jsonb)":
+                ("memoriesql_worker",),
+            "memoriesql.withheld_semantic_output_v1(uuid)": ("memoriesql_application",),
+        }
+        roles = ("public", "memoriesql_worker", "memoriesql_application", "memoriesql_query_view_owner")
+        for function, allowed in grants.items():
+            for role in roles:
+                with self.subTest(function=function, role=role):
+                    self.assertEqual(
+                        self.row("SELECT has_function_privilege(%s,%s,'EXECUTE')", (role, function))[0],
+                        role in allowed,
+                    )
 
     def test_without_a_withheld_row_a_missing_bead_is_still_refused(self) -> None:
         with self.assertRaises(psycopg.errors.DataError):
