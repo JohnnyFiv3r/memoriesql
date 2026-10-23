@@ -58,6 +58,12 @@ else:
     from test_postgres_runtime import PostgresRuntime, migrate
 
 
+# Bound for waits on real progress of another thread or session. A contended
+# hosted runner can take many times a local run to reach a step, so the bound
+# only has to catch a wedge (test_attempt_refusals' receipt gate is 30 s too).
+PROGRESS_SECONDS = 30
+
+
 class ImmutableObservations(PostgresRuntime):
     def setUp(self) -> None:
         super().setUp()
@@ -925,7 +931,8 @@ class ImmutableObservations(PostgresRuntime):
                     assert expires is not None
                     thread.start()
                     self.assertTrue(
-                        connection_ready.wait(2), "worker did not establish its context"
+                        connection_ready.wait(PROGRESS_SECONDS),
+                        "worker did not establish its context"
                     )
                     self.assertTrue(worker_pid, errors)
                     deadline = time.monotonic() + 2

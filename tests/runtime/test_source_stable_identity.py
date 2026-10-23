@@ -34,6 +34,12 @@ else:
     from test_postgres_runtime import migrate
 
 
+# Bound for waits on real progress of another thread or session. A contended
+# hosted runner can take many times a local run to reach a step, so the bound
+# only has to catch a wedge (test_attempt_refusals' receipt gate is 30 s too).
+PROGRESS_SECONDS = 30
+
+
 class SourceStableIdentity(unittest.TestCase):
     def setUp(self) -> None:
         self.f = fixtures.LogicalUnitMaterialization(
@@ -578,10 +584,12 @@ class SourceStableIdentity(unittest.TestCase):
         with psycopg.connect(
             make_conninfo(f.admin, dbname=f.database), autocommit=True
         ) as lock:
-            f.db.execute(
-                "UPDATE memoriesql.authentication_credentials SET expires_at=clock_timestamp()+interval '350 milliseconds' WHERE principal_id=%s",
+            expiry = f.db.execute(
+                "UPDATE memoriesql.authentication_credentials SET expires_at=clock_timestamp()+interval '3 seconds' WHERE principal_id=%s RETURNING expires_at",
                 (f.principal,),
-            )
+            ).fetchone()
+            assert expiry is not None
+            expires = expiry[0]
 
             def submit() -> Any:
                 with psycopg.connect(
@@ -598,7 +606,7 @@ class SourceStableIdentity(unittest.TestCase):
                         (str(f.tenant) + ":materialization-source:" + str(f.source),),
                     )
                     future = pool.submit(submit)
-                    deadline = monotonic() + 1
+                    deadline = monotonic() + PROGRESS_SECONDS
                     while not f.row(
                         "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=%s AND wait_event='advisory' AND query LIKE 'SELECT memoriesql.materialize_logical_unit_v2%%')",
                         (f.database,),
@@ -608,9 +616,12 @@ class SourceStableIdentity(unittest.TestCase):
                                 "materialization did not reach the held source lock"
                             )
                         sleep(0.005)
-                    sleep(0.36)
+                    # Waiting before the deadline, released only after it.
+                    remaining = (expires - datetime.now(UTC)).total_seconds()
+                    self.assertGreater(remaining, 0, "waited only after expiry")
+                    sleep(remaining + 0.015)
                 with self.assertRaisesRegex(psycopg.Error, "authority_unavailable"):
-                    future.result(timeout=3)
+                    future.result(timeout=PROGRESS_SECONDS)
         self.assertEqual(f.counts(), (0, 0, 0, 0, 0, 0, 0))
         self.assertEqual(
             f.row(
