@@ -347,8 +347,8 @@ class PartialObservationAcceptance(PostgresRuntime):
         self.assertEqual(accepted["bead"]["lifecycle"], "accepted")
         visible = self.agent_rows(secret, self.trees)
         self.assertNotEqual(visible, agent[self.trees])
-        self.assertTrue(visible["statements"])
-        self.assertFalse(agent[self.trees]["statements"])
+        self.assertTrue(visible["memory_v1.statements"])
+        self.assertFalse(agent[self.trees]["memory_v1.statements"])
 
     def test_hidden_state_never_yields_partial_acceptance(self) -> None:
         # A refusal that depends on database state (here a revoked source)
