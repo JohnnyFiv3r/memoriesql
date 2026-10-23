@@ -201,6 +201,10 @@
     {
       "filename": "0050_sealed_unit_query_facts.sql",
       "sha256": "2c39a4ada8de634a13b146316852d75b2f7fe7b80fad0eab5ff5913304a44f08"
+    },
+    {
+      "filename": "0051_population_family_budget.sql",
+      "sha256": "b69b586866974280f231ccdbbedeb31fd82f0bdb01e347960f91625098052886"
     }
   ]
 }
