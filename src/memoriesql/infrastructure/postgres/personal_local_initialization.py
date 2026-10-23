@@ -14,6 +14,7 @@ from memoriesql.application.personal_local_initialization import (
     InitializePersonalLocal,
     PersonalLocalInitialization,
 )
+from memoriesql.infrastructure.postgres.transient_retry import run_owned
 
 _INITIALIZATION_NAMESPACE = UUID("1f3c4b2a-8d7e-5f60-9a1b-2c3d4e5f6a7b")
 _ROLES = (
@@ -57,32 +58,36 @@ class PostgresPersonalLocalInitialization:
         command = InitializePersonalLocal.model_validate(request.model_dump(mode="json"))
         ids = initialization_identities(command.request_id)
         try:
-            with self._connection.transaction():
-                self._connection.execute(
-                    "SELECT set_config('statement_timeout','2500',true), "
-                    "set_config('lock_timeout','500',true)"
-                )
-                self._connection.execute("SET LOCAL ROLE memoriesql_application")
-                self._connection.execute(
-                    "SELECT memoriesql.bootstrap_personal_local("
-                    "%s,%s,%s,%s,%s,%s,%s,%s,%s,'memoriesql.local',%s,%s,%s,"
-                    "pg_catalog.statement_timestamp(),%s)",
-                    (
-                        ids["tenant"],
-                        ids["user"],
-                        ids["identity"],
-                        ids["principal"],
-                        ids["workspace"],
-                        ids["access-scope"],
-                        ids["policy-revision"],
-                        ids["credential"],
-                        ids["session"],
-                        str(ids["identity"]),
-                        command.owner_display_name,
-                        session_secret_sha256,
-                        command.expires_at,
-                    ),
-                )
+
+            def attempt() -> None:
+                with self._connection.transaction():
+                    self._connection.execute(
+                        "SELECT set_config('statement_timeout','2500',true), "
+                        "set_config('lock_timeout','500',true)"
+                    )
+                    self._connection.execute("SET LOCAL ROLE memoriesql_application")
+                    self._connection.execute(
+                        "SELECT memoriesql.bootstrap_personal_local("
+                        "%s,%s,%s,%s,%s,%s,%s,%s,%s,'memoriesql.local',%s,%s,%s,"
+                        "pg_catalog.statement_timestamp(),%s)",
+                        (
+                            ids["tenant"],
+                            ids["user"],
+                            ids["identity"],
+                            ids["principal"],
+                            ids["workspace"],
+                            ids["access-scope"],
+                            ids["policy-revision"],
+                            ids["credential"],
+                            ids["session"],
+                            str(ids["identity"]),
+                            command.owner_display_name,
+                            session_secret_sha256,
+                            command.expires_at,
+                        ),
+                    )
+
+            run_owned(attempt)
             replayed = False
         except ObjectNotInPrerequisiteState as error:
             owned = self._owns_existing(ids, command)
