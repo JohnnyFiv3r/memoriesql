@@ -4,7 +4,8 @@ The hidden-length worlds rerun with the facts installed: the pre-closure
 control, the three-world invariance, the TOAST check, the digests and the
 transition. Here the invariance also bounds charged time, and is guarded
 deterministically: a non-raw agent's query, pages and reuse make the same
-function calls, hashing inputs of the same sizes, whatever is hidden. On top,
+function calls, hashing inputs of the same sizes, whatever is hidden; a control
+at the closure alone shows the guard sees hidden parts there. On top,
 query paths must read no block of any part relation for a
 hidden package (exact, against the closure's own record build), every
 materialization's facts must equal the closure's digest, results saved under
@@ -233,6 +234,27 @@ class SealedUnitFacts(hidden.HiddenPackageLength):
         for calls, sizes in others:
             self.assertEqual(calls, first_calls)
             self.assertEqual(sizes, first_sizes)
+
+    def test_the_work_guard_sees_hidden_parts_at_the_closure_alone(self) -> None:
+        """Sensitivity control: before the facts, the guard detects per-part work.
+
+        With the closure alone a query still canonicalizes and hashes records
+        built from every part, so the third world, whose identity package is
+        split into many parts, must profile differently from the second.
+        """
+        migrate(
+            self.db,
+            expected_current_version=hidden.closure() - 1,
+            target_version=hidden.closure(),
+        )
+        self.install_guard()
+        profiles = []
+        for world in self.worlds:
+            profiles.append(self.profile(world))
+        for calls, sizes in profiles:
+            self.assertGreater(calls.get(HASH, 0), 0, calls)
+            self.assertEqual(sum(sizes.values()), calls[HASH])
+        self.assertNotEqual(profiles[2], profiles[1])
 
     def materialized(
         self,
