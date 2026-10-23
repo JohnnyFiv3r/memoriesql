@@ -66,14 +66,12 @@ class Legacy7AvailabilityMigration(unittest.TestCase):
         )
         rows = inventory["migrations"]
         self.assertEqual(rows[44]["filename"], NAME)
-        self.assertEqual(len(rows), 50)
+        self.assertEqual(len(rows), 51)
         for row in rows:
             data = (ROOT / "migrations" / row["filename"]).read_bytes()
             self.assertEqual(hashlib.sha256(data).hexdigest(), row["sha256"])
         source = (ROOT / "migrations" / NAME).read_text()
-        functions = re.findall(
-            r"CREATE OR REPLACE FUNCTION memoriesql\.(\w+)", source
-        )
+        functions = re.findall(r"CREATE OR REPLACE FUNCTION memoriesql\.(\w+)", source)
         self.assertEqual(
             functions, ["activate_complete_input_v6", "source_revisiting_authorize"]
         )
