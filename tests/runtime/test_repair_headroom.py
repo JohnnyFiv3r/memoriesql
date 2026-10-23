@@ -37,6 +37,7 @@ from memoriesql.application.complete_input_execution import (
     RepairableExecutionInput,
     load_repairable_complete_input_task_registry,
 )
+from memoriesql.application.evidence_packages import NativeFacts
 from memoriesql.application.module_registry import (
     BuiltInModuleRegistry,
     ProfileDefinition,
@@ -87,9 +88,11 @@ class RepairHeadroom(unittest.TestCase):
         self.repairs: list[dict[str, Any]] = []
 
     def bind(self, *texts: str) -> Any:
+        """A sealed unit of its own: each binding names a distinct occurrence."""
         h = self.h
+        name = "orchard.unit." + uuid.uuid4().hex[:12]
         parts = tuple(h.part(text, i) for i, text in enumerate(texts))
-        package = h.create(parts)
+        package = h.create(parts, occurrence_key=name, native=NativeFacts(native_id=name))
         for part in parts:
             h.append(package, part)
         h.seal(package)
