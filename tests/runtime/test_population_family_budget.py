@@ -198,7 +198,7 @@ class PopulationFamilyBudget(unittest.TestCase):
                     self.assertEqual(unreadable[label][table], rows)
         with self.subTest(check="withheld_on"):
             self.assertEqual(reasons[0], ["54000", "root_budget"])
-            self.assertEqual(reasons[1][0], "42501")
+            self.assertEqual(reasons[1], ["42501", "assertion_unavailable"])
         print(
             json.dumps(
                 {
