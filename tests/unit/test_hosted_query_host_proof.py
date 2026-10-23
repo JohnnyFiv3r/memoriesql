@@ -811,5 +811,214 @@ class HostedQueryHostProof(unittest.TestCase):
         self.assertIn('test_root = private / "installed"', body)
 
 
+class FakeRunner:
+    """The driver's command runner, answering without running anything."""
+
+    def __init__(self, root: Path, wheel: Path) -> None:
+        self.root, self.wheel = root, wheel
+        self.names: list[str] = []
+        self.captures = {
+            "source-head": SHA_UNDER_TEST,
+            "tracked-inputs": subprocess.check_output(
+                ["git", "ls-files"], cwd=ROOT, text=True
+            ),
+            "installed-environment": '{"python":"x","postgres":"18.4","distributions":{}}',
+            "installed-import-roots": "[]",
+            "installed-mapped-objects": "[]",
+        }
+
+    def run(self, name: str, args: list[str], cwd: Path, **kwargs: Any) -> None:
+        self.names.append(name)
+        if name == "dependencies":
+            (self.root / "dependencies").mkdir()
+            (self.root / "dependencies/fictional.whl").write_bytes(b"dependency")
+        elif name == "sdist-wheel":
+            (self.root / "from-sdist").mkdir()
+            shutil.copyfile(self.wheel, self.root / "from-sdist" / self.wheel.name)
+
+    def capture(self, name: str, args: list[str], cwd: Path) -> str:
+        self.names.append(name)
+        return self.captures[name]
+
+    def start(self, name: str, args: list[str], cwd: Path, **kwargs: Any) -> str:
+        self.names.append(name)
+        return name
+
+    def finish(self, child: str, **kwargs: Any) -> int:
+        return 0
+
+    def close(self) -> None:
+        pass
+
+
+SHA_UNDER_TEST = "b" * 40
+
+
+class HostProofAdmission(unittest.TestCase):
+    def test_dispatch_is_always_admitted_and_others_need_authority(self) -> None:
+        for event, authority, admitted in (
+            ("workflow_dispatch", None, True),
+            ("workflow_dispatch", hosted.HOST_AUTHORITY_SHA256, True),
+            ("push", None, False),
+            ("push", "", False),
+            ("pull_request", None, False),
+            ("push", hosted.HOST_AUTHORITY_SHA256, True),
+            ("pull_request", "0" * 64, True),  # present but wrong: still refused
+        ):
+            env = {"GITHUB_EVENT_NAME": event}
+            if authority is not None:
+                env[hosted.HOST_ENV[2]] = authority
+            with (
+                self.subTest(event=event, authority=authority),
+                patch.dict(os.environ, env, clear=True),
+            ):
+                self.assertIs(hosted.host_proof_admitted(), admitted)
+
+    def qualify(
+        self, event: str, authority: str | None
+    ) -> tuple[dict[str, Any], list[str], str, BaseException | None]:
+        with tempfile.TemporaryDirectory() as directory:
+            top = Path(directory)
+            artifacts, evidence, root, private = (
+                top / "artifacts",
+                top / "evidence",
+                top / "root",
+                top / "private",
+            )
+            for folder in (artifacts, evidence, root, private):
+                folder.mkdir()
+            wheel = artifacts / "memoriesql-0.0.12-py3-none-any.whl"
+            wheel.write_bytes(b"wheel")
+            (artifacts / "memoriesql-0.0.12.tar.gz").write_bytes(b"sdist")
+            base = Path(sys.base_prefix).resolve()
+            copy = private / "copy"
+            interpreter = copy / Path(sys.executable).resolve().relative_to(base)
+            interpreter.parent.mkdir(parents=True)
+            interpreter.write_bytes(b"interpreter")
+            runner = FakeRunner(root, wheel)
+            summary = top / "summary.md"
+            env = {
+                "GITHUB_EVENT_NAME": event,
+                "GITHUB_STEP_SUMMARY": str(summary),
+                "RUNNER_ENVIRONMENT": "github-hosted",
+                "RUNNER_OS": "Linux",
+                "SOURCE_SHA": SHA_UNDER_TEST,
+            }
+            if authority is not None:
+                env[hosted.HOST_ENV[2]] = authority
+            raised: BaseException | None = None
+            output = io.StringIO()
+            with (
+                patch.dict(os.environ, env, clear=True),
+                patch.object(hosted, "Commands", return_value=runner),
+                patch.object(
+                    hosted, "private_interpreter", return_value=(private, copy, {})
+                ),
+                patch.object(hosted, "check_client_unwritable"),
+                patch.object(hosted, "check_shards"),
+                patch.object(
+                    hosted,
+                    "prepare_host_binding",
+                    wraps=hosted.prepare_host_binding,
+                    side_effect=None
+                    if authority is None
+                    else lambda *a: dict.fromkeys(hosted.HOST_ENV, "fictional"),
+                ),
+                redirect_stdout(output),
+            ):
+                try:
+                    hosted.qualify(ROOT, artifacts, evidence, root, SHA_UNDER_TEST)
+                except BaseException as error:  # noqa: BLE001 - recorded below
+                    raised = error
+            metadata = json.loads((evidence / "qualification.json").read_text())
+            text = output.getvalue() + (summary.read_text() if summary.exists() else "")
+            return metadata, runner.names, text, raised
+
+    def test_push_without_authority_records_the_host_proof_as_not_run(self) -> None:
+        for event in ("push", "pull_request"):
+            with self.subTest(event=event):
+                metadata, names, text, raised = self.qualify(event, None)
+                self.assertIsNone(raised)
+                self.assertEqual(
+                    metadata["host_proof"],
+                    {"outcome": "not_run", "reason": "authority_not_granted"},
+                )
+                self.assertFalse(metadata["proof_complete"])
+                self.assertIn("restart-4-cleanup", names)
+                self.assertNotIn("query-host-facts", names)
+                self.assertNotIn("query-host", names)
+                self.assertIn("::notice title=Host proof not run::", text)
+                self.assertIn("This run is not a qualification.", text)
+
+    def test_dispatch_without_authority_is_still_refused(self) -> None:
+        metadata, names, _, raised = self.qualify("workflow_dispatch", None)
+        self.assertIsInstance(raised, ValueError)
+        self.assertIn("independent host fixture authority", str(raised))
+        self.assertIn("independent host fixture authority", metadata["failure"])
+        self.assertFalse(metadata["proof_complete"])
+        self.assertNotIn("host_proof", metadata)
+        self.assertNotIn("query-host", names)
+
+    def test_granted_authority_runs_the_unchanged_host_proof(self) -> None:
+        for event in ("push", "workflow_dispatch"):
+            with self.subTest(event=event):
+                metadata, names, _, raised = self.qualify(
+                    event, hosted.HOST_AUTHORITY_SHA256
+                )
+                self.assertIsNone(raised)
+                self.assertEqual(names[-1], "query-host")
+                self.assertEqual(metadata["host_proof"], {"outcome": "passed"})
+                self.assertTrue(metadata["proof_complete"])
+
+    def test_workflow_shows_the_host_proof_as_its_own_gated_step(self) -> None:
+        workflow = (ROOT / ".github/workflows/python-package.yml").read_text()
+        name = "      - name: Require the completed query host proof\n"
+        self.assertLess(
+            workflow.index(
+                "      - name: Retain and stop the exact owned PostgreSQL service\n"
+            ),
+            workflow.index(name),
+        )
+        step = workflow.split(name)[1].split("      - name: ")[0]
+        self.assertIn(
+            "if: github.event_name == 'workflow_dispatch' || "
+            "vars.N1_TEST_CLI_IDENTITY_AUTHORITY_SHA256 != ''",
+            step,
+        )
+        folded = step.split("        run: >-\n")[1]
+        command = " ".join(line.strip() for line in folded.splitlines() if line.strip())
+        for record, passes in (
+            ({"host_proof": {"outcome": "passed"}, "proof_complete": True}, True),
+            (
+                {
+                    "host_proof": {
+                        "outcome": "not_run",
+                        "reason": "authority_not_granted",
+                    },
+                    "proof_complete": False,
+                },
+                False,
+            ),
+            ({"proof_complete": False}, False),
+        ):
+            with (
+                self.subTest(record=record),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                qualification = Path(directory) / "build/qualification"
+                qualification.mkdir(parents=True)
+                (qualification / "qualification.json").write_text(json.dumps(record))
+                result = subprocess.run(
+                    [
+                        "bash",
+                        "-c",
+                        command.replace("python -c", f"{sys.executable} -c", 1),
+                    ],
+                    cwd=directory,
+                    capture_output=True,
+                )
+                self.assertEqual(result.returncode == 0, passes, result.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()
