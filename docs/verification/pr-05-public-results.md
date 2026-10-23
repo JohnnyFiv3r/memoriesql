@@ -74,10 +74,46 @@ authorized agent now receives its normalized projection, within these bounds:
   package's own declared limits (`package_exclusion:…`, `package_unresolved:…`).
   It is never described as raw evidence or as sanitized.
 - **Closure.** The pin, its parts' hashes and derivations, and their raw lineage
-  join the sealed dependency closure as a `unit_package` record. Reuse
+  are bound into the sealed dependency closure by a `unit_package` record. Reuse
   reauthorizes it whole, and the disclosure receipt binds the exact delivered
   response. The raw lineage is noncontent provenance that is never disclosed to
   agents; raw bytes stay owner-only.
+- **Hidden length (forward migration `hidden_package_length`).** For a
+  caller without `source.raw.read`, retained bytes, remaining allocation, the
+  `max_result_bytes` threshold and the visible rows no longer vary with hidden
+  raw content, part count or raw-lineage offsets. Database time no longer
+  reads raw content, but it still tracks the part count and lineage size (see
+  the residual below):
+  - Package text is concatenated only for a normalized package. An identity or
+    mixed package's raw parts are never read, and every package value is
+    unchanged.
+  - The `unit_package` record holds only the fixed-width digest
+    `content_sha256` of the full record. The full record is built internally
+    to be hashed, so every frame still binds it, and reuse compares digests.
+    The population estimate, the stored dependency records, their charge and
+    the `max_result_bytes` threshold therefore do not vary with what is
+    hidden.
+  - A result saved before this migration keeps the full record, no longer
+    rebuilds equal, and refuses as unavailable. Results last at most 30 days,
+    so there is no dual acceptance.
+  - Its residual, database time tracking the part count and lineage size, is
+    closed by the next item.
+- **Sealed unit facts (forward migration `sealed_unit_query_facts`).** A
+  unit's package digest, normalized flag and normalized text are fixed once
+  it is materialized. The package is sealed and immutable, and the pin is
+  insert-only.
+  - **Recorded once.** An insert-only facts table holds them. The
+    materializing writer records them under its own authority, and existing
+    units are backfilled.
+  - **Query paths.** Unit records, the population's package view, saved-result
+    rebuilds, inspection and helper reads now read one facts row per unit
+    and no part row at all. Database time for a caller without
+    `source.raw.read` no longer tracks hidden part count or lineage size.
+    Normalized text is the sealed copy, so reading it costs only its
+    visible length.
+  - **Same digests.** The digests equal the previous migration's, so results
+    saved under it still reuse. The population's package view no longer
+    builds the unread provenance `parts` list.
 
 Units that retain their own text (not materialized) return it as before.
 

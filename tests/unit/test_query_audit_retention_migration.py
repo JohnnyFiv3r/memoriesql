@@ -338,7 +338,7 @@ class QueryAuditRetentionMigration(unittest.TestCase):
             (ROOT / "contracts/migration-inventory.json").read_text()
         )
         rows = inventory["migrations"]
-        self.assertEqual([int(r["filename"][:4]) for r in rows], list(range(1, 48)))
+        self.assertEqual([int(r["filename"][:4]) for r in rows], list(range(1, 51)))
         self.assertEqual(
             rows[46],
             {
