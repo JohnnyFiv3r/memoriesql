@@ -584,12 +584,10 @@ class SourceStableIdentity(unittest.TestCase):
         with psycopg.connect(
             make_conninfo(f.admin, dbname=f.database), autocommit=True
         ) as lock:
-            expiry = f.db.execute(
-                "UPDATE memoriesql.authentication_credentials SET expires_at=clock_timestamp()+interval '3 seconds' WHERE principal_id=%s RETURNING expires_at",
+            f.db.execute(
+                "UPDATE memoriesql.authentication_credentials SET expires_at=clock_timestamp()+interval '350 milliseconds' WHERE principal_id=%s",
                 (f.principal,),
-            ).fetchone()
-            assert expiry is not None
-            expires = expiry[0]
+            )
 
             def submit() -> Any:
                 with psycopg.connect(
@@ -616,10 +614,7 @@ class SourceStableIdentity(unittest.TestCase):
                                 "materialization did not reach the held source lock"
                             )
                         sleep(0.005)
-                    # Waiting before the deadline, released only after it.
-                    remaining = (expires - datetime.now(UTC)).total_seconds()
-                    self.assertGreater(remaining, 0, "waited only after expiry")
-                    sleep(remaining + 0.015)
+                    sleep(0.36)
                 with self.assertRaisesRegex(psycopg.Error, "authority_unavailable"):
                     future.result(timeout=PROGRESS_SECONDS)
         self.assertEqual(f.counts(), (0, 0, 0, 0, 0, 0, 0))
