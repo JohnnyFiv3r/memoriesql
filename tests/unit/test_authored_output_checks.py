@@ -1,0 +1,148 @@
+"""Pre-apply checks of authored annotations name what canonical apply would refuse."""
+
+from __future__ import annotations
+
+import copy
+import re
+import unittest
+from pathlib import Path
+from typing import Any
+
+from memoriesql.application.authored_output_checks import (
+    ISSUE_REFUSALS,
+    AuthoredOutputIssue,
+    authored_annotation_issues,
+)
+
+ROOT = Path(__file__).resolve().parents[2]
+EVENT, OTHER_EVENT = "e" * 8 + "-0000-7000-8000-000000000001", "e" * 8 + "-0000-7000-8000-000000000002"
+BEADS = ["b" * 8 + "-0000-7000-8000-00000000000" + str(i) for i in (1, 2)]
+UNITS = ["a" * 8 + "-0000-7000-8000-00000000000" + str(i) for i in (1, 2)]
+HASHES = ["1" * 64, "2" * 64]
+SECRET = "Fictional private orchard detail that must never be echoed."
+OBSERVATIONS = ("memory.semantic.author-observations", 2)
+LEGACY = ("memory.semantic.author-observations", 1)
+COMPLETE = ("memory.semantic.author-complete-unit", 3)
+
+
+def task_input() -> dict[str, Any]:
+    return {
+        "payload": {"event_id": EVENT, "bead_ids": BEADS, "source_unit_ids": UNITS},
+        "evidence_manifest": {
+            "references": [
+                {"reference_id": unit, "content_hash": digest}
+                for unit, digest in zip(UNITS, HASHES, strict=True)
+            ]
+        },
+    }
+
+
+def annotation(index: int) -> dict[str, Any]:
+    return {
+        "bead_id": BEADS[index],
+        "event_id": EVENT,
+        "source_unit_id": UNITS[index],
+        "statements": [
+            {
+                "statement_id": f"5{index}" + "0" * 6 + "-0000-7000-8000-000000000000",
+                "statement_text": SECRET,
+                "evidence": [
+                    {"source_unit_id": UNITS[index], "content_hash": HASHES[index]}
+                ],
+                "context_source_ids": [],
+            }
+        ],
+    }
+
+
+def output() -> dict[str, Any]:
+    return {"annotations": [annotation(0), annotation(1)]}
+
+
+def issues(
+    payload: dict[str, Any],
+    used: list[str] = UNITS,
+    kind: tuple[str, int] = OBSERVATIONS,
+    task: dict[str, Any] | None = None,
+) -> list[str]:
+    found = authored_annotation_issues(
+        task or task_input(), payload, used, task_kind=kind[0], contract_revision=kind[1]
+    )
+    for issue in found:
+        assert SECRET not in issue.feedback()
+    return [issue.code for issue in found]
+
+
+class AuthoredOutputChecks(unittest.TestCase):
+    def test_a_valid_output_has_no_issue(self) -> None:
+        for kind in (OBSERVATIONS, LEGACY):
+            self.assertEqual(issues(output(), kind=kind), [])
+        self.assertEqual(issues({"decision": "not an annotation output"}), [])
+
+    def test_coverage_names_missing_duplicated_and_outside_beads(self) -> None:
+        payload = output()
+        payload["annotations"] = [annotation(0), annotation(0)]
+        self.assertEqual(
+            issues(payload), ["annotation.bead_missing", "annotation.bead_duplicated"]
+        )
+        payload = output()
+        payload["annotations"][1]["bead_id"] = "c" * 8 + "-0000-7000-8000-000000000009"
+        self.assertEqual(
+            issues(payload), ["annotation.bead_missing", "annotation.bead_outside_task"]
+        )
+
+    def test_evidence_must_be_declared_by_identity_and_hash_and_used(self) -> None:
+        self.assertEqual(
+            issues(output(), used=[*UNITS, "undeclared"]), ["evidence.outside_manifest"]
+        )
+        payload = output()
+        payload["annotations"][0]["statements"][0]["evidence"][0]["content_hash"] = "9" * 64
+        self.assertEqual(issues(payload), ["evidence.outside_manifest"])
+        self.assertEqual(issues(output(), used=UNITS[:1]), ["evidence.not_declared_as_used"])
+
+    def test_a_context_source_needs_statement_evidence(self) -> None:
+        payload = output()
+        payload["annotations"][0]["statements"][0]["context_source_ids"] = [UNITS[1]]
+        self.assertEqual(issues(payload), ["statement.context_without_evidence"])
+
+    def test_pins_are_checked_only_where_canonical_apply_checks_them(self) -> None:
+        payload = output()
+        payload["annotations"][0]["event_id"] = OTHER_EVENT
+        payload["annotations"][1]["source_unit_id"] = UNITS[0]
+        self.assertEqual(
+            issues(payload),
+            ["annotation.event_mismatch"],
+        )
+        # Revision-1 apply reads its pins from the stored bead, not here.
+        self.assertEqual(issues(payload, kind=LEGACY), [])
+        # A complete unit names exactly its one source unit.
+        task = task_input()
+        task["payload"] = {"event_id": EVENT, "bead_ids": BEADS[:1], "source_unit_ids": UNITS[:1]}
+        unit = {"annotations": [copy.deepcopy(annotation(0))]}
+        self.assertEqual(issues(unit, kind=COMPLETE, task=task, used=UNITS[:1]), [])
+        unit["annotations"][0]["source_unit_id"] = UNITS[1]
+        self.assertIn(
+            "annotation.source_unit_mismatch",
+            issues(unit, kind=COMPLETE, task=task, used=UNITS[:1]),
+        )
+
+    def test_feedback_names_only_identifiers(self) -> None:
+        issue = AuthoredOutputIssue("annotation.event_mismatch", BEADS[0], EVENT)
+        self.assertEqual(
+            issue.feedback(), f"annotation.event_mismatch: {BEADS[0]} (expected {EVENT})"
+        )
+        with self.assertRaises(ValueError):
+            AuthoredOutputIssue("annotation.unregistered", BEADS[0])
+
+    def test_every_anticipated_refusal_is_raised_by_canonical_apply(self) -> None:
+        text = (ROOT / "migrations/0041_authored_statement_kinds.sql").read_text()
+        start = text.index("FUNCTION memoriesql.apply_semantic_annotations_schema29(")
+        body = text[start : text.index("\n$$;", start)]
+        for code, refusals in ISSUE_REFUSALS.items():
+            for refusal in refusals:
+                with self.subTest(code=code, refusal=refusal):
+                    self.assertRegex(body, r"RAISE EXCEPTION\s+'" + re.escape(refusal) + "'")
+
+
+if __name__ == "__main__":
+    unittest.main()
