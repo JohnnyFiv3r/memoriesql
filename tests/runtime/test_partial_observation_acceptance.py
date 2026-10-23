@@ -56,6 +56,8 @@ class PartialObservationAcceptance(PostgresRuntime):
             expected_current_version=14,
             target_version=discover_migrations()[-1].version,
         )
+        self.pair_worker()
+        self.explicit_scope()
         original = self.command()
         content = "The fictional orchard has one gate."
         gate = original.units[0].model_copy(
@@ -82,7 +84,6 @@ class PartialObservationAcceptance(PostgresRuntime):
             self.accepted = PostgresCanonicalTransactions(self.db).accept_source_event_v2(
                 self.capture, recorded_at=datetime.now(UTC)
             )
-        self.pair_worker()
         self.claimed = self.claim()
         self.task = self.claimed.fence.task_id
         # Each observation unit's bead, in unit order.
@@ -117,6 +118,53 @@ class PartialObservationAcceptance(PostgresRuntime):
                     recorded_at=datetime.now(UTC),
                 )
             )
+
+    def explicit_scope(self) -> None:
+        """Capture into an explicit scope with its own source: the owner-private
+        default scope admits no grant to a paired agent, so an agent could read
+        nothing there (custody W-1)."""
+        scope, source = uuid.uuid4(), uuid.uuid4()
+        pairing = self.row(
+            "SELECT r.pairing_grant_id,r.revision,r.allowed_capabilities,r.allowed_access_scope_ids "
+            "FROM memoriesql.pairing_grant_revisions AS r JOIN memoriesql.pairing_grants AS g "
+            "USING (tenant_id,pairing_grant_id) WHERE g.paired_principal_id=%s "
+            "ORDER BY r.revision DESC LIMIT 1",
+            (self.worker_principal,),
+        )
+        with self.db.transaction():
+            self.begin()
+            self.db.execute(
+                "SELECT memoriesql.create_access_scope(%s,%s,'explicit',%s,%s)",
+                (scope, uuid.uuid4(), "Fictional explicit orchard", self.now),
+            )
+            for principal in (self.principal, self.worker_principal):
+                self.db.execute(
+                    "SELECT memoriesql.create_access_grant(%s,%s,%s,%s,%s,%s)",
+                    (uuid.uuid4(), principal, scope, ["read", "write"], self.now,
+                     self.now + timedelta(hours=1)),
+                )
+            # The worker's pairing extends to the new scope.
+            self.db.execute(
+                "SELECT memoriesql.revise_pairing_grant(%s,%s,%s,%s,'active',%s,%s,%s)",
+                (pairing[0], pairing[1], pairing[2], [*pairing[3], scope], self.now,
+                 self.now + timedelta(hours=1), self.now),
+            )
+        self.db.execute(
+            "INSERT INTO memoriesql.protected_resources SELECT tenant_id,workspace_id,%s,%s,"
+            "resource_kind,owner_user_id,status,created_by_principal_id,created_at "
+            "FROM memoriesql.protected_resources WHERE resource_id=%s",
+            (scope, source, self.source),
+        )
+        self.db.execute(
+            "INSERT INTO memoriesql.source_objects(tenant_id,workspace_id,access_scope_id,"
+            "source_object_id,source_system,object_kind,external_object_id,schema_version,"
+            "metadata,created_at,last_observed_at,owner_user_id) SELECT tenant_id,"
+            "workspace_id,%s,%s,source_system,object_kind,'orchard.explicit',schema_version,"
+            "metadata,created_at,last_observed_at,owner_user_id FROM memoriesql.source_objects "
+            "WHERE source_object_id=%s",
+            (scope, source, self.source),
+        )
+        self.scope, self.source = scope, source
 
     def row(self, query: str, parameters: tuple[Any, ...] = ()) -> Any:
         found = self.db.execute(query, parameters).fetchone()
@@ -223,6 +271,11 @@ class PartialObservationAcceptance(PostgresRuntime):
                     self.now + timedelta(hours=1),
                 ),
             )
+            self.db.execute(
+                "SELECT memoriesql.create_access_grant(%s,%s,%s,%s,%s,%s)",
+                (uuid.uuid4(), principal, self.scope, ["read"], self.now,
+                 self.now + timedelta(hours=1)),
+            )
         return secret
 
     def inspected(self, bead: Any, secret: str | None = None) -> Any:
@@ -258,17 +311,22 @@ class PartialObservationAcceptance(PostgresRuntime):
             for name, credential in readers.items()
             for bead in self.beads
         }
-        self.assertEqual(before["owner", self.gate]["outcome"], "available")
-        self.assertEqual(before["owner", self.gate]["bead"]["lifecycle"], "thin")
+        # Both readers can read the beads, so neither comparison below is vacuous.
+        for name in readers:
+            with self.subTest(reader=name):
+                self.assertEqual(before[name, self.gate]["outcome"], "available")
+                self.assertEqual(before[name, self.gate]["bead"]["lifecycle"], "thin")
         self.persist(self.result((0,), ((self.gate, "withheld.pin_mismatch"),)))
         for name, credential in readers.items():
             with self.subTest(reader=name):
                 # The withheld bead reads exactly as before it was authored.
                 self.assertEqual(self.inspected(self.gate, credential), before[name, self.gate])
-        # Not a vacuous comparison: the accepted bead did change.
-        accepted = self.inspected(self.trees)
-        self.assertNotEqual(accepted, before["owner", self.trees])
-        self.assertEqual(accepted["bead"]["lifecycle"], "accepted")
+        # Not a vacuous comparison: for each reader the accepted bead did change.
+        for name, credential in readers.items():
+            with self.subTest(reader=name):
+                accepted = self.inspected(self.trees, credential)
+                self.assertNotEqual(accepted, before[name, self.trees])
+                self.assertEqual(accepted["bead"]["lifecycle"], "accepted")
 
     def test_hidden_state_never_yields_partial_acceptance(self) -> None:
         # A refusal that depends on database state (here a revoked source)
