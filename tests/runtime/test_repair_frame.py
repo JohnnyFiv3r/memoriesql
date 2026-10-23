@@ -92,36 +92,40 @@ class OrchardAnnotations(FrozenContractModel):
     annotations: tuple[OrchardAnnotation, ...]
 
 
-def annotated(ports: Ports, bead: str) -> dict[str, Any]:
+def annotation(ports: Ports, bead: str, unit: str = UNIT) -> dict[str, Any]:
     return {
-        "annotations": [
+        "bead_id": bead,
+        "event_id": "orchard-event",
+        "source_unit_id": unit,
+        "statements": [
             {
-                "bead_id": bead,
-                "event_id": "orchard-event",
-                "source_unit_id": UNIT,
-                "statements": [
+                "statement_id": "orchard-statement",
+                "statement_text": "Four fictional trees.",
+                "evidence": [
                     {
-                        "statement_id": "orchard-statement",
-                        "statement_text": "Four fictional trees.",
-                        "evidence": [
-                            {
-                                "source_unit_id": UNIT,
-                                "content_hash": hashlib.sha256(
-                                    ports.content.encode()
-                                ).hexdigest(),
-                            }
-                        ],
+                        "source_unit_id": unit,
+                        "content_hash": hashlib.sha256(ports.content.encode()).hexdigest(),
                     }
                 ],
             }
-        ]
+        ],
     }
 
 
+def annotated(ports: Ports, bead: str) -> dict[str, Any]:
+    return {"annotations": [annotation(ports, bead)]}
+
+
 def fixture(
-    outputs: list[str], *, request_limit: int = 2
+    outputs: list[Any],
+    *,
+    request_limit: int = 2,
+    task_kind: str = "orchard.annotate",
+    beads: tuple[str, ...] = (BEAD,),
+    units: tuple[str, ...] = (UNIT,),
 ) -> tuple[Any, Any, SemanticRunDeps, Ports, list[str]]:
-    """One task; the model answers with the next bead of `outputs` per call."""
+    """One task; the model answers with the next of `outputs` per call: a bead
+    to annotate alone, or a callable building the whole answer from the ports."""
 
     ports = Ports()
     prompts: list[str] = []
@@ -144,7 +148,7 @@ def fixture(
         maximum_effort_key="frontier",
     )
     task = SemanticTaskDefinition(
-        task_kind="orchard.annotate",
+        task_kind=task_kind,
         contract_revision=1,
         owning_module="memoriesql.kernel",
         input_contract=input_contract,
@@ -163,7 +167,7 @@ def fixture(
             tool_call_limit=0,
             max_delegate_calls=0,
             max_parallel_delegates=0,
-            evidence_item_limit=1,
+            evidence_item_limit=len(units),
             hydrated_character_limit=1000,
             output_retries=0,
             tool_retries=0,
@@ -182,12 +186,13 @@ def fixture(
     manifest = EvidenceManifest(
         manifest_id="orchard.evidence",
         revision=1,
-        references=(
+        references=tuple(
             EvidenceReference(
-                reference_id=UNIT,
+                reference_id=unit,
                 content_hash=hashlib.sha256(ports.content.encode()).hexdigest(),
                 declared_characters=len(ports.content),
-            ),
+            )
+            for unit in units
         ),
     )
     task_input = SemanticTaskInput[OrchardUnits](
@@ -197,7 +202,7 @@ def fixture(
         target_reference="orchard.plot",
         expected_target_revision=1,
         evidence_manifest=manifest,
-        payload=OrchardUnits(event_id="orchard-event", bead_ids=(BEAD,), source_unit_ids=(UNIT,)),
+        payload=OrchardUnits(event_id="orchard-event", bead_ids=beads, source_unit_ids=units),
     )
     deps = SemanticRunDeps(
         task_id=task_input.task_id,
@@ -237,12 +242,14 @@ def fixture(
             for part in message.parts
             if isinstance(part, UserPromptPart)
         )
-        bead = outputs[min(len(prompts), len(outputs)) - 1]
+        answer = outputs[min(len(prompts), len(outputs)) - 1]
         return ModelResponse(
             parts=[
                 ToolCallPart(
                     info.output_tools[0].name,
-                    {"typed_output": annotated(ports, bead), "used_evidence_refs": [UNIT]},
+                    answer(ports)
+                    if callable(answer)
+                    else {"typed_output": annotated(ports, answer), "used_evidence_refs": [UNIT]},
                 )
             ],
             usage=RequestUsage(input_tokens=11, output_tokens=7),

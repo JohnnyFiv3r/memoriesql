@@ -43,6 +43,7 @@ from pydantic_ai.usage import RequestUsage, RunUsage, UsageLimits
 from memoriesql.application.authored_output_checks import (
     AuthoredOutputIssue,
     authored_annotation_issues,
+    partial_annotations,
 )
 from memoriesql.application.authored_relations import (
     RelatedAuthorStep,
@@ -146,6 +147,7 @@ from memoriesql.application.semantic_task_contracts import (
     SemanticTaskResult,
     UsageSummary,
     ValidationResult,
+    WithheldOutputItem,
     canonical_json_bytes,
     canonical_sha256,
     retry_class_for_status,
@@ -672,6 +674,8 @@ class _TreeState:
     # The executor-built repair frame while its one dispatch is admitted.
     repair_frame: str | None = None
     repair_used: bool = False
+    # The beads a partially accepted root output withholds.
+    withheld_items: tuple[WithheldOutputItem, ...] = ()
 
     def __post_init__(self) -> None:
         self.delegations_closed.set()
@@ -2408,11 +2412,48 @@ class PydanticAISemanticExecutor:
                 self._guard_authored_output(run_deps, authored)
                 issues = self._annotation_issues(state.task, authored)
         if issues:
+            partial = self._partial_root_output(state, run_deps, authored, issues)
+            if partial is not None:
+                return partial
             raise EvidenceGuardError(
                 "output." + issues[0].code,
                 "; ".join(issue.feedback() for issue in issues),
             )
         return authored
+
+    def _partial_root_output(
+        self,
+        state: _TreeState,
+        run_deps: _AgentRunDeps,
+        authored: AuthoredSemanticOutput[BaseModel],
+        issues: tuple[AuthoredOutputIssue, ...],
+    ) -> AuthoredSemanticOutput[BaseModel] | None:
+        # Observation authoring keeps its acceptable beads (guard audit P1-f
+        # (b)): each bead with an issue is withheld whole and recorded for the
+        # owner, and canonical apply checks the rest exactly as before.
+        definition = state.task.definition
+        plan = partial_annotations(
+            state.task.task_input.model_dump(mode="json"),
+            authored.typed_output.model_dump(mode="json"),
+            authored.used_evidence_refs,
+            issues,
+            task_kind=definition.task_kind,
+            contract_revision=definition.contract_revision,
+        )
+        if plan is None:
+            return None
+        partial = type(authored)(
+            typed_output=type(authored.typed_output).model_validate_json(
+                json.dumps(plan.payload)
+            ),
+            used_evidence_refs=plan.used_evidence_refs,
+        )
+        self._guard_authored_output(run_deps, partial)
+        state.withheld_items = tuple(
+            WithheldOutputItem(item_kind="bead", item_id=bead, reason_code=reason)
+            for bead, reason in plan.withheld
+        )
+        return partial
 
     async def _author_relations(
         self,
@@ -3262,6 +3303,7 @@ class PydanticAISemanticExecutor:
                 ),
                 used_evidence_refs=authored.used_evidence_refs,
                 model_run_refs=tuple(state.run_refs),
+                withheld_items=state.withheld_items,
                 validation_results=(
                     ValidationResult(
                         validator_key="runtime.run_reference",
