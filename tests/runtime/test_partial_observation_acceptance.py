@@ -406,6 +406,25 @@ class PartialObservationAcceptance(PostgresRuntime):
             with self.db.transaction():
                 self.db.execute(f"UPDATE {TABLE} SET reason_code='withheld.duplicated'")
 
+    def test_function_grants_are_exactly_the_documented_ones(self) -> None:
+        # Custody B-6: the effective EXECUTE privileges after 0052. Apply stays
+        # reachable only through its wrapper; the recorder is the worker's and
+        # the owner read the application's.
+        grants = {
+            "memoriesql.apply_semantic_annotations_schema29(jsonb,text,text,timestamptz)": (),
+            "memoriesql.record_withheld_semantic_output_v1(uuid,uuid,uuid,bigint,text,text,jsonb)":
+                ("memoriesql_worker",),
+            "memoriesql.withheld_semantic_output_v1(uuid)": ("memoriesql_application",),
+        }
+        roles = ("public", "memoriesql_worker", "memoriesql_application", "memoriesql_query_view_owner")
+        for function, allowed in grants.items():
+            for role in roles:
+                with self.subTest(function=function, role=role):
+                    self.assertEqual(
+                        self.row("SELECT has_function_privilege(%s,%s,'EXECUTE')", (role, function))[0],
+                        role in allowed,
+                    )
+
     def test_without_a_withheld_row_a_missing_bead_is_still_refused(self) -> None:
         with self.assertRaises(psycopg.errors.DataError):
             self.persist(self.result((0,)))
