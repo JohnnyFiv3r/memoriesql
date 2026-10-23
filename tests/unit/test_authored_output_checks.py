@@ -10,16 +10,25 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
 
+from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, UserPromptPart
+from pydantic_ai.models import ModelRequestParameters
+from pydantic_ai.models.function import FunctionModel
+
 from memoriesql.application.authored_output_checks import (
     ISSUE_REFUSALS,
     AuthoredOutputIssue,
     authored_annotation_issues,
 )
-from memoriesql.application.semantic_task_contracts import SemanticResultStatus
+from memoriesql.application.bead_classification import ClassificationExecutionInput
+from memoriesql.application.semantic_task_contracts import (
+    DispatchMode,
+    SemanticResultStatus,
+)
 from memoriesql.infrastructure.models.pydanticai_executor import (
     REPAIR_INSTRUCTION,
     EvidenceGuardError,
     PydanticAISemanticExecutor,
+    _DispatchGuardedModel,
     _normalize_failure,
     _repair_frame,
 )
@@ -198,6 +207,78 @@ class AuthoredOutputChecks(unittest.TestCase):
             for refusal in refusals:
                 with self.subTest(code=code, refusal=refusal):
                     self.assertRegex(body, r"RAISE EXCEPTION\s+'" + re.escape(refusal) + "'")
+
+
+class RepairAdmissionAndGuard(unittest.IsolatedAsyncioTestCase):
+    """Custody S-1 and S-2 for #107: the guard and the admission rule."""
+
+    async def test_a_repair_dispatch_carrying_anything_but_its_frame_is_refused(self) -> None:
+        dispatched: list[Any] = []
+
+        def respond(messages: Any, info: Any) -> ModelResponse:
+            dispatched.append(messages)
+            return ModelResponse(parts=[TextPart("unreachable")])
+
+        async def dispatch_open() -> None:
+            return None
+
+        state = SimpleNamespace(require_dispatch_open=dispatch_open, repair_frame="FRAME")
+        guarded = _DispatchGuardedModel(
+            FunctionModel(respond), cast(Any, SimpleNamespace(state=state, parent_run_id=None))
+        )
+        for parts in (
+            [UserPromptPart("FRAME"), UserPromptPart(SECRET)],
+            [UserPromptPart("FRAME, altered")],
+            [],
+        ):
+            with self.subTest(parts=parts):
+                with self.assertRaises(EvidenceGuardError) as raised:
+                    await guarded.request(
+                        [ModelRequest(parts=parts)], None, ModelRequestParameters()
+                    )
+                self.assertEqual(raised.exception.code, "runtime.repair_frame_mismatch")
+        # Refused before dispatch, and before any exposure or delivery record.
+        self.assertEqual(dispatched, [])
+
+    def test_only_a_tool_free_unsupervised_direct_leaf_with_headroom_is_repaired(self) -> None:
+        def admitted(**changes: Any) -> bool:
+            definition = SimpleNamespace(
+                dispatch_mode=changes.get("dispatch_mode", DispatchMode.DIRECT_LEAF),
+                allowed_delegate_keys=changes.get("delegates", ()),
+                allowed_tool_keys=changes.get("tools", ()),
+            )
+            state = SimpleNamespace(
+                repair_used=changes.get("repair_used", False),
+                reserved_requests=changes.get("reserved", 1),
+                task=SimpleNamespace(
+                    definition=definition,
+                    task_input=changes.get("task_input", SimpleNamespace()),
+                    effective_budget=SimpleNamespace(request_limit=2),
+                ),
+            )
+            run_deps = SimpleNamespace(
+                binding=SimpleNamespace(evidence_tool_key=changes.get("evidence_tool")),
+                model_profile=SimpleNamespace(
+                    binding=SimpleNamespace(supervision=changes.get("supervision"))
+                ),
+            )
+            return PydanticAISemanticExecutor._repair_admitted(
+                cast(Any, state), cast(Any, run_deps)
+            )
+
+        self.assertTrue(admitted())
+        for name, change in (
+            ("supervised", {"supervision": object()}),
+            ("classification", {"task_input": ClassificationExecutionInput.model_construct()}),
+            ("delegated", {"dispatch_mode": DispatchMode.CONDUCTOR}),
+            ("delegate keys", {"delegates": ("orchard.helper",)}),
+            ("tools", {"tools": ("orchard.tool",)}),
+            ("evidence tool", {"evidence_tool": "orchard.fetch"}),
+            ("second repair", {"repair_used": True}),
+            ("no headroom", {"reserved": 2}),
+        ):
+            with self.subTest(name=name):
+                self.assertFalse(admitted(**change))
 
 
 if __name__ == "__main__":

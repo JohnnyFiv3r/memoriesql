@@ -305,6 +305,8 @@ class RepairFrame(unittest.IsolatedAsyncioTestCase):
             frame["previous_output"]["typed_output"]["annotations"][0]["bead_id"], STRAY
         )
         self.assertEqual(frame["task_input"]["payload"]["bead_ids"], [BEAD])
+        # The task input is byte for byte what the original prompt carried.
+        self.assertEqual(frame["task_input"], json.loads(prompts[0])["typed_input"])
 
     async def test_a_second_failure_still_settles_invalid_output(self) -> None:
         executor, task, deps, ports, prompts = fixture([STRAY, STRAY])
