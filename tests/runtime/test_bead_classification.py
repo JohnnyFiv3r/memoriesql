@@ -42,6 +42,12 @@ else:
     import test_source_revisiting as source_fixtures
     from test_postgres_runtime import migrate
 
+# Bound for waits on real worker progress. A contended hosted runner can take
+# many times a local run to reach a step (a 3.13 shard once missed a 5 s start
+# wait), so the bound only has to catch a wedge, like test_attempt_refusals'
+# 30 s receipt gate.
+PROGRESS_SECONDS = 30
+
 
 class BeadClassification(fixtures.LocalMentions):
     def setUp(self) -> None:
@@ -451,9 +457,11 @@ class BeadClassification(fixtures.LocalMentions):
         worker._record_run_event = observe
 
         async def execute() -> Any:
-            receipt = await asyncio.wait_for(worker.run_once(), 5)
+            receipt = await asyncio.wait_for(worker.run_once(), PROGRESS_SECONDS)
             if worker.cleanup_pending:
-                receipt = await asyncio.wait_for(worker.wait_for_cleanup(), 5)
+                receipt = await asyncio.wait_for(
+                    worker.wait_for_cleanup(), PROGRESS_SECONDS
+                )
             self.assertFalse(worker._event_writes)
             self.assertIsNone(worker._cleanup_heartbeat)
             return receipt
@@ -558,7 +566,7 @@ class BeadClassification(fixtures.LocalMentions):
             )
             foreground = asyncio.create_task(worker.run_once())
             try:
-                await asyncio.wait_for(started.wait(), 5)
+                await asyncio.wait_for(started.wait(), PROGRESS_SECONDS)
                 foreground.cancel()
                 with self.assertRaises(asyncio.CancelledError):
                     await foreground
@@ -568,14 +576,17 @@ class BeadClassification(fixtures.LocalMentions):
                 )
             finally:
                 release.set()
-            settled = await asyncio.wait_for(worker.wait_for_cleanup(), 5)
+            settled = await asyncio.wait_for(
+                worker.wait_for_cleanup(), PROGRESS_SECONDS
+            )
             self.assertEqual(settled.task_status if settled else None, "cancelled")
             self.assertFalse(worker.cleanup_pending)
 
-        # Capture a wedged loop even when cancellation prevents asyncio timeouts.
+        # Capture a wedged loop even when cancellation prevents asyncio timeouts;
+        # this exits the process, so it stays above the scenario's asyncio bounds.
         import faulthandler
 
-        faulthandler.dump_traceback_later(60, exit=True)
+        faulthandler.dump_traceback_later(4 * PROGRESS_SECONDS, exit=True)
         try:
             asyncio.run(scenario())
         finally:
@@ -610,7 +621,7 @@ class BeadClassification(fixtures.LocalMentions):
         def blocked(port: Any, query: str, parameters: Any, **kwargs: Any) -> Any:
             if "record_classification_v1" in query:
                 started.set()
-                if not release.wait(10):
+                if not release.wait(PROGRESS_SECONDS):
                     raise AssertionError("fictional classifier receipt gate timed out")
             return original(port, query, parameters, **kwargs)
 
@@ -623,7 +634,9 @@ class BeadClassification(fixtures.LocalMentions):
             )
             foreground = asyncio.create_task(worker.run_once())
             try:
-                self.assertTrue(await asyncio.to_thread(started.wait, 5))
+                self.assertTrue(
+                    await asyncio.to_thread(started.wait, PROGRESS_SECONDS)
+                )
                 foreground.cancel()
                 with self.assertRaises(asyncio.CancelledError):
                     await foreground
@@ -633,7 +646,9 @@ class BeadClassification(fixtures.LocalMentions):
                 )
             finally:
                 release.set()
-            settled = await worker.wait_for_cleanup()
+            settled = await asyncio.wait_for(
+                worker.wait_for_cleanup(), PROGRESS_SECONDS
+            )
             self.assertEqual(settled.task_status if settled else None, "cancelled")
             self.assertFalse(worker.cleanup_pending)
 
