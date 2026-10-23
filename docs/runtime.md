@@ -265,3 +265,32 @@ client threads outside PostgreSQL: those remain owned until they return.
 The disposable producer-clock tests and separate-process restart proof exercise
 refusal, recovery and stale-write rejection; they do not identify the cause of
 the original observed database clock regression or promise host clock stability.
+
+## Accounting misconfigurations wait for the owner
+
+Some accounting refusals come from configuration, not from the provider or the
+database's availability. Retrying the same configuration fails the same way, so
+these are not transient. The executor settles the attempt as `policy_paused`
+(retry class `policy`) with a code that names the setting. The task then waits,
+and no worker claims it, until an owner with `memory.maintain` corrects the
+setting and calls `resume_semantic_task`. The pause records only the code; no
+configuration value is stored or disclosed.
+
+| Code | Setting to correct |
+|---|---|
+| `accounting.pricing_revision_unavailable` | The target's `pricing_revision_id` must name a pricing revision of its provider and model that is effective now (it is missing or expired). |
+| `accounting.reservation_not_conservative` | The request reservation is below the catalog maximum for the target's token bounds at its pinned pricing revision. |
+| `accounting.ceiling_cash_basis_missing` | A dollar ceiling needs a metered target with a `pricing_revision_id` or a covered subscription. Pin a pricing revision or remove the ceiling. |
+| `accounting.prior_request_cash_basis_missing` | An earlier request of the attempt has no pricing revision, covered subscription or reported cost, so the dollar ceiling cannot be enforced. |
+| `accounting.quality_policy_unavailable` | The target's `quality_policy_revision_id` must name the default quality-first policy revision. |
+| `accounting.lower_tier_unqualified` | A `qualified_lower` target needs a frozen task-profile qualification for its task kind, contract revision, model profile and quality policy. |
+| `accounting.transport_retries_enabled` | The target must disable transport and host retries. |
+| `accounting.access_scope_ambiguous` | Provider requests need a worker authorization over exactly one access scope. |
+| `accounting.supervision_task_mismatch` | The model profile's supervised qualification must name the semantic task it runs. |
+
+The database refusals are matched by their exact message from
+`record_model_provider_request_intent`, never by a substring, so a value quoted
+inside another error is not mistaken for one. Every other accounting failure
+keeps its existing handling: a ceiling reached is `budget_exhausted`, an
+exhausted or unknown allowance is `policy_paused`, and a failure to persist is
+`unavailable` and retried. Spend already accounted to the attempt is kept.
