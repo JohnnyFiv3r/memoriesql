@@ -18,6 +18,7 @@ from memoriesql.application.canonical_transactions import (
 )
 from memoriesql.application.complete_input_execution import (
     ApplyCompleteInput,
+    ApplyRepairableCompleteInput,
     CompleteEvidenceBatch,
     ReadCompleteEvidence,
 )
@@ -798,11 +799,15 @@ class PostgresSemanticTaskQueue:
             if row is None or not isinstance(row[0], dict):
                 raise RuntimeError("relation assessment application returned no receipt")
             return str(row[0]["task_status"])
-        elif (result.task_kind, result.contract_revision) == (
-            "memory.semantic.author-complete-unit",
-            2,
+        elif (
+            result.task_kind == "memory.semantic.author-complete-unit"
+            and result.contract_revision in (2, 8)
         ):
-            command = ApplyCompleteInput.model_validate(command_data)
+            command = (
+                ApplyRepairableCompleteInput.model_validate(command_data)
+                if result.contract_revision == 8
+                else ApplyCompleteInput.model_validate(command_data)
+            )
             row = self._connection.execute(
                 "SELECT * FROM memoriesql.apply_semantic_annotations(%s,%s,%s,%s)",
                 (

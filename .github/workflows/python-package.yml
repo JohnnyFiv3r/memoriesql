@@ -58,6 +58,7 @@ jobs:
           python scripts/generate_evidence_package_contract.py --check
           python scripts/generate_logical_unit_contract.py --check
           python scripts/generate_complete_input_contracts.py --check
+          python scripts/generate_repairable_complete_input_contract.py --check
           python scripts/generate_fold_recovery_contract.py --check
           python scripts/generate_source_revisiting_contract.py --check
           python scripts/generate_source_stable_identity_contract.py --check

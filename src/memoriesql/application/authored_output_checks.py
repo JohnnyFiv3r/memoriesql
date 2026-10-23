@@ -47,7 +47,7 @@ _PINNED: frozenset[tuple[str, int]] = frozenset(
     {
         ("memory.semantic.author-observations", 2),
         ("memory.semantic.correct-observation", 2),
-        *((_COMPLETE_KIND, revision) for revision in range(2, 8)),
+        *((_COMPLETE_KIND, revision) for revision in range(2, 9)),
     }
 )
 

@@ -1446,7 +1446,7 @@
     },
     {
       "disposition": "include",
-      "expected_record_count": 63,
+      "expected_record_count": 64,
       "filename": "json-schema.json",
       "kind": "json_schema",
       "note": "Provider-neutral capture, host, source-range, transcript-fold, and harness-lifecycle schemas. Runtime availability: memory.semantic.author-complete-unit revision 7 is unavailable for activation, source delivery and canonical apply; memoriesql.local-entity-mentions.v2 is retained for historical schemas and authorized inspection only."
@@ -1643,6 +1643,17 @@
       "public_sha256": "34a7d0d91a6c4ea5d78435fd1f9dab2a677df02320376914692dd0202ffdf899",
       "reason": "Public-authored forward complete-input execution and bounded reader contracts.",
       "version": "1"
+    },
+    {
+      "canonical_payload_sha256": "10e4fe91724f71b3b821f6f49caccf108edce5e91c33b8b88f1d5d022d4a62ae",
+      "catalog": "json_schema",
+      "classification": "proposed_open_core",
+      "id": "memoriesql.complete-input-execution.v2",
+      "package_disposition": "include",
+      "path": "contracts/records/memoriesql-complete-input-execution-v2.json",
+      "public_sha256": "eb96c2f84c5853f3c318b5877b8386a1d37f37484700e0a794641e11ced37bcd",
+      "reason": "Public-authored revision-8 complete-input execution: revision 2 with one more request for the evidence-free repair round.",
+      "version": "2"
     },
     {
       "canonical_payload_sha256": "984a1899a9ef20a9f9a1239be0bb70b992c7d083f51e34ceaa7e314dcfc4acf2",

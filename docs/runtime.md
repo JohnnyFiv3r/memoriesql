@@ -312,6 +312,11 @@ and attempt (owner decision 2026-10-23, P1-f D1):
   The per-attempt dollar ceiling and token limits apply unchanged. A
   reservation refused before dispatch leaves the first output's issues in
   place.
+
+  A complete unit that uses all eight inspection windows of
+  `author-complete-unit` revision 2 has no request left. Revision 8 is revision
+  2 with one more request for this round (owner decision P1-f D2); see
+  [complete-input execution](complete-input-execution.md#revision-8-one-request-for-the-repair-round).
 - **After the repair.** The repaired output goes through every check again. If
   issues remain, it settles `invalid_output` with `output.<code>` naming the
   first issue, and retry class `never`. There is no second repair. Observation

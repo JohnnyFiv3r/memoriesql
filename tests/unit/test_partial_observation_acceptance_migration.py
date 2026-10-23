@@ -83,10 +83,22 @@ class PartialObservationAcceptanceMigration(unittest.TestCase):
         self.assertEqual(compact(function(SQL, RECORD)).count(f"IN ({codes})"), 1)
 
     def test_only_the_recorder_apply_and_the_owner_read_name_the_table(self) -> None:
+        coverage = function(SQL, APPLY)
+        coverage = coverage[coverage.index("    -- Withheld beads") :]
+        coverage = coverage[: coverage.index("THEN\n") + 5]
         for path in sorted(MIGRATIONS.glob("[0-9][0-9][0-9][0-9]_*.sql")):
-            if path != MIGRATION:
-                with self.subTest(migration=path.name):
-                    self.assertNotIn(TABLE, path.read_text())
+            if path == MIGRATION:
+                continue
+            with self.subTest(migration=path.name):
+                text = path.read_text()
+                if path.name < MIGRATION.name or APPLY not in text:
+                    self.assertNotIn(TABLE, text)
+                    continue
+                # A later restatement of apply keeps the withheld coverage
+                # block exactly, and names the table nowhere else.
+                restated = function(text, APPLY)
+                self.assertIn(coverage, restated)
+                self.assertNotIn(TABLE, text.replace(restated, ""))
         rest = SQL
         for name in (RECORD, READ, APPLY):
             self.assertIn(TABLE, function(SQL, name))
@@ -160,7 +172,7 @@ class PartialObservationAcceptanceMigration(unittest.TestCase):
 
     def test_inventory_pins_the_migration(self) -> None:
         rows = json.loads((ROOT / "contracts/migration-inventory.json").read_text())["migrations"]
-        self.assertEqual([int(r["filename"][:4]) for r in rows], list(range(1, 53)))
+        self.assertEqual([int(r["filename"][:4]) for r in rows], list(range(1, 54)))
         self.assertEqual(rows[51]["filename"], MIGRATION.name)
         self.assertEqual(rows[51]["sha256"], hashlib.sha256(MIGRATION.read_bytes()).hexdigest())
 

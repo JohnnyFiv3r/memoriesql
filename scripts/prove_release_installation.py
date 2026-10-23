@@ -26,6 +26,9 @@ def main() -> None:
         from memoriesql.application.bead_classification import (
             ActivateClassifiedAuthorship,
         )
+        from memoriesql.application.complete_input_execution import (
+            ActivateRepairableCompleteInput,
+        )
         from memoriesql.application.local_entity_mentions import (
             ActivateAuthoredMentions,
             ActivateMentionAuthorship,
@@ -55,7 +58,7 @@ def main() -> None:
             Path(str(installed.locate_file(p))).resolve() for p in installed.files or ()
         }
         migrations = discover_migrations()
-        assert len(migrations) == 52
+        assert len(migrations) == 53
         for migration in migrations:
             assert Path(str(migration.path)).resolve() in owned
             assert (
@@ -71,7 +74,7 @@ def main() -> None:
                     .rstrip("=")
                     == record.hash.value
                 )
-        assert len(tuple(iter_contracts())) == 70
+        assert len(tuple(iter_contracts())) == 71
         assert (
             get_contract("memoriesql.source-stable-identity.v1")["id"]
             == "memoriesql.source-stable-identity.v1"
@@ -85,6 +88,7 @@ def main() -> None:
         for identifier in (
             "memoriesql.local-entity-mentions.v1",
             "memoriesql.local-entity-mentions.v2",
+            "memoriesql.complete-input-execution.v2",
             "memoriesql.authored-relations.v1",
             "memoriesql.relation-profile.v1",
             "memoriesql.bead-classification.v1",
@@ -105,6 +109,10 @@ def main() -> None:
         assert (
             ActivateClassifiedAuthorship.model_fields["expected_schema_version"].default
             == 23
+        )
+        assert (
+            ActivateRepairableCompleteInput.model_fields["expected_schema_version"].default
+            == 53
         )
         assert "bead_id" in InspectStoredBead.model_fields
         assert callable(PostgresStoredBeadInspection.inspect)
