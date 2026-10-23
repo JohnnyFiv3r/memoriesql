@@ -286,12 +286,14 @@ Checked here, they settle as `invalid_output`.
 When the output has issues, the model gets one repair round inside the same run
 and attempt (owner decision 2026-10-23, P1-f D1):
 
-- **The frame.** One extra request carries a repair frame, with exactly these
-  keys:
+- **The frame.** One repair round sends one repair frame (published output
+  retries of the repaired output still apply), with exactly these keys:
   - `repair_frame`;
   - `instruction`, which is fixed;
-  - `task_input`, the task's typed input (identifiers and evidence references,
-    never evidence content);
+  - `task_input`, the task's typed input exactly as this attempt already sent
+    it: identifiers and evidence references, and for authored-relation units
+    the candidate beads' accepted statement, mention and claim text. No
+    evidence frame or source-unit content is sent again;
   - `previous_output`, the model's own prior output;
   - `refusal_codes`, fixed codes with the identifiers they name.
 
