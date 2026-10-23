@@ -7,7 +7,8 @@ One accepted assessed relation cites a bead whose derived_from lineage holds
 a paired agent alike: that one relation family is withheld exactly as an
 unreadable family is, and every other family is disclosed. Then the deep
 family is made unreadable as well, so it is withheld for privilege instead of
-depth, and no relation row either reader receives may change by a byte.
+depth, and no relation row either reader receives may change by a byte (evidence
+refs, minted afresh for every population, are compared by the rows they bind).
 """
 
 from __future__ import annotations
@@ -21,6 +22,9 @@ from uuid import UUID
 import psycopg
 
 from memoriesql.infrastructure.postgres.migration_runner import discover_migrations
+from memoriesql.infrastructure.postgres.relation_projection import (
+    relation_projection_frame,
+)
 
 if TYPE_CHECKING:
     from tests.runtime import agent_relation_fixtures as relation_agents
@@ -134,24 +138,41 @@ class PopulationFamilyBudget(unittest.TestCase):
 
     def relation_rows(self, secret: str | None) -> dict[str, str]:
         """Every relation table read whole, every column, as JSON. No reply
-        names the deep relation."""
+        names the deep relation. Each population mints its evidence refs afresh
+        (uuid4, relation_sql_population.py), so a ref becomes the order it first
+        appears in: which rows share one is still compared."""
         run = self.r.start(secret)
         seen = self.r.every_relation_row(run, secret=secret)
         self.r.close(run, secret)
-        for table, (_, reply) in seen.items():
+        refs: dict[Any, str] = {}
+        tables = {}
+        for table, (rows, reply) in seen.items():
             self.assertNotIn(self.deep, reply, table)
-        return {table: json.dumps(rows) for table, (rows, _) in seen.items()}
+            columns = self.r.ALL_RELATION_COLUMNS[table]
+            if "evidence_ref" in columns:
+                at = columns.index("evidence_ref")
+                for row in rows:
+                    if row[at] is not None:
+                        row[at] = refs.setdefault(row[at], f"ref-{len(refs)}")
+            tables[table] = json.dumps(rows)
+        return tables
 
     def withheld_on(self) -> list[str]:
         """The SQLSTATE and message the deep family's assertion row raises in the
-        owner's context. The hook is private, so it runs as the test's own role."""
-        try:
-            with self.db.transaction():
-                self.fixture.begin()
-                self.db.execute("RESET ROLE")
-                self.db.execute(ASSERTION_ROW, (self.fixture.tenant, UUID(self.deep)))
-        except psycopg.Error as error:
-            return [str(error.sqlstate), str(error.diag.message_primary)]
+        owner's canonical relation frame, where the population calls it. The
+        hook is private, so the call leaves the frame's application role."""
+        with relation_projection_frame(
+            self.db,
+            credential_sha256=self.fixture.secret_hash,
+            workspace_id=self.fixture.workspace,
+            statement_timeout_ms=30000,
+        ) as frame:
+            try:
+                with frame.transaction(force_rollback=True):
+                    frame.execute("SET LOCAL ROLE NONE")
+                    frame.execute(ASSERTION_ROW, (self.fixture.tenant, UUID(self.deep)))
+            except psycopg.Error as error:
+                return [str(error.sqlstate), str(error.diag.message_primary)]
         return ["readable"]
 
     def test_a_lineage_over_the_root_budget_withholds_only_its_family(self) -> None:
