@@ -201,6 +201,10 @@
     {
       "filename": "0050_sealed_unit_query_facts.sql",
       "sha256": "2c39a4ada8de634a13b146316852d75b2f7fe7b80fad0eab5ff5913304a44f08"
+    },
+    {
+      "filename": "0051_work_deadlines_after_lock_waits.sql",
+      "sha256": "22a91144237ecd5fd93cbdd8c8b59d5510e8a27823ca206425209fae72b8575e"
     }
   ]
 }
