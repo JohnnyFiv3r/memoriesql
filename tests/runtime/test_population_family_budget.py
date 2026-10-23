@@ -8,7 +8,9 @@ a paired agent alike: that one relation family is withheld exactly as an
 unreadable family is, and every other family is disclosed. Then the deep
 family is made unreadable as well, so it is withheld for privilege instead of
 depth, and no relation row either reader receives may change by a byte (evidence
-refs, minted afresh for every population, are compared by the rows they bind).
+refs, minted afresh for every population, are compared by the rows they bind). A
+second read of the deep state is the control for that comparison: two reads of
+one state may differ only in evidence_ref.
 """
 
 from __future__ import annotations
@@ -136,11 +138,12 @@ class PopulationFamilyBudget(unittest.TestCase):
         self.r.close(run, secret)
         return reply
 
-    def relation_rows(self, secret: str | None) -> dict[str, str]:
-        """Every relation table read whole, every column, as JSON. No reply
-        names the deep relation. Each population mints its evidence refs afresh
-        (uuid4, relation_sql_population.py), so a ref becomes the order it first
-        appears in: which rows share one is still compared."""
+    def relation_rows(self, secret: str | None) -> dict[str, dict[str, str]]:
+        """Every relation table read whole, every column, as JSON three ways: as
+        read ("raw"), without evidence_ref ("other"), and with each evidence_ref
+        replaced by the order it first appears in ("bound"), which still compares
+        which rows share one. Each population mints its evidence refs afresh
+        (uuid4, relation_sql_population.py). No reply names the deep relation."""
         run = self.r.start(secret)
         seen = self.r.every_relation_row(run, secret=secret)
         self.r.close(run, secret)
@@ -149,12 +152,22 @@ class PopulationFamilyBudget(unittest.TestCase):
         for table, (rows, reply) in seen.items():
             self.assertNotIn(self.deep, reply, table)
             columns = self.r.ALL_RELATION_COLUMNS[table]
-            if "evidence_ref" in columns:
-                at = columns.index("evidence_ref")
-                for row in rows:
-                    if row[at] is not None:
-                        row[at] = refs.setdefault(row[at], f"ref-{len(refs)}")
-            tables[table] = json.dumps(rows)
+            at = columns.index("evidence_ref") if "evidence_ref" in columns else -1
+            other = [[v for i, v in enumerate(row) if i != at] for row in rows]
+            bound = [
+                [
+                    refs.setdefault(v, f"ref-{len(refs)}")
+                    if i == at and v is not None
+                    else v
+                    for i, v in enumerate(row)
+                ]
+                for row in rows
+            ]
+            tables[table] = {
+                "raw": json.dumps(rows),
+                "other": json.dumps(other),
+                "bound": json.dumps(bound),
+            }
         return tables
 
     def withheld_on(self) -> list[str]:
@@ -203,20 +216,27 @@ class PopulationFamilyBudget(unittest.TestCase):
         # family withheld for depth and then for privilege: its source revoked,
         # its closure fails authorization before any root is walked.
         deep = {label: self.relation_rows(secret) for label, secret in readers}
+        # The control: the same state read again. Two reads may differ only in
+        # evidence_ref, and not at all once refs are compared by what they bind.
+        again = {label: self.relation_rows(secret) for label, secret in readers}
         reasons = [self.withheld_on()]
         self.db.execute(REVOKE_SOURCE, (self.deep_source,))
         reasons.append(self.withheld_on())
         unreadable = {label: self.relation_rows(secret) for label, secret in readers}
-        identical = {}
+        raw_equal = {}
         for label, tables in deep.items():
-            identical[label] = sorted(
-                table
-                for table, rows in tables.items()
-                if unreadable[label][table] == rows
-            )
-            for table, rows in tables.items():
-                with self.subTest(reader=label, table=table):
-                    self.assertEqual(unreadable[label][table], rows)
+            raw_equal[label] = {
+                table: [
+                    again[label][table]["raw"] == forms["raw"],
+                    unreadable[label][table]["raw"] == forms["raw"],
+                ]
+                for table, forms in tables.items()
+            }
+            for table, forms in tables.items():
+                for read, later in (("same state", again), ("revoked", unreadable)):
+                    with self.subTest(reader=label, table=table, read=read):
+                        self.assertEqual(later[label][table]["other"], forms["other"])
+                        self.assertEqual(later[label][table]["bound"], forms["bound"])
         with self.subTest(check="withheld_on"):
             self.assertEqual(reasons[0], ["54000", "root_budget"])
             self.assertEqual(reasons[1], ["42501", "assertion_unavailable"])
@@ -225,7 +245,16 @@ class PopulationFamilyBudget(unittest.TestCase):
                 {
                     "population_family_budget": observed,
                     "withheld_on": reasons,
-                    "identical_relation_tables": identical,
+                    # Per table: raw bytes equal to the first read, for the
+                    # same-state read and for the revoked read.
+                    "raw_equal": raw_equal,
+                    "relation_evidence_raw": {
+                        label: [
+                            reads[label]["relation_evidence"]["raw"]
+                            for reads in (deep, again, unreadable)
+                        ]
+                        for label in deep
+                    },
                 },
                 sort_keys=True,
             )
