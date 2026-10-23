@@ -44,6 +44,37 @@ statement starts after them.
 The number is provisional; the coordinator assigns the final one (0053 or
 later). Forward-only; earlier migrations keep their bytes.
 
+## What `waited` covers
+
+`waited` is the time spent inside the bracketed statements below, and nothing
+else.
+- Every key named here is `hashtextextended(tenant_id || …, 0)`.
+- "The fence" is the tenant `:semantic_outcome_authority:` key. Authorization
+  takes it shared through `evidence_package_authorize`.
+- "Capability rows" are `memoriesql.role_capabilities` rows of the caller's
+  role, locked `FOR SHARE OF cap`.
+- Only the first authorization in a call can wait for the fence or a capability
+  row. Later ones reuse what the transaction already holds, so their brackets
+  measure only their lookups.
+
+| Function | Bracketed statements, and what each can wait for |
+|---|---|
+| `write_evidence_package_v1` | the first authorization, in the create or the append/seal branch (the fence); the `:evidence-operation:` key; the `:evidence-occurrence:` key with the authorization recheck after it; the package row `FOR UPDATE` (append/seal); the final authorization recheck |
+| `read_evidence_package_v1` | both authorizations (the fence; the second is a recheck) |
+| `recover_transcript_fold_v1` | the first authorization (the fence); the `source.raw.read` capability row; the final authorization recheck |
+| `materialize_logical_unit_v2`, `materialize_declared_scope_v1` | the first `source_stable_authorize`: the fence, and through `revisiting_source_authorize` up to three capability rows (`source.raw.read`, `memory.capture`, `memory.maintain`); the `:materialization-source:` key; the `:materialize-operation:`, `:logical-event:` and `:logical-occurrence:` keys with the authorization recheck after them; the final authorization recheck |
+| `inspect_stored_bead_v1` | every `revisiting_source_authorize` call (the first can wait for the fence and up to three capability rows; the rest are rechecks) |
+
+**Not covered, so still counted as work:**
+- every read, write, hash and validation outside those brackets;
+- the replay path's authorization, which returns without a deadline check;
+- in the materializations, `enqueue_semantic_task` and the waits inside it
+  (its `:semantic_task.enqueue:` key, its shared `:semantic_module:` key and
+  its receipt row).
+
+The authorization lookups inside a bracket are excluded with its wait. They
+are a few indexed reads per call.
+
 ## Adapter bounds: work plus bounded lock waits
 
 The Python adapters' wall-clock statement timeout used to be 2 s (2.5 s for
