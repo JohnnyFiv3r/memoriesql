@@ -3399,8 +3399,11 @@ class AgentSqlResults(unittest.TestCase):
         )
         self.assertEqual(second["outcome"], "available", second)
         self.assertEqual(replies["first"]["outcome"], "available", replies)
+        # Each agent's rows carry its own opaque references; the values match.
         self.assertEqual(
-            replies["first"]["page"]["rows"], second["page"]["rows"], replies
+            [row["values"] for row in replies["first"]["page"]["rows"]],
+            [row["values"] for row in second["page"]["rows"]],
+            replies,
         )
         self.assertEqual(len(sent), 2)
         self.assertEqual(sent[0], sent[1])
