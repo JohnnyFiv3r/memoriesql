@@ -248,6 +248,9 @@
       "path": "src/memoriesql/infrastructure/postgres/query_reader_provisioning.py"
     },
     {
+      "path": "src/memoriesql/infrastructure/postgres/work_deadlines.py"
+    },
+    {
       "path": "src/memoriesql/infrastructure/results_broker/__init__.py"
     },
     {

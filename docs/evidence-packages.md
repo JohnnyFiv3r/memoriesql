@@ -145,7 +145,7 @@ resource-authorization mechanism; those audits are not authoring exposure receip
 | Content read | 1–1,024 Unicode characters from one part of at most 64 KiB. No scan of other parts. |
 | Response | At most 64 KiB canonical JSON, checked in SQL and adapter. |
 | Seal | At most 256 entry hashes (16 KiB digest input), plus a package row. No content scan. |
-| Time | 500 ms per lock wait; two-second SQL work deadline. The adapter owns a short transaction and sets a two-second statement timeout, including authorization statements. This is a server work bound, not a network/client scheduling SLA. |
+| Time | 500 ms per lock wait; two-second SQL work deadline, which excludes lock waits. The adapter owns a short transaction and sets a statement timeout of that work plus every lock wait the operation can meet: 4 s for writes, 2.5 s for reads (`docs/verification/work-deadlines-after-lock-waits.md`). This is a server work bound, not a network/client scheduling SLA. |
 
 Per-append component checks inspect at most 256 bounded inventory entries (2 MiB
 metadata). Raw reconstruction retains at most 256 KiB slices plus one bounded receipt

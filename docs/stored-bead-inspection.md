@@ -62,9 +62,11 @@ protected existence or counts. Larger stored statement/mention aggregates yield
 `budget_exhausted` without truncation. Every check that can make the bead
 unavailable runs before the first budget, so only a reader of the whole bead
 learns that it is over budget. A raw page over the reader's chunk work bound also
-yields `budget_exhausted`. The adapter sets a 2.5-second statement and
-500ms lock timeout; timeout/lock exhaustion yields the same explicit bounded
-outcome. Missing and protected resources return identical `unavailable` shapes.
+yields `budget_exhausted`. The two-second work budget excludes lock waits. The
+adapter sets a 500ms lock timeout, and a statement timeout of that work plus
+every lock wait the inspection can meet (4 s for `inspect_stored_bead_v1`, see
+`docs/verification/work-deadlines-after-lock-waits.md`); timeout/lock exhaustion yields the same explicit
+bounded outcome. Missing and protected resources return identical `unavailable` shapes.
 Invalid selection shapes fail validation. A read that succeeds may create existing
 authorization audit records. A read that reports `unavailable` or
 `budget_exhausted` leaves none, as a read of a missing bead leaves none. No read
