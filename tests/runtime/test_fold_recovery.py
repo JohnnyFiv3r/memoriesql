@@ -36,6 +36,12 @@ else:
     from test_postgres_runtime import PostgresRuntime, migrate
 
 
+# Bound for waits on real progress of another thread or session. A contended
+# hosted runner can take many times a local run to reach a step, so the bound
+# only has to catch a wedge (test_attempt_refusals' receipt gate is 30 s too).
+PROGRESS_SECONDS = 30
+
+
 class FoldRecovery(PostgresRuntime):
     def setUp(self) -> None:
         super().setUp()
@@ -279,7 +285,7 @@ class FoldRecovery(PostgresRuntime):
             self.api.inspect(InspectFoldOutcome(key=key))
 
     def wait_for_lock(self, pid: int, event: str = "advisory") -> None:
-        deadline = time.monotonic() + 1
+        deadline = time.monotonic() + PROGRESS_SECONDS
         while time.monotonic() < deadline:
             row = self.db.execute(
                 "SELECT wait_event FROM pg_stat_activity WHERE pid=%s", (pid,)
@@ -308,7 +314,7 @@ class FoldRecovery(PostgresRuntime):
                 self.wait_for_lock(reader.info.backend_pid)
                 self.revoke(blocker)
             with self.assertRaises((psycopg.Error, PermissionError)):
-                future.result(timeout=3)
+                future.result(timeout=PROGRESS_SECONDS)
         self.assertEqual(before, self.state())
 
     def test_lock_timeout_and_strong_snapshot_fail_closed(self) -> None:
@@ -780,10 +786,10 @@ class FoldRecovery(PostgresRuntime):
                     max(0, (expires - datetime.now(UTC)).total_seconds()) + 0.015
                 )
             if alternative:
-                self.assertEqual(future.result(timeout=3).key, key)
+                self.assertEqual(future.result(timeout=PROGRESS_SECONDS).key, key)
             else:
                 with self.assertRaises(psycopg.errors.InsufficientPrivilege):
-                    future.result(timeout=3)
+                    future.result(timeout=PROGRESS_SECONDS)
 
     def test_credential_expiry_during_wait_denies_delivery(self) -> None:
         self.expiry_during_wait("credential")
@@ -820,7 +826,7 @@ class FoldRecovery(PostgresRuntime):
                 )
                 self.wait_for_lock(mutation.info.backend_pid, event="transactionid")
                 self.assertFalse(future.done())
-            future.result(timeout=3)
+            future.result(timeout=PROGRESS_SECONDS)
         with self.assertRaises(psycopg.errors.InsufficientPrivilege):
             self.api.inspect(InspectFoldOutcome(key=key))
 
@@ -840,7 +846,7 @@ class FoldRecovery(PostgresRuntime):
                 )
                 self.wait_for_lock(reader.info.backend_pid, event="transactionid")
             with self.assertRaises(psycopg.errors.InsufficientPrivilege):
-                future.result(timeout=3)
+                future.result(timeout=PROGRESS_SECONDS)
 
     def test_unexpired_alternative_access_grant_still_permits_delivery(self) -> None:
         self.expiry_during_wait("access_grant", alternative=True)

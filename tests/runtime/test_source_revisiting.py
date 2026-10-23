@@ -64,6 +64,12 @@ else:
     from test_postgres_runtime import migrate
 
 
+# Bound for waits on real progress of another thread or session. A contended
+# hosted runner can take many times a local run to reach a step, so the bound
+# only has to catch a wedge (test_attempt_refusals' receipt gate is 30 s too).
+PROGRESS_SECONDS = 30
+
+
 class SourceRevisiting(CompleteInputExecution):
     activation: Any
 
@@ -777,7 +783,7 @@ class SourceRevisiting(CompleteInputExecution):
                         ReadSourceEvidence.model_validate(self.selection()),
                     ),
                 )
-                until = time.monotonic() + 3
+                until = time.monotonic() + PROGRESS_SECONDS
                 saw_wait = False
                 while time.monotonic() < until:
                     saw_wait = bool(
@@ -801,7 +807,7 @@ class SourceRevisiting(CompleteInputExecution):
                     (self.worker_secret,),
                 )
             with self.assertRaises(psycopg.errors.InsufficientPrivilege):
-                waiting.result(timeout=3)
+                waiting.result(timeout=PROGRESS_SECONDS)
         self.assert_no_meaning()
 
     def test_stale_selection_and_missing_raw_are_explicit(self) -> None:
