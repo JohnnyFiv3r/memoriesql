@@ -23,6 +23,9 @@ from psycopg.types.json import Jsonb
 
 from memoriesql.application.evidence_packages import AppendEvidencePart
 from memoriesql.infrastructure.postgres.authorization import PostgresAuthorizationPort
+from memoriesql.infrastructure.postgres.evidence_packages import (
+    PostgresEvidencePackages,
+)
 from memoriesql.infrastructure.postgres.migration_runner import discover_migrations
 
 if TYPE_CHECKING:
@@ -67,8 +70,14 @@ class WorkDeadlines(fixtures.EvidencePackages):
         self.addCleanup(connection.close)
         return connection
 
-    def contended_append(self, package: Any, part: Any) -> Any:
-        """Append `part` in SQL while two of the writer's lock waits are held."""
+    def contended_append(
+        self, package: Any, part: Any, *, through_adapter: bool = False
+    ) -> Any:
+        """Append `part` while two of the writer's lock waits are held.
+
+        By default the call is standalone SQL with a long statement timeout;
+        `through_adapter` uses the evidence adapter and its own bound.
+        """
         command = AppendEvidencePart(
             idempotency_key="append." + str(uuid.uuid4()),
             package_id=package.package_id,
@@ -105,6 +114,12 @@ class WorkDeadlines(fixtures.EvidencePackages):
         watcher = threading.Thread(target=release_after_waits)
         watcher.start()
         try:
+            if through_adapter:
+                return PostgresEvidencePackages(
+                    writer,
+                    credential_sha256=self.secret_hash,
+                    workspace_id=self.workspace,
+                ).write(command)
             with writer.transaction():
                 # A standalone SQL caller: its own interruption bound is long,
                 # so only the function's work deadline can end the call.
@@ -140,6 +155,21 @@ class WorkDeadlines(fixtures.EvidencePackages):
         # After it: the same waits are excluded, and 1.6 s of work fits.
         receipt = self.contended_append(package, second)
         self.assertFalse(receipt["replayed"])
+        self.assertEqual(self.status(package).appended_parts, 2)
+
+    def test_the_adapter_bound_leaves_room_for_the_lock_waits(self) -> None:
+        # The adapter's statement timeout is 2 s of work plus each lock wait
+        # an evidence write can meet (4 s), so the same contended append
+        # completes through the adapter too. A 2 s bound would cancel it.
+        migrate(self.db, expected_current_version=FIX - 1, target_version=FIX)
+        first, second = (
+            self.part("Fictional first part."),
+            self.part("Fictional second part.", 1),
+        )
+        package = self.create((first, second))
+        self.append(package, first)
+        receipt = self.contended_append(package, second, through_adapter=True)
+        self.assertFalse(receipt.replayed)
         self.assertEqual(self.status(package).appended_parts, 2)
 
 

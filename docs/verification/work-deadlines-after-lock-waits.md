@@ -44,18 +44,35 @@ statement starts after them.
 The number is provisional; the coordinator assigns the final one (0053 or
 later). Forward-only; earlier migrations keep their bytes.
 
-## Limit: adapter statement timeouts
+## Adapter bounds: work plus bounded lock waits
 
-The Python adapters set their own wall-clock `statement_timeout`:
-- 2 s for evidence, fold recovery and materialization (`OPERATION_TIMEOUT_MS`);
-- 2.5 s for stored-bead inspection.
+The Python adapters' wall-clock statement timeout used to be 2 s (2.5 s for
+inspection), and it counted lock waits too, so contention still ended calls the
+database would finish. Each adapter now takes its bound from one table,
+`infrastructure/postgres/work_deadlines.py`:
 
-That timeout still counts lock waits. So this migration removes the false
-trip for standalone SQL callers and lets inspection absorb up to 0.5 s of
-waits. Through the 2 s adapters, waits plus work above 2 s still end in a
-statement timeout (57014). Giving those adapters headroom for waits raises
-their documented wall-clock bound; that is pending a decision and is not in
-this change.
+> statement timeout = 2 s of work + (lock waits the function can meet × its
+> 500 ms lock timeout)
+
+A later authorization in the same call reuses the fence and rows its
+transaction already holds, so it adds no wait.
+
+| Function | Fence | Role-capability rows | Advisory locks | Other rows | Statement timeout |
+|---|---|---|---|---|---|
+| `write_evidence_package_v1` | 1 | 0 | 2 (operation, occurrence) | 1 (package) | 4.0 s |
+| `read_evidence_package_v1` | 1 | 0 | 0 | 0 | 2.5 s |
+| `recover_transcript_fold_v1` | 1 | 1 | 0 | 0 | 3.0 s |
+| `materialize_logical_unit_v2` | 1 | 3 (via source revisiting) | 4 (source, operation, event, occurrence) | 0 | 6.0 s |
+| `materialize_declared_scope_v1` | 1 | 3 (via source revisiting) | 4 | 0 | 6.0 s |
+| `inspect_stored_bead_v1` | 1 | 3 (via source revisiting) | 0 | 0 | 4.0 s |
+
+**What changes for callers.** The documented "operation 2 s" bound becomes
+**2 s of work plus bounded lock waits**, per function, as in the table. The
+in-database work deadline stays 2 s. Other queries through the same adapters
+keep their earlier bound.
+
+**Role-capability rows.** No product path writes them today. They are counted
+anyway, so the bound holds whatever writes them later.
 
 ## Tests
 
@@ -70,6 +87,11 @@ this change.
   authorization and operation lock each wait 0.3 s, with a test-only trigger
   that sleeps 1.6 s while it works.
   - Before the fix the call ends with `evidence_work_timeout`.
-  - After it the same append succeeds.
+  - After it the same append succeeds, as standalone SQL and through the
+    evidence adapter, whose 4 s bound leaves room for both waits.
+- **`tests/unit/test_work_deadlines.py`** (database-free) pins each adapter
+  bound. It re-derives each function's lock waits from its installed text and
+  checks the lock timeout and deadline constants against it, so changing a lock,
+  a lock timeout or the deadline forces a review there.
   - Each wait stays under the lock timeout and the work under 2 s, so the
     margins do not depend on machine speed.
