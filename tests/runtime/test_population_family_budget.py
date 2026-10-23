@@ -143,10 +143,12 @@ class PopulationFamilyBudget(unittest.TestCase):
         return {table: json.dumps(rows) for table, (rows, _) in seen.items()}
 
     def withheld_on(self) -> list[str]:
-        """The SQLSTATE and message the deep family's assertion row raises."""
+        """The SQLSTATE and message the deep family's assertion row raises in the
+        owner's context. The hook is private, so it runs as the test's own role."""
         try:
             with self.db.transaction():
                 self.fixture.begin()
+                self.db.execute("RESET ROLE")
                 self.db.execute(ASSERTION_ROW, (self.fixture.tenant, UUID(self.deep)))
         except psycopg.Error as error:
             return [str(error.sqlstate), str(error.diag.message_primary)]
@@ -184,8 +186,6 @@ class PopulationFamilyBudget(unittest.TestCase):
         self.db.execute(REVOKE_SOURCE, (self.deep_source,))
         reasons.append(self.withheld_on())
         unreadable = {label: self.relation_rows(secret) for label, secret in readers}
-        self.assertEqual(reasons[0], ["54000", "root_budget"])
-        self.assertEqual(reasons[1][0], "42501")
         identical = {}
         for label, tables in deep.items():
             identical[label] = sorted(
@@ -196,6 +196,9 @@ class PopulationFamilyBudget(unittest.TestCase):
             for table, rows in tables.items():
                 with self.subTest(reader=label, table=table):
                     self.assertEqual(unreadable[label][table], rows)
+        with self.subTest(check="withheld_on"):
+            self.assertEqual(reasons[0], ["54000", "root_budget"])
+            self.assertEqual(reasons[1][0], "42501")
         print(
             json.dumps(
                 {
