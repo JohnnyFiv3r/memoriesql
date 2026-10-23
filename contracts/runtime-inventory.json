@@ -273,6 +273,9 @@
     },
     {
       "path": "src/memoriesql/query_client.py"
+    },
+    {
+      "path": "src/memoriesql/application/authored_output_checks.py"
     }
   ]
 }

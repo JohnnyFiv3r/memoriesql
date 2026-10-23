@@ -6,12 +6,19 @@ import copy
 import re
 import unittest
 from pathlib import Path
-from typing import Any
+from types import SimpleNamespace
+from typing import Any, cast
 
 from memoriesql.application.authored_output_checks import (
     ISSUE_REFUSALS,
     AuthoredOutputIssue,
     authored_annotation_issues,
+)
+from memoriesql.application.semantic_task_contracts import SemanticResultStatus
+from memoriesql.infrastructure.models.pydanticai_executor import (
+    EvidenceGuardError,
+    PydanticAISemanticExecutor,
+    _normalize_failure,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -133,6 +140,30 @@ class AuthoredOutputChecks(unittest.TestCase):
         )
         with self.assertRaises(ValueError):
             AuthoredOutputIssue("annotation.unregistered", BEADS[0])
+
+    def test_the_executor_refuses_the_root_output_as_named_invalid_output(self) -> None:
+        def dumped(value: dict[str, Any]) -> Any:
+            return SimpleNamespace(model_dump=lambda mode: copy.deepcopy(value))
+
+        task = SimpleNamespace(
+            task_input=dumped(task_input()),
+            definition=SimpleNamespace(task_kind=OBSERVATIONS[0], contract_revision=2),
+        )
+        payload = output()
+        payload["annotations"][0]["event_id"] = OTHER_EVENT
+        authored = SimpleNamespace(typed_output=dumped(payload), used_evidence_refs=UNITS)
+        guard = PydanticAISemanticExecutor._guard_authored_annotations
+        with self.assertRaises(EvidenceGuardError) as raised:
+            guard(cast(Any, task), cast(Any, authored))
+        self.assertEqual(raised.exception.code, "output.annotation.event_mismatch")
+        self.assertNotIn(SECRET, str(raised.exception))
+        failure = _normalize_failure(raised.exception)
+        self.assertEqual(
+            (failure.status, failure.error_code),
+            (SemanticResultStatus.INVALID_OUTPUT, "output.annotation.event_mismatch"),
+        )
+        valid = SimpleNamespace(typed_output=dumped(output()), used_evidence_refs=UNITS)
+        guard(cast(Any, task), cast(Any, valid))
 
     def test_every_anticipated_refusal_is_raised_by_canonical_apply(self) -> None:
         text = (ROOT / "migrations/0041_authored_statement_kinds.sql").read_text()

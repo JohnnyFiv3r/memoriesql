@@ -40,6 +40,7 @@ from pydantic_ai.models.wrapper import WrapperModel
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import RequestUsage, RunUsage, UsageLimits
 
+from memoriesql.application.authored_output_checks import authored_annotation_issues
 from memoriesql.application.authored_relations import (
     RelatedAuthorStep,
     RelatedExecutionInput,
@@ -2236,6 +2237,8 @@ class PydanticAISemanticExecutor:
                 else cast(AuthoredSemanticOutput[BaseModel], result.output)
             )
             self._guard_authored_output(run_deps, authored)
+            if parent_run_id is None:
+                self._guard_authored_annotations(state.task, authored)
             if parent_run_id is not None:
                 if state.deps.cancellation.is_cancelled():
                     raise RunCancelled("semantic run cancelled before acceptance")
@@ -2316,6 +2319,27 @@ class PydanticAISemanticExecutor:
             raise EvidenceGuardError(
                 "runtime.evidence_not_visible",
                 ", ".join(sorted(not_visible)),
+            )
+
+    @staticmethod
+    def _guard_authored_annotations(
+        task: ResolvedSemanticTask[BaseModel, BaseModel],
+        authored: AuthoredSemanticOutput[BaseModel],
+    ) -> None:
+        # Refuse here what canonical apply would refuse, naming what is wrong:
+        # some of these reach apply as an authority or Python error, not as
+        # invalid output (guard audit P1-f).
+        issues = authored_annotation_issues(
+            task.task_input.model_dump(mode="json"),
+            authored.typed_output.model_dump(mode="json"),
+            authored.used_evidence_refs,
+            task_kind=task.definition.task_kind,
+            contract_revision=task.definition.contract_revision,
+        )
+        if issues:
+            raise EvidenceGuardError(
+                "output." + issues[0].code,
+                "; ".join(issue.feedback() for issue in issues),
             )
 
     async def _author_relations(
