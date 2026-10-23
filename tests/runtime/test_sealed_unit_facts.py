@@ -2,7 +2,11 @@
 
 The hidden-length worlds rerun with the facts installed: the pre-closure
 control, the three-world invariance, the TOAST check, the digests and the
-transition. On top, query paths must read no block of any part relation for a
+transition. Here the invariance also bounds charged time, and is guarded
+deterministically: a non-raw agent's query, pages and reuse make the same
+function calls, hashing inputs of the same sizes, whatever is hidden; a control
+at the closure alone shows the guard sees hidden parts there. On top,
+query paths must read no block of any part relation for a
 hidden package (exact, against the closure's own record build), every
 materialization's facts must equal the closure's digest, results saved under
 the closure must still reuse, and a new materialization must record its facts
@@ -16,11 +20,14 @@ import json
 import os
 import time
 import unittest
+from collections import Counter
 from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 from uuid import UUID, uuid4
 
 import psycopg
+from psycopg import sql
+from psycopg.conninfo import make_conninfo
 
 from memoriesql.application.stored_bead_inspection import InspectStoredBead
 from memoriesql.infrastructure.postgres.stored_bead_inspection import (
@@ -46,6 +53,20 @@ RELATIONS = (
 )
 PARTS = "memoriesql.evidence_package_parts"
 FACTS = "memoriesql.logical_unit_query_facts"
+GUARD = "hl_guard"
+HASH = "memoriesql.lifecycle_hash_v1(jsonb)"
+# Test-only: the same digest, recording each input's size through an autonomous
+# connection, since a population's read-only transaction is rolled back.
+RECORDER = (
+    "CREATE OR REPLACE FUNCTION memoriesql.lifecycle_hash_v1(v jsonb) RETURNS text "
+    "LANGUAGE plpgsql IMMUTABLE SECURITY DEFINER SET search_path=pg_catalog,memoriesql "
+    "AS $$ DECLARE canonical text := memoriesql.lifecycle_canonical_json_v1(v); BEGIN "
+    "IF NOT COALESCE('hl_guard'=ANY(hl_guard.dblink_get_connections()),false) THEN "
+    "PERFORM hl_guard.dblink_connect('hl_guard',{}); END IF; "
+    "PERFORM hl_guard.dblink_exec('hl_guard','INSERT INTO hl_guard.hash_inputs VALUES ('"
+    "||octet_length(canonical)||')'); "
+    "RETURN encode(sha256(convert_to(canonical,'UTF8')),'hex'); END $$"
+)
 
 
 def facts() -> int:
@@ -106,6 +127,134 @@ class SealedUnitFacts(hidden.HiddenPackageLength):
                 return current
             previous = current
             time.sleep(0.5)
+
+    def compare_times(self, first: list[int], times: list[int]) -> None:
+        self.assertEqual(len(times), len(first))
+        for one, other in zip(first, times, strict=True):
+            self.assertLessEqual(abs(one - other), hidden.TIME_BOUND_MS)
+
+    def install_guard(self) -> None:
+        """Count every function call, and record every hash input's size.
+
+        Function statistics are not transactional, so they see the rolled-back
+        population too; the recorder writes through its own connection.
+        """
+        row = self.db.execute(
+            "SELECT current_database(),current_user,"
+            "current_setting('unix_socket_directories'),current_setting('port')"
+        ).fetchone()
+        assert row is not None
+        database, user, sockets, port = row
+        self.db.execute(
+            sql.SQL("ALTER DATABASE {} SET track_functions='all'").format(
+                sql.Identifier(database)
+            )
+        )
+        self.db.execute(sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(GUARD)))
+        self.db.execute(
+            sql.SQL("CREATE EXTENSION dblink SCHEMA {}").format(sql.Identifier(GUARD))
+        )
+        self.db.execute("CREATE TABLE hl_guard.hash_inputs(bytes integer NOT NULL)")
+        conninfo = make_conninfo(
+            host=sockets.split(",")[0].strip(), port=port, dbname=database, user=user
+        )
+        self.db.execute(sql.SQL(RECORDER).format(sql.Literal(conninfo)))
+
+    def settled_calls(self) -> dict[str, int]:
+        """Calls per function by every finished backend, once flushed."""
+        deadline = time.monotonic() + 15
+        while self.scalar(
+            "SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() "
+            "AND pid<>pg_backend_pid() AND backend_type='client backend'"
+        ):
+            if time.monotonic() > deadline:
+                break
+            time.sleep(0.05)
+        self.db.execute("SELECT pg_stat_force_next_flush()")
+        previous: dict[str, int] | None = None
+        while True:
+            self.db.execute("SELECT pg_stat_clear_snapshot()")
+            current = {
+                name: int(calls)
+                for name, calls in self.db.execute(
+                    "SELECT s.schemaname||'.'||s.funcname||'('||oidvectortypes(p.proargtypes)"
+                    "||')',s.calls FROM pg_stat_user_functions s "
+                    "JOIN pg_proc p ON p.oid=s.funcid WHERE s.schemaname<>%s",
+                    (GUARD,),
+                ).fetchall()
+            }
+            if current == previous:
+                return current
+            previous = current
+            time.sleep(0.5)
+
+    def profile(self, world: hidden.World) -> tuple[dict[str, int], Counter[int]]:
+        """Function calls and hash-input sizes of a non-raw agent's query, pages and reuse."""
+        before = self.settled_calls()
+        run = self.r.start(world.agent)
+        _, first = self.r.query(run, hidden.QUERY, page_size=1, secret=world.agent)
+        self.assertEqual(first["outcome"], "available", first)
+        cursor = first["page"]["next_cursor"]
+        while cursor is not None:
+            page = self.r.reuse(
+                run, first["result"], cursor=cursor, page_size=1, secret=world.agent
+            )
+            self.assertEqual(page["outcome"], "available", page)
+            cursor = page["page"]["next_cursor"]
+        again = self.r.reuse(run, first["result"], page_size=50, secret=world.agent)
+        self.assertEqual(again["outcome"], "available", again)
+        self.r.close(run, secret=world.agent)
+        after = self.settled_calls()
+        calls = {
+            name: count - before.get(name, 0)
+            for name, count in after.items()
+            if count != before.get(name, 0)
+        }
+        sizes = Counter(
+            int(row[0])
+            for row in self.db.execute(
+                "SELECT bytes FROM hl_guard.hash_inputs"
+            ).fetchall()
+        )
+        self.db.execute("TRUNCATE hl_guard.hash_inputs")
+        return calls, sizes
+
+    def guard_work(self) -> None:
+        """The bounded time's causes are equal exactly, not only within a bound."""
+        self.install_guard()
+        profiles = []
+        for world in self.worlds:
+            profiles.append(self.profile(world))
+        for calls, sizes in profiles:
+            # Not vacuous: every hash call was recorded, and there were some.
+            self.assertGreater(calls.get(HASH, 0), 0, calls)
+            self.assertEqual(sum(sizes.values()), calls[HASH])
+        (first_calls, first_sizes), *others = profiles
+        self.assertEqual(len(others), 2)
+        for calls, sizes in others:
+            self.assertEqual(calls, first_calls)
+            self.assertEqual(sizes, first_sizes)
+
+    def test_the_work_guard_sees_hidden_parts_at_the_closure_alone(self) -> None:
+        """Sensitivity control: before the facts, the guard detects per-part work.
+
+        With the closure alone a query still canonicalizes and hashes records
+        built from every part, so the third world, whose identity package is
+        split into many parts, must profile differently from the second.
+        """
+        migrate(
+            self.db,
+            expected_current_version=hidden.closure() - 1,
+            target_version=hidden.closure(),
+        )
+        self.install_guard()
+        profiles = []
+        for world in self.worlds:
+            profiles.append(self.profile(world))
+        for calls, sizes in profiles:
+            self.assertGreater(calls.get(HASH, 0), 0, calls)
+            self.assertEqual(sum(sizes.values()), calls[HASH])
+        self.assertNotEqual(profiles[2], profiles[1])
 
     def materialized(
         self,
