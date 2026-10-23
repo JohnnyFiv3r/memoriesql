@@ -5,7 +5,9 @@ one bead settles succeeded: the other bead is accepted, the withheld bead stays
 thin, and an owner-only row with a fixed reason records it. Only the human
 owner reads that row; a paired agent and the worker cannot, and no other
 database function reads the table. Without a recorded row a missing bead is
-still refused, and a withheld bead can never also be annotated.
+still refused, a withheld bead can never also be annotated, and a refusal
+that depends on database state refuses the whole output. The withheld bead's
+owner and agent inspection reads exactly as before it was authored.
 """
 
 from __future__ import annotations
@@ -214,7 +216,7 @@ class PartialObservationAcceptance(PostgresRuntime):
                     uuid.uuid4(),
                     uuid.uuid4(),
                     uuid.uuid4(),
-                    ["memory.inspect", "memory.query"],
+                    ["memory.inspect", "memory.query", "source.read"],
                     [self.scope],
                     secret,
                     self.now,
@@ -234,6 +236,23 @@ class PartialObservationAcceptance(PostgresRuntime):
             )
         return secret
 
+    def inspected(self, bead: Any, secret: str | None = None) -> Any:
+        """One stored-bead inspection, as the owner or a paired agent."""
+        with self.db.transaction():
+            self.db.execute("SET LOCAL ROLE memoriesql_application")
+            PostgresAuthorizationPort(self.db).begin_context(
+                credential_sha256=secret or self.secret_hash,
+                requested_workspace_id=self.workspace,
+            )
+            try:
+                with self.db.transaction():
+                    return self.row(
+                        "SELECT memoriesql.inspect_stored_bead_v1(%s)",
+                        (Jsonb({"contract_version": 1, "bead_id": str(bead)}),),
+                    )[0]
+            except psycopg.Error as error:
+                return ("refused", error.sqlstate)
+
     def versions(self, bead: Any) -> int:
         return int(
             self.row(
@@ -241,6 +260,38 @@ class PartialObservationAcceptance(PostgresRuntime):
                 (self.tenant, bead),
             )[0]
         )
+
+    def test_a_withheld_bead_reads_as_never_authored(self) -> None:
+        secret = self.pair_agent()
+        readers = {"owner": None, "agent": secret}
+        before = {
+            (name, bead): self.inspected(bead, credential)
+            for name, credential in readers.items()
+            for bead in self.beads
+        }
+        self.assertEqual(before["owner", self.gate]["outcome"], "available")
+        self.assertEqual(before["owner", self.gate]["bead"]["lifecycle"], "thin")
+        self.persist(self.result((0,), ((self.gate, "withheld.pin_mismatch"),)))
+        for name, credential in readers.items():
+            with self.subTest(reader=name):
+                # The withheld bead reads exactly as before it was authored.
+                self.assertEqual(self.inspected(self.gate, credential), before[name, self.gate])
+        # Not a vacuous comparison: the accepted bead did change.
+        accepted = self.inspected(self.trees)
+        self.assertNotEqual(accepted, before["owner", self.trees])
+        self.assertEqual(accepted["bead"]["lifecycle"], "accepted")
+
+    def test_hidden_state_never_yields_partial_acceptance(self) -> None:
+        # A refusal that depends on database state (here a revoked source)
+        # refuses the whole output, withheld rows included.
+        self.db.execute(
+            "UPDATE memoriesql.protected_resources SET status='revoked',"
+            "revoked_at=clock_timestamp() WHERE resource_id=%s",
+            (self.source,),
+        )
+        with self.assertRaises(psycopg.Error):
+            self.persist(self.result((0,), ((self.gate, "withheld.not_authored"),)))
+        self.assertEqual((self.statements(self.trees), self.withheld_rows()), (0, 0))
 
     def test_a_withheld_bead_stays_thin_and_only_the_owner_sees_why(self) -> None:
         trees, gate = self.versions(self.trees), self.versions(self.gate)
