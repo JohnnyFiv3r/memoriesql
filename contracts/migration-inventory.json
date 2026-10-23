@@ -205,6 +205,10 @@
     {
       "filename": "0051_supervised_reapproval.sql",
       "sha256": "d45a83fe0649b6118ab44b5519271252ef094c80f55581685fd645f62b59ca85"
+    },
+    {
+      "filename": "0052_partial_observation_acceptance.sql",
+      "sha256": "7d0f2a97959d736092d43b4b449272c9885845295a63d92b7990e8795d99f5ab"
     }
   ]
 }

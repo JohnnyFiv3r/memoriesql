@@ -708,6 +708,23 @@ class PostgresSemanticTaskQueue:
             "model_run_refs": result.model_run_refs,
             "payload": payload,
         }
+        if result.withheld_items:
+            # Owner-only, in this transaction and before apply, which counts the
+            # recorded beads as covered and never accepts them. The function
+            # refuses any task but observation authoring as invalid.
+            self._connection.execute(
+                "SELECT memoriesql.record_withheld_semantic_output_v1("
+                "%s,%s,%s,%s,%s,%s,%s)",
+                self._fence_parameters(fence)
+                + (
+                    Jsonb(
+                        [
+                            item.model_dump(mode="json", warnings="error")
+                            for item in result.withheld_items
+                        ]
+                    ),
+                ),
+            )
         if (result.task_kind, result.contract_revision) == (
             "memory.semantic.author-observations",
             1,
