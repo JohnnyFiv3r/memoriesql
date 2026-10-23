@@ -158,7 +158,7 @@ class SupervisedReapprovalMigration(unittest.TestCase):
 
     def test_inventory_pins_the_migration(self) -> None:
         rows = json.loads((ROOT / "contracts/migration-inventory.json").read_text())["migrations"]
-        self.assertEqual([int(r["filename"][:4]) for r in rows], list(range(1, 53)))
+        self.assertEqual([int(r["filename"][:4]) for r in rows], list(range(1, 54)))
         self.assertEqual(rows[50]["filename"], MIGRATION.name)
         self.assertEqual(rows[50]["sha256"], hashlib.sha256(MIGRATION.read_bytes()).hexdigest())
 

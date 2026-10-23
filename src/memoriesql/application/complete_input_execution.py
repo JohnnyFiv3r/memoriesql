@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from dataclasses import replace
 from typing import Final, Literal, Protocol, cast
 from uuid import UUID
 
@@ -276,6 +277,71 @@ class ApplyCompleteInput(FrozenContractModel):
         ):
             raise ValueError("complete input output contract mismatch")
         return self
+
+
+# Revision 8 (guard audit P1-f D2, owner decision 2026-10-23). Revision 2 spends
+# its whole request ceiling on up to eight inspection windows, so a unit that
+# uses them all has no request left for the evidence-free repair round.
+# Revision 8 is revision 2 with one more request. Its inputs, output, exposure,
+# apply and render semantics are revision 2's; only the request ceiling and the
+# identifiers that pin it are new. Revision-2 tasks and dispatch policies keep
+# their pins; an administrator opts in with a revision-8 dispatch policy.
+
+
+class RepairableExecutionInput(CompleteExecutionInput):
+    contract_revision: Literal[8] = 8  # type: ignore[assignment]
+
+
+class ActivateRepairableCompleteInput(ActivateCompleteInput):
+    contract_version: Literal[7] = 7  # type: ignore[assignment]
+    expected_schema_version: Literal[53] = 53  # type: ignore[assignment]
+
+
+class RepairableActivationReceipt(CompleteInputActivationReceipt):
+    contract_version: Literal[7] = 7  # type: ignore[assignment]
+
+
+REPAIRABLE_EXECUTION_TASK = replace(
+    COMPLETE_EXECUTION_TASK,
+    contract_revision=8,
+    input_contract=TypedModelContract(
+        contract_id="memory.semantic.complete-input-execution.input",
+        revision=2,
+        model_type=RepairableExecutionInput,
+    ),
+    run_budget=COMPLETE_EXECUTION_TASK.run_budget.model_copy(
+        update={"request_limit": 9}
+    ),
+    leaf_agent_key="memory.semantic.complete-unit-author.v2",
+)
+
+
+def load_repairable_complete_input_task_registry(
+    module_registry: BuiltInModuleRegistry,
+) -> SemanticTaskRegistry:
+    task = REPAIRABLE_EXECUTION_TASK
+    return SemanticTaskRegistry._from_source_controlled(
+        module_registry,
+        (cast(SemanticTaskDefinition[BaseModel, BaseModel], task),),
+        (
+            AgentContract(
+                agent_key=cast(str, task.leaf_agent_key),
+                input_contract=task.input_contract.reference,
+                output_contract=task.output_contract.reference,
+                maximum_effort_key="standard",
+            ),
+        ),
+        (),
+        BUILTIN_EFFORT_PROFILES,
+        BUILTIN_MODEL_PROFILE_REFERENCES,
+        (EvidencePolicyContract(policy_key="complete-input-exposure-v1"),),
+    )
+
+
+class ApplyRepairableCompleteInput(ApplyCompleteInput):
+    contract_version: Literal[9] = 9  # type: ignore[assignment]
+    expected_schema_version: Literal[53] = 53  # type: ignore[assignment]
+    contract_revision: Literal[8] = 8  # type: ignore[assignment]
 
 
 class CompleteInputError(RuntimeError):
