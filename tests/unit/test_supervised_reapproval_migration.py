@@ -128,10 +128,13 @@ class SupervisedReapprovalMigration(unittest.TestCase):
             "NEW.workspace_id IS DISTINCT FROM prior.workspace_id",
             "NEW.access_scope_id IS DISTINCT FROM prior.access_scope_id",
             "NEW.origin_principal_id IS DISTINCT FROM prior.origin_principal_id",
-            "t.status IN ('queued','retry_wait','policy_paused') AND t.result_attempt_id IS NULL",
+            "t.status IN ('queued','retry_wait','policy_paused'))",
             "a.status IN ('claimed','running')",
         ):
             self.assertIn(condition, guard)
+        # Every recorded outcome sets result_attempt_id, a retry or a pause
+        # included, so a waiting task is known by its status alone.
+        self.assertNotIn("result_attempt_id", guard)
         self.assertIn(
             "CREATE TRIGGER supervised_reapproval_guard BEFORE INSERT ON "
             "memoriesql.model_supervised_qualifications",

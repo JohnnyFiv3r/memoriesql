@@ -3430,7 +3430,13 @@ def _repair_frame(
             "repair_frame": 1,
             "instruction": REPAIR_INSTRUCTION,
             "task_input": task_input.model_dump(mode="json", warnings="error"),
-            "previous_output": authored.model_dump(mode="json", warnings="error"),
+            # Dumped field by field: a source-revisiting output is held as
+            # AuthoredSemanticOutput[BaseModel], whose own dump would drop the
+            # typed output's fields.
+            "previous_output": {
+                "typed_output": authored.typed_output.model_dump(mode="json", warnings="error"),
+                "used_evidence_refs": list(authored.used_evidence_refs),
+            },
             "refusal_codes": [issue.feedback() for issue in issues],
         },
         ensure_ascii=True,
