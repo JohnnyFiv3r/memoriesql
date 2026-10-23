@@ -181,6 +181,7 @@ def _attributed(factory: ConnectionFactory) -> ConnectionFactory:
             delivery, opened = claim
             try:
                 with connection.transaction():
+                    connection.execute("SET LOCAL ROLE memoriesql_application")
                     connection.execute(_AUDIT_CLAIM, (delivery,))
             except BaseException:
                 connection.close()
@@ -198,6 +199,7 @@ def _end_audit_claims(opened: list[Connection[Any]]) -> None:
             continue
         try:
             with connection.transaction():
+                connection.execute("SET LOCAL ROLE memoriesql_application")
                 connection.execute(_AUDIT_CLAIM, ("",))
         except Error:
             connection.close()
@@ -545,6 +547,7 @@ class PostgresAgentSqlResults:
                         break
                 # Governed expiry of query-attributed audit rows (M0047).
                 with connection.transaction():
+                    connection.execute("SET LOCAL ROLE memoriesql_application")
                     retained = connection.execute(_AUDIT_RETENTION_SQL).fetchone()
                 for _ in range(max_batches if retained and retained[0] else 0):
                     with connection.transaction():
