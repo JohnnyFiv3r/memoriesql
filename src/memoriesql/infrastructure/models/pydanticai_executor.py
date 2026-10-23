@@ -40,7 +40,10 @@ from pydantic_ai.models.wrapper import WrapperModel
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import RequestUsage, RunUsage, UsageLimits
 
-from memoriesql.application.authored_output_checks import authored_annotation_issues
+from memoriesql.application.authored_output_checks import (
+    AuthoredOutputIssue,
+    authored_annotation_issues,
+)
 from memoriesql.application.authored_relations import (
     RelatedAuthorStep,
     RelatedExecutionInput,
@@ -666,6 +669,9 @@ class _TreeState:
     pending_terminal_event_tasks: set[asyncio.Task[None]] = field(default_factory=set)
     open_delegations: int = 0
     delegations_closed: asyncio.Event = field(default_factory=asyncio.Event)
+    # The executor-built repair frame while its one dispatch is admitted.
+    repair_frame: str | None = None
+    repair_used: bool = False
 
     def __post_init__(self) -> None:
         self.delegations_closed.set()
@@ -818,7 +824,23 @@ class _DispatchGuardedModel(WrapperModel):
         await state.require_dispatch_open()
         exposed_window: EvidenceExecutionWindow | None = None
         source_delivery: SourceDelivery | None = None
-        if (
+        repair = state.repair_frame if self._run_deps.parent_run_id is None else None
+        if repair is not None:
+            # The task input, the model's own prior output and fixed refusal
+            # codes, nothing else: no evidence is delivered, none is recorded.
+            supplied_repair = [
+                p.content
+                for m in messages
+                if isinstance(m, ModelRequest)
+                for p in m.parts
+                if isinstance(p, UserPromptPart)
+            ]
+            if supplied_repair != [repair]:
+                raise EvidenceGuardError(
+                    "runtime.repair_frame_mismatch",
+                    "a repair dispatch carries exactly its frame",
+                )
+        elif (
             isinstance(state.task.task_input, RevisitingExecutionInput)
             and self._run_deps.parent_run_id is None
         ):
@@ -862,7 +884,7 @@ class _DispatchGuardedModel(WrapperModel):
                     "source_revisiting.delivery_budget",
                 )
             state.delivered_source_units += source_delivery.delivered_units
-        if isinstance(state.task.task_input, CompleteExecutionInput):
+        if repair is None and isinstance(state.task.task_input, CompleteExecutionInput):
             if (
                 state.deps.complete_input is None
                 or state.deps.exposure_recorder is None
@@ -2238,7 +2260,9 @@ class PydanticAISemanticExecutor:
             )
             self._guard_authored_output(run_deps, authored)
             if parent_run_id is None:
-                self._guard_authored_annotations(state.task, authored)
+                authored = await self._repaired_root_output(
+                    state, run_deps, invoke, authored
+                )
             if parent_run_id is not None:
                 if state.deps.cancellation.is_cancelled():
                     raise RunCancelled("semantic run cancelled before acceptance")
@@ -2322,25 +2346,73 @@ class PydanticAISemanticExecutor:
             )
 
     @staticmethod
-    def _guard_authored_annotations(
+    def _annotation_issues(
         task: ResolvedSemanticTask[BaseModel, BaseModel],
         authored: AuthoredSemanticOutput[BaseModel],
-    ) -> None:
-        # Refuse here what canonical apply would refuse, naming what is wrong:
-        # some of these reach apply as an authority or Python error, not as
-        # invalid output (guard audit P1-f).
-        issues = authored_annotation_issues(
+    ) -> tuple[AuthoredOutputIssue, ...]:
+        return authored_annotation_issues(
             task.task_input.model_dump(mode="json"),
             authored.typed_output.model_dump(mode="json"),
             authored.used_evidence_refs,
             task_kind=task.definition.task_kind,
             contract_revision=task.definition.contract_revision,
         )
+
+    @staticmethod
+    def _repair_admitted(state: _TreeState, run_deps: _AgentRunDeps) -> bool:
+        # One per run, on a tool-free direct leaf (no tool or delegate can fetch
+        # evidence), never for a supervised turn (its allowance is one turn) or
+        # a classified proposal (its classification binds the original), and
+        # only with a request left in the run's existing budget.
+        definition = state.task.definition
+        return (
+            not state.repair_used
+            and definition.dispatch_mode is DispatchMode.DIRECT_LEAF
+            and not definition.allowed_delegate_keys
+            and not definition.allowed_tool_keys
+            and run_deps.binding.evidence_tool_key is None
+            and run_deps.model_profile.binding.supervision is None
+            and not isinstance(state.task.task_input, ClassificationExecutionInput)
+            and state.reserved_requests < state.task.effective_budget.request_limit
+        )
+
+    async def _repaired_root_output(
+        self,
+        state: _TreeState,
+        run_deps: _AgentRunDeps,
+        invoke: Callable[[str], Awaitable[Any]],
+        authored: AuthoredSemanticOutput[BaseModel],
+    ) -> AuthoredSemanticOutput[BaseModel]:
+        # Refuse here what canonical apply would refuse, naming what is wrong:
+        # some of these reach apply as an authority or Python error, not as
+        # invalid output. First the model gets one evidence-free repair round
+        # (guard audit P1-f); canonical apply still decides.
+        issues = self._annotation_issues(state.task, authored)
+        if issues and self._repair_admitted(state, run_deps):
+            state.repair_used = True
+            state.repair_frame = _repair_frame(state.task.task_input, authored, issues)
+            dispatched = state.usage.requests
+            repaired = None
+            try:
+                repaired = await invoke(state.repair_frame)
+            except UsageLimitExceeded:
+                # Refused before dispatch: the first output's issues stand.
+                if state.usage.requests != dispatched:
+                    raise
+            except TimeoutError as error:
+                raise ProviderRequestTimeout from error
+            finally:
+                state.repair_frame = None
+            if repaired is not None:
+                authored = cast(AuthoredSemanticOutput[BaseModel], repaired.output)
+                self._guard_authored_output(run_deps, authored)
+                issues = self._annotation_issues(state.task, authored)
         if issues:
             raise EvidenceGuardError(
                 "output." + issues[0].code,
                 "; ".join(issue.feedback() for issue in issues),
             )
+        return authored
 
     async def _author_relations(
         self,
@@ -3334,6 +3406,35 @@ def _usage_summary(usage: RunUsage) -> UsageSummary:
         input_tokens=usage.input_tokens,
         output_tokens=usage.output_tokens,
         tool_calls=usage.tool_calls,
+    )
+
+
+REPAIR_INSTRUCTION = (
+    "Your previous output would be refused for the reasons listed. Return the "
+    "corrected typed result: change what the reasons name and keep everything "
+    "else. No evidence is sent again; add nothing that needs evidence you "
+    "cannot see in this frame."
+)
+
+
+def _repair_frame(
+    task_input: BaseModel,
+    authored: AuthoredSemanticOutput[BaseModel],
+    issues: tuple[AuthoredOutputIssue, ...],
+) -> str:
+    """The one repair frame: the task input, the model's own prior output and
+    fixed refusal codes with identifiers. No evidence and no database text."""
+
+    return json.dumps(
+        {
+            "repair_frame": 1,
+            "instruction": REPAIR_INSTRUCTION,
+            "task_input": task_input.model_dump(mode="json", warnings="error"),
+            "previous_output": authored.model_dump(mode="json", warnings="error"),
+            "refusal_codes": [issue.feedback() for issue in issues],
+        },
+        ensure_ascii=True,
+        separators=(",", ":"),
     )
 
 

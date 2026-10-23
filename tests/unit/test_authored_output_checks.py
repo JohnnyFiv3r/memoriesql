@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import json
 import re
 import unittest
 from pathlib import Path
@@ -16,9 +17,11 @@ from memoriesql.application.authored_output_checks import (
 )
 from memoriesql.application.semantic_task_contracts import SemanticResultStatus
 from memoriesql.infrastructure.models.pydanticai_executor import (
+    REPAIR_INSTRUCTION,
     EvidenceGuardError,
     PydanticAISemanticExecutor,
     _normalize_failure,
+    _repair_frame,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -141,9 +144,9 @@ class AuthoredOutputChecks(unittest.TestCase):
         with self.assertRaises(ValueError):
             AuthoredOutputIssue("annotation.unregistered", BEADS[0])
 
-    def test_the_executor_refuses_the_root_output_as_named_invalid_output(self) -> None:
+    def test_the_executor_names_issues_and_builds_an_evidence_free_frame(self) -> None:
         def dumped(value: dict[str, Any]) -> Any:
-            return SimpleNamespace(model_dump=lambda mode: copy.deepcopy(value))
+            return SimpleNamespace(model_dump=lambda **_: copy.deepcopy(value))
 
         task = SimpleNamespace(
             task_input=dumped(task_input()),
@@ -151,19 +154,41 @@ class AuthoredOutputChecks(unittest.TestCase):
         )
         payload = output()
         payload["annotations"][0]["event_id"] = OTHER_EVENT
-        authored = SimpleNamespace(typed_output=dumped(payload), used_evidence_refs=UNITS)
-        guard = PydanticAISemanticExecutor._guard_authored_annotations
-        with self.assertRaises(EvidenceGuardError) as raised:
-            guard(cast(Any, task), cast(Any, authored))
-        self.assertEqual(raised.exception.code, "output.annotation.event_mismatch")
-        self.assertNotIn(SECRET, str(raised.exception))
-        failure = _normalize_failure(raised.exception)
+        authored = SimpleNamespace(
+            typed_output=dumped(payload),
+            used_evidence_refs=UNITS,
+            model_dump=lambda **_: {"typed_output": payload, "used_evidence_refs": UNITS},
+        )
+        issues = PydanticAISemanticExecutor._annotation_issues(
+            cast(Any, task), cast(Any, authored)
+        )
+        self.assertEqual([issue.code for issue in issues], ["annotation.event_mismatch"])
+        frame = json.loads(_repair_frame(cast(Any, task.task_input), cast(Any, authored), issues))
+        self.assertEqual(
+            set(frame),
+            {"repair_frame", "instruction", "task_input", "previous_output", "refusal_codes"},
+        )
+        self.assertEqual(frame["instruction"], REPAIR_INSTRUCTION)
+        self.assertEqual(
+            frame["refusal_codes"],
+            [f"annotation.event_mismatch: {BEADS[0]} (expected {EVENT})"],
+        )
+        # The task input carries references and hashes only, never evidence.
+        self.assertEqual(frame["task_input"], task_input())
+        self.assertEqual(frame["previous_output"]["typed_output"], payload)
+        error = EvidenceGuardError(
+            "output." + issues[0].code, "; ".join(i.feedback() for i in issues)
+        )
+        self.assertNotIn(SECRET, str(error))
+        failure = _normalize_failure(error)
         self.assertEqual(
             (failure.status, failure.error_code),
             (SemanticResultStatus.INVALID_OUTPUT, "output.annotation.event_mismatch"),
         )
         valid = SimpleNamespace(typed_output=dumped(output()), used_evidence_refs=UNITS)
-        guard(cast(Any, task), cast(Any, valid))
+        self.assertEqual(
+            PydanticAISemanticExecutor._annotation_issues(cast(Any, task), cast(Any, valid)), ()
+        )
 
     def test_every_anticipated_refusal_is_raised_by_canonical_apply(self) -> None:
         text = (ROOT / "migrations/0041_authored_statement_kinds.sql").read_text()
