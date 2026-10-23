@@ -206,6 +206,28 @@ class AuthoredOutputChecks(unittest.TestCase):
             PydanticAISemanticExecutor._annotation_issues(cast(Any, task), cast(Any, valid)), ()
         )
 
+    def test_the_frame_carries_a_generic_output_in_full(self) -> None:
+        # Source revisiting holds its output as AuthoredSemanticOutput[BaseModel];
+        # the frame still carries every field the model wrote.
+        from pydantic import BaseModel
+
+        from memoriesql.infrastructure.models.pydanticai_executor import (
+            AuthoredSemanticOutput,
+        )
+
+        class Written(BaseModel):
+            annotations: list[dict[str, Any]]
+
+        typed = Written(annotations=[annotation(0)])
+        authored = AuthoredSemanticOutput[BaseModel](
+            typed_output=typed, used_evidence_refs=tuple(UNITS)
+        )
+        frame = json.loads(_repair_frame(cast(Any, SimpleNamespace(model_dump=lambda **_: {})), authored, ()))
+        self.assertEqual(
+            frame["previous_output"],
+            {"typed_output": typed.model_dump(mode="json"), "used_evidence_refs": UNITS},
+        )
+
     def test_every_anticipated_refusal_is_raised_by_canonical_apply(self) -> None:
         text = (ROOT / "migrations/0041_authored_statement_kinds.sql").read_text()
         start = text.index("FUNCTION memoriesql.apply_semantic_annotations_schema29(")

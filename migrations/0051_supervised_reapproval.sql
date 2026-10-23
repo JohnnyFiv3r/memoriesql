@@ -52,7 +52,7 @@ BEGIN
   OR NEW.access_scope_id IS DISTINCT FROM prior.access_scope_id
   OR NEW.origin_principal_id IS DISTINCT FROM prior.origin_principal_id
   OR NOT EXISTS(SELECT 1 FROM memoriesql.semantic_tasks t WHERE t.tenant_id=NEW.tenant_id AND t.task_id=NEW.task_id
-                AND t.status IN ('queued','retry_wait','policy_paused') AND t.result_attempt_id IS NULL)
+                AND t.status IN ('queued','retry_wait','policy_paused'))
   OR EXISTS(SELECT 1 FROM memoriesql.semantic_task_attempts a WHERE a.tenant_id=NEW.tenant_id AND a.task_id=NEW.task_id
             AND a.status IN ('claimed','running')) THEN
   RAISE EXCEPTION 'supervised_reapproval_unavailable' USING ERRCODE='55000';
