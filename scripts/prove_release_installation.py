@@ -33,6 +33,9 @@ def main() -> None:
             ActivateAuthoredMentions,
             ActivateMentionAuthorship,
         )
+        from memoriesql.application.relation_assessment import (
+            ActivateRepairableRelationAssessment,
+        )
         from memoriesql.application.source_stable_identity import (
             MaterializeSourceStableUnit,
         )
@@ -74,7 +77,7 @@ def main() -> None:
                     .rstrip("=")
                     == record.hash.value
                 )
-        assert len(tuple(iter_contracts())) == 71
+        assert len(tuple(iter_contracts())) == 72
         assert (
             get_contract("memoriesql.source-stable-identity.v1")["id"]
             == "memoriesql.source-stable-identity.v1"
@@ -94,6 +97,7 @@ def main() -> None:
             "memoriesql.bead-classification.v1",
             "memoriesql.stored-bead-inspection.v1",
             "memoriesql.relation-assessment.v1",
+            "memoriesql.relation-assessment.v2",
             "memoriesql.core-cli.v1",
             "memoriesql.source-enrollment.v1",
         ):
@@ -112,6 +116,12 @@ def main() -> None:
         )
         assert (
             ActivateRepairableCompleteInput.model_fields["expected_schema_version"].default
+            == 53
+        )
+        assert (
+            ActivateRepairableRelationAssessment.model_fields[
+                "expected_schema_version"
+            ].default
             == 53
         )
         assert "bead_id" in InspectStoredBead.model_fields

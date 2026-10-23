@@ -32,6 +32,7 @@ from memoriesql.application.observation_commands import (
 )
 from memoriesql.application.relation_assessment import (
     ApplyRelationAssessment,
+    ApplyRepairableRelationAssessment,
     EvidenceExcerpt,
 )
 from memoriesql.application.semantic_task_contracts import (
@@ -782,11 +783,15 @@ class PostgresSemanticTaskQueue:
                 worker_instance_id=fence.worker_instance_id,
                 recorded_at=recorded_at,
             )
-        elif (result.task_kind, result.contract_revision) == (
-            "memory.semantic.assess-relations",
-            1,
+        elif (
+            result.task_kind == "memory.semantic.assess-relations"
+            and result.contract_revision in (1, 2)
         ):
-            relation_command = ApplyRelationAssessment.model_validate(command_data)
+            relation_command = (
+                ApplyRepairableRelationAssessment.model_validate(command_data)
+                if result.contract_revision == 2
+                else ApplyRelationAssessment.model_validate(command_data)
+            )
             row = self._connection.execute(
                 "SELECT memoriesql.apply_relation_assessment_v1(%s,%s,%s,%s)",
                 (

@@ -21,10 +21,12 @@ from pydantic import BaseModel
 
 from memoriesql.application.relation_assessment import (
     ActivateRelationAssessment,
+    ActivateRepairableRelationAssessment,
     RelationAssessmentActivationReceipt,
     RelationAuthorPacket,
     RelationSpecialistDecision,
     RelationSpecialistPacket,
+    RepairableRelationActivationReceipt,
 )
 from memoriesql.application.relation_inspection import (
     BeadRelationsInspectionV2,
@@ -59,6 +61,17 @@ class PostgresRelationAssessments:
             "SELECT memoriesql.activate_relation_assessment_v1(%s)",
             command,
             RelationAssessmentActivationReceipt,
+            bound=COMMAND_RESPONSE_BYTES,
+            statement_timeout_ms=5000,
+        )
+
+    def activate_repairable(
+        self, command: ActivateRepairableRelationAssessment
+    ) -> RepairableRelationActivationReceipt:
+        return self._transaction(
+            "SELECT memoriesql.activate_relation_assessment_v2(%s)",
+            command,
+            RepairableRelationActivationReceipt,
             bound=COMMAND_RESPONSE_BYTES,
             statement_timeout_ms=5000,
         )

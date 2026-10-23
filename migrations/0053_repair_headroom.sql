@@ -22,6 +22,27 @@
 -- Revision-2 tasks, executions, dispatch policies and receipts keep their pins
 -- and their budget: nothing moves them to revision 8. A deployment opts in by
 -- provisioning a revision-8 dispatch policy and activating with v7.
+--
+-- Part 2, memory.semantic.assess-relations revision 2. Revision 1 spends its
+-- two requests on the author and the batched specialist, so an author output
+-- that misses a pair's disposition has no request left for a repair round.
+-- Revision 2 is revision 1 with request_limit 3, for one evidence-free author
+-- repair frame (custody ruling RULING-P1F-D2-RELATION-REPAIR-AUTHOR-FRAME,
+-- R-1 to R-7). Packets, output contract, deliveries, apply and the run tree
+-- (author root plus one specialist run) are revision 1's; its author agent is
+-- memory.semantic.relation-author.v2. This migration admits it beside
+-- revision 1:
+-- - an admission policy pins the revision-2 task contract and registry;
+-- - activate_relation_assessment_v2 activates revision 2, as v1 does revision 1;
+-- - apply_relation_assessment_v1 accepts command version 2 (schema 53) for a
+--   revision-2 task and its author agent, and nothing else changed;
+-- - record_relation_delivery_v1, record_semantic_run_event,
+--   reauthorize_semantic_task, consume_supervised_dispatch and
+--   semantic_task_input_reference_safe handle revision 2 exactly like
+--   revision 1. semantic_task_input_reference_safe also admits
+--   author-complete-unit revision 8's input exactly like revision 2's.
+-- Revision-1 tasks keep their pins and their two requests; nothing moves them.
+--
 -- Forward-only; this file's number is provisional and is assigned at landing.
 
 ALTER TABLE memoriesql.complete_input_executions
@@ -34,8 +55,9 @@ ALTER TABLE memoriesql.complete_input_dispatch_policies
         CHECK (execution_contract_revision IN (2, 3, 4, 5, 6, 7, 8));
 
 INSERT INTO memoriesql.semantic_task_admission_policies (semantic_registry_hash,task_kind,contract_revision,owning_module,task_contract_hash,target_kind,required_capability,queue_name,base_priority,max_attempts,concurrency_key,concurrency_limit) VALUES ('semantic-tasks-v1:e97805481c3507604e33f40351f681631490e087ecb3ea9174b740afd8475e02','memory.semantic.author-complete-unit',8,'memoriesql.kernel','6238dcd66fa6da02d29e71848086b64be9eda1867070369224287ce6eb356416','canonical_semantics','memory.capture','capture',50,3,NULL,NULL);
+INSERT INTO memoriesql.semantic_task_admission_policies (semantic_registry_hash,task_kind,contract_revision,owning_module,task_contract_hash,target_kind,required_capability,queue_name,base_priority,max_attempts,concurrency_key,concurrency_limit) VALUES ('semantic-tasks-v1:acb8198184ab7920a2ad6fce484a14d4ad03bd4eea6418b7fd62b16a2c5bab34','memory.semantic.assess-relations',2,'memoriesql.kernel','d79977ebc0c64cd0448857b46020fe7a79659ba55c32de6c038041a6d1bfcc2d','canonical_semantics','memory.maintain','capture',50,1,NULL,NULL);
 
--- From 0052_partial_observation_acceptance.sql: revision 8 handled exactly like revision 2.
+-- From 0052_partial_observation_acceptance.sql: the new revisions handled exactly like the ones they extend.
 CREATE OR REPLACE FUNCTION memoriesql.apply_semantic_annotations_schema29(
     requested_command jsonb,
     requested_worker_id text,
@@ -991,7 +1013,7 @@ BEGIN
 END;
 $$;
 
--- From 0041_authored_statement_kinds.sql: revision 8 handled exactly like revision 2.
+-- From 0041_authored_statement_kinds.sql: the new revisions handled exactly like the ones they extend.
 CREATE OR REPLACE FUNCTION memoriesql.assert_complete_execution_binding() RETURNS trigger LANGUAGE plpgsql
 SET search_path=pg_catalog,memoriesql AS $$
 DECLARE e memoriesql.complete_input_executions%ROWTYPE; b memoriesql.logical_unit_materializations%ROWTYPE;
@@ -1025,7 +1047,7 @@ BEGIN
     RETURN NULL;
 END; $$;
 
--- From 0051_supervised_reapproval.sql: revision 8 handled exactly like revision 2.
+-- From 0051_supervised_reapproval.sql: the new revisions handled exactly like the ones they extend.
 CREATE OR REPLACE FUNCTION memoriesql.consume_supervised_dispatch(i jsonb) RETURNS void
 LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,memoriesql SET lock_timeout='500ms' AS $$
 DECLARE q memoriesql.model_supervised_qualifications%ROWTYPE; route jsonb; ordinal bigint; prior_count bigint; c memoriesql.authorization_contexts%ROWTYPE;
@@ -1040,7 +1062,7 @@ BEGIN
  OR q.workspace_id IS DISTINCT FROM (i->>'workspace_id')::uuid OR q.access_scope_id IS DISTINCT FROM (i->>'access_scope_id')::uuid
  OR NOT memoriesql.supervised_task_open(q.tenant_id,q.task_id)
  OR NOT COALESCE((i->>'task_kind'='memory.semantic.author-complete-unit' AND (i->>'task_contract_revision')::integer IN (2,3,4,5,6,7,8))
-   OR (i->>'task_kind'='memory.semantic.assess-relations' AND (i->>'task_contract_revision')::integer=1),false)
+   OR (i->>'task_kind'='memory.semantic.assess-relations' AND (i->>'task_contract_revision')::integer IN (1,2)),false)
  THEN RAISE EXCEPTION 'supervised_qualification_unavailable' USING ERRCODE='42501'; END IF;
  IF current_setting('transaction_isolation')<>'read committed' THEN RAISE EXCEPTION 'supervised_requires_read_committed'; END IF;
  PERFORM pg_advisory_xact_lock(hashtextextended(q.tenant_id::text||':supervised-dispatch:'||q.qualification_id::text,0));
@@ -1078,7 +1100,7 @@ BEGIN
  THEN RAISE EXCEPTION 'supervised_followup_exceeds_remaining_allowance' USING ERRCODE='55000'; END IF;
 END; $$;
 
--- From 0041_authored_statement_kinds.sql: revision 8 handled exactly like revision 2.
+-- From 0041_authored_statement_kinds.sql: the new revisions handled exactly like the ones they extend.
 CREATE OR REPLACE FUNCTION memoriesql.guard_complete_unit_execution() RETURNS trigger
 LANGUAGE plpgsql SET search_path=pg_catalog,memoriesql AS $$
 DECLARE complete boolean; t memoriesql.semantic_tasks%ROWTYPE; a memoriesql.semantic_task_attempts%ROWTYPE;
@@ -1118,7 +1140,7 @@ BEGIN
     RETURN NEW;
 END; $$;
 
--- From 0043_inspection_withholding.sql: revision 8 handled exactly like revision 2.
+-- From 0043_inspection_withholding.sql: the new revisions handled exactly like the ones they extend.
 CREATE OR REPLACE FUNCTION memoriesql.inspect_stored_bead_v1(request jsonb) RETURNS jsonb
 LANGUAGE plpgsql VOLATILE SECURITY DEFINER
 SET search_path=pg_catalog,memoriesql SET row_security=off SET lock_timeout='500ms'
@@ -1354,7 +1376,7 @@ EXCEPTION WHEN insufficient_privilege THEN RETURN unavailable;
 END;
 $$;
 
--- From 0041_authored_statement_kinds.sql: revision 8 handled exactly like revision 2.
+-- From 0041_authored_statement_kinds.sql: the new revisions handled exactly like the ones they extend.
 CREATE OR REPLACE FUNCTION memoriesql.reauthorize_semantic_task(
     requested_tenant_id uuid,
     requested_task_id uuid,
@@ -1490,7 +1512,7 @@ BEGIN
     END IF;
     -- A relation task stays under its origin's and the worker's authority over every
     -- pinned bead, statement and evidence source, and its attestor policy stays active.
-    IF task_record.task_kind='memory.semantic.assess-relations' AND task_record.contract_revision=1 THEN
+    IF task_record.task_kind='memory.semantic.assess-relations' AND task_record.contract_revision IN (1,2) THEN
         BEGIN PERFORM memoriesql.relation_assessment_pins_authorize(requested_tenant_id,requested_task_id);
         EXCEPTION WHEN insufficient_privilege THEN RETURN 'policy_paused';
                   WHEN object_not_in_prerequisite_state THEN RETURN 'stale_evidence'; END;
@@ -1504,7 +1526,7 @@ BEGIN
 END;
 $$;
 
--- From 0020_author_controlled_source_revisiting.sql: revision 8 handled exactly like revision 2.
+-- From 0020_author_controlled_source_revisiting.sql: the new revisions handled exactly like the ones they extend.
 CREATE OR REPLACE FUNCTION memoriesql.record_complete_input_exposure_v1(request_id uuid, payload_hash text, frame jsonb) RETURNS boolean
 LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,memoriesql SET lock_timeout='500ms' AS $$
 DECLARE c memoriesql.authorization_contexts%ROWTYPE; e memoriesql.complete_input_executions%ROWTYPE;
@@ -1554,6 +1576,1276 @@ BEGIN
     PERFORM memoriesql.complete_input_authorize(c.tenant_id,e.binding_task_id,e.dispatch_policy_id);
     RETURN true;
 END; $$;
+
+-- From 0041_authored_statement_kinds.sql: the new revisions handled exactly like the ones they extend.
+CREATE OR REPLACE FUNCTION memoriesql.semantic_task_input_reference_safe(
+    candidate jsonb,
+    maximum_bytes integer
+)
+RETURNS boolean
+LANGUAGE plpgsql
+IMMUTABLE
+SET search_path = pg_catalog, memoriesql
+AS $$
+DECLARE
+    manifest jsonb;
+    evidence_references jsonb;
+    reference_item jsonb;
+    budget jsonb;
+    budget_item record;
+    payload jsonb;
+    effective_maximum_bytes integer;
+BEGIN
+    -- A relation task carries pinned bead packets (<=131,072 canonical bytes), vocabulary
+    -- (<=32,768) and an optional recorded disagreement; evidence content is never inlined.
+    IF candidate->>'task_kind'='memory.semantic.assess-relations' THEN
+        RETURN candidate->>'contract_revision' IN ('1','2') AND octet_length(candidate::text)<=262144
+           AND candidate#>>'{payload,required_execution}'='trusted_relation_assessment_v1'
+           AND candidate->>'expected_target_revision'='0' AND candidate->'requested_budget'='null'::jsonb
+           AND candidate->'requested_effort_key'='null'::jsonb
+           AND jsonb_typeof(candidate#>'{evidence_manifest,references}')='array'
+           AND jsonb_array_length(candidate#>'{evidence_manifest,references}') BETWEEN 1 AND 72
+           AND jsonb_typeof(candidate#>'{payload,beads}')='array'
+           AND jsonb_array_length(candidate#>'{payload,beads}') BETWEEN 1 AND 9
+           AND jsonb_typeof(candidate#>'{payload,relation_vocabulary}')='array'
+           AND jsonb_array_length(candidate#>'{payload,relation_vocabulary}') BETWEEN 1 AND 32;
+    END IF;
+    -- Revision 6 carries pinned candidate packets (<=65,536 canonical bytes) and
+    -- vocabulary (<=32,768) beside the unchanged revisiting envelope.
+    IF candidate->>'task_kind'='memory.semantic.author-complete-unit' AND candidate->>'contract_revision'='6' THEN
+        RETURN octet_length(candidate::text)<=196608 AND candidate#>>'{payload,required_execution}'='trusted_source_revisiting_v1'
+           AND candidate->>'expected_target_revision'='0' AND candidate->'requested_budget'='null'::jsonb
+           AND candidate->'requested_effort_key'='null'::jsonb AND jsonb_array_length(candidate#>'{evidence_manifest,references}')=1
+           AND jsonb_array_length(candidate#>'{payload,source_unit_ids}')=1 AND jsonb_array_length(candidate#>'{payload,bead_ids}')=1
+           AND jsonb_typeof(candidate#>'{payload,relation_candidates}')='array' AND jsonb_array_length(candidate#>'{payload,relation_candidates}')<=8
+           AND jsonb_typeof(candidate#>'{payload,relation_vocabulary}')='array'
+           AND jsonb_array_length(candidate#>'{payload,relation_vocabulary}') BETWEEN 1 AND 32;
+    END IF;
+    IF candidate->>'task_kind'='memory.semantic.author-complete-unit' AND candidate->>'contract_revision' IN ('3','4','5','7') THEN
+        RETURN octet_length(candidate::text)<=32768 AND candidate#>>'{payload,required_execution}'='trusted_source_revisiting_v1'
+           AND candidate->>'expected_target_revision'='0' AND candidate->'requested_budget'='null'::jsonb
+           AND candidate->'requested_effort_key'='null'::jsonb AND jsonb_array_length(candidate#>'{evidence_manifest,references}')=1
+           AND jsonb_array_length(candidate#>'{payload,source_unit_ids}')=1 AND jsonb_array_length(candidate#>'{payload,bead_ids}')=1;
+    END IF;
+    IF candidate->>'task_kind'='memory.semantic.author-complete-unit' AND candidate->>'contract_revision' IN ('2','8') THEN
+        RETURN octet_length(candidate::text)<=32768 AND candidate#>>'{payload,required_execution}'='trusted_complete_input_exposure_v1'
+           AND candidate->>'expected_target_revision'='0' AND candidate->'requested_budget'='null'::jsonb
+           AND candidate->'requested_effort_key'='null'::jsonb AND jsonb_array_length(candidate#>'{evidence_manifest,references}')=1
+           AND jsonb_array_length(candidate#>'{payload,source_unit_ids}')=1 AND jsonb_array_length(candidate#>'{payload,bead_ids}')=1;
+    END IF;
+    IF candidate->>'task_kind'='memory.semantic.author-complete-unit' THEN RETURN maximum_bytes>0 AND octet_length(candidate::text)<=maximum_bytes AND memoriesql.complete_unit_input_valid(candidate); END IF;
+    effective_maximum_bytes := maximum_bytes;
+    IF candidate IS NULL
+       OR maximum_bytes <= 0
+       OR octet_length(candidate::text) > effective_maximum_bytes
+       OR jsonb_typeof(candidate) IS DISTINCT FROM 'object' THEN
+        RETURN false;
+    END IF;
+    IF (SELECT count(*) FROM jsonb_object_keys(candidate)) <> 9
+       OR EXISTS (
+           SELECT 1
+           FROM jsonb_object_keys(candidate) AS input_key(key)
+           WHERE input_key.key <> ALL (ARRAY[
+               'task_id', 'task_kind', 'contract_revision',
+               'target_reference', 'expected_target_revision',
+               'evidence_manifest', 'requested_effort_key',
+               'requested_budget', 'payload'
+           ]::text[])
+       ) THEN
+        RETURN false;
+    END IF;
+
+    IF NOT memoriesql.semantic_queue_reference_text_safe(
+           candidate ->> 'task_id', 36
+       )
+       OR NOT memoriesql.semantic_queue_reference_text_safe(
+           candidate ->> 'task_kind', 128
+       )
+       OR NOT memoriesql.semantic_queue_reference_text_safe(
+           candidate ->> 'target_reference', 512
+       )
+       OR jsonb_typeof(candidate -> 'contract_revision') <> 'number'
+       OR candidate ->> 'contract_revision' !~ '^[0-9]+$'
+       OR (candidate ->> 'contract_revision')::numeric < 1
+       OR jsonb_typeof(candidate -> 'expected_target_revision') <> 'number'
+       OR candidate ->> 'expected_target_revision' !~ '^[0-9]+$'
+       OR jsonb_typeof(candidate -> 'requested_effort_key')
+            NOT IN ('null', 'string')
+       OR (
+           jsonb_typeof(candidate -> 'requested_effort_key') = 'string'
+           AND NOT memoriesql.semantic_queue_reference_text_safe(
+               candidate ->> 'requested_effort_key', 128
+           )
+       ) THEN
+        RETURN false;
+    END IF;
+
+    manifest := candidate -> 'evidence_manifest';
+    IF jsonb_typeof(manifest) IS DISTINCT FROM 'object' THEN
+        RETURN false;
+    END IF;
+    IF (SELECT count(*) FROM jsonb_object_keys(manifest)) <> 3
+       OR EXISTS (
+           SELECT 1
+           FROM jsonb_object_keys(manifest) AS manifest_key(key)
+           WHERE manifest_key.key <> ALL (
+               ARRAY['manifest_id', 'revision', 'references']::text[]
+           )
+       )
+       OR NOT memoriesql.semantic_queue_reference_text_safe(
+           manifest ->> 'manifest_id', 512
+       )
+       OR jsonb_typeof(manifest -> 'revision') <> 'number'
+       OR manifest ->> 'revision' !~ '^[0-9]+$'
+       OR (manifest ->> 'revision')::numeric < 1
+       OR jsonb_typeof(manifest -> 'references') <> 'array'
+       OR jsonb_array_length(manifest -> 'references') > 256 THEN
+        RETURN false;
+    END IF;
+    evidence_references := manifest -> 'references';
+    FOR reference_item IN
+        SELECT value FROM jsonb_array_elements(evidence_references)
+    LOOP
+        IF jsonb_typeof(reference_item) <> 'object' THEN
+            RETURN false;
+        END IF;
+        IF (SELECT count(*) FROM jsonb_object_keys(reference_item)) <> 3
+           OR EXISTS (
+               SELECT 1
+               FROM jsonb_object_keys(reference_item) AS reference_key(key)
+               WHERE reference_key.key <> ALL (
+                   ARRAY[
+                       'reference_id', 'content_hash', 'declared_characters'
+                   ]::text[]
+               )
+           )
+           OR NOT memoriesql.semantic_queue_reference_text_safe(
+               reference_item ->> 'reference_id', 512
+           )
+           OR reference_item ->> 'content_hash' !~ '^[a-f0-9]{64}$'
+           OR jsonb_typeof(reference_item -> 'declared_characters') <> 'number'
+           OR reference_item ->> 'declared_characters' !~ '^[0-9]+$' THEN
+            RETURN false;
+        END IF;
+    END LOOP;
+    IF (
+        SELECT count(*) <> count(DISTINCT item ->> 'reference_id')
+        FROM jsonb_array_elements(evidence_references) AS item
+    ) THEN
+        RETURN false;
+    END IF;
+
+    budget := candidate -> 'requested_budget';
+    IF jsonb_typeof(budget) NOT IN ('null', 'object') THEN
+        RETURN false;
+    END IF;
+    IF jsonb_typeof(budget) = 'object' THEN
+        IF (SELECT count(*) FROM jsonb_object_keys(budget)) <> 13
+           OR EXISTS (
+               SELECT 1
+               FROM jsonb_object_keys(budget) AS budget_key(key)
+               WHERE budget_key.key <> ALL (ARRAY[
+                   'wall_clock_seconds', 'request_limit',
+                   'input_token_limit', 'output_token_limit',
+                   'total_token_limit', 'tool_call_limit',
+                   'cost_safety_limit_microusd', 'max_delegate_calls',
+                   'max_parallel_delegates', 'evidence_item_limit',
+                   'hydrated_character_limit', 'output_retries', 'tool_retries'
+               ]::text[])
+           ) THEN
+            RETURN false;
+        END IF;
+        FOR budget_item IN SELECT key, value FROM jsonb_each(budget)
+        LOOP
+            IF budget_item.key = 'cost_safety_limit_microusd'
+               AND jsonb_typeof(budget_item.value) = 'null' THEN
+                CONTINUE;
+            END IF;
+            IF jsonb_typeof(budget_item.value) <> 'number'
+               OR budget_item.value #>> '{}' !~ '^[0-9]+$' THEN
+                RETURN false;
+            END IF;
+        END LOOP;
+        IF (budget ->> 'wall_clock_seconds')::numeric < 1
+           OR (budget ->> 'request_limit')::numeric < 1
+           OR (budget ->> 'input_token_limit')::numeric < 1
+           OR (budget ->> 'output_token_limit')::numeric < 1
+           OR (budget ->> 'total_token_limit')::numeric < 1
+           OR (budget ->> 'evidence_item_limit')::numeric < 1
+           OR (budget ->> 'hydrated_character_limit')::numeric < 1
+           OR (budget ->> 'total_token_limit')::numeric
+                < (budget ->> 'input_token_limit')::numeric
+           OR (budget ->> 'total_token_limit')::numeric
+                < (budget ->> 'output_token_limit')::numeric
+           OR (budget ->> 'max_parallel_delegates')::numeric
+                > (budget ->> 'max_delegate_calls')::numeric THEN
+            RETURN false;
+        END IF;
+    END IF;
+
+    IF candidate ->> 'contract_revision' = '2'
+       AND candidate ->> 'task_kind' IN ('memory.semantic.author-observations', 'memory.semantic.correct-observation')
+       AND (jsonb_array_length(evidence_references) NOT BETWEEN 1 AND 8
+            OR (SELECT COALESCE(sum((value ->> 'declared_characters')::numeric), 0)
+                FROM jsonb_array_elements(evidence_references)) > 4096) THEN
+        RETURN false;
+    END IF;
+    payload := candidate -> 'payload';
+    IF candidate ->> 'task_kind' = 'memory.semantic.author-observations'
+       AND candidate ->> 'contract_revision' IN ('1', '2') THEN
+        IF jsonb_typeof(payload) IS DISTINCT FROM 'object'
+           OR (SELECT count(*) FROM jsonb_object_keys(payload)) <> 3
+           OR EXISTS (
+               SELECT 1
+               FROM jsonb_object_keys(payload) AS payload_key(key)
+               WHERE payload_key.key <> ALL (
+                   ARRAY['event_id', 'bead_ids', 'source_unit_ids']::text[]
+               )
+           )
+           OR payload ->> 'event_id' !~
+                '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+           OR jsonb_typeof(payload -> 'bead_ids') <> 'array'
+           OR jsonb_typeof(payload -> 'source_unit_ids') <> 'array'
+           OR jsonb_array_length(payload -> 'bead_ids') NOT BETWEEN 1 AND 8
+           OR jsonb_array_length(payload -> 'bead_ids') <>
+                jsonb_array_length(payload -> 'source_unit_ids')
+           OR EXISTS (
+               SELECT 1
+               FROM jsonb_array_elements(payload -> 'bead_ids') AS item(value)
+               WHERE jsonb_typeof(item.value) <> 'string'
+                  OR item.value #>> '{}' !~
+                     '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+           )
+           OR EXISTS (
+               SELECT 1
+               FROM jsonb_array_elements(payload -> 'source_unit_ids')
+                    AS item(value)
+               WHERE jsonb_typeof(item.value) <> 'string'
+                  OR item.value #>> '{}' !~
+                     '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+           )
+           OR (
+               SELECT count(*) <> count(DISTINCT item.value #>> '{}')
+               FROM jsonb_array_elements(payload -> 'bead_ids') AS item(value)
+           )
+           OR (
+               SELECT count(*) <> count(DISTINCT item.value #>> '{}')
+               FROM jsonb_array_elements(payload -> 'source_unit_ids')
+                    AS item(value)
+           ) THEN
+            RETURN false;
+        END IF;
+        RETURN true;
+    END IF;
+    IF candidate ->> 'task_kind' = 'memory.semantic.correct-observation'
+       AND candidate ->> 'contract_revision' = '2' THEN
+        IF jsonb_typeof(payload) IS DISTINCT FROM 'object'
+           OR (SELECT count(*) FROM jsonb_object_keys(payload)) <> 4
+           OR NOT memoriesql.semantic_task_input_reference_safe(
+                jsonb_set(jsonb_set(candidate, '{task_kind}',
+                    '"memory.semantic.author-observations"'::jsonb),
+                    '{payload}', payload - 'supersedes'), maximum_bytes)
+           OR jsonb_array_length(payload -> 'bead_ids') <> 1
+           OR jsonb_typeof(payload -> 'supersedes') IS DISTINCT FROM 'array'
+           OR jsonb_array_length(payload -> 'supersedes') NOT BETWEEN 1 AND 8 THEN
+            RETURN false;
+        END IF;
+        FOR reference_item IN SELECT value FROM jsonb_array_elements(payload -> 'supersedes')
+        LOOP
+            IF jsonb_typeof(reference_item) IS DISTINCT FROM 'object'
+               OR (SELECT count(*) FROM jsonb_object_keys(reference_item)) <> 2
+               OR COALESCE(reference_item ->> 'bead_id', '') !~
+                   '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+               OR COALESCE(reference_item ->> 'bead_version_id', '') !~
+                   '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+               OR reference_item ->> 'bead_id' = payload #>> '{bead_ids,0}' THEN
+                RETURN false;
+            END IF;
+        END LOOP;
+        RETURN (SELECT count(*) = count(DISTINCT value ->> 'bead_id')
+                FROM jsonb_array_elements(payload -> 'supersedes'));
+    END IF;
+    RETURN memoriesql.semantic_queue_payload_reference_scalar_safe(payload);
+END;
+$$;
+
+-- From 0030_assessed_relation_lifecycle.sql: the new revisions handled exactly like the ones they extend.
+CREATE OR REPLACE FUNCTION memoriesql.apply_relation_assessment_v1(
+    requested_command jsonb, requested_worker_id text, requested_worker_instance_id text,
+    requested_at timestamp with time zone
+) RETURNS jsonb
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER
+SET search_path = pg_catalog, memoriesql SET row_security = off AS $$
+DECLARE
+    context_record memoriesql.authorization_contexts%ROWTYPE;
+    task_record memoriesql.semantic_tasks%ROWTYPE;
+    attempt_record memoriesql.semantic_task_attempts%ROWTYPE;
+    receipt_record memoriesql.idempotency_receipts%ROWTYPE;
+    x memoriesql.relation_assessments%ROWTYPE;
+    rel6 memoriesql.bead_relations%ROWTYPE; prior memoriesql.assessed_relations%ROWTYPE;
+    body jsonb := requested_command->'payload';
+    command_tenant_id uuid; command_workspace_id uuid; command_access_scope_id uuid;
+    command_task_id uuid; command_attempt_id uuid; command_generation bigint;
+    command_model_runs text[]; computed_request_hash text; new_receipt_id uuid; root_run text;
+    outcome_status text; response jsonb; item jsonb; p jsonb; j jsonb; contributor jsonb;
+    type_revision uuid; type_symmetric boolean; agreed boolean; forbidden uuid; named uuid[]; lock_id uuid;
+    pinned_ids text[]; fresh jsonb := '[]'; relation_ids uuid[] := ARRAY[]::uuid[];
+    accepted_ids uuid[] := ARRAY[]::uuid[]; statement uuid; unit uuid;
+    uuid_pattern constant text := '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
+    database_now timestamp with time zone := pg_catalog.clock_timestamp();
+BEGIN
+    IF jsonb_typeof(requested_command) IS DISTINCT FROM 'object'
+       OR octet_length(requested_command::text) > 1048576
+       OR requested_command - ARRAY['contract_version', 'expected_schema_version', 'idempotency_key', 'tenant_id',
+            'workspace_id', 'access_scope_id', 'task_id', 'attempt_id', 'lease_generation', 'task_kind',
+            'contract_revision', 'output_contract_hash', 'semantic_result_hash', 'semantic_payload_canonical_json',
+            'used_evidence_refs', 'model_run_refs', 'payload'] <> '{}'::jsonb
+       OR NOT ((requested_command->>'contract_version' IS NOT DISTINCT FROM '1'
+                AND requested_command->>'expected_schema_version' IS NOT DISTINCT FROM '29'
+                AND requested_command->>'contract_revision' IS NOT DISTINCT FROM '1')
+            OR (requested_command->>'contract_version' IS NOT DISTINCT FROM '2'
+                AND requested_command->>'expected_schema_version' IS NOT DISTINCT FROM '53'
+                AND requested_command->>'contract_revision' IS NOT DISTINCT FROM '2'))
+       OR requested_command->>'task_kind' IS DISTINCT FROM 'memory.semantic.assess-relations'
+       OR requested_command->>'output_contract_hash' IS DISTINCT FROM '7b069836b3c71657aa5ade422e3310b4a5d203d15ebfb32bbdee2054889647b5'
+       OR COALESCE(requested_command->>'semantic_result_hash', '') !~ '^[a-f0-9]{64}$'
+       OR jsonb_typeof(requested_command->'semantic_payload_canonical_json') IS DISTINCT FROM 'string'
+       OR octet_length(requested_command->>'semantic_payload_canonical_json') NOT BETWEEN 2 AND 131072
+       OR requested_command->>'semantic_payload_canonical_json' IS DISTINCT FROM memoriesql.canonical_semantic_json_text(body)
+       OR encode(sha256(convert_to(requested_command->>'semantic_payload_canonical_json', 'UTF8')), 'hex')
+            IS DISTINCT FROM requested_command->>'semantic_result_hash'
+       OR jsonb_typeof(body) IS DISTINCT FROM 'object'
+       OR body - ARRAY['proposals', 'dispositions', 'specialist_contributions'] <> '{}'::jsonb
+       OR jsonb_typeof(body->'proposals') IS DISTINCT FROM 'array' OR jsonb_array_length(body->'proposals') > 16
+       OR jsonb_typeof(body->'dispositions') IS DISTINCT FROM 'array'
+       OR jsonb_array_length(body->'dispositions') NOT BETWEEN 1 AND 45
+       OR jsonb_typeof(body->'specialist_contributions') IS DISTINCT FROM 'array'
+       OR jsonb_array_length(body->'specialist_contributions') > 16
+       OR jsonb_typeof(requested_command->'used_evidence_refs') IS DISTINCT FROM 'array'
+       OR jsonb_array_length(requested_command->'used_evidence_refs') NOT BETWEEN 1 AND 72
+       OR jsonb_typeof(requested_command->'model_run_refs') IS DISTINCT FROM 'array'
+       OR jsonb_array_length(requested_command->'model_run_refs') NOT BETWEEN 1 AND 17
+       OR EXISTS (SELECT 1 FROM jsonb_array_elements(requested_command->'model_run_refs') AS r(v)
+                  WHERE jsonb_typeof(r.v) IS DISTINCT FROM 'string')
+       OR EXISTS (SELECT 1 FROM unnest(ARRAY['tenant_id', 'workspace_id', 'access_scope_id', 'task_id', 'attempt_id']) AS k(key)
+                  WHERE COALESCE(requested_command->>k.key, '') !~ uuid_pattern)
+       OR COALESCE(requested_command->>'lease_generation', '') !~ '^[1-9][0-9]{0,17}$'
+       OR btrim(COALESCE(requested_command->>'idempotency_key', '')) = ''
+       OR length(requested_command->>'idempotency_key') > 512
+       OR btrim(requested_worker_id) = '' OR btrim(requested_worker_instance_id) = ''
+       OR requested_at IS NULL OR requested_at < database_now - interval '5 minutes'
+       OR requested_at > database_now + interval '5 minutes' THEN
+        RAISE EXCEPTION 'relation assessment command is invalid' USING ERRCODE = '22023';
+    END IF;
+    command_tenant_id := (requested_command->>'tenant_id')::uuid;
+    command_workspace_id := (requested_command->>'workspace_id')::uuid;
+    command_access_scope_id := (requested_command->>'access_scope_id')::uuid;
+    command_task_id := (requested_command->>'task_id')::uuid;
+    command_attempt_id := (requested_command->>'attempt_id')::uuid;
+    command_generation := (requested_command->>'lease_generation')::bigint;
+    command_model_runs := ARRAY(SELECT r.v FROM jsonb_array_elements_text(requested_command->'model_run_refs') AS r(v));
+    computed_request_hash := encode(sha256(convert_to(requested_command::text, 'UTF8')), 'hex');
+
+    SELECT * INTO context_record FROM memoriesql.current_authorization_context();
+    IF NOT FOUND OR context_record.principal_kind <> 'service'
+       OR context_record.tenant_id <> command_tenant_id OR context_record.workspace_id <> command_workspace_id
+       OR context_record.expires_at <= database_now
+       OR NOT memoriesql.current_context_scope_authorized(command_access_scope_id, 'memory.maintain', 'write') THEN
+        RAISE EXCEPTION 'relation assessment command is outside authorization' USING ERRCODE = '42501';
+    END IF;
+    SELECT q.* INTO task_record FROM memoriesql.semantic_tasks AS q
+    JOIN memoriesql.semantic_task_attempts AS a
+      ON a.tenant_id = q.tenant_id AND a.task_id = q.task_id AND a.attempt_id = command_attempt_id
+     AND a.lease_generation = command_generation AND a.claimant_principal_id = context_record.principal_id
+     AND a.worker_id = requested_worker_id AND a.worker_instance_id = requested_worker_instance_id
+    WHERE q.tenant_id = command_tenant_id AND q.workspace_id = command_workspace_id
+      AND q.access_scope_id = command_access_scope_id AND q.task_id = command_task_id
+      AND q.target_kind = 'canonical_semantics' AND q.task_kind = 'memory.semantic.assess-relations'
+      AND q.contract_revision = (requested_command->>'contract_revision')::integer;
+    IF NOT FOUND
+       OR NOT memoriesql.current_context_semantic_task_authorized(command_task_id, 'memory.maintain', 'write')
+       OR NOT memoriesql.semantic_task_origin_authorized(command_tenant_id, command_task_id, database_now) THEN
+        RAISE EXCEPTION 'relation assessment task is unavailable' USING ERRCODE = '42501';
+    END IF;
+
+    PERFORM pg_advisory_xact_lock_shared(hashtextextended(command_tenant_id::text||':semantic_outcome_authority:',0));
+    PERFORM pg_advisory_xact_lock(hashtextextended(command_tenant_id::text||':relation-lineage:',0));
+    database_now:=clock_timestamp();
+    PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
+        command_tenant_id::text || ':relation_assessment.apply.v1:' || (requested_command->>'idempotency_key'), 0));
+    database_now := pg_catalog.clock_timestamp();
+    IF context_record.expires_at <= database_now
+       OR NOT memoriesql.current_context_scope_authorized(command_access_scope_id, 'memory.maintain', 'write')
+       OR NOT memoriesql.current_context_scope_time_authorized(command_access_scope_id, 'write', database_now)
+       OR NOT memoriesql.current_context_semantic_task_authorized(command_task_id, 'memory.maintain', 'write')
+       OR NOT memoriesql.semantic_task_origin_authorized(command_tenant_id, command_task_id, database_now) THEN
+        RAISE EXCEPTION 'relation assessment command is outside authorization' USING ERRCODE = '42501';
+    END IF;
+    -- Every pinned bead, statement and evidence source stays authorized at apply.
+    PERFORM memoriesql.relation_assessment_pins_authorize(command_tenant_id, command_task_id);
+    SELECT r.* INTO receipt_record FROM memoriesql.idempotency_receipts AS r
+    WHERE r.tenant_id = command_tenant_id AND r.operation_kind = 'relation_assessment.apply.v1'
+      AND r.idempotency_key = requested_command->>'idempotency_key'
+    FOR UPDATE;
+    IF FOUND THEN
+        IF receipt_record.request_hash <> computed_request_hash THEN
+            RAISE EXCEPTION 'idempotency_conflict' USING ERRCODE = '23505';
+        END IF;
+        IF receipt_record.status <> 'succeeded' OR receipt_record.response_receipt IS NULL THEN
+            RAISE EXCEPTION 'relation assessment receipt is incomplete' USING ERRCODE = '55000';
+        END IF;
+        RETURN receipt_record.response_receipt || '{"replayed":true}'::jsonb;
+    END IF;
+
+    SELECT q.* INTO task_record FROM memoriesql.semantic_tasks AS q
+    WHERE q.tenant_id = command_tenant_id AND q.task_id = command_task_id AND q.status = 'running'
+      AND q.target_kind = 'canonical_semantics' AND q.lease_generation = command_generation
+      AND q.lease_owner = requested_worker_id AND q.worker_instance_id = requested_worker_instance_id
+      AND q.result_attempt_id IS NULL AND q.cancel_requested_at IS NULL
+    FOR UPDATE;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'stale_fence' USING ERRCODE = '40001';
+    END IF;
+    SELECT a.* INTO attempt_record FROM memoriesql.semantic_task_attempts AS a
+    WHERE a.tenant_id = command_tenant_id AND a.task_id = command_task_id AND a.attempt_id = command_attempt_id
+      AND a.lease_generation = command_generation AND a.claimant_principal_id = context_record.principal_id
+      AND a.worker_id = requested_worker_id AND a.worker_instance_id = requested_worker_instance_id
+      AND a.status = 'running'
+    FOR UPDATE;
+    IF NOT FOUND OR NOT memoriesql.lock_semantic_task_outcome_authority(command_tenant_id, command_task_id) THEN
+        RAISE EXCEPTION 'stale_fence' USING ERRCODE = '40001';
+    END IF;
+    database_now := pg_catalog.clock_timestamp();
+    IF task_record.lease_expires_at <= database_now OR attempt_record.deadline_at <= database_now
+       OR context_record.expires_at <= database_now
+       OR NOT memoriesql.current_context_scope_time_authorized(command_access_scope_id, 'write', database_now)
+       OR memoriesql.reauthorize_semantic_task(command_tenant_id, command_task_id, command_attempt_id,
+            command_generation, requested_worker_id, requested_worker_instance_id, 'outcome', requested_at) <> 'authorized' THEN
+        RAISE EXCEPTION 'stale_fence' USING ERRCODE = '40001';
+    END IF;
+    IF NOT memoriesql.relation_assessment_exposure_valid(command_tenant_id, command_task_id, command_attempt_id, command_generation) THEN
+        RAISE EXCEPTION 'relation_assessment_exposure_required' USING ERRCODE = '42501';
+    END IF;
+    SELECT ra.* INTO x FROM memoriesql.relation_assessments AS ra
+    WHERE ra.tenant_id = command_tenant_id AND ra.task_id = command_task_id;
+    pinned_ids := ARRAY(SELECT b.v->>'bead_id' FROM jsonb_array_elements(x.beads) AS b(v));
+
+    -- The run tree is exactly the author's root run and one settled specialist run
+    -- per contribution, each contribution exactly as its attestor recorded it.
+    SELECT r.run_id INTO root_run FROM memoriesql.semantic_task_runs AS r
+    WHERE r.tenant_id = command_tenant_id AND r.attempt_id = command_attempt_id AND r.lease_generation = command_generation
+      AND r.parent_run_id IS NULL AND r.run_status = 'running'
+      AND r.agent_key = CASE WHEN (requested_command->>'contract_revision')::integer=2 THEN 'memory.semantic.relation-author.v2' ELSE 'memory.semantic.relation-author' END;
+    IF root_run IS NULL OR NOT root_run = ANY(command_model_runs)
+       OR cardinality(command_model_runs) <> (SELECT count(DISTINCT r.v) FROM unnest(command_model_runs) AS r(v))
+       OR cardinality(command_model_runs) <> (
+            SELECT count(*) FROM memoriesql.semantic_task_runs AS r
+            WHERE r.tenant_id = command_tenant_id AND r.task_id = command_task_id AND r.attempt_id = command_attempt_id
+              AND r.lease_generation = command_generation)
+       OR cardinality(command_model_runs) <> (
+            SELECT count(*) FROM memoriesql.semantic_task_runs AS r
+            WHERE r.tenant_id = command_tenant_id AND r.task_id = command_task_id AND r.attempt_id = command_attempt_id
+              AND r.lease_generation = command_generation AND r.run_id = ANY(command_model_runs))
+       OR EXISTS (SELECT 1 FROM memoriesql.semantic_task_runs AS r
+                  WHERE r.tenant_id = command_tenant_id AND r.attempt_id = command_attempt_id
+                    AND r.parent_run_id IS NOT NULL
+                    AND (NOT r.settled OR r.run_status <> 'succeeded' OR r.parent_run_id <> root_run
+                         OR r.agent_key <> 'memory.semantic.relation-specialist'))
+       OR (SELECT count(*) FROM memoriesql.semantic_task_runs AS r
+           WHERE r.tenant_id = command_tenant_id AND r.attempt_id = command_attempt_id AND r.parent_run_id IS NOT NULL)
+          <> jsonb_array_length(body->'specialist_contributions') THEN
+        RAISE EXCEPTION 'relation assessment run tree is incomplete' USING ERRCODE = '22023';
+    END IF;
+    FOR contributor IN SELECT value FROM jsonb_array_elements(body->'specialist_contributions') LOOP
+        -- The specialist judged exactly these proposals, in this order: its attested
+        -- packet hash binds them, so no proposal changes after its judgment.
+        IF contributor->>'proposals_sha256' IS DISTINCT FROM memoriesql.classification_sha((
+               SELECT jsonb_agg(pr.v ORDER BY pr.o) FROM jsonb_array_elements(body->'proposals') WITH ORDINALITY AS pr(v, o)
+               WHERE pr.v->>'proposal_id' IN (SELECT jd.v->>'proposal_id'
+                                              FROM jsonb_array_elements(contributor#>'{decision,judgments}') AS jd(v))))
+           OR contributor->>'author_run_ref' IS DISTINCT FROM root_run OR NOT EXISTS (
+            SELECT 1 FROM memoriesql.relation_assessment_deliveries AS d
+            JOIN memoriesql.semantic_task_runs AS r ON r.tenant_id = d.tenant_id AND r.attempt_id = d.attempt_id AND r.run_id = d.run_id
+            WHERE d.tenant_id = command_tenant_id AND d.task_id = command_task_id AND d.attempt_id = command_attempt_id
+              AND d.lease_generation = command_generation AND d.role = 'specialist'
+              AND d.request_id::text = contributor->>'request_id' AND d.run_id = contributor->>'model_run_ref'
+              AND r.parent_run_id = root_run AND d.contribution = contributor) THEN
+            RAISE EXCEPTION 'relation_specialist_contribution_unrecorded' USING ERRCODE = '22023';
+        END IF;
+    END LOOP;
+    -- Every proposal is judged exactly once across the contributions, and only proposals are.
+    IF (SELECT COALESCE(jsonb_agg(jd.v->>'proposal_id' ORDER BY jd.v->>'proposal_id'), '[]'::jsonb)
+        FROM jsonb_array_elements(body->'specialist_contributions') AS sc(v),
+             jsonb_array_elements(sc.v#>'{decision,judgments}') AS jd(v))
+       IS DISTINCT FROM (SELECT COALESCE(jsonb_agg(pr.v->>'proposal_id' ORDER BY pr.v->>'proposal_id'), '[]'::jsonb)
+                         FROM jsonb_array_elements(body->'proposals') AS pr(v))
+       OR (SELECT count(*) <> count(DISTINCT pr.v->>'proposal_id') FROM jsonb_array_elements(body->'proposals') AS pr(v)) THEN
+        RAISE EXCEPTION 'relation_specialist_coverage_incomplete' USING ERRCODE = '22023';
+    END IF;
+    IF EXISTS (SELECT 1 FROM jsonb_array_elements_text(requested_command->'used_evidence_refs') AS u(v)
+               WHERE NOT EXISTS (SELECT 1 FROM jsonb_array_elements(x.evidence_units) AS e(v)
+                                 WHERE e.v->>'source_unit_id' = u.v))
+       OR (SELECT count(*) <> count(DISTINCT u.v) FROM jsonb_array_elements_text(requested_command->'used_evidence_refs') AS u(v)) THEN
+        RAISE EXCEPTION 'relation assessment evidence is outside its pins' USING ERRCODE = '22023';
+    END IF;
+
+    -- Every unordered pinned pair, each bead with itself, has exactly one disposition.
+    IF (SELECT jsonb_agg(jsonb_build_array(f.id, s.id) ORDER BY f.id, s.id)
+        FROM unnest(pinned_ids::uuid[]) AS f(id) JOIN unnest(pinned_ids::uuid[]) AS s(id) ON f.id <= s.id)
+       IS DISTINCT FROM (
+        SELECT jsonb_agg(jsonb_build_array((d.v->>'first_bead_id')::uuid, (d.v->>'second_bead_id')::uuid)
+                         ORDER BY (d.v->>'first_bead_id')::uuid, (d.v->>'second_bead_id')::uuid)
+        FROM jsonb_array_elements(body->'dispositions') AS d(v)
+        WHERE COALESCE(d.v->>'first_bead_id', '') ~ uuid_pattern AND COALESCE(d.v->>'second_bead_id', '') ~ uuid_pattern)
+       OR EXISTS (SELECT 1 FROM jsonb_array_elements(body->'dispositions') AS d(v)
+                  WHERE jsonb_typeof(d.v) IS DISTINCT FROM 'object'
+                     OR d.v - ARRAY['first_bead_id', 'second_bead_id', 'disposition', 'abstention', 'reason'] <> '{}'::jsonb
+                     OR COALESCE(d.v->>'disposition', '') NOT IN ('related', 'not_related', 'abstained', 'not_assessed')
+                     OR (d.v->>'disposition' = 'abstained') IS DISTINCT FROM
+                        COALESCE(d.v->>'abstention' IN ('no_fit', 'insufficient_evidence', 'ambiguous'), false)
+                     OR (d.v->>'disposition' <> 'abstained' AND d.v->'abstention' IS DISTINCT FROM 'null'::jsonb)
+                     OR jsonb_typeof(d.v->'reason') NOT IN ('string', 'null')
+                     OR (jsonb_typeof(d.v->'reason') = 'string' AND (btrim(d.v->>'reason') = '' OR char_length(d.v->>'reason') > 1024))
+                     OR (d.v->>'disposition' = 'not_assessed' AND jsonb_typeof(d.v->'reason') IS DISTINCT FROM 'string')
+                     OR (d.v->>'disposition' = 'related') IS DISTINCT FROM EXISTS (
+                        SELECT 1 FROM jsonb_array_elements(body->'proposals') AS pr(v)
+                        WHERE LEAST((pr.v#>>'{source,bead_id}')::uuid, (pr.v#>>'{target,bead_id}')::uuid) = (d.v->>'first_bead_id')::uuid
+                          AND GREATEST((pr.v#>>'{source,bead_id}')::uuid, (pr.v#>>'{target,bead_id}')::uuid) = (d.v->>'second_bead_id')::uuid)) THEN
+        RAISE EXCEPTION 'relation_pair_coverage_invalid' USING ERRCODE = '22023';
+    END IF;
+
+    INSERT INTO memoriesql.idempotency_receipts (tenant_id, workspace_id, access_scope_id, idempotency_receipt_id,
+        operation_kind, idempotency_key, request_hash, status, resource_kind, resource_id, attempt_count, created_at, updated_at)
+    VALUES (command_tenant_id, command_workspace_id, command_access_scope_id, pg_catalog.uuidv7(),
+        'relation_assessment.apply.v1', requested_command->>'idempotency_key', computed_request_hash, 'in_progress',
+        'semantic_task', command_task_id, 1, database_now, database_now)
+    RETURNING idempotency_receipts.idempotency_receipt_id INTO new_receipt_id;
+
+    -- Cycle-forbidden keys are serialized per tenant and key before any write, in a
+    -- fixed order, with the same lock revision-6 authorship takes.
+    FOR forbidden IN
+        SELECT DISTINCT r.relation_type_id FROM jsonb_array_elements(body->'proposals') AS pr(v)
+        JOIN jsonb_array_elements(x.relation_vocabulary) AS d(v)
+          ON d.v->>'key' = pr.v#>>'{relation_type,key}' AND d.v->'revision' = pr.v#>'{relation_type,revision}'
+        JOIN memoriesql.relation_types AS ty ON ty.type_key = d.v->>'key'
+         AND (ty.tenant_id IS NULL OR (ty.tenant_id = command_tenant_id AND ty.workspace_id = command_workspace_id))
+        JOIN memoriesql.relation_type_revisions AS r ON r.relation_type_id = ty.relation_type_id
+         AND r.revision = (d.v->>'revision')::integer
+        ORDER BY 1
+    LOOP
+        PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
+            command_tenant_id::text || ':relation-cycle:' || forbidden::text, 0));
+    END LOOP;
+
+    FOR lock_id IN SELECT DISTINCT (v#>>'{retires,relation_id}')::uuid FROM jsonb_array_elements(body->'proposals') x(v) WHERE jsonb_typeof(v->'retires')='object' ORDER BY 1 LOOP
+        PERFORM pg_advisory_xact_lock(hashtextextended(command_tenant_id::text||':bead-relation:'||lock_id::text,0));
+    END LOOP;
+    FOR p IN SELECT value FROM jsonb_array_elements(body->'proposals') ORDER BY value->>'proposal_id' LOOP
+        IF jsonb_typeof(p) IS DISTINCT FROM 'object'
+           OR p - ARRAY['proposal_id', 'relation_type', 'source', 'target', 'basis_statements', 'evidence', 'basis',
+                        'qualification', 'rationale', 'author_confidence', 'retires'] <> '{}'::jsonb
+           OR COALESCE(p->>'proposal_id', '') !~ uuid_pattern
+           OR jsonb_typeof(p->'relation_type') IS DISTINCT FROM 'object'
+           OR (p->'relation_type') - ARRAY['key', 'revision'] <> '{}'::jsonb
+           OR NOT EXISTS (SELECT 1 FROM jsonb_array_elements(x.relation_vocabulary) AS d(v)
+                          WHERE d.v->>'key' = p#>>'{relation_type,key}' AND d.v->'revision' = p#>'{relation_type,revision}')
+           OR jsonb_typeof(p->'source') IS DISTINCT FROM 'object' OR jsonb_typeof(p->'target') IS DISTINCT FROM 'object'
+           OR (p->'source') - ARRAY['bead_id', 'bead_version_id', 'statement_ids'] <> '{}'::jsonb
+           OR (p->'target') - ARRAY['bead_id', 'bead_version_id', 'statement_ids'] <> '{}'::jsonb
+           OR NOT memoriesql.relation_pinned_statements_v1(x.beads, p#>>'{source,bead_id}', p#>>'{source,bead_version_id}', p#>'{source,statement_ids}')
+           OR NOT memoriesql.relation_pinned_statements_v1(x.beads, p#>>'{target,bead_id}', p#>>'{target,bead_version_id}', p#>'{target,statement_ids}')
+           OR jsonb_typeof(p->'basis_statements') IS DISTINCT FROM 'array' OR jsonb_array_length(p->'basis_statements') > 8
+           OR EXISTS (SELECT 1 FROM jsonb_array_elements(p->'basis_statements') AS b(v)
+                      WHERE jsonb_typeof(b.v) IS DISTINCT FROM 'object'
+                         OR b.v - ARRAY['bead_id', 'bead_version_id', 'statement_id'] <> '{}'::jsonb
+                         OR jsonb_typeof(b.v->'statement_id') IS DISTINCT FROM 'string'
+                         OR NOT memoriesql.relation_pinned_statements_v1(x.beads, b.v->>'bead_id', b.v->>'bead_version_id',
+                                                                         jsonb_build_array(b.v->'statement_id')))
+           OR jsonb_typeof(p->'evidence') IS DISTINCT FROM 'array' OR jsonb_array_length(p->'evidence') NOT BETWEEN 1 AND 8
+           OR COALESCE(p->>'basis', '') NOT IN ('source_stated', 'agent_inferred')
+           OR (p->>'basis' = 'source_stated' AND jsonb_array_length(p->'basis_statements') = 0)
+           OR jsonb_typeof(p->'rationale') IS DISTINCT FROM 'string' OR btrim(p->>'rationale') = '' OR char_length(p->>'rationale') > 1024
+           OR jsonb_typeof(p->'qualification') NOT IN ('string', 'null')
+           OR (jsonb_typeof(p->'qualification') = 'string' AND (btrim(p->>'qualification') = '' OR char_length(p->>'qualification') > 1024))
+           OR jsonb_typeof(p->'author_confidence') IS DISTINCT FROM 'number'
+           OR (p->>'author_confidence')::numeric NOT BETWEEN 0 AND 1
+           OR round((p->>'author_confidence')::numeric, 2) <> (p->>'author_confidence')::numeric
+           OR jsonb_typeof(p->'retires') NOT IN ('object', 'null') THEN
+            RAISE EXCEPTION 'relation_proposal_invalid' USING ERRCODE = '22023';
+        END IF;
+        -- Endpoint statements differ, and basis statements are separate from both.
+        named := ARRAY(SELECT s.i::uuid FROM jsonb_array_elements_text(p#>'{source,statement_ids}') AS s(i))
+              || ARRAY(SELECT s.i::uuid FROM jsonb_array_elements_text(p#>'{target,statement_ids}') AS s(i))
+              || ARRAY(SELECT (b.v->>'statement_id')::uuid FROM jsonb_array_elements(p->'basis_statements') AS b(v));
+        IF cardinality(named) <> (SELECT count(DISTINCT n) FROM unnest(named) AS n) THEN
+            RAISE EXCEPTION 'relation_statements_overlap' USING ERRCODE = '22023';
+        END IF;
+        -- Evidence: exact existing statement-evidence pairs of the proposal's own statements.
+        IF EXISTS (SELECT 1 FROM jsonb_array_elements(p->'evidence') AS e(v)
+                   WHERE jsonb_typeof(e.v) IS DISTINCT FROM 'object'
+                      OR e.v - ARRAY['statement_id', 'source_unit_id', 'content_hash'] <> '{}'::jsonb
+                      OR COALESCE(e.v->>'statement_id', '') !~ uuid_pattern
+                      OR COALESCE(e.v->>'source_unit_id', '') !~ uuid_pattern
+                      OR COALESCE(e.v->>'content_hash', '') !~ '^[a-f0-9]{64}$'
+                      OR NOT (e.v->>'statement_id')::uuid = ANY(named)
+                      OR NOT EXISTS (SELECT 1 FROM memoriesql.bead_semantic_statement_evidence AS ev
+                                     WHERE ev.tenant_id = command_tenant_id AND ev.statement_id = (e.v->>'statement_id')::uuid
+                                       AND ev.evidence_source_unit_id = (e.v->>'source_unit_id')::uuid
+                                       AND ev.evidence_content_hash = e.v->>'content_hash'))
+           OR (SELECT count(*) <> count(DISTINCT (e.v->>'statement_id', e.v->>'source_unit_id'))
+               FROM jsonb_array_elements(p->'evidence') AS e(v)) THEN
+            RAISE EXCEPTION 'relation_evidence_unbound' USING ERRCODE = '22023';
+        END IF;
+        IF EXISTS (SELECT 1 FROM memoriesql.assessed_relations AS r
+                   WHERE r.tenant_id = command_tenant_id AND r.relation_id = (p->>'proposal_id')::uuid)
+           OR EXISTS (SELECT 1 FROM memoriesql.bead_relations AS r
+                      WHERE r.tenant_id = command_tenant_id AND r.relation_id = (p->>'proposal_id')::uuid) THEN
+            RAISE EXCEPTION 'relation_identifier_conflict' USING ERRCODE = '22023';
+        END IF;
+        SELECT r.relation_type_revision_id, r.is_symmetric INTO type_revision, type_symmetric
+        FROM memoriesql.relation_types AS ty
+        JOIN memoriesql.relation_type_revisions AS r ON r.relation_type_id = ty.relation_type_id
+        WHERE ty.type_key = p#>>'{relation_type,key}' AND r.revision = (p#>>'{relation_type,revision}')::integer
+          AND (ty.tenant_id IS NULL OR (ty.tenant_id = command_tenant_id AND ty.workspace_id = command_workspace_id));
+        IF type_revision IS NULL THEN
+            RAISE EXCEPTION 'unknown_relation_type' USING ERRCODE = '22023';
+        END IF;
+        -- A symmetric assertion read in either direction is the same assertion.
+        IF type_symmetric AND EXISTS (
+            SELECT 1 FROM jsonb_array_elements(body->'proposals') AS o(v)
+            WHERE o.v->>'proposal_id' <> p->>'proposal_id' AND o.v->'relation_type' = p->'relation_type'
+              AND o.v#>>'{source,bead_id}' = p#>>'{target,bead_id}' AND o.v#>>'{target,bead_id}' = p#>>'{source,bead_id}'
+              AND (SELECT array_agg(s.i ORDER BY s.i) FROM jsonb_array_elements_text(o.v#>'{source,statement_ids}') AS s(i))
+                = (SELECT array_agg(s.i ORDER BY s.i) FROM jsonb_array_elements_text(p#>'{target,statement_ids}') AS s(i))
+              AND (SELECT array_agg(s.i ORDER BY s.i) FROM jsonb_array_elements_text(o.v#>'{target,statement_ids}') AS s(i))
+                = (SELECT array_agg(s.i ORDER BY s.i) FROM jsonb_array_elements_text(p#>'{source,statement_ids}') AS s(i))) THEN
+            RAISE EXCEPTION 'relation_symmetric_duplicate' USING ERRCODE = '22023';
+        END IF;
+        SELECT sc.v, jd.v INTO contributor, j
+        FROM jsonb_array_elements(body->'specialist_contributions') AS sc(v),
+             jsonb_array_elements(sc.v#>'{decision,judgments}') AS jd(v)
+        WHERE jd.v->>'proposal_id' = p->>'proposal_id';
+        -- Agreement concerns the exact assertion: consistent, and the author's predicate,
+        -- revision and direction among those the specialist finds warranted.
+        agreed := j->>'outcome' = 'assessed' AND j->'consistent' = 'true'::jsonb AND EXISTS (
+            SELECT 1 FROM jsonb_array_elements(j->'warranted') AS w(v)
+            WHERE w.v->'relation_type' = p->'relation_type' AND w.v->>'direction' = 'as_proposed');
+        IF jsonb_typeof(p->'retires') = 'object' THEN
+            IF (p->'retires') - ARRAY['relation_kind', 'relation_id', 'reason'] <> '{}'::jsonb
+               OR COALESCE(p#>>'{retires,relation_id}', '') !~ uuid_pattern
+               OR jsonb_typeof(p#>'{retires,reason}') IS DISTINCT FROM 'string'
+               OR btrim(p#>>'{retires,reason}') = '' OR char_length(p#>>'{retires,reason}') > 1024
+               OR EXISTS (SELECT 1 FROM jsonb_array_elements(body->'proposals') AS o(v)
+                          WHERE o.v->>'proposal_id' <> p->>'proposal_id' AND o.v->'retires' = p->'retires')
+               OR EXISTS (SELECT 1 FROM memoriesql.relation_retirements AS rr
+                          WHERE rr.tenant_id = command_tenant_id AND rr.retired_kind = p#>>'{retires,relation_kind}'
+                            AND rr.retired_relation_id = (p#>>'{retires,relation_id}')::uuid) THEN
+                RAISE EXCEPTION 'relation_retirement_invalid' USING ERRCODE = '22023';
+            END IF;
+            -- Only an earlier active assertion among the pinned beads can be retired.
+            IF p#>>'{retires,relation_kind}' = 'authored' THEN
+                SELECT r.* INTO rel6 FROM memoriesql.bead_relations AS r
+                WHERE r.tenant_id = command_tenant_id AND r.relation_id = (p#>>'{retires,relation_id}')::uuid;
+                IF rel6.relation_id IS NULL OR rel6.workspace_id <> command_workspace_id
+                   OR NOT rel6.source_bead_id::text = ANY(pinned_ids) OR NOT rel6.target_bead_id::text = ANY(pinned_ids)
+                   OR memoriesql.bead_relation_state_v1(command_tenant_id, rel6.relation_id, database_now)->>'state'
+                      IN ('retracted', 'superseded') THEN
+                    RAISE EXCEPTION 'relation_retirement_invalid' USING ERRCODE = '22023';
+                END IF;
+            ELSIF p#>>'{retires,relation_kind}' = 'assessed' THEN
+                SELECT r.* INTO prior FROM memoriesql.assessed_relations AS r
+                WHERE r.tenant_id = command_tenant_id AND r.relation_id = (p#>>'{retires,relation_id}')::uuid;
+                IF prior.relation_id IS NULL OR prior.workspace_id <> command_workspace_id
+                   OR NOT prior.source_bead_id::text = ANY(pinned_ids) OR NOT prior.target_bead_id::text = ANY(pinned_ids)
+                   OR memoriesql.assessed_relation_state_v1(command_tenant_id, prior.relation_id, database_now)->>'state'
+                      IN ('retracted', 'superseded', 'not_accepted') THEN
+                    RAISE EXCEPTION 'relation_retirement_invalid' USING ERRCODE = '22023';
+                END IF;
+            ELSE
+                RAISE EXCEPTION 'relation_retirement_invalid' USING ERRCODE = '22023';
+            END IF;
+        END IF;
+
+        INSERT INTO memoriesql.assessed_relations (tenant_id, workspace_id, relation_id, task_id, attempt_id, author_run_id,
+            specialist_run_id, specialist_request_id, source_access_scope_id, source_bead_id, source_bead_version_id,
+            target_access_scope_id, target_bead_id, target_bead_version_id, relation_type_revision_id, basis,
+            rationale_text, qualification_text, author_confidence, proposal, judgment, acceptance,
+            applied_by_principal_id, recorded_at)
+        SELECT command_tenant_id, command_workspace_id, (p->>'proposal_id')::uuid, command_task_id, command_attempt_id, root_run,
+            contributor->>'model_run_ref', (contributor->>'request_id')::uuid,
+            src.access_scope_id, src.bead_id, src.bead_version_id, dst.access_scope_id, dst.bead_id, dst.bead_version_id,
+            type_revision, p->>'basis', p->>'rationale', NULLIF(p->'qualification', 'null'::jsonb) #>> '{}',
+            (p->>'author_confidence')::numeric, p, j, CASE WHEN agreed THEN 'accepted' ELSE 'not_accepted' END,
+            context_record.principal_id, database_now
+        FROM memoriesql.accepted_bead_semantics AS src, memoriesql.accepted_bead_semantics AS dst
+        WHERE src.tenant_id = command_tenant_id AND src.bead_id = (p#>>'{source,bead_id}')::uuid
+          AND src.bead_version_id = (p#>>'{source,bead_version_id}')::uuid
+          AND dst.tenant_id = command_tenant_id AND dst.bead_id = (p#>>'{target,bead_id}')::uuid
+          AND dst.bead_version_id = (p#>>'{target,bead_version_id}')::uuid;
+        IF NOT FOUND THEN
+            RAISE EXCEPTION 'relation_endpoint_unavailable' USING ERRCODE = '22023';
+        END IF;
+        INSERT INTO memoriesql.assessed_relation_statements (tenant_id, relation_id, role, workspace_id, access_scope_id,
+            bead_id, bead_version_id, statement_id)
+        SELECT command_tenant_id, (p->>'proposal_id')::uuid, n.role, st.workspace_id, st.access_scope_id,
+               st.bead_id, st.bead_version_id, st.statement_id
+        FROM (SELECT 'source' AS role, s.i::uuid AS id FROM jsonb_array_elements_text(p#>'{source,statement_ids}') AS s(i)
+              UNION ALL SELECT 'target', s.i::uuid FROM jsonb_array_elements_text(p#>'{target,statement_ids}') AS s(i)
+              UNION ALL SELECT 'basis', (b.v->>'statement_id')::uuid FROM jsonb_array_elements(p->'basis_statements') AS b(v)) AS n
+        JOIN memoriesql.bead_semantic_statements AS st ON st.tenant_id = command_tenant_id AND st.statement_id = n.id;
+        FOR statement, unit IN
+            SELECT (e.v->>'statement_id')::uuid, (e.v->>'source_unit_id')::uuid FROM jsonb_array_elements(p->'evidence') AS e(v)
+            ORDER BY 1, 2
+        LOOP
+            PERFORM memoriesql.record_semantic_evidence_link(command_tenant_id, command_workspace_id, 'assessed_relation',
+                (p->>'proposal_id')::uuid, 'supports', statement, unit, database_now);
+        END LOOP;
+        relation_ids := array_append(relation_ids, (p->>'proposal_id')::uuid);
+        IF agreed THEN
+            accepted_ids := array_append(accepted_ids, (p->>'proposal_id')::uuid);
+            fresh := fresh || jsonb_build_array(jsonb_build_object('kind', 'assessed', 'relation_id', p->>'proposal_id'));
+            -- Same-write direction correction: the retired assertion stops counting at once.
+            IF jsonb_typeof(p->'retires') = 'object' THEN
+                INSERT INTO memoriesql.relation_retirements (tenant_id, workspace_id, retirement_id, retired_kind,
+                    retired_relation_id, replacement_relation_id, reason_text, task_id, attempt_id, author_run_id,
+                    idempotency_receipt_id, recorded_by_principal_id, recorded_at)
+                VALUES (command_tenant_id, command_workspace_id, pg_catalog.uuidv7(), p#>>'{retires,relation_kind}',
+                    (p#>>'{retires,relation_id}')::uuid, (p->>'proposal_id')::uuid, p#>>'{retires,reason}',
+                    command_task_id, command_attempt_id, root_run, new_receipt_id, context_record.principal_id, database_now);
+            END IF;
+        END IF;
+    END LOOP;
+
+    -- No accepted assertion of a cycle-forbidden key closes a cycle among active
+    -- assertions of both kinds once this write commits.
+    IF memoriesql.relation_cycle_closes_v1(command_tenant_id, fresh) THEN
+        RAISE EXCEPTION 'relation_cycle_forbidden' USING ERRCODE = '22023';
+    END IF;
+
+    FOR item IN SELECT value FROM jsonb_array_elements(body->'dispositions')
+                ORDER BY value->>'first_bead_id', value->>'second_bead_id' LOOP
+        INSERT INTO memoriesql.relation_pair_dispositions (tenant_id, workspace_id, task_id, first_access_scope_id,
+            first_bead_id, first_bead_version_id, second_access_scope_id, second_bead_id, second_bead_version_id,
+            disposition, abstention, reason_text, attempt_id, author_run_id, recorded_at)
+        SELECT command_tenant_id, command_workspace_id, command_task_id, f.access_scope_id, f.bead_id, f.bead_version_id,
+            s.access_scope_id, s.bead_id, s.bead_version_id, item->>'disposition',
+            NULLIF(item->'abstention', 'null'::jsonb) #>> '{}', NULLIF(item->'reason', 'null'::jsonb) #>> '{}',
+            command_attempt_id, root_run, database_now
+        FROM jsonb_array_elements(x.beads) AS fb(v), jsonb_array_elements(x.beads) AS sb(v),
+             memoriesql.accepted_bead_semantics AS f, memoriesql.accepted_bead_semantics AS s
+        WHERE fb.v->>'bead_id' = item->>'first_bead_id' AND sb.v->>'bead_id' = item->>'second_bead_id'
+          AND f.tenant_id = command_tenant_id AND f.bead_id = (fb.v->>'bead_id')::uuid
+          AND f.bead_version_id = (fb.v->>'bead_version_id')::uuid
+          AND s.tenant_id = command_tenant_id AND s.bead_id = (sb.v->>'bead_id')::uuid
+          AND s.bead_version_id = (sb.v->>'bead_version_id')::uuid;
+    END LOOP;
+
+    outcome_status := memoriesql.record_semantic_task_outcome(
+        command_tenant_id, command_task_id, command_attempt_id, command_generation, requested_worker_id,
+        requested_worker_instance_id, 'succeeded', requested_command->>'semantic_result_hash',
+        'semantic.application.' || command_attempt_id::text, NULL, NULL, NULL, NULL, 0, requested_at);
+    IF outcome_status <> 'succeeded' THEN
+        RAISE EXCEPTION 'semantic task success settlement was rejected: %', outcome_status USING ERRCODE = '40001';
+    END IF;
+    UPDATE memoriesql.semantic_task_runs AS r SET run_status = 'succeeded', finished_at = database_now, settled = true
+    WHERE r.tenant_id = command_tenant_id AND r.task_id = command_task_id AND r.attempt_id = command_attempt_id
+      AND r.lease_generation = command_generation AND r.parent_run_id IS NULL AND r.run_status = 'running'
+      AND r.run_id = root_run;
+    IF EXISTS (SELECT 1 FROM memoriesql.semantic_task_runs AS r
+               WHERE r.tenant_id = command_tenant_id AND r.attempt_id = command_attempt_id AND NOT r.settled) THEN
+        RAISE EXCEPTION 'relation assessment run tree did not settle' USING ERRCODE = '22023';
+    END IF;
+    INSERT INTO memoriesql.outbox_events (tenant_id, workspace_id, access_scope_id, outbox_event_id, idempotency_receipt_id,
+        aggregate_kind, aggregate_id, event_kind, payload, headers, recorded_at, available_at)
+    VALUES (command_tenant_id, command_workspace_id, command_access_scope_id, pg_catalog.uuidv7(), new_receipt_id,
+        'semantic_task', command_task_id, 'relation_assessment.apply.v1',
+        jsonb_build_object('task_id', command_task_id, 'attempt_id', command_attempt_id,
+            'proposal_count', cardinality(relation_ids), 'accepted_count', cardinality(accepted_ids)),
+        jsonb_build_object('contract_version', 1), database_now, database_now);
+    response := jsonb_build_object('contract_version', 1, 'task_id', command_task_id, 'attempt_id', command_attempt_id,
+        'idempotency_receipt_id', new_receipt_id, 'relation_ids', to_jsonb(relation_ids),
+        'accepted_relation_ids', to_jsonb(accepted_ids), 'task_status', 'succeeded', 'replayed', false);
+    UPDATE memoriesql.idempotency_receipts AS r SET status = 'succeeded', response_receipt = response,
+        updated_at = database_now, completed_at = database_now
+    WHERE r.tenant_id = command_tenant_id AND r.idempotency_receipt_id = new_receipt_id;
+    RETURN response;
+END;
+$$;
+
+-- From 0029_relation_assessment.sql: the new revisions handled exactly like the ones they extend.
+CREATE OR REPLACE FUNCTION memoriesql.record_relation_delivery_v1(request_id uuid, payload_hash text, packet jsonb, decision jsonb)
+RETURNS boolean
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER
+SET search_path = pg_catalog, memoriesql SET row_security = off SET lock_timeout = '500ms' AS $$
+DECLARE
+    c memoriesql.authorization_contexts%ROWTYPE; i memoriesql.model_provider_request_intents%ROWTYPE;
+    x memoriesql.relation_assessments%ROWTYPE; q memoriesql.semantic_tasks%ROWTYPE;
+    a memoriesql.semantic_task_attempts%ROWTYPE; run memoriesql.semantic_task_runs%ROWTYPE;
+    item jsonb; expected jsonb := '[]'; delivered_refs jsonb := '[]'; attested jsonb;
+    delivered bigint := 0; packet_role text := packet->>'role';
+BEGIN
+    SELECT * INTO c FROM memoriesql.current_authorization_context();
+    SELECT pi.* INTO i FROM memoriesql.model_provider_request_intents AS pi
+    WHERE pi.tenant_id = c.tenant_id AND pi.request_id = record_relation_delivery_v1.request_id;
+    SELECT ra.* INTO x FROM memoriesql.relation_assessments AS ra WHERE ra.tenant_id = c.tenant_id AND ra.task_id = i.task_id;
+    SELECT st.* INTO q FROM memoriesql.semantic_tasks AS st WHERE st.tenant_id = c.tenant_id AND st.task_id = i.task_id FOR UPDATE;
+    SELECT sa.* INTO a FROM memoriesql.semantic_task_attempts AS sa WHERE sa.tenant_id = c.tenant_id AND sa.attempt_id = i.attempt_id;
+    SELECT r.* INTO run FROM memoriesql.semantic_task_runs AS r
+    WHERE r.tenant_id = c.tenant_id AND r.attempt_id = i.attempt_id AND r.run_id = i.run_id;
+    IF c.principal_kind IS DISTINCT FROM 'service' OR c.principal_id = a.claimant_principal_id
+       OR x.task_id IS NULL OR q.task_kind IS DISTINCT FROM 'memory.semantic.assess-relations' OR q.contract_revision NOT IN (1,2)
+       OR i.request_payload_hash IS DISTINCT FROM payload_hash
+       OR i.task_id::text IS DISTINCT FROM packet->>'task_id' OR i.attempt_id::text IS DISTINCT FROM packet->>'attempt_id'
+       OR q.status IS DISTINCT FROM 'running' OR a.status IS DISTINCT FROM 'running' OR q.cancel_requested_at IS NOT NULL
+       OR q.lease_generation IS DISTINCT FROM a.lease_generation
+       OR q.lease_expires_at <= pg_catalog.clock_timestamp() OR a.deadline_at <= pg_catalog.clock_timestamp()
+       OR NOT EXISTS (SELECT 1 FROM memoriesql.relation_assessment_dispatch_policies AS d
+                      WHERE d.tenant_id = c.tenant_id AND d.dispatch_policy_id = x.dispatch_policy_id
+                        AND d.attestor_principal_id = c.principal_id AND d.status = 'active'
+                        AND d.expires_at > pg_catalog.clock_timestamp())
+       OR NOT EXISTS (SELECT 1 FROM memoriesql.model_usage_events AS u
+                      WHERE u.tenant_id = c.tenant_id AND u.request_id = i.request_id AND u.outcome = 'succeeded')
+       OR run.run_status IS DISTINCT FROM 'running'
+       OR (packet_role = 'author' AND (i.run_role IS DISTINCT FROM 'direct_leaf' OR run.parent_run_id IS NOT NULL
+                                       OR run.agent_key IS DISTINCT FROM CASE WHEN q.contract_revision=2 THEN 'memory.semantic.relation-author.v2' ELSE 'memory.semantic.relation-author' END))
+       OR (packet_role = 'specialist' AND (i.run_role IS DISTINCT FROM 'delegate' OR run.parent_run_id IS NULL
+                                           OR run.agent_key IS DISTINCT FROM 'memory.semantic.relation-specialist'
+                                           OR i.parent_run_id IS DISTINCT FROM packet->>'author_run_id'))
+       OR COALESCE(packet_role, '') NOT IN ('author', 'specialist') THEN
+        RAISE EXCEPTION 'trusted_relation_delivery_required' USING ERRCODE = '42501';
+    END IF;
+    IF jsonb_typeof(packet) IS DISTINCT FROM 'object' OR packet->'contract_version' IS DISTINCT FROM '1'::jsonb
+       OR octet_length(memoriesql.canonical_semantic_json_text(packet)) > 1048576
+       OR (packet_role = 'author' AND (packet - ARRAY['contract_version', 'role', 'task_id', 'attempt_id', 'subject_bead_id',
+               'beads', 'relation_vocabulary', 'evidence', 'reconsideration'] <> '{}'::jsonb
+            OR packet->'reconsideration' IS DISTINCT FROM COALESCE(x.reconsideration, 'null'::jsonb)
+            OR decision IS NOT NULL))
+       OR (packet_role = 'specialist' AND (packet - ARRAY['contract_version', 'role', 'task_id', 'attempt_id', 'author_run_id',
+               'subject_bead_id', 'beads', 'relation_vocabulary', 'evidence', 'proposals'] <> '{}'::jsonb
+            OR jsonb_typeof(packet->'proposals') IS DISTINCT FROM 'array'
+            OR jsonb_array_length(packet->'proposals') NOT BETWEEN 1 AND 16
+            OR EXISTS (SELECT 1 FROM jsonb_array_elements(packet->'proposals') AS p(v)
+                       WHERE jsonb_typeof(p.v) IS DISTINCT FROM 'object'
+                          OR COALESCE(p.v->>'proposal_id', '') !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
+            OR (SELECT count(*) <> count(DISTINCT p.v->>'proposal_id') FROM jsonb_array_elements(packet->'proposals') AS p(v))))
+       OR packet->>'subject_bead_id' IS DISTINCT FROM x.subject_bead_id::text
+       OR packet->'beads' IS DISTINCT FROM x.beads
+       OR packet->'relation_vocabulary' IS DISTINCT FROM x.relation_vocabulary
+       OR jsonb_typeof(packet->'evidence') IS DISTINCT FROM 'array' THEN
+        RAISE EXCEPTION 'relation_packet_invalid' USING ERRCODE = '22023';
+    END IF;
+    -- Re-derive every excerpt under this attestor's own authority; the packet must
+    -- carry exactly the pinned evidence, in unit order, byte for byte.
+    FOR item IN SELECT value FROM jsonb_array_elements(x.evidence_units) ORDER BY value->>'source_unit_id' LOOP
+        PERFORM memoriesql.revisiting_source_authorize((item->>'source_object_id')::uuid);
+        expected := expected || jsonb_build_array(memoriesql.relation_evidence_content_v1(c.tenant_id, item));
+    END LOOP;
+    IF packet->'evidence' IS DISTINCT FROM expected THEN
+        RAISE EXCEPTION 'relation_evidence_mismatch' USING ERRCODE = '22023';
+    END IF;
+    SELECT COALESCE(jsonb_agg(jsonb_build_object('source_unit_id', e.v->>'source_unit_id', 'content_hash', e.v->>'content_hash',
+               'sha256', memoriesql.classification_sha(e.v)) ORDER BY e.v->>'source_unit_id'), '[]'::jsonb),
+           COALESCE(sum(COALESCE(char_length(e.v->>'content'), 0)
+                + COALESCE((SELECT sum(char_length(p.v->>'content')) FROM jsonb_array_elements(e.v->'parts') AS p(v)), 0)), 0)
+    INTO delivered_refs, delivered FROM jsonb_array_elements(expected) AS e(v);
+    IF delivered > 131072 THEN
+        RAISE EXCEPTION 'relation_evidence_budget' USING ERRCODE = '54000';
+    END IF;
+    IF packet_role = 'specialist' THEN
+        IF jsonb_typeof(decision) IS DISTINCT FROM 'object' OR decision - ARRAY['contract_version', 'judgments'] <> '{}'::jsonb
+           OR decision->'contract_version' IS DISTINCT FROM '1'::jsonb
+           OR jsonb_typeof(decision->'judgments') IS DISTINCT FROM 'array'
+           OR EXISTS (SELECT 1 FROM jsonb_array_elements(decision->'judgments') AS j(v)
+                      WHERE NOT memoriesql.relation_judgment_valid_v1(j.v, x.relation_vocabulary)) THEN
+            RAISE EXCEPTION 'relation_specialist_decision_invalid' USING ERRCODE = '22023';
+        END IF;
+        IF octet_length(memoriesql.canonical_semantic_json_text(decision)) > 65536 THEN
+            RAISE EXCEPTION 'relation_specialist_batch_oversized' USING ERRCODE = '54000';
+        END IF;
+        -- Every proposal in the batch is judged exactly once, and nothing else is.
+        IF (SELECT COALESCE(jsonb_agg(j.v->>'proposal_id' ORDER BY j.v->>'proposal_id'), '[]'::jsonb)
+            FROM jsonb_array_elements(decision->'judgments') AS j(v))
+           IS DISTINCT FROM (SELECT jsonb_agg(p.v->>'proposal_id' ORDER BY p.v->>'proposal_id')
+                             FROM jsonb_array_elements(packet->'proposals') AS p(v)) THEN
+            RAISE EXCEPTION 'relation_specialist_batch_incomplete' USING ERRCODE = '22023';
+        END IF;
+        attested := jsonb_build_object('contract_version', 1, 'request_id', i.request_id, 'model_run_ref', i.run_id,
+            'author_run_ref', i.parent_run_id, 'packet_sha256', memoriesql.classification_sha(packet),
+            'proposals_sha256', memoriesql.classification_sha(packet->'proposals'),
+            'vocabulary_sha256', memoriesql.classification_sha(packet->'relation_vocabulary'), 'decision', decision);
+    ELSIF decision IS NOT NULL THEN
+        RAISE EXCEPTION 'relation_packet_invalid' USING ERRCODE = '22023';
+    END IF;
+    IF EXISTS (SELECT 1 FROM memoriesql.relation_assessment_deliveries AS d
+               WHERE d.tenant_id = c.tenant_id AND d.request_id = i.request_id) THEN
+        IF NOT EXISTS (SELECT 1 FROM memoriesql.relation_assessment_deliveries AS d
+                       WHERE d.tenant_id = c.tenant_id AND d.request_id = i.request_id
+                         AND d.packet_sha256 = memoriesql.classification_sha(packet)
+                         AND d.contribution IS NOT DISTINCT FROM attested) THEN
+            RAISE EXCEPTION 'relation_delivery_replay_conflict' USING ERRCODE = '23505';
+        END IF;
+    ELSE
+        INSERT INTO memoriesql.relation_assessment_deliveries (tenant_id, request_id, task_id, attempt_id, lease_generation,
+            run_id, role, packet_sha256, evidence, delivered_characters, contribution, attestor_principal_id, recorded_at)
+        VALUES (c.tenant_id, i.request_id, i.task_id, i.attempt_id, a.lease_generation, i.run_id, packet_role,
+            memoriesql.classification_sha(packet), delivered_refs, delivered, attested, c.principal_id, pg_catalog.clock_timestamp());
+    END IF;
+    PERFORM memoriesql.relation_assessment_pins_authorize(c.tenant_id, i.task_id);
+    IF q.lease_expires_at <= pg_catalog.clock_timestamp() OR a.deadline_at <= pg_catalog.clock_timestamp() THEN
+        RAISE EXCEPTION 'relation_delivery_stale_attempt' USING ERRCODE = '42501';
+    END IF;
+    RETURN true;
+END; $$;
+
+-- From 0029_relation_assessment.sql: the new revisions handled exactly like the ones they extend.
+CREATE OR REPLACE FUNCTION memoriesql.record_semantic_run_event(
+    requested_tenant_id uuid,
+    requested_task_id uuid,
+    requested_attempt_id uuid,
+    requested_lease_generation bigint,
+    requested_worker_id text,
+    requested_worker_instance_id text,
+    requested_event_kind text,
+    requested_run_id text,
+    requested_parent_run_id text,
+    requested_run_role text,
+    requested_agent_key text,
+    requested_input_contract_id text,
+    requested_input_contract_revision integer,
+    requested_input_contract_hash text,
+    requested_output_contract_id text,
+    requested_output_contract_revision integer,
+    requested_output_contract_hash text,
+    requested_model_profile_key text,
+    requested_model_profile_revision integer,
+    requested_effort_key text,
+    requested_delegation_id text,
+    requested_at timestamp with time zone
+)
+RETURNS boolean
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = pg_catalog, memoriesql
+AS $$
+DECLARE
+    context_record memoriesql.authorization_contexts%ROWTYPE;
+    task_record memoriesql.semantic_tasks%ROWTYPE;
+    existing_run memoriesql.semantic_task_runs%ROWTYPE;
+    authorization_result text;
+    next_sibling_order integer;
+    terminal_status text;
+    database_now timestamp with time zone := pg_catalog.statement_timestamp();
+BEGIN
+    SELECT * INTO context_record
+    FROM memoriesql.current_authorization_context();
+    IF NOT FOUND
+       OR context_record.principal_kind <> 'service'
+       OR requested_at IS NULL
+       OR requested_at < database_now - interval '5 minutes'
+       OR requested_at > database_now + interval '5 minutes'
+       OR requested_event_kind NOT IN (
+           'run.started', 'run.succeeded', 'run.failed',
+           'delegation.started', 'delegation.finished'
+       )
+       OR requested_run_role NOT IN ('direct_leaf', 'conductor', 'delegate')
+       OR requested_run_id !~ '^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$'
+       OR length(requested_run_id) > 128
+       OR requested_agent_key !~ '^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$'
+       OR length(requested_agent_key) > 128
+       OR requested_input_contract_id
+          !~ '^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$'
+       OR length(requested_input_contract_id) > 128
+       OR requested_output_contract_id
+          !~ '^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$'
+       OR length(requested_output_contract_id) > 128
+       OR requested_model_profile_key
+          !~ '^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$'
+       OR length(requested_model_profile_key) > 128
+       OR requested_effort_key
+          !~ '^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$'
+       OR length(requested_effort_key) > 128
+       OR requested_input_contract_revision <= 0
+       OR requested_output_contract_revision <= 0
+       OR requested_model_profile_revision <= 0
+       OR requested_input_contract_hash !~ '^[a-f0-9]{64}$'
+       OR requested_output_contract_hash !~ '^[a-f0-9]{64}$'
+       OR (
+           requested_run_role = 'delegate'
+           AND (
+               requested_parent_run_id IS NULL
+               OR requested_delegation_id IS NULL
+               OR requested_parent_run_id = requested_run_id
+           )
+       )
+       OR (
+           requested_run_role <> 'delegate'
+           AND (
+               requested_parent_run_id IS NOT NULL
+               OR requested_delegation_id IS NOT NULL
+               OR requested_event_kind LIKE 'delegation.%'
+           )
+       )
+       OR requested_parent_run_id IS NOT NULL AND (
+           requested_parent_run_id
+              !~ '^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$'
+           OR length(requested_parent_run_id) > 128
+       )
+       OR requested_delegation_id IS NOT NULL AND (
+           requested_delegation_id
+              !~ '^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$'
+           OR length(requested_delegation_id) > 128
+       ) THEN
+        RAISE EXCEPTION 'semantic run event contract is invalid'
+            USING ERRCODE = '22023';
+    END IF;
+
+    PERFORM 1
+    FROM memoriesql.semantic_task_attempts AS attempt
+    WHERE attempt.tenant_id = requested_tenant_id
+      AND attempt.task_id = requested_task_id
+      AND attempt.attempt_id = requested_attempt_id
+      AND attempt.lease_generation = requested_lease_generation
+      AND attempt.claimant_principal_id = context_record.principal_id
+      AND attempt.worker_id = requested_worker_id
+      AND attempt.worker_instance_id = requested_worker_instance_id
+      AND attempt.status = 'running';
+    IF NOT FOUND THEN
+        RETURN false;
+    END IF;
+
+    SELECT task.* INTO task_record
+    FROM memoriesql.semantic_tasks AS task
+    WHERE task.tenant_id = requested_tenant_id
+      AND task.task_id = requested_task_id
+      AND task.status = 'running'
+      AND task.lease_generation = requested_lease_generation
+      AND task.lease_owner = requested_worker_id
+      AND task.worker_instance_id = requested_worker_instance_id
+      AND memoriesql.current_context_semantic_task_authorized(
+          task.task_id, 'memory.maintain', 'read'
+      )
+    FOR UPDATE;
+    IF NOT FOUND THEN
+        RETURN false;
+    END IF;
+    PERFORM 1
+    FROM memoriesql.semantic_task_attempts AS attempt
+    WHERE attempt.tenant_id = requested_tenant_id
+      AND attempt.task_id = requested_task_id
+      AND attempt.attempt_id = requested_attempt_id
+      AND attempt.lease_generation = requested_lease_generation
+      AND attempt.claimant_principal_id = context_record.principal_id
+      AND attempt.worker_id = requested_worker_id
+      AND attempt.worker_instance_id = requested_worker_instance_id
+      AND attempt.status = 'running'
+    FOR UPDATE;
+    IF NOT FOUND THEN
+        RETURN false;
+    END IF;
+    database_now := pg_catalog.clock_timestamp();
+    IF task_record.lease_expires_at <= database_now
+       OR context_record.expires_at <= database_now THEN
+        RETURN false;
+    END IF;
+    authorization_result := memoriesql.reauthorize_semantic_task(
+        requested_tenant_id, requested_task_id, requested_attempt_id,
+        requested_lease_generation, requested_worker_id,
+        requested_worker_instance_id, 'outcome', requested_at
+    );
+    IF authorization_result <> 'authorized' THEN
+        RETURN false;
+    END IF;
+
+    SELECT * INTO existing_run
+    FROM memoriesql.semantic_task_runs AS run
+    WHERE run.tenant_id = requested_tenant_id
+      AND run.attempt_id = requested_attempt_id
+      AND run.run_id = requested_run_id;
+
+    IF FOUND AND (
+        existing_run.task_id IS DISTINCT FROM requested_task_id
+        OR existing_run.lease_generation IS DISTINCT FROM
+           requested_lease_generation
+        OR existing_run.parent_run_id IS DISTINCT FROM requested_parent_run_id
+        OR existing_run.run_role IS DISTINCT FROM requested_run_role
+        OR existing_run.agent_key IS DISTINCT FROM requested_agent_key
+        OR existing_run.input_contract_id IS DISTINCT FROM
+           requested_input_contract_id
+        OR existing_run.input_contract_revision IS DISTINCT FROM
+           requested_input_contract_revision
+        OR existing_run.input_contract_hash IS DISTINCT FROM
+           requested_input_contract_hash
+        OR existing_run.output_contract_id IS DISTINCT FROM
+           requested_output_contract_id
+        OR existing_run.output_contract_revision IS DISTINCT FROM
+           requested_output_contract_revision
+        OR existing_run.output_contract_hash IS DISTINCT FROM
+           requested_output_contract_hash
+        OR existing_run.model_profile_key IS DISTINCT FROM
+           requested_model_profile_key
+        OR existing_run.model_profile_revision IS DISTINCT FROM
+           requested_model_profile_revision
+        OR existing_run.effort_key IS DISTINCT FROM requested_effort_key
+        OR existing_run.delegation_id IS DISTINCT FROM requested_delegation_id
+    ) THEN
+        RETURN false;
+    END IF;
+
+    IF requested_event_kind = 'delegation.started' THEN
+        IF FOUND THEN
+            RETURN existing_run.run_status = 'delegation_started'
+               AND existing_run.delegation_status = 'started';
+        END IF;
+        PERFORM 1 FROM memoriesql.semantic_task_runs AS parent
+        WHERE parent.tenant_id = requested_tenant_id
+          AND parent.attempt_id = requested_attempt_id
+          AND parent.run_id = requested_parent_run_id
+          AND (parent.run_role = 'conductor' OR
+            (parent.run_role='direct_leaf' AND parent.run_status='running'
+             AND task_record.task_kind='memory.semantic.author-complete-unit' AND task_record.contract_revision=5
+             AND requested_agent_key='memory.semantic.bead-type-classifier'
+             AND requested_input_contract_id='memory.semantic.bead-classification.packet' AND requested_input_contract_revision=1
+             AND requested_input_contract_hash='c661867057e6a6e31950f56ec27f2be71ec1fe550ed7283f82c4a53dd65eb389'
+             AND requested_output_contract_id='memory.semantic.bead-classification.decision' AND requested_output_contract_revision=1
+             AND requested_output_contract_hash='c1efb5bc7652a827e63b1bdbadabc7ce19c72ca74c38abf41dd7061ecc09b802'
+             AND requested_model_profile_key='classification.standard' AND requested_model_profile_revision=1
+             AND requested_effort_key='standard'
+             AND NOT EXISTS(SELECT 1 FROM memoriesql.semantic_task_runs child WHERE child.tenant_id=requested_tenant_id
+                AND child.attempt_id=requested_attempt_id AND child.parent_run_id=requested_parent_run_id))
+            -- One runtime-scheduled relation specialist after the author, never a delegation tool.
+            OR (parent.run_role='direct_leaf' AND parent.run_status='running'
+             AND task_record.task_kind='memory.semantic.assess-relations' AND task_record.contract_revision IN (1,2)
+             AND requested_agent_key='memory.semantic.relation-specialist'
+             AND requested_input_contract_id='memory.semantic.relation-assessment.packet' AND requested_input_contract_revision=1
+             AND requested_input_contract_hash='50ab104aa74104f5229be113b3666fc56f6a544629c5e5221d3b89d7ae4c11dc'
+             AND requested_output_contract_id='memory.semantic.relation-assessment.decision' AND requested_output_contract_revision=1
+             AND requested_output_contract_hash='d9d2912d3aeef02ea5db097c670ef0fbec77fee0a9cb3dd069271294d98f73b6'
+             AND requested_model_profile_key='relation-specialist.standard' AND requested_model_profile_revision=1
+             AND requested_effort_key='standard'
+             AND NOT EXISTS(SELECT 1 FROM memoriesql.semantic_task_runs child WHERE child.tenant_id=requested_tenant_id
+                AND child.attempt_id=requested_attempt_id AND child.parent_run_id=requested_parent_run_id)));
+
+        IF NOT FOUND THEN
+            RETURN false;
+        END IF;
+        SELECT COALESCE(MAX(run.sibling_order), 0) + 1
+        INTO next_sibling_order
+        FROM memoriesql.semantic_task_runs AS run
+        WHERE run.tenant_id = requested_tenant_id
+          AND run.attempt_id = requested_attempt_id
+          AND run.parent_run_id = requested_parent_run_id;
+        INSERT INTO memoriesql.semantic_task_runs (
+            tenant_id, workspace_id, access_scope_id, task_id, attempt_id,
+            lease_generation, run_id, parent_run_id, delegation_id, run_role,
+            sibling_order, agent_key, input_contract_id,
+            input_contract_revision, input_contract_hash, output_contract_id,
+            output_contract_revision, output_contract_hash, model_profile_key,
+            model_profile_revision, effort_key, run_status, delegation_status,
+            delegation_started_at, settled
+        ) VALUES (
+            task_record.tenant_id, task_record.workspace_id,
+            task_record.access_scope_id, task_record.task_id,
+            requested_attempt_id, requested_lease_generation, requested_run_id,
+            requested_parent_run_id, requested_delegation_id, requested_run_role,
+            next_sibling_order, requested_agent_key, requested_input_contract_id,
+            requested_input_contract_revision, requested_input_contract_hash,
+            requested_output_contract_id, requested_output_contract_revision,
+            requested_output_contract_hash, requested_model_profile_key,
+            requested_model_profile_revision, requested_effort_key,
+            'delegation_started', 'started', database_now, false
+        );
+        RETURN true;
+    END IF;
+
+    IF requested_event_kind = 'run.started' THEN
+        IF FOUND THEN
+            IF existing_run.run_role <> 'delegate' THEN
+                RETURN existing_run.run_status = 'running';
+            END IF;
+            IF existing_run.run_status = 'running' THEN
+                RETURN true;
+            END IF;
+            IF existing_run.run_status <> 'delegation_started' THEN
+                RETURN false;
+            END IF;
+            UPDATE memoriesql.semantic_task_runs
+               SET run_status = 'running', started_at = database_now
+             WHERE tenant_id = requested_tenant_id
+               AND attempt_id = requested_attempt_id
+               AND run_id = requested_run_id;
+            RETURN true;
+        END IF;
+        IF requested_run_role = 'delegate' THEN
+            RETURN false;
+        END IF;
+        INSERT INTO memoriesql.semantic_task_runs (
+            tenant_id, workspace_id, access_scope_id, task_id, attempt_id,
+            lease_generation, run_id, run_role, sibling_order, agent_key,
+            input_contract_id, input_contract_revision, input_contract_hash,
+            output_contract_id, output_contract_revision, output_contract_hash,
+            model_profile_key, model_profile_revision, effort_key, run_status,
+            started_at, settled
+        ) VALUES (
+            task_record.tenant_id, task_record.workspace_id,
+            task_record.access_scope_id, task_record.task_id,
+            requested_attempt_id, requested_lease_generation, requested_run_id,
+            requested_run_role, 1, requested_agent_key,
+            requested_input_contract_id, requested_input_contract_revision,
+            requested_input_contract_hash, requested_output_contract_id,
+            requested_output_contract_revision, requested_output_contract_hash,
+            requested_model_profile_key, requested_model_profile_revision,
+            requested_effort_key, 'running', database_now, false
+        );
+        RETURN true;
+    END IF;
+
+    IF NOT FOUND THEN
+        RETURN false;
+    END IF;
+    IF requested_event_kind IN ('run.succeeded', 'run.failed') THEN
+        terminal_status := CASE requested_event_kind
+            WHEN 'run.succeeded' THEN 'succeeded'
+            ELSE 'failed'
+        END;
+        IF existing_run.run_status = terminal_status THEN
+            RETURN true;
+        END IF;
+        IF existing_run.run_status <> 'running' OR existing_run.settled THEN
+            RETURN false;
+        END IF;
+        UPDATE memoriesql.semantic_task_runs
+           SET run_status = terminal_status,
+               finished_at = database_now,
+               settled = (run_role <> 'delegate')
+         WHERE tenant_id = requested_tenant_id
+           AND attempt_id = requested_attempt_id
+           AND run_id = requested_run_id;
+        RETURN true;
+    END IF;
+
+    IF requested_event_kind = 'delegation.finished' THEN
+        IF existing_run.delegation_status = 'finished' THEN
+            RETURN true;
+        END IF;
+        IF existing_run.run_role <> 'delegate'
+           OR existing_run.run_status NOT IN ('succeeded', 'failed')
+           OR existing_run.delegation_status <> 'started'
+           OR existing_run.settled THEN
+            RETURN false;
+        END IF;
+        UPDATE memoriesql.semantic_task_runs
+           SET delegation_status = 'finished',
+               delegation_finished_at = database_now,
+               settled = true
+         WHERE tenant_id = requested_tenant_id
+           AND attempt_id = requested_attempt_id
+           AND run_id = requested_run_id;
+        RETURN true;
+    END IF;
+    RETURN false;
+END;
+$$;
 
 -- From 0020_author_controlled_source_revisiting.sql activate_complete_input_v1: revision 8's activation.
 CREATE FUNCTION memoriesql.activate_complete_input_v7(request jsonb) RETURNS jsonb
@@ -1616,3 +2908,183 @@ BEGIN
 END; $$;
 REVOKE ALL ON FUNCTION memoriesql.activate_complete_input_v7(jsonb) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION memoriesql.activate_complete_input_v7(jsonb) TO memoriesql_application;
+
+-- From 0029_relation_assessment.sql activate_relation_assessment_v1: relation revision 2's activation.
+CREATE FUNCTION memoriesql.activate_relation_assessment_v2(request jsonb) RETURNS jsonb
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = pg_catalog, memoriesql SET lock_timeout = '500ms' AS $$
+DECLARE
+    c memoriesql.authorization_contexts%ROWTYPE; subject memoriesql.accepted_bead_semantics%ROWTYPE;
+    accepted memoriesql.accepted_bead_semantics%ROWTYPE; old memoriesql.idempotency_receipts%ROWTYPE;
+    prior memoriesql.relation_assessments%ROWTYPE; resolved memoriesql.relation_type_revisions%ROWTYPE;
+    rid uuid := pg_catalog.uuidv7(); tid uuid := pg_catalog.uuidv7(); eid uuid;
+    item jsonb; pinned jsonb := '[]'; vocabulary jsonb := '[]'; units jsonb; input jsonb; result jsonb;
+    reconsideration jsonb; request_hash text; candidates uuid[]; declared bigint;
+    started timestamp with time zone := pg_catalog.clock_timestamp();
+    uuid_pattern constant text := '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
+BEGIN
+    IF jsonb_typeof(request) IS DISTINCT FROM 'object'
+       OR request->>'contract_version' IS DISTINCT FROM '2' OR request->>'expected_schema_version' IS DISTINCT FROM '53'
+       OR request - ARRAY['contract_version', 'expected_schema_version', 'idempotency_key', 'subject_bead_id',
+                          'candidate_bead_ids', 'relation_vocabulary', 'dispatch_policy_id', 'reconsiders_task_id'] <> '{}'::jsonb
+       OR COALESCE(length(request->>'idempotency_key'), 0) NOT BETWEEN 1 AND 512 OR octet_length(request::text) > 16384
+       OR COALESCE(request->>'subject_bead_id', '') !~ uuid_pattern
+       OR COALESCE(request->>'dispatch_policy_id', '') !~ uuid_pattern
+       OR (jsonb_typeof(request->'reconsiders_task_id') IS DISTINCT FROM 'null'
+           AND COALESCE(request->>'reconsiders_task_id', '') !~ uuid_pattern)
+       OR jsonb_typeof(request->'candidate_bead_ids') IS DISTINCT FROM 'array'
+       OR jsonb_array_length(request->'candidate_bead_ids') > 8
+       OR EXISTS (SELECT 1 FROM jsonb_array_elements(request->'candidate_bead_ids') AS x(v)
+                  WHERE jsonb_typeof(x.v) IS DISTINCT FROM 'string' OR x.v#>>'{}' !~ uuid_pattern
+                     OR x.v#>>'{}' = request->>'subject_bead_id')
+       OR (SELECT count(*) <> count(DISTINCT x.i) FROM jsonb_array_elements_text(request->'candidate_bead_ids') AS x(i))
+       OR jsonb_typeof(request->'relation_vocabulary') IS DISTINCT FROM 'array'
+       OR jsonb_array_length(request->'relation_vocabulary') NOT BETWEEN 1 AND 32
+       OR EXISTS (SELECT 1 FROM jsonb_array_elements(request->'relation_vocabulary') AS x(v)
+                  WHERE jsonb_typeof(x.v) IS DISTINCT FROM 'object' OR x.v - ARRAY['key', 'revision'] <> '{}'::jsonb
+                     OR jsonb_typeof(x.v->'key') IS DISTINCT FROM 'string' OR x.v->>'revision' !~ '^[1-9][0-9]{0,8}$')
+       OR EXISTS (SELECT 1 FROM jsonb_array_elements(request->'relation_vocabulary') AS x(v)
+                  GROUP BY x.v->>'key' HAVING count(*) <> 1) THEN
+        RAISE EXCEPTION 'invalid_relation_assessment_activation' USING ERRCODE = '22023';
+    END IF;
+    candidates := ARRAY(SELECT x.i::uuid FROM jsonb_array_elements_text(request->'candidate_bead_ids') WITH ORDINALITY AS x(i, o) ORDER BY x.o);
+    SELECT * INTO c FROM memoriesql.current_authorization_context();
+    IF c.tenant_id IS NULL OR c.expires_at <= pg_catalog.clock_timestamp() THEN
+        RAISE EXCEPTION 'relation_assessment_activation_denied' USING ERRCODE = '42501';
+    END IF;
+    PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
+        c.tenant_id::text || ':relation-assessment-activate:' || (request->>'idempotency_key'), 0));
+
+    -- Every pinned bead is an accepted version the activator may maintain.
+    SELECT a.* INTO subject FROM memoriesql.accepted_bead_semantics AS a
+    WHERE a.tenant_id = c.tenant_id AND a.workspace_id = c.workspace_id AND a.bead_id = (request->>'subject_bead_id')::uuid;
+    IF subject.bead_id IS NULL OR NOT memoriesql.lifecycle_bead_authorized(
+            c.tenant_id, subject.workspace_id, subject.access_scope_id, subject.bead_version_id) THEN
+        RAISE EXCEPTION 'relation_assessment_subject_unavailable' USING ERRCODE = '42501';
+    END IF;
+    FOR item IN SELECT to_jsonb(x.id) FROM unnest(candidates) AS x(id) LOOP
+        SELECT a.* INTO accepted FROM memoriesql.accepted_bead_semantics AS a
+        WHERE a.tenant_id = c.tenant_id AND a.workspace_id = c.workspace_id AND a.bead_id = (item#>>'{}')::uuid;
+        IF accepted.bead_id IS NULL OR NOT memoriesql.current_context_accepted_bead_maintain_authorized(
+                c.tenant_id, accepted.workspace_id, accepted.access_scope_id, accepted.bead_version_id) THEN
+            RAISE EXCEPTION 'relation_candidate_unavailable' USING ERRCODE = '42501';
+        END IF;
+    END LOOP;
+    IF NOT EXISTS (SELECT 1 FROM memoriesql.relation_assessment_dispatch_policies AS d
+                   WHERE d.tenant_id = c.tenant_id AND d.dispatch_policy_id = (request->>'dispatch_policy_id')::uuid
+                     AND d.workspace_id = c.workspace_id AND d.status = 'active' AND d.expires_at > pg_catalog.clock_timestamp()) THEN
+        RAISE EXCEPTION 'relation_assessment_policy_unavailable' USING ERRCODE = '42501';
+    END IF;
+
+    request_hash := encode(sha256(convert_to(request::text, 'UTF8')), 'hex');
+    SELECT r.* INTO old FROM memoriesql.idempotency_receipts AS r
+    WHERE r.tenant_id = c.tenant_id AND r.operation_kind = 'relation_assessment.activate.v2'
+      AND r.idempotency_key = request->>'idempotency_key';
+    IF FOUND THEN
+        IF old.request_hash <> request_hash THEN
+            RAISE EXCEPTION 'idempotency_conflict' USING ERRCODE = '23505';
+        END IF;
+        RETURN old.response_receipt || '{"replayed":true}'::jsonb;
+    END IF;
+
+    -- Exact latest active revisions only; the task never mints vocabulary.
+    FOR item IN SELECT value FROM jsonb_array_elements(request->'relation_vocabulary') ORDER BY value->>'key' LOOP
+        resolved := memoriesql.relation_type_active_revision(c.tenant_id, c.workspace_id, item->>'key', (item->>'revision')::integer);
+        IF resolved.relation_type_revision_id IS NULL THEN
+            RAISE EXCEPTION 'unknown_relation_type' USING ERRCODE = '22023';
+        END IF;
+        vocabulary := vocabulary || jsonb_build_array(jsonb_build_object('key', item->>'key', 'revision', resolved.revision,
+            'namespace', (SELECT ty.namespace FROM memoriesql.relation_types AS ty WHERE ty.relation_type_id = resolved.relation_type_id),
+            'label', resolved.display_label, 'definition', resolved.definition, 'endpoint_rule', resolved.endpoint_rule,
+            'evidence_expectation', resolved.evidence_expectation, 'example', resolved.example,
+            'counterexample', resolved.counterexample, 'cycle_policy', resolved.cycle_policy,
+            'forward_reading', resolved.forward_reading, 'inverse_reading', resolved.inverse_reading,
+            'symmetric', resolved.is_symmetric));
+    END LOOP;
+    IF octet_length(memoriesql.canonical_semantic_json_text(vocabulary)) > 32768 THEN
+        RAISE EXCEPTION 'relation_vocabulary_budget' USING ERRCODE = '54000';
+    END IF;
+
+    pinned := jsonb_build_array(memoriesql.relation_assessment_bead_packet_v1(c.tenant_id, c.workspace_id, subject.bead_id, 'subject'));
+    FOR item IN SELECT to_jsonb(x.id) FROM unnest(candidates) WITH ORDINALITY AS x(id, o) ORDER BY x.o LOOP
+        pinned := pinned || jsonb_build_array(
+            memoriesql.relation_assessment_bead_packet_v1(c.tenant_id, c.workspace_id, (item#>>'{}')::uuid, 'candidate'));
+    END LOOP;
+    IF octet_length(memoriesql.canonical_semantic_json_text(pinned)) > 131072 THEN
+        RAISE EXCEPTION 'relation_assessment_budget' USING ERRCODE = '54000';
+    END IF;
+    units := memoriesql.relation_evidence_units_v1(c.tenant_id, pinned);
+    SELECT COALESCE(sum((u.v->>'declared_characters')::bigint), 0) INTO declared FROM jsonb_array_elements(units) AS u(v);
+    IF jsonb_array_length(units) > 72 OR declared > 131072 THEN
+        RAISE EXCEPTION 'relation_evidence_budget' USING ERRCODE = '54000';
+    END IF;
+    FOR item IN SELECT value FROM jsonb_array_elements(units) LOOP
+        PERFORM memoriesql.revisiting_source_authorize((item->>'source_object_id')::uuid);
+    END LOOP;
+
+    IF jsonb_typeof(request->'reconsiders_task_id') = 'string' THEN
+        SELECT ra.* INTO prior FROM memoriesql.relation_assessments AS ra
+        WHERE ra.tenant_id = c.tenant_id AND ra.task_id = (request->>'reconsiders_task_id')::uuid FOR SHARE;
+        -- An applied assessment of the same subject with at least one proposal left
+        -- unaccepted. Every bead it pinned is pinned again at its immutable accepted
+        -- version, so the carried disagreement names only statements this task pins
+        -- and authorizes; new candidates and current vocabulary revisions may join
+        -- when evidence or understanding changed. No count limits it: each
+        -- reconsideration is its own explicit, bounded activation, a reconsideration
+        -- may itself be reconsidered, and nothing activates one automatically.
+        IF prior.task_id IS NULL OR prior.workspace_id <> c.workspace_id
+           OR prior.subject_bead_id <> subject.bead_id
+           OR EXISTS (SELECT 1 FROM jsonb_array_elements(prior.beads) AS earlier(v)
+                      WHERE NOT EXISTS (SELECT 1 FROM jsonb_array_elements(pinned) AS again(v)
+                                        WHERE again.v->>'bead_id' = earlier.v->>'bead_id'
+                                          AND again.v->>'bead_version_id' = earlier.v->>'bead_version_id'))
+           OR NOT EXISTS (SELECT 1 FROM memoriesql.semantic_tasks AS q
+                          WHERE q.tenant_id = c.tenant_id AND q.task_id = prior.task_id AND q.status = 'succeeded')
+           OR NOT EXISTS (SELECT 1 FROM memoriesql.assessed_relations AS r
+                          WHERE r.tenant_id = c.tenant_id AND r.task_id = prior.task_id AND r.acceptance = 'not_accepted') THEN
+            RAISE EXCEPTION 'relation_reconsideration_unavailable' USING ERRCODE = '55000';
+        END IF;
+        SELECT jsonb_build_object('reconsiders_task_id', prior.task_id,
+                   'proposals', jsonb_agg(r.proposal ORDER BY r.relation_id),
+                   'judgments', jsonb_agg(r.judgment ORDER BY r.relation_id))
+        INTO reconsideration FROM memoriesql.assessed_relations AS r
+        WHERE r.tenant_id = c.tenant_id AND r.task_id = prior.task_id AND r.acceptance = 'not_accepted';
+    END IF;
+
+    INSERT INTO memoriesql.idempotency_receipts (tenant_id, workspace_id, access_scope_id, idempotency_receipt_id, operation_kind,
+        idempotency_key, request_hash, status, resource_kind, resource_id, attempt_count, created_at, updated_at)
+    VALUES (c.tenant_id, c.workspace_id, subject.access_scope_id, rid, 'relation_assessment.activate.v2',
+        request->>'idempotency_key', request_hash, 'in_progress', 'semantic_task', tid, 1, started, started);
+    input := jsonb_build_object('task_id', tid, 'task_kind', 'memory.semantic.assess-relations', 'contract_revision', 2,
+        'target_reference', subject.bead_id, 'expected_target_revision', 0,
+        'requested_effort_key', NULL, 'requested_budget', NULL,
+        'evidence_manifest', jsonb_build_object('manifest_id', 'relation-assessment.' || tid::text, 'revision', 1,
+            'references', (SELECT jsonb_agg(jsonb_build_object('reference_id', u.v->>'source_unit_id',
+                               'content_hash', u.v->>'content_hash',
+                               'declared_characters', (u.v->>'declared_characters')::integer) ORDER BY u.v->>'source_unit_id')
+                           FROM jsonb_array_elements(units) AS u(v))),
+        'payload', jsonb_build_object('subject_bead_id', subject.bead_id, 'beads', pinned,
+            'relation_vocabulary', vocabulary, 'dispatch_policy_id', request->>'dispatch_policy_id',
+            'reconsideration', reconsideration, 'required_execution', 'trusted_relation_assessment_v1'));
+    SELECT q.idempotency_receipt_id INTO eid FROM memoriesql.enqueue_semantic_task(tid,
+        'relation-assessment.v2:' || tid::text, 'memoriesql.kernel', 'memory.semantic.assess-relations', 2,
+        'd79977ebc0c64cd0448857b46020fe7a79659ba55c32de6c038041a6d1bfcc2d', 'semantic-tasks-v1:acb8198184ab7920a2ad6fce484a14d4ad03bd4eea6418b7fd62b16a2c5bab34', subject.bead_id::text, 0, input,
+        input#>>'{evidence_manifest,manifest_id}', subject.access_scope_id, started, NULL, started) AS q;
+    INSERT INTO memoriesql.relation_assessments (tenant_id, workspace_id, access_scope_id, task_id, subject_bead_id,
+        subject_bead_version_id, candidate_bead_ids, beads, relation_vocabulary, evidence_units, reconsideration,
+        dispatch_policy_id, reconsiders_task_id, origin_principal_id, activation_receipt_id, created_at)
+    VALUES (c.tenant_id, c.workspace_id, subject.access_scope_id, tid, subject.bead_id, subject.bead_version_id,
+        candidates, pinned, vocabulary, units, reconsideration, (request->>'dispatch_policy_id')::uuid,
+        prior.task_id, c.principal_id, rid, started);
+    result := jsonb_build_object('contract_version', 2, 'task_id', tid, 'subject_bead_id', subject.bead_id,
+        'subject_bead_version_id', subject.bead_version_id, 'candidate_bead_ids', to_jsonb(candidates),
+        'reconsiders_task_id', prior.task_id, 'idempotency_receipt_id', rid, 'enqueue_receipt_id', eid,
+        'replayed', false);
+    -- Recheck every authority at the return boundary; never cache permission.
+    PERFORM memoriesql.relation_assessment_pins_authorize(c.tenant_id, tid);
+    UPDATE memoriesql.idempotency_receipts AS r SET status = 'succeeded', response_receipt = result,
+        completed_at = pg_catalog.clock_timestamp(), updated_at = pg_catalog.clock_timestamp()
+    WHERE r.tenant_id = c.tenant_id AND r.idempotency_receipt_id = rid;
+    RETURN result;
+END; $$;
+REVOKE ALL ON FUNCTION memoriesql.activate_relation_assessment_v2(jsonb) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION memoriesql.activate_relation_assessment_v2(jsonb) TO memoriesql_application;

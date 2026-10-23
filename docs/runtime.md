@@ -317,6 +317,8 @@ and attempt (owner decision 2026-10-23, P1-f D1):
   `author-complete-unit` revision 2 has no request left. Revision 8 is revision
   2 with one more request for this round (owner decision P1-f D2); see
   [complete-input execution](complete-input-execution.md#revision-8-one-request-for-the-repair-round).
+  Relation assessment has its own author repair round from revision 2; see
+  [relation assessment](relation-assessment.md#revision-2-one-repair-round-for-the-author).
 - **After the repair.** The repaired output goes through every check again. If
   issues remain, it settles `invalid_output` with `output.<code>` naming the
   first issue, and retry class `never`. There is no second repair. Observation

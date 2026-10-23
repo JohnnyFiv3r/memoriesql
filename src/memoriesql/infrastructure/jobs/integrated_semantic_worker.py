@@ -1935,7 +1935,7 @@ class IntegratedSemanticWorker:
             if (
                 settlement_result.status == SemanticResultStatus.SUCCEEDED
                 and claimed.task_kind == "memory.semantic.assess-relations"
-                and claimed.contract_revision == 1
+                and claimed.contract_revision in (1, 2)
                 and not queue.relation_exposure_valid(claimed.fence)
             ):
                 settlement_result = SemanticTaskResult[BaseModel](
