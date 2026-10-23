@@ -223,17 +223,6 @@ class PartialObservationAcceptance(PostgresRuntime):
                     self.now + timedelta(hours=1),
                 ),
             )
-            self.db.execute(
-                "SELECT memoriesql.create_access_grant(%s,%s,%s,%s,%s,%s)",
-                (
-                    uuid.uuid4(),
-                    principal,
-                    self.scope,
-                    ["read"],
-                    self.now,
-                    self.now + timedelta(hours=1),
-                ),
-            )
         return secret
 
     def inspected(self, bead: Any, secret: str | None = None) -> Any:
