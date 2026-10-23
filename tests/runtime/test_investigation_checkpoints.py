@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import unittest
+from collections import Counter
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import timedelta
@@ -34,10 +35,18 @@ from memoriesql.infrastructure.postgres.result_preparation import (
 
 if TYPE_CHECKING:
     from tests.runtime import test_agent_sql_helpers_runtime as helpers
+    from tests.runtime import test_query_audit_retention as audit
     from tests.runtime.test_postgres_runtime import migrate
 else:
     import test_agent_sql_helpers_runtime as helpers
+    import test_query_audit_retention as audit
     from test_postgres_runtime import migrate
+
+STATEMENTS = (
+    "SELECT s.statement_id,s.bead_id,e.evidence_ref FROM memory_v1.statements s "
+    "JOIN memory_v1.statement_sources e ON e.statement_id=s.statement_id "
+    "ORDER BY s.statement_id,e.evidence_ref"
+)
 
 
 @unittest.skipUnless(
@@ -652,6 +661,257 @@ class AutomaticCheckpointRuntime(unittest.TestCase):
             (refused["outcome"], refused["error"]),
             ("invalid_request", {"code": "cursor"}),
         )
+
+    def contextual_page(
+        self, run: dict[str, Any], result: dict[str, Any], context: dict[str, Any]
+    ) -> dict[str, Any]:
+        return self.r.send(
+            {
+                "contract_version": 1,
+                "run_ref": run["run_ref"],
+                "step_key": str(uuid4()),
+                "kind": "reuse_result",
+                "result": self.pin(result),
+                "access": context,
+                "page_size": 50,
+            }
+        )
+
+    def normalized_evidence(
+        self, run: dict[str, Any], result: dict[str, Any], page: dict[str, Any]
+    ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+        """The normalized bead's delivered source ref, its exact pin, and the
+        direct inspection that reported the pin."""
+        columns = [c["name"] for c in result["result"]["result_schema"]]
+        row = next(
+            r
+            for r in page["page"]["rows"]
+            if r["values"][columns.index("bead_id")] == str(self.h.normalized)
+        )
+        statement = row["values"][columns.index("statement_id")]
+        source_ref = next(
+            ref for ref in row["evidence_refs"] if ref["kind"] == "source"
+        )
+        raw, direct = self.h.send(
+            self.h.inspection(
+                run, beads=(self.h.normalized,), facets=("evidence_metadata",)
+            )
+        )
+        self.h.available(raw, direct)
+        pin = next(
+            p
+            for p in direct["inspection"]["evidence_pins"]
+            if p["statement_id"] == statement
+            and p["unit"]["source_unit_id"] == source_ref["unit_ref"]
+            and p["unit"]["content_sha256"] == source_ref["content_sha256"]
+            and p["part"] is not None
+        )
+        return source_ref, pin, direct
+
+    def test_named_save_basis_refuses_like_an_unknown_checkpoint(self) -> None:
+        # Named saves do not exist in this slice. A named_save basis is refused
+        # as unavailable, content-free, and is never read as the automatic one.
+        run, result = self.query_root()
+        first = self.r.send(self.append(run, result))
+        self.assert_checkpoint(first)
+        head = first["branch"]["head"]
+        named = {"kind": "named_save", "save_id": str(uuid4()), "revision": "1"}
+        restored = self.r.send(self.read(run, head))
+        self.assert_checkpoint(restored)
+        context = restored["root_contexts"][0]
+        request = self.read(run, head)
+        request["access"]["basis"] = named
+        refused = self.r.send(request)
+        unknown = self.r.send(
+            self.read(run, {"checkpoint_id": str(uuid4()), "manifest_digest": "f" * 64})
+        )
+        for reply in (refused, unknown):
+            self.assertEqual(
+                (reply["outcome"], reply["error"]),
+                ("unavailable", {"code": "unavailable"}),
+            )
+            for field in ("checkpoint", "retention", "root_contexts", "work"):
+                self.assertNotIn(field, reply)
+        self.assertEqual(set(refused), set(unknown))
+        self.assertNotIn(head["manifest_digest"], json.dumps(refused))
+        # A root context naming a named_save basis is refused like one naming
+        # an unknown checkpoint; the same context with its automatic basis reads.
+        named_page = self.contextual_page(run, result, {**context, "basis": named})
+        missing_page = self.contextual_page(
+            run, result, {**context, "checkpoint_id": str(uuid4())}
+        )
+        for reply in (named_page, missing_page):
+            self.assertEqual(reply["outcome"], "unavailable", reply)
+            for field in ("page", "result", "visibility"):
+                self.assertNotIn(field, reply)
+        self.assertEqual(set(named_page), set(missing_page))
+        page = self.contextual_page(run, result, context)
+        self.assertEqual(page["outcome"], "available", page)
+        self.assertEqual(page["access_bases"][0]["context"], context)
+
+    def test_null_origin_hydration_rechecks_its_first_checkpoint_delivery_only(
+        self,
+    ) -> None:
+        run = self.r.start()
+        _, result = self.r.query(run, STATEMENTS, page_size=50)
+        self.assertEqual(result["outcome"], "available", result)
+        first = self.r.send(self.append(run, result))
+        self.assert_checkpoint(first)
+        new = self.r.start()
+        restored = self.r.send(self.read(new, first["branch"]["head"]))
+        self.assert_checkpoint(restored)
+        context = restored["root_contexts"][0]
+        # This run's first delivery of the evidence is the checkpoint-context page.
+        page = self.contextual_page(new, result, context)
+        self.assertEqual(page["outcome"], "available", page)
+        source_ref, pin, _ = self.normalized_evidence(new, result, page)
+        hydration = self.h.hydration(new, pin)
+        hydration["selections"][0]["evidence_ref"] = source_ref["ref"]
+        self.assertIsNone(hydration["selections"][0]["origin"])
+        raw, hydrated = self.h.send(hydration)
+        self.h.available(raw, hydrated)
+        self.assertEqual(
+            hydrated["hydration"]["slices"][0]["content"], self.h.TEXT[:512]
+        )
+        self.assertEqual(
+            [
+                (b["context"], b["end_condition"], b["hold_ref"])
+                for b in hydrated["access_bases"]
+            ],
+            [(context, "checkpoint_expiry_or_prune", context["checkpoint_id"])],
+        )
+        # Prune that checkpoint with the 21st append. The root stays live
+        # standalone and is delivered again in this run, yet the null origin
+        # still re-checks only its first delivery's context: no fallback.
+        current = first
+        for _ in range(20):
+            current = self.r.send(self.append(run, result, current))
+            self.assert_checkpoint(current)
+        self.assertEqual(
+            self.r.send(self.read(new, first["branch"]["head"]))["outcome"],
+            "unavailable",
+        )
+        standalone = self.r.reuse(new, result["result"], page_size=50)
+        self.assertEqual(standalone["outcome"], "available", standalone)
+        again = copy.deepcopy(hydration)
+        again["step_key"] = str(uuid4())
+        _, refused = self.h.send(again)
+        self.assertEqual(refused["outcome"], "unavailable", refused)
+        for field in ("hydration", "inspection", "result", "page", "visibility"):
+            self.assertNotIn(field, refused)
+        self.assertNotIn(self.h.TEXT[:64], json.dumps(refused))
+
+    def test_checkpoint_deliveries_attribute_all_their_audit_to_its_allowance(
+        self,
+    ) -> None:
+        # Modeled on #91's attribution case. Both ways: every audit row that a
+        # checkpoint append, a read, and contextual reuse, inspection and
+        # hydration write is attributed to its own delivery, and no row outside
+        # a live delivery is. Retained audit is charged to the audit allowance,
+        # never to the 512 MiB content allocation.
+        before = self.h.scalar(
+            "SELECT count(*) FROM memoriesql.authorization_audit_events"
+        )
+        run = self.r.start()
+        _, result = self.r.query(run, STATEMENTS, page_size=50)
+        self.assertEqual(result["outcome"], "available", result)
+        appended = self.r.send(self.append(run, result))
+        self.assert_checkpoint(appended)
+        new = self.r.start()
+        restored = self.r.send(self.read(new, appended["branch"]["head"]))
+        self.assert_checkpoint(restored)
+        context = restored["root_contexts"][0]
+        page = self.contextual_page(new, result, context)
+        self.assertEqual(page["outcome"], "available", page)
+        inspection = self.h.inspection(new, beads=(), facets=("content",))
+        inspection.update(
+            result={"pin": self.pin(result), "access": context},
+            known_at=result["result"]["frame"]["known_at"],
+        )
+        raw, inspected = self.h.send(inspection)
+        self.h.available(raw, inspected)
+        self.assertEqual(inspected["access_bases"][0]["context"], context)
+        source_ref, pin, direct = self.normalized_evidence(new, result, page)
+        hydration = self.h.hydration(new, pin)
+        hydration["selections"][0]["evidence_ref"] = source_ref["ref"]
+        hydration["selections"][0]["origin"] = {
+            "result": self.pin(result),
+            "access": context,
+        }
+        raw, hydrated = self.h.send(hydration)
+        self.h.available(raw, hydrated)
+        operations = {
+            name: reply["access_receipt_ref"]
+            for name, reply in (
+                ("query", result),
+                ("checkpoint", appended),
+                ("read_checkpoint", restored),
+                ("reuse", page),
+                ("inspect", inspected),
+                ("evidence_metadata", direct),
+                ("hydrate", hydrated),
+            )
+        }
+        rows = self.db.execute(audit.ATTRIBUTED + audit.ORDER).fetchall()
+        per_delivery = Counter(str(row[5]) for row in rows)
+        for name, delivery in operations.items():
+            self.assertGreater(per_delivery[delivery], 0, name)
+        self.assertEqual(set(per_delivery), set(operations.values()))
+        for *_head, recorded, _ref, space, expires in rows:
+            self.assertEqual(space, self.fixture.workspace)
+            self.assertEqual(expires - recorded, timedelta(days=30))
+        written = self.h.scalar(
+            "SELECT count(*) FROM memoriesql.authorization_audit_events"
+        )
+        self.assertEqual(written - before, len(rows))
+        status = json.loads(self.r.service().cleanup_status())["audit_retention"]
+        self.assertEqual(
+            status["retained"],
+            {"audit_rows": len(rows), "charged_bytes": len(rows) * audit.ROW_BYTES},
+        )
+        self.assertEqual(status["allowance_bytes"], 2147483648)
+        self.assertEqual((status["due_rows"], status["overdue_rows"]), (0, 0))
+        # The content allocation does not count that retained audit: a
+        # reservation that fills the 512 MiB exactly is still admitted.
+        used = self.h.scalar(
+            "SELECT COALESCE(sum(CASE WHEN state='reserved' THEN reservation_bytes "
+            "ELSE allocation_bytes END),0) FROM memoriesql.result_preparation_operations "
+            "WHERE workspace_id=%s",
+            (self.fixture.workspace,),
+        )
+        padding = audit.WORKSPACE_BYTES - 8192 - used
+        while padding > 0:
+            amount = min(padding, 67108864)
+            self.db.execute(
+                "INSERT INTO memoriesql.result_preparation_operations(tenant_id,workspace_id,"
+                "principal_id,owner_user_id,run_ref,step_key,operation_ref,ownership_ref,"
+                "request_fingerprint,state,reservation_bytes,encoded_bytes,allocation_bytes) "
+                "VALUES(%s,%s,%s,NULL,%s,%s,%s,%s,%s,'sealed',%s,0,%s)",
+                (
+                    self.fixture.tenant,
+                    self.fixture.workspace,
+                    self.fixture.principal,
+                    uuid4(),
+                    uuid4(),
+                    uuid4(),
+                    uuid4(),
+                    "f" * 64,
+                    max(8192, amount),
+                    amount,
+                ),
+            )
+            padding -= amount
+        with self.fixture.connection() as connection:
+            PostgresResultPreparation(
+                connection,
+                credential_sha256=self.fixture.secret_hash,
+                workspace_id=self.fixture.workspace,
+            ).reserve(
+                run_ref=UUID(new["run_ref"]),
+                step_key=uuid4(),
+                request_fingerprint="e" * 64,
+                reservation_bytes=8192,
+            )
 
     def test_workspace_reservation_failure_publishes_no_partial_checkpoint(
         self,
