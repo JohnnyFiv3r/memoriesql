@@ -22,6 +22,7 @@ import hashlib
 import json
 import os
 import re
+import statistics
 import unittest
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -54,8 +55,12 @@ CITED = (
     "ORDER BY s.text"
 )
 # A bound, not a proof: equal work still varies with scheduling. Applied where
-# time no longer depends on hidden parts (the sealed-facts suite).
+# time no longer depends on hidden parts (the sealed-facts suite), to per-step
+# medians of rotated rounds.
 TIME_BOUND_MS = 250
+# The replies that carry charged time, in measure()'s order: six available
+# replies always do; the hydration refusal may.
+TIMED = ("population", "page", "page", "reuse", "inspect", "cited", "hydrate")
 
 
 def hidden(label: str, size: int) -> str:
@@ -101,6 +106,8 @@ class HiddenPackageLength(unittest.TestCase):
     SMALL, LARGE = 40, 24000
     # Many parts of one component; still a single hidden identity unit.
     PARTS = 64
+    # Timed rounds; one here, where only steps are compared.
+    ROUNDS = 1
 
     def setUp(self) -> None:
         self.r = fixtures.AgentSqlResults(methodName="runTest")
@@ -336,7 +343,9 @@ class HiddenPackageLength(unittest.TestCase):
                 low = middle
         return high, seen
 
-    def measure(self, world: World) -> tuple[list[Any], list[int]]:
+    def measure(
+        self, world: World, *, threshold: bool = True
+    ) -> tuple[list[Any], list[int]]:
         """Charges a non-raw agent sees, exact ones apart from database time."""
         exact: list[Any] = []
         times: list[int] = []
@@ -468,10 +477,11 @@ class HiddenPackageLength(unittest.TestCase):
         self.assertNotEqual(hydration["outcome"], "available", hydration)
         self.assertNotIn("hydration", hydration)
         record("hydrate", hydration)
-        least, steps = self.threshold(
-            request, world.agent, int(first["work"]["retained_bytes"])
-        )
-        exact.append(("threshold", least, steps))
+        if threshold:
+            least, steps = self.threshold(
+                request, world.agent, int(first["work"]["retained_bytes"])
+            )
+            exact.append(("threshold", least, steps))
         self.assertEqual(
             [item[0] for item in exact if isinstance(item, tuple)],
             [
@@ -482,8 +492,8 @@ class HiddenPackageLength(unittest.TestCase):
                 "inspect",
                 "cited",
                 "hydrate",
-                "threshold",
-            ],
+            ]
+            + (["threshold"] if threshold else []),
         )
         # Six available replies always carry work; a refusal may not.
         self.assertGreaterEqual(len(times), 6)
@@ -491,14 +501,52 @@ class HiddenPackageLength(unittest.TestCase):
         self.r.close(run, secret=world.agent)
         return exact, times
 
-    def compare_times(self, first: list[int], times: list[int]) -> None:
+    def report_times(self, rounds: list[dict[int, list[int]]]) -> list[list[int]]:
+        """Print every world's charged time per step and round, pass or fail.
+
+        Round r measures the worlds in the order r, r+1, r+2 (mod 3), so each
+        world takes every position once over three rounds. Returns each world's
+        per-step median over the rounds, once the steps are known to align.
+        """
+        worlds = range(len(self.worlds))
+        steps = {len(times[index]) for times in rounds for index in times}
+        trace = {
+            "case": type(self).__name__,
+            "steps": TIMED[: max(steps)],
+            "rounds": [
+                {
+                    "order": [(turn + p) % len(worlds) for p in worlds],
+                    "ms": [times.get(index) for index in worlds],
+                }
+                for turn, times in enumerate(rounds)
+            ],
+        }
+        print("fictional charged-time trace " + json.dumps(trace), flush=True)
+        for times in rounds:
+            self.assertEqual(sorted(times), list(worlds))
+        self.assertEqual(len(steps), 1, trace)
+        medians = [
+            [
+                int(statistics.median(times[index][step] for times in rounds))
+                for step in range(len(rounds[0][0]))
+            ]
+            for index in worlds
+        ]
+        print(
+            "fictional charged-time medians "
+            + json.dumps({"case": trace["case"], "medians": medians}),
+            flush=True,
+        )
+        return medians
+
+    def compare_times(self, rounds: list[dict[int, list[int]]]) -> None:
         """Only the steps are compared at this schema.
 
         With the closure alone, a query still visits every part row, so charged
         time tracks hidden part count: the documented residual of a state that
         never ships. The sealed-facts suite bounds time and guards its causes.
         """
-        self.assertEqual(len(times), len(first))
+        self.report_times(rounds)
 
     def guard_work(self) -> None:
         """Nothing at this schema; see compare_times."""
@@ -522,16 +570,27 @@ class HiddenPackageLength(unittest.TestCase):
             [self.part_count(world.identity) for world in self.worlds],
             [1, 1, self.PARTS],
         )
-        # An explicit loop: a StopIteration inside map() would end it silently.
-        measured = []
-        for world in self.worlds:
-            measured.append(self.measure(world))
-        (first, first_times), *others = measured
-        self.assertEqual(len(others), 2)
-        for exact, times in others:
-            self.assertEqual(exact, first)
-            self.compare_times(first_times, times)
+        # Timed rounds first, against the product as installed; the guard only
+        # after them. Worlds rotate, and the threshold is searched once.
+        rounds: list[dict[int, tuple[list[Any], list[int]]]] = []
+        for turn in range(self.ROUNDS):
+            measured: dict[int, tuple[list[Any], list[int]]] = {}
+            # An explicit loop: a StopIteration inside map() would end it silently.
+            for position in range(len(self.worlds)):
+                index = (turn + position) % len(self.worlds)
+                measured[index] = self.measure(self.worlds[index], threshold=turn == 0)
+            rounds.append(measured)
+        # Verdicts: the work guard, then exact charges in every round, then time.
         self.guard_work()
+        for turn, measured in enumerate(rounds):
+            self.assertEqual(sorted(measured), [0, 1, 2])
+            for index in (1, 2):
+                self.assertEqual(
+                    measured[index][0], measured[0][0], f"round {turn}, world {index}"
+                )
+        self.compare_times(
+            [{index: times for index, (_, times) in m.items()} for m in rounds]
+        )
 
     def test_identity_raw_content_is_never_read_for_package_text(self) -> None:
         self.upgrade()
