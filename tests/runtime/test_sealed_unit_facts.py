@@ -135,15 +135,14 @@ class SealedUnitFacts(hidden.HiddenPackageLength):
     def compare_times(self, rounds: list[dict[int, list[int]]]) -> None:
         """Each world's per-step median stays within the bound of world 0's."""
         self.assertEqual(len(rounds), self.ROUNDS)
-        medians = self.report_times(rounds)
+        medians = self.median_times(rounds)
         for index in (1, 2):
-            for step, one, other in zip(
-                hidden.TIMED, medians[0], medians[index], strict=False
-            ):
+            pairs = zip(medians[0], medians[index], strict=True)
+            for step, (one, other) in enumerate(pairs):
                 self.assertLessEqual(
                     abs(one - other),
                     hidden.TIME_BOUND_MS,
-                    f"world {index}, step {step}: median {other} ms, "
+                    f"world {index}, step {hidden.TIMED[step]}: median {other} ms, "
                     f"world 0 median {one} ms",
                 )
 

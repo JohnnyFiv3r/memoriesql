@@ -501,40 +501,46 @@ class HiddenPackageLength(unittest.TestCase):
         self.r.close(run, secret=world.agent)
         return exact, times
 
-    def report_times(self, rounds: list[dict[int, list[int]]]) -> list[list[int]]:
-        """Print every world's charged time per step and round, pass or fail.
+    def trace_times(self, rounds: list[dict[int, list[int]]]) -> None:
+        """Print every world's charged time per step and round, before any verdict.
 
         Round r measures the worlds in the order r, r+1, r+2 (mod 3), so each
-        world takes every position once over three rounds. Returns each world's
-        per-step median over the rounds, once the steps are known to align.
+        world takes every position once over three rounds.
         """
         worlds = range(len(self.worlds))
-        steps = {len(times[index]) for times in rounds for index in times}
+        steps = max(len(times) for measured in rounds for times in measured.values())
         trace = {
             "case": type(self).__name__,
-            "steps": TIMED[: max(steps)],
+            "steps": TIMED[:steps],
             "rounds": [
                 {
                     "order": [(turn + p) % len(worlds) for p in worlds],
-                    "ms": [times.get(index) for index in worlds],
+                    "ms": [measured.get(index) for index in worlds],
                 }
-                for turn, times in enumerate(rounds)
+                for turn, measured in enumerate(rounds)
             ],
         }
         print("fictional charged-time trace " + json.dumps(trace), flush=True)
-        for times in rounds:
-            self.assertEqual(sorted(times), list(worlds))
-        self.assertEqual(len(steps), 1, trace)
+
+    def median_times(self, rounds: list[dict[int, list[int]]]) -> list[list[int]]:
+        """Each world's per-step median over the rounds, once the steps align."""
+        worlds = range(len(self.worlds))
+        for measured in rounds:
+            self.assertEqual(sorted(measured), list(worlds))
+        self.assertEqual(
+            {len(times) for measured in rounds for times in measured.values()},
+            {len(rounds[0][0])},
+        )
         medians = [
             [
-                int(statistics.median(times[index][step] for times in rounds))
+                int(statistics.median(measured[index][step] for measured in rounds))
                 for step in range(len(rounds[0][0]))
             ]
             for index in worlds
         ]
         print(
             "fictional charged-time medians "
-            + json.dumps({"case": trace["case"], "medians": medians}),
+            + json.dumps({"case": type(self).__name__, "medians": medians}),
             flush=True,
         )
         return medians
@@ -546,7 +552,7 @@ class HiddenPackageLength(unittest.TestCase):
         time tracks hidden part count: the documented residual of a state that
         never ships. The sealed-facts suite bounds time and guards its causes.
         """
-        self.report_times(rounds)
+        self.median_times(rounds)
 
     def guard_work(self) -> None:
         """Nothing at this schema; see compare_times."""
@@ -580,6 +586,9 @@ class HiddenPackageLength(unittest.TestCase):
                 index = (turn + position) % len(self.worlds)
                 measured[index] = self.measure(self.worlds[index], threshold=turn == 0)
             rounds.append(measured)
+        timed = [{index: times for index, (_, times) in m.items()} for m in rounds]
+        # Every sample is printed before any verdict, so a failure keeps them.
+        self.trace_times(timed)
         # Verdicts: the work guard, then exact charges in every round, then time.
         self.guard_work()
         for turn, measured in enumerate(rounds):
@@ -588,9 +597,7 @@ class HiddenPackageLength(unittest.TestCase):
                 self.assertEqual(
                     measured[index][0], measured[0][0], f"round {turn}, world {index}"
                 )
-        self.compare_times(
-            [{index: times for index, (_, times) in m.items()} for m in rounds]
-        )
+        self.compare_times(timed)
 
     def test_identity_raw_content_is_never_read_for_package_text(self) -> None:
         self.upgrade()
