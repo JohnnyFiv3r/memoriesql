@@ -2,8 +2,9 @@
 
 The hidden-length worlds rerun with the facts installed: the pre-closure
 control, the three-world invariance, the TOAST check, the digests and the
-transition. Here the invariance also bounds charged time, and is guarded
-deterministically: a non-raw agent's query, pages and reuse make the same
+transition. Here the invariance also bounds charged time, as per-step medians
+of three rotated rounds measured before the guard, and is guarded
+deterministically first: a non-raw agent's query, pages and reuse make the same
 function calls, hashing inputs of the same sizes, whatever is hidden; a control
 at the closure alone shows the guard sees hidden parts there. On top,
 query paths must read no block of any part relation for a
@@ -77,6 +78,9 @@ def facts() -> int:
     os.environ.get("N1_TEST_DATABASE_URL"), "assigned disposable PostgreSQL required"
 )
 class SealedUnitFacts(hidden.HiddenPackageLength):
+    # Exactly three timed rounds; the statistic is their median.
+    ROUNDS = 3
+
     def upgrade(self) -> None:
         migrate(
             self.db,
@@ -128,10 +132,19 @@ class SealedUnitFacts(hidden.HiddenPackageLength):
             previous = current
             time.sleep(0.5)
 
-    def compare_times(self, first: list[int], times: list[int]) -> None:
-        self.assertEqual(len(times), len(first))
-        for one, other in zip(first, times, strict=True):
-            self.assertLessEqual(abs(one - other), hidden.TIME_BOUND_MS)
+    def compare_times(self, rounds: list[dict[int, list[int]]]) -> None:
+        """Each world's per-step median stays within the bound of world 0's."""
+        self.assertEqual(len(rounds), self.ROUNDS)
+        medians = self.median_times(rounds)
+        for index in (1, 2):
+            pairs = zip(medians[0], medians[index], strict=True)
+            for step, (one, other) in enumerate(pairs):
+                self.assertLessEqual(
+                    abs(one - other),
+                    hidden.TIME_BOUND_MS,
+                    f"world {index}, step {hidden.TIMED[step]}: median {other} ms, "
+                    f"world 0 median {one} ms",
+                )
 
     def install_guard(self) -> None:
         """Count every function call, and record every hash input's size.
