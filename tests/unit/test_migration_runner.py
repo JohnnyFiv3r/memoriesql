@@ -13,7 +13,7 @@ from memoriesql.infrastructure.postgres import migration_runner as runner
 
 
 class MigrationStreamTests(unittest.TestCase):
-    def test_packaged_fixture_validates_53_resource_inventory(self) -> None:
+    def test_packaged_fixture_validates_54_resource_inventory(self) -> None:
         # Source checkouts intentionally lack build-generated package resources.
         # Exercise the packaged loader with a fictional distribution fixture;
         # real resource discovery remains mandatory in installed acceptance.
@@ -22,7 +22,7 @@ class MigrationStreamTests(unittest.TestCase):
             stream_root = root / "_migrations"
             stream_root.mkdir()
             rows = []
-            for version in range(1, 54):
+            for version in range(1, 55):
                 name = f"{version:04d}_fictional.sql"
                 data = f"SELECT {version};\n".encode()
                 (stream_root / name).write_bytes(data)
@@ -40,7 +40,7 @@ class MigrationStreamTests(unittest.TestCase):
             )
             with patch.object(runner, "files", return_value=root):
                 stream = runner.discover_migrations()
-            self.assertEqual([m.version for m in stream], list(range(1, 54)))
+            self.assertEqual([m.version for m in stream], list(range(1, 55)))
             for migration in stream:
                 self.assertEqual(
                     hashlib.sha256(migration.path.read_bytes()).hexdigest(),
