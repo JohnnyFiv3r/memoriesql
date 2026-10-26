@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 import inspect
+import io
 import json
 import os
 import shutil
@@ -10,6 +12,7 @@ import tempfile
 import textwrap
 import time
 import unittest
+import zipfile
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
@@ -17,16 +20,31 @@ from unittest.mock import patch
 
 from scripts.inspect_python_distribution import AUTHORED_SDIST_FILES
 from scripts.run_hosted_qualification import (
+    ACCEPTANCE_PARTS,
     ACCEPTANCE_SHARDS,
+    HOST_COMMANDS,
+    HOST_PROOF_PART,
+    PART_RECORD,
+    PLAN_INPUTS,
+    POSTGRES,
+    SETUP_COMMANDS,
+    SHARDS_PER_PART,
     Commands,
     ResourceSampler,
+    acceptance_plan,
+    aggregate,
     check_shards,
+    extract_artifact,
+    file_hash,
+    part_artifact_name,
+    part_shards,
     qualify,
 )
 from scripts.select_hosted_qualification import READY_LABEL, REPOSITORY, select
 
 SHA = "a" * 40
 REF = "refs/heads/codex/candidate"
+REPO = Path(__file__).resolve().parents[2]
 
 
 def event() -> dict[str, Any]:
@@ -145,14 +163,24 @@ class QualificationSelectionTests(unittest.TestCase):
 
 class QualificationProcessTests(unittest.TestCase):
     def test_workflow_propagates_driver_failure_through_retained_log(self) -> None:
-        workflow = (
-            Path(__file__).resolve().parents[2] / ".github/workflows/python-package.yml"
-        ).read_text()
-        step = workflow.split(
-            "      - name: Qualify reviewed installed bytes, all shards and restart processes\n"
-        )[1].split(
-            "      - name: Retain and stop the exact owned PostgreSQL service\n"
-        )[0]
+        workflow = (REPO / ".github/workflows/python-package.yml").read_text()
+        for start, end, log in (
+            (
+                "      - name: Qualify reviewed installed bytes for one acceptance part\n",
+                "      - name: Retain and stop the exact owned PostgreSQL service\n",
+                "driver.log",
+            ),
+            (
+                "      - name: Aggregate every part into this interpreter's proof\n",
+                "      - name: Retain the interpreter's aggregated proof\n",
+                "aggregate.log",
+            ),
+        ):
+            with self.subTest(log=log):
+                step = workflow.split(start)[1].split(end)[0]
+                self.check_step_failure(step, log)
+
+    def check_step_failure(self, step: str, log: str) -> None:
         body = textwrap.dedent(step.split("        run: |\n")[1])
         # GitHub's documented unspecified shell is bash -e; explicit bash also
         # sets pipefail. Exercise the actual run block with a fictional driver.
@@ -174,7 +202,11 @@ class QualificationProcessTests(unittest.TestCase):
                     + os.pathsep
                     + os.environ["PATH"],
                     "SOURCE_SHA": SHA,
+                    "PART": "1",
                     "PROOF_ROOT": str(root / "proof"),
+                    "PARTS_RESULT": "success",
+                    "PYTHON_MINOR": "3.13",
+                    "AGGREGATION_ROOT": str(root / "aggregation"),
                 },
                 capture_output=True,
                 text=True,
@@ -182,7 +214,7 @@ class QualificationProcessTests(unittest.TestCase):
             self.assertEqual(result.returncode, 7, result.stdout + result.stderr)
             self.assertIn(
                 "deliberate fictional driver failure",
-                (root / "build/qualification/driver.log").read_text(),
+                (root / "build/qualification" / log).read_text(),
             )
 
     def test_failure_does_not_lose_peer_exit_or_logs(self) -> None:
@@ -259,9 +291,13 @@ class QualificationProcessTests(unittest.TestCase):
                             "synthetic cleanup failure"
                         )
                     with self.assertRaises(RuntimeError):
-                        qualify(root, root, root, root, SHA)
-                metadata = json.loads((root / "qualification.json").read_text())
-                self.assertFalse(metadata["proof_complete"])
+                        qualify(root, root, root, root, SHA, 2)
+                metadata = json.loads((root / PART_RECORD).read_text())
+                self.assertFalse(metadata["part_complete"])
+                # A part never claims a proof; only the aggregation can.
+                self.assertNotIn("proof_complete", metadata)
+                self.assertFalse((root / "qualification.json").exists())
+                self.assertEqual((metadata["part"], metadata["shards"]), (2, [3, 4]))
                 self.assertIn("synthetic proof failure", metadata["failure"])
                 self.assertEqual("cleanup_failure" in metadata, close_fails)
 
@@ -353,20 +389,41 @@ class QualificationCoverageTests(unittest.TestCase):
                 self.check(reports)
 
 
-class AcceptanceShardCountTests(unittest.TestCase):
-    def test_one_shard_per_runner_cpu_and_every_report_required(self) -> None:
-        self.assertEqual(ACCEPTANCE_SHARDS, 4)
+class AcceptancePartTests(unittest.TestCase):
+    def test_three_parts_of_two_shards_partition_one_six_way_plan(self) -> None:
+        self.assertEqual((ACCEPTANCE_PARTS, SHARDS_PER_PART), (3, 2))
+        self.assertEqual(ACCEPTANCE_SHARDS, 6)
+        self.assertEqual(HOST_PROOF_PART, 1)
         self.assertEqual(
             inspect.signature(check_shards).parameters["count"].default,
             ACCEPTANCE_SHARDS,
         )
-        source = (
-            Path(__file__).resolve().parents[2] / "scripts/run_hosted_qualification.py"
-        ).read_text()
-        body = source[source.index("def qualify(") :]
-        self.assertIn("for i in range(1, ACCEPTANCE_SHARDS + 1)", body)
+        shards = [part_shards(part) for part in range(1, ACCEPTANCE_PARTS + 1)]
+        self.assertEqual(shards, [[1, 2], [3, 4], [5, 6]])
+        for part in (0, ACCEPTANCE_PARTS + 1):
+            with self.subTest(part=part), self.assertRaises(ValueError):
+                part_shards(part)
+        source = (REPO / "scripts/run_hosted_qualification.py").read_text()
+        body = source[
+            source.index("def qualify(") : source.index("def part_artifact_name(")
+        ]
+        self.assertIn("for i in shards\n", body)
         self.assertIn('f"{i}/{ACCEPTANCE_SHARDS}"', body)
-        self.assertNotIn('f"{i}/3"', body)
+        # Restarts and the host proof only follow the host part's acceptance.
+        self.assertLess(
+            body.index("if part != HOST_PROOF_PART:"),
+            body.index('sampler.mark("restarts")'),
+        )
+
+    def test_the_plan_is_the_acceptance_runners_own_placement(self) -> None:
+        weights = REPO / PLAN_INPUTS[1]
+        modules = {name: 1 for name in json.loads(weights.read_text())["seconds"]}
+        plan = acceptance_plan(REPO / PLAN_INPUTS[0], weights)(modules)
+        self.assertEqual(len(plan), ACCEPTANCE_SHARDS)
+        placed = [module for shard in plan for module in shard]
+        self.assertEqual(sorted(placed), sorted(modules))
+
+    def test_every_report_of_the_plan_is_required(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             for index in range(1, ACCEPTANCE_SHARDS):
@@ -374,6 +431,38 @@ class AcceptanceShardCountTests(unittest.TestCase):
             # One shard report short: the suite was not proved, whatever ran.
             with self.assertRaises((OSError, ValueError, KeyError)):
                 check_shards(root)
+
+    def test_a_part_checks_only_its_shards_and_their_plan(self) -> None:
+        discovered = {"one": 1, "two": 1, "three": 1, "four": 1}
+        tests = {m: {f"{m}.Case.test": 1} for m in discovered}
+        plan = [["one"], ["two"], ["three", "four"]]
+
+        def report(modules: list[str]) -> dict[str, Any]:
+            return {
+                "discovered_modules": discovered,
+                "discovered_tests": tests,
+                "selected_modules": modules,
+                "executed_tests": {m: tests[m] for m in modules},
+                "tests_run": len(modules),
+                "skipped": 0,
+                "errors": 0,
+                "failures": 0,
+            }
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "acceptance-2.json").write_text(json.dumps(report(["two"])))
+            (root / "acceptance-3.json").write_text(
+                json.dumps(report(["three", "four"]))
+            )
+            check_shards(root, 3, [2, 3], lambda _: plan)
+            for invalid in ([], [2, 2], [0], [4]):
+                with self.subTest(indices=invalid), self.assertRaises(ValueError):
+                    check_shards(root, 3, invalid, lambda _: plan)
+            # A shard that ran a module planned elsewhere fails, even when complete.
+            (root / "acceptance-2.json").write_text(json.dumps(report(["one"])))
+            with self.assertRaises(ValueError):
+                check_shards(root, 3, [2, 3], lambda _: plan)
 
 
 class ResourceSamplerTests(unittest.TestCase):
@@ -467,3 +556,341 @@ class ResourceSamplerTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AggregationTests(unittest.TestCase):
+    MINOR = "3.13"
+    RUN = "77"
+    ATTEMPT = "1"
+
+    def setUp(self) -> None:
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.base = Path(temporary.name)
+        self.checkout = self.base / "checkout"
+        (self.checkout / "scripts").mkdir(parents=True)
+        (self.checkout / "tests/fixtures").mkdir(parents=True)
+        shutil.copyfile(REPO / PLAN_INPUTS[0], self.checkout / PLAN_INPUTS[0])
+        weights = {f"test_m{i}": float(10 * (i + 1)) for i in range(9)}
+        (self.checkout / PLAN_INPUTS[1]).write_text(json.dumps({"seconds": weights}))
+        self.package = self.base / "package"
+        self.package.mkdir()
+        (self.package / "memoriesql-0.0.12-py3-none-any.whl").write_bytes(b"wheel")
+        (self.package / "memoriesql-0.0.12.tar.gz").write_bytes(b"sdist")
+        self.discovered = {module: 2 for module in weights}
+        self.tests = {
+            m: {f"{m}.Case.test_a": 1, f"{m}.Case.test_b": 1} for m in weights
+        }
+        self.plan = acceptance_plan(
+            self.checkout / PLAN_INPUTS[0], self.checkout / PLAN_INPUTS[1]
+        )(self.discovered)
+        self.files = {part: self.part_files(part) for part in range(1, 4)}
+        self.listing_changes: list[Any] = []
+        self.zip_changes: dict[int, bytes] = {}
+
+    def part_files(self, part: int) -> dict[str, bytes]:
+        evidence: dict[str, bytes] = {}
+        names = [
+            *SETUP_COMMANDS,
+            *(f"acceptance-{i}" for i in part_shards(part)),
+            *(HOST_COMMANDS if part == HOST_PROOF_PART else ()),
+        ]
+        rows = []
+        for name in names:
+            log = f"{name} fictional ok\n".encode()
+            evidence[f"{name}.log"] = log
+            rows.append(
+                {
+                    "name": name,
+                    "log": f"{name}.log",
+                    "complete": True,
+                    "exit_code": 0,
+                    "log_sha256": hashlib.sha256(log).hexdigest(),
+                }
+            )
+        evidence["commands.json"] = json.dumps(rows).encode()
+        for index in part_shards(part):
+            modules = self.plan[index - 1]
+            evidence[f"acceptance-{index}.json"] = json.dumps(
+                {
+                    "discovered_modules": self.discovered,
+                    "discovered_tests": self.tests,
+                    "selected_modules": modules,
+                    "executed_tests": {m: self.tests[m] for m in modules},
+                    "tests_run": 2 * len(modules),
+                    "skipped": 0,
+                    "errors": 0,
+                    "failures": 0,
+                }
+            ).encode()
+        record = {
+            "source_sha": SHA,
+            "run_id": self.RUN,
+            "run_attempt": self.ATTEMPT,
+            "postgres_index": POSTGRES,
+            "part": part,
+            "parts": ACCEPTANCE_PARTS,
+            "shards": part_shards(part),
+            "global_shards": ACCEPTANCE_SHARDS,
+            "host_proof_part": HOST_PROOF_PART,
+            "part_complete": True,
+            "sdist_wheel_equal": True,
+            "client_unwritable_inputs": True,
+            "artifacts": {
+                p.name: {"sha256": file_hash(p), "bytes": p.stat().st_size}
+                for p in sorted(self.package.iterdir())
+            },
+            "interpreter": {
+                "build": "setup-python",
+                "version": "3.13.16",
+                "architecture": "x64",
+                "source_python_sha256": "1" * 64,
+                "source_tree_sha256": "2" * 64,
+                "normalized_copy_tree_sha256": "2" * 64,
+                # The relocated copy differs by its private path in every part.
+                "python_sha256": str(part) * 64,
+            },
+            "installed_environment": {"python": "3.13.16", "postgres": "18.4"},
+            "copied_inputs": {
+                path: file_hash(self.checkout / path) for path in PLAN_INPUTS
+            },
+            "runner_resources": {"phases": {"acceptance": {"busy_mean": 0.6}}},
+        }
+        if part == HOST_PROOF_PART:
+            record["host_binding_sha256"] = "3" * 64
+        evidence[PART_RECORD] = json.dumps(record).encode()
+        evidence["dependency-hashes.json"] = b'{"psycopg.whl": "4"}'
+        evidence["postgres-image-id.txt"] = b"sha256:5\n"
+        evidence["postgres-cleanup-exit.txt"] = b"0\n"
+        files = {f"qualification/{name}": data for name, data in evidence.items()}
+        files["reviewed-package/python-package-artifacts.json"] = b"{}"
+        return files
+
+    def edit(self, part: int, name: str, change: Any) -> None:
+        key = f"qualification/{name}"
+        value = json.loads(self.files[part][key])
+        change(value)
+        self.files[part][key] = json.dumps(value).encode()
+
+    @staticmethod
+    def archive(files: dict[str, bytes]) -> bytes:
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w") as archive:
+            for name, data in sorted(files.items()):
+                archive.writestr(name, data)
+        return buffer.getvalue()
+
+    def fetch(self) -> Any:
+        zips = {100 + part: self.archive(files) for part, files in self.files.items()}
+        artifacts = [
+            {
+                "id": artifact_id,
+                "name": part_artifact_name(
+                    self.MINOR, artifact_id - 100, SHA, self.RUN, self.ATTEMPT
+                ),
+                "expired": False,
+                "digest": "sha256:" + hashlib.sha256(data).hexdigest(),
+                "workflow_run": {"id": int(self.RUN), "head_sha": SHA},
+            }
+            for artifact_id, data in zips.items()
+        ]
+        artifacts.append(
+            {"id": 1, "name": f"memoriesql-python-{SHA}", "expired": False}
+        )
+        for change in self.listing_changes:
+            change(artifacts)
+        zips.update(self.zip_changes)
+        listing = json.dumps({"total_count": len(artifacts), "artifacts": artifacts})
+
+        def fetch(arguments: list[str]) -> bytes:
+            if arguments[-1] == "per_page=100":
+                self.assertEqual(
+                    arguments[3],
+                    f"repos/JohnnyFiv3r/memoriesql/actions/runs/{self.RUN}/artifacts",
+                )
+                return listing.encode()
+            return zips[int(arguments[1].split("/")[-2])]
+
+        return fetch
+
+    def run_aggregate(
+        self, parts_result: str = "success", head: str = SHA
+    ) -> dict[str, Any]:
+        evidence = self.base / "evidence"
+        root = self.base / "root"
+        for directory in (evidence, root):
+            shutil.rmtree(directory, ignore_errors=True)
+        evidence.mkdir()
+        root.mkdir()
+        with patch(
+            "scripts.run_hosted_qualification.checkout_identity", return_value=head
+        ):
+            aggregate(
+                self.checkout,
+                self.package,
+                evidence,
+                root,
+                SHA,
+                self.MINOR,
+                parts_result,
+                self.RUN,
+                self.ATTEMPT,
+                self.fetch(),
+            )
+        return dict(json.loads((evidence / "qualification.json").read_text()))
+
+    def assert_refused(self, **kwargs: Any) -> None:
+        with self.assertRaises((ValueError, KeyError, OSError)):
+            self.run_aggregate(**kwargs)
+        metadata = json.loads((self.base / "evidence/qualification.json").read_text())
+        self.assertFalse(metadata["proof_complete"])
+        self.assertIn("failure", metadata)
+
+    def test_every_part_binds_into_one_complete_proof(self) -> None:
+        metadata = self.run_aggregate()
+        self.assertTrue(metadata["proof_complete"])
+        self.assertEqual(
+            metadata["census"], {"occurrences": 18, "ids": 18, "modules": 9}
+        )
+        manifest = json.loads(
+            (self.base / "evidence/aggregation-manifest.json").read_text()
+        )
+        self.assertEqual(sorted(manifest["parts"]), ["1", "2", "3"])
+        for part, row in manifest["parts"].items():
+            self.assertEqual(row["id"], 100 + int(part))
+            self.assertTrue(row["digest"].startswith("sha256:"))
+            self.assertEqual(len(row["record_sha256"]), 64)
+
+    def test_a_failed_part_job_or_another_checkout_is_never_a_proof(self) -> None:
+        for result in ("failure", "cancelled", "skipped", ""):
+            with self.subTest(result=result):
+                self.assert_refused(parts_result=result)
+        self.assert_refused(head="b" * 40)
+
+    def test_missing_duplicate_expired_and_altered_artifacts_are_refused(self) -> None:
+        def drop(artifacts: list[dict[str, Any]]) -> None:
+            artifacts[:] = [a for a in artifacts if a["id"] != 103]
+
+        def duplicate(artifacts: list[dict[str, Any]]) -> None:
+            artifacts.append(dict(artifacts[0], id=999))
+
+        def expire(artifacts: list[dict[str, Any]]) -> None:
+            artifacts[1]["expired"] = True
+
+        def other_run(artifacts: list[dict[str, Any]]) -> None:
+            artifacts[2]["workflow_run"] = {"id": 78, "head_sha": SHA}
+
+        def no_digest(artifacts: list[dict[str, Any]]) -> None:
+            artifacts[0]["digest"] = None
+
+        for change in (drop, duplicate, expire, other_run, no_digest):
+            with self.subTest(change=change.__name__):
+                self.listing_changes = [change]
+                self.assert_refused()
+        self.listing_changes = []
+        self.zip_changes = {102: self.archive({"qualification/x": b"other"})}
+        self.assert_refused()
+
+    def test_parts_must_share_one_attempt_source_package_and_environment(self) -> None:
+        cases = {
+            "attempt": lambda r: r.update(run_attempt="2"),
+            "source": lambda r: r.update(source_sha="b" * 40),
+            "incomplete": lambda r: r.update(part_complete=False),
+            "package": lambda r: r["artifacts"].popitem(),
+            "interpreter": lambda r: r["interpreter"].update(
+                source_tree_sha256="9" * 64
+            ),
+            "minor": lambda r: r["interpreter"].update(version="3.14.8"),
+            "environment": lambda r: r["installed_environment"].update(postgres="18.5"),
+            "inputs": lambda r: r["copied_inputs"].update({PLAN_INPUTS[0]: "0" * 64}),
+            "host": lambda r: r.update(host_proof_part=2),
+        }
+        original = deepcopy(self.files)
+        for name, change in cases.items():
+            with self.subTest(case=name):
+                self.files = deepcopy(original)
+                self.edit(2 if name != "minor" else 1, PART_RECORD, change)
+                if name == "minor":
+                    for part in (2, 3):
+                        self.edit(part, PART_RECORD, change)
+                self.assert_refused()
+        # Every part agrees, but not with the exact source being aggregated.
+        self.files = deepcopy(original)
+        (self.checkout / PLAN_INPUTS[1]).write_text('{"seconds": {}}')
+        self.assert_refused()
+        (self.checkout / PLAN_INPUTS[1]).write_text(
+            json.dumps(
+                {"seconds": {m: 10.0 * (i + 1) for i, m in enumerate(self.tests)}}
+            )
+        )
+        for name, data in (
+            ("dependency-hashes.json", b'{"psycopg.whl": "other"}'),
+            ("postgres-image-id.txt", b"sha256:other\n"),
+            ("postgres-cleanup-exit.txt", b"1\n"),
+        ):
+            with self.subTest(file=name):
+                self.files = deepcopy(original)
+                self.files[3][f"qualification/{name}"] = data
+                self.assert_refused()
+
+    def test_the_union_must_be_the_recomputed_plan_without_failures(self) -> None:
+        original = deepcopy(self.files)
+        moved = self.plan[0][0]
+
+        def take(report: dict[str, Any]) -> None:
+            report["selected_modules"].append(moved)
+            report["executed_tests"][moved] = self.tests[moved]
+            report["tests_run"] += 2
+
+        def give(report: dict[str, Any]) -> None:
+            report["selected_modules"].remove(moved)
+            del report["executed_tests"][moved]
+            report["tests_run"] -= 2
+
+        self.edit(1, "acceptance-2.json", take)
+        self.edit(1, "acceptance-1.json", give)
+        self.assert_refused()
+        for field in ("failures", "errors", "skipped"):
+            with self.subTest(field=field):
+                self.files = deepcopy(original)
+                self.edit(2, "acceptance-3.json", lambda r: r.update({field: 1}))
+                self.assert_refused()
+        self.files = deepcopy(original)
+        del self.files[3]["qualification/acceptance-6.json"]
+        self.assert_refused()
+
+    def test_restarts_and_host_proof_run_exactly_once_in_the_host_part(self) -> None:
+        original = deepcopy(self.files)
+        host_row = {
+            "name": "query-host",
+            "log": "query-host.log",
+            "complete": True,
+            "exit_code": 0,
+            "log_sha256": hashlib.sha256(b"query-host fictional ok\n").hexdigest(),
+        }
+        self.edit(2, "commands.json", lambda rows: rows.append(host_row))
+        self.files[2]["qualification/query-host.log"] = b"query-host fictional ok\n"
+        self.assert_refused()
+        self.files = deepcopy(original)
+        self.edit(1, "commands.json", lambda rows: rows.pop())
+        self.assert_refused()
+        self.files = deepcopy(original)
+        self.edit(1, "commands.json", lambda rows: rows[-1].update(exit_code=1))
+        self.assert_refused()
+        self.files = deepcopy(original)
+        self.files[1]["qualification/query-host.log"] = b"altered\n"
+        self.assert_refused()
+
+    def test_artifact_members_cannot_escape_or_link(self) -> None:
+        for member in ("../escape", "/absolute", "qualification/../../escape"):
+            with self.subTest(member=member):
+                data = self.archive({member: b"x"})
+                with self.assertRaises(ValueError):
+                    extract_artifact(data, self.base / f"x-{abs(hash(member))}")
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w") as archive:
+            link = zipfile.ZipInfo("qualification/link")
+            link.external_attr = 0o120777 << 16
+            archive.writestr(link, "/etc/passwd")
+        with self.assertRaises(ValueError):
+            extract_artifact(buffer.getvalue(), self.base / "linked")

@@ -158,9 +158,15 @@ class PublicBootstrapTests(unittest.TestCase):
         compatibility = workflow.split("  compatibility:")[1]
         self.assertIn('python-version: ["3.13", "3.14"]', compatibility)
         self.assertIn("run_hosted_qualification.py", compatibility)
-        self.assertIn("Retain complete proof exits and failures", compatibility)
+        self.assertIn("Retain complete part exits and failures", compatibility)
         self.assertIn("if: always()", compatibility)
         self.assertIn("runs-on: ubuntu-24.04", compatibility)
+        aggregation = workflow.split("  qualification:")[1]
+        self.assertIn("run_hosted_qualification.py aggregate", aggregation)
+        self.assertIn("Retain the interpreter's aggregated proof", aggregation)
+        self.assertIn(
+            "if: always() && needs.package.outputs.qualify == 'true'", aggregation
+        )
 
     def test_standing_matrix_is_selected_and_cheap_checks_cancel_only_superseded(
         self,
