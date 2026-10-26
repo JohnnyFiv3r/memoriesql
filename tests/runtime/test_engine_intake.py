@@ -694,6 +694,32 @@ class EngineRecordIntake(unittest.TestCase):
         self.assertEqual(self.deliver(late), [EngineRecordAccepted(outcome="accepted")])
         self.assertEqual(self.held(), [early, late])
 
+    def test_a_batch_never_holds_back_a_scope_it_may_not_write(self) -> None:
+        (here,) = event_records(
+            "acme", "orchard/15", ["Mine."], [(assigned("observation"), rule())]
+        )
+        (named,) = event_records(
+            "beta", "orchard/16", ["Not mine."], [(assigned("observation"), rule())]
+        )
+        (theirs,) = event_records(
+            "beta", "orchard/17", ["Theirs."], [(assigned("observation"), rule())]
+        )
+        beta = self.enroll("beta")
+        other_engine = uuid.uuid4()
+        other_secret = sha("fictional beta engine credential")
+        self.pair(other_engine, other_secret, [beta.access_scope_id])
+        self.grant(beta.source_object_id, other_engine)
+        # The open batch names beta, which its engine may not write.
+        with self.held_open(here, named):
+            with psycopg.connect(self.url, autocommit=True) as other:
+                accepted = self.intake(other_secret, other).accept(
+                    AcceptEngineRecords(records=(theirs,))
+                )
+                self.assertEqual(
+                    list(accepted.results), [EngineRecordAccepted(outcome="accepted")]
+                )
+        self.assertEqual(self.held(), [here])
+
 
 if __name__ == "__main__":
     unittest.main()

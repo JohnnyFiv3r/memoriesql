@@ -475,6 +475,20 @@ AS $$
        AND source.external_object_id = engine_scope
 $$;
 
+-- One engine scope's writer lock, held to the end of the transaction.
+CREATE FUNCTION memoriesql.engine_lock_scope_v1(
+    authority memoriesql.authorization_contexts,
+    source_object_id uuid
+)
+RETURNS void
+LANGUAGE sql VOLATILE SECURITY DEFINER
+SET search_path = pg_catalog, memoriesql
+AS $$
+    SELECT pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
+        authority.tenant_id::text || ':engine_scope:' || source_object_id::text, 0
+    ));
+$$;
+
 CREATE FUNCTION memoriesql.engine_accept_chunk_v1(
     authority memoriesql.authorization_contexts,
     source memoriesql.source_objects,
@@ -843,6 +857,10 @@ BEGIN
         ));
     END IF;
 
+    -- Already held when the batch locked its scopes; taken here as well for a
+    -- scope that became deliverable after that, so no record is written
+    -- without its scope's lock.
+    PERFORM memoriesql.engine_lock_scope_v1(authority, source.source_object_id);
     PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
         authority.tenant_id::text || ':engine_chunk:' || chunk_ref::text, 0
     ));
@@ -891,7 +909,7 @@ SET lock_timeout = '500ms'
 AS $$
 DECLARE
     authority memoriesql.authorization_contexts%ROWTYPE;
-    engine_scope text;
+    writable uuid;
     item jsonb;
     outcome jsonb;
     deferred jsonb;
@@ -931,17 +949,31 @@ BEGIN
     END IF;
     -- Writers to one engine scope take turns, so a scope's records commit in
     -- record_seq order and a reader's cursor never passes a record that
-    -- commits later. Every scope is locked, in sorted order, before any
-    -- record is read, so two batches never wait on each other in a cycle.
-    FOR engine_scope IN
-        SELECT DISTINCT record ->> 'scope'
-          FROM jsonb_array_elements(request -> 'records') AS record
-         WHERE jsonb_typeof(record -> 'scope') = 'string'
+    -- commits later. Only scopes this caller may deliver to are locked, so a
+    -- batch never holds back a scope it cannot write. They are locked in
+    -- source order before any record is read, so two batches never wait on
+    -- each other in a cycle.
+    FOR writable IN
+        SELECT DISTINCT resolved.source_object_id
+          FROM (
+              SELECT DISTINCT record ->> 'scope' AS engine_scope
+                FROM jsonb_array_elements(request -> 'records') AS record
+               WHERE jsonb_typeof(record -> 'scope') = 'string'
+          ) AS named
+          CROSS JOIN LATERAL memoriesql.engine_scope_source_v1(
+              authority, named.engine_scope
+          ) AS resolved
+         WHERE resolved.source_object_id IS NOT NULL
+           AND memoriesql.current_context_source_authorized(
+               resolved.access_scope_id, resolved.source_object_id,
+               'engine.records.deliver', 'write'
+           )
+           AND memoriesql.current_context_scope_time_authorized(
+               resolved.access_scope_id, 'write', pg_catalog.clock_timestamp()
+           )
          ORDER BY 1
     LOOP
-        PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
-            authority.tenant_id::text || ':engine_scope:' || engine_scope, 0
-        ));
+        PERFORM memoriesql.engine_lock_scope_v1(authority, writable);
     END LOOP;
     FOR item IN SELECT value FROM jsonb_array_elements(request -> 'records') LOOP
         IF deferred IS NOT NULL THEN
@@ -1061,6 +1093,7 @@ REVOKE ALL ON FUNCTION memoriesql.engine_rejected(text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION memoriesql.engine_retryable(text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION memoriesql.engine_decision_fields_v1(jsonb, jsonb, jsonb) FROM PUBLIC;
 REVOKE ALL ON FUNCTION memoriesql.engine_scope_source_v1(memoriesql.authorization_contexts, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION memoriesql.engine_lock_scope_v1(memoriesql.authorization_contexts, uuid) FROM PUBLIC;
 REVOKE ALL ON FUNCTION memoriesql.engine_accept_chunk_v1(
     memoriesql.authorization_contexts, memoriesql.source_objects, jsonb, text
 ) FROM PUBLIC;
