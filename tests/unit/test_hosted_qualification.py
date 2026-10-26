@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import json
 import os
 import shutil
@@ -15,7 +16,13 @@ from typing import Any
 from unittest.mock import patch
 
 from scripts.inspect_python_distribution import AUTHORED_SDIST_FILES
-from scripts.run_hosted_qualification import Commands, check_shards, qualify
+from scripts.run_hosted_qualification import (
+    ACCEPTANCE_SHARDS,
+    Commands,
+    ResourceSampler,
+    check_shards,
+    qualify,
+)
 from scripts.select_hosted_qualification import READY_LABEL, REPOSITORY, select
 
 SHA = "a" * 40
@@ -311,7 +318,7 @@ class QualificationCoverageTests(unittest.TestCase):
             root = Path(directory)
             for index, report in enumerate(reports, 1):
                 (root / f"acceptance-{index}.json").write_text(json.dumps(report))
-            check_shards(root)
+            check_shards(root, len(reports))
 
     def test_all_modules_exactly_once(self) -> None:
         self.check(self.reports())
@@ -344,6 +351,118 @@ class QualificationCoverageTests(unittest.TestCase):
                 reports[1][mode] = 1
             with self.subTest(mode=mode), self.assertRaises(ValueError):
                 self.check(reports)
+
+
+class AcceptanceShardCountTests(unittest.TestCase):
+    def test_one_shard_per_runner_cpu_and_every_report_required(self) -> None:
+        self.assertEqual(ACCEPTANCE_SHARDS, 4)
+        self.assertEqual(
+            inspect.signature(check_shards).parameters["count"].default,
+            ACCEPTANCE_SHARDS,
+        )
+        source = (
+            Path(__file__).resolve().parents[2] / "scripts/run_hosted_qualification.py"
+        ).read_text()
+        body = source[source.index("def qualify(") :]
+        self.assertIn("for i in range(1, ACCEPTANCE_SHARDS + 1)", body)
+        self.assertIn('f"{i}/{ACCEPTANCE_SHARDS}"', body)
+        self.assertNotIn('f"{i}/3"', body)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for index in range(1, ACCEPTANCE_SHARDS):
+                (root / f"acceptance-{index}.json").write_text("{}")
+            # One shard report short: the suite was not proved, whatever ran.
+            with self.assertRaises((OSError, ValueError, KeyError)):
+                check_shards(root)
+
+
+class ResourceSamplerTests(unittest.TestCase):
+    def proc(self, root: Path, *, pressure: bool = True) -> Path:
+        (root / "stat").write_text("cpu  100 0 50 800 50 0 0 0 0 0\ncpu0 1 2 3 4\n")
+        (root / "meminfo").write_text(
+            "MemTotal:       16000000 kB\nMemFree:  1 kB\nMemAvailable:   12000000 kB\n"
+        )
+        (root / "loadavg").write_text("2.50 2.00 1.50 3/400 12345\n")
+        if pressure:
+            (root / "pressure").mkdir()
+            for kind in ("cpu", "io", "memory"):
+                (root / "pressure" / kind).write_text(
+                    "some avg10=12.50 avg60=1.00 avg300=0.10 total=1\n"
+                    "full avg10=0.00 avg60=0.00 avg300=0.00 total=0\n"
+                )
+        return root
+
+    def test_a_sample_reads_cpu_memory_load_and_pressure(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            sampler = ResourceSampler(root / "out.jsonl", proc=self.proc(root))
+            record = sampler.sample()
+        self.assertEqual(record["cpu"][:5], [100, 0, 50, 800, 50])
+        self.assertEqual(
+            record["mem_kib"], {"MemTotal": 16000000, "MemAvailable": 12000000}
+        )
+        self.assertEqual(record["load1"], 2.5)
+        self.assertEqual(
+            record["pressure_some_avg10"], {"cpu": 12.5, "io": 12.5, "memory": 12.5}
+        )
+        self.assertEqual(record["phase"], "setup")
+
+    def test_absent_pressure_files_are_simply_not_reported(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            sampler = ResourceSampler(
+                root / "out.jsonl", proc=self.proc(root, pressure=False)
+            )
+            self.assertEqual(sampler.sample()["pressure_some_avg10"], {})
+
+    def test_the_summary_is_per_phase_cpu_shares_and_extremes(self) -> None:
+        sampler = ResourceSampler(Path("unused.jsonl"), interval=15)
+
+        def at(t: float, phase: str, cpu: list[int], available: int) -> dict[str, Any]:
+            return {
+                "t": t,
+                "phase": phase,
+                "load1": t / 10,
+                "cpu": cpu,
+                "mem_kib": {"MemTotal": 16000000, "MemAvailable": available},
+                "pressure_some_avg10": {"cpu": t},
+            }
+
+        sampler.samples = [
+            at(0, "setup", [100, 0, 50, 800, 50], 15000000),
+            at(15, "acceptance", [400, 0, 100, 1000, 100], 9000000),
+            at(30, "acceptance", [700, 0, 150, 1100, 100], 8000000),
+        ]
+        summary = sampler.stop()
+        acceptance = summary["phases"]["acceptance"]
+        self.assertEqual(acceptance["intervals"], 2)
+        # (300+50)/600 busy and 50/600 iowait, then (300+50)/450 busy, no iowait.
+        self.assertEqual(acceptance["busy_mean"], round((350 / 600 + 350 / 450) / 2, 3))
+        self.assertEqual(acceptance["iowait_mean"], round((50 / 600) / 2, 3))
+        self.assertEqual(acceptance["load1_max"], 3.0)
+        self.assertEqual(acceptance["mem_available_min_kib"], 8000000)
+        self.assertEqual(acceptance["cpu_pressure_avg10_max"], 30)
+        self.assertEqual(summary["mem_total_kib"], 16000000)
+        self.assertEqual(summary["samples"], 3)
+        self.assertNotIn("setup", summary["phases"])
+
+    def test_sampling_writes_lines_and_a_read_failure_never_raises(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            out = root / "runner-resources.jsonl"
+            sampler = ResourceSampler(out, proc=self.proc(root), interval=0.01)
+            sampler.start()
+            deadline = time.monotonic() + 30
+            while len(sampler.samples) < 3 and time.monotonic() < deadline:
+                time.sleep(0.01)
+            sampler.mark("acceptance")
+            (root / "stat").unlink()  # a later read fails: sampling just ends
+            summary = sampler.stop()
+            lines = out.read_text().splitlines()
+        self.assertGreaterEqual(summary["samples"], 3)
+        self.assertEqual(len(lines), summary["samples"])
+        self.assertEqual(json.loads(lines[0])["phase"], "setup")
+        self.assertFalse(sampler.thread.is_alive())
 
 
 if __name__ == "__main__":

@@ -18,6 +18,7 @@ import string
 import struct
 import subprocess
 import sys
+import threading
 import time
 import zipfile
 from pathlib import Path
@@ -47,6 +48,11 @@ RUNTIME_DEPS = (
 )
 MAX_LOG_BYTES = 16 * 1024 * 1024
 MAX_COMMANDS = 40
+# One acceptance process per CPU of the standard public Linux runner (four), all
+# sharing the job's one PostgreSQL service; modules are placed longest-first.
+ACCEPTANCE_SHARDS = 4
+# Runner load is observed, never enforced: CPU, memory and pressure every 15 s.
+RESOURCE_SAMPLE_SECONDS = 15
 HOST_AUTHORITY_SHA256 = (
     "83e3a3d63a1a8a9da88d1a0688e9241527726dd856be33a0b039a735cb5b504c"
 )
@@ -833,7 +839,7 @@ def private_interpreter(
     )
 
 
-def check_shards(root: Path, count: int = 3) -> None:
+def check_shards(root: Path, count: int = ACCEPTANCE_SHARDS) -> None:
     discovered: dict[str, int] | None = None
     identities: dict[str, dict[str, int]] | None = None
     selected: set[str] = set()
@@ -907,10 +913,119 @@ def retain_containment_failure(
     metadata["containment_record_sha256"] = hashlib.sha256(data).hexdigest()
 
 
+class ResourceSampler:
+    """Runner CPU, memory and pressure while the proof runs, for its evidence.
+
+    Observation only: a read failure ends sampling, never the proof. Each sample
+    is one JSON line; `stop()` summarises CPU busy and iowait shares, load,
+    lowest available memory and the highest pressure per marked phase.
+    """
+
+    def __init__(
+        self,
+        path: Path,
+        proc: Path = Path("/proc"),
+        interval: float = RESOURCE_SAMPLE_SECONDS,
+    ) -> None:
+        self.path, self.proc, self.interval = path, proc, interval
+        self.samples: list[dict[str, Any]] = []
+        self.phase = "setup"
+        self.stopped = threading.Event()
+        self.thread = threading.Thread(target=self._loop, daemon=True)
+        self.started = time.monotonic()
+
+    def start(self) -> None:
+        self.thread.start()
+
+    def mark(self, phase: str) -> None:
+        self.phase = phase
+
+    def sample(self) -> dict[str, Any]:
+        cpu = [
+            int(v) for v in (self.proc / "stat").read_text().split("\n")[0].split()[1:]
+        ]
+        memory = {
+            key: int(value.split()[0])
+            for key, value in (
+                line.split(":", 1)
+                for line in (self.proc / "meminfo").read_text().splitlines()
+                if ":" in line
+            )
+            if key in ("MemTotal", "MemAvailable")
+        }
+        pressure: dict[str, float] = {}
+        for kind in ("cpu", "io", "memory"):
+            try:
+                first = (self.proc / "pressure" / kind).read_text().splitlines()[0]
+            except (OSError, IndexError):
+                continue
+            fields = dict(part.split("=", 1) for part in first.split()[1:])
+            pressure[kind] = float(fields["avg10"])
+        return {
+            "t": round(time.monotonic() - self.started, 1),
+            "phase": self.phase,
+            "load1": float((self.proc / "loadavg").read_text().split()[0]),
+            "cpu": cpu,
+            "mem_kib": memory,
+            "pressure_some_avg10": pressure,
+        }
+
+    def _loop(self) -> None:
+        try:
+            with self.path.open("a") as stream:
+                while True:
+                    record = self.sample()
+                    self.samples.append(record)
+                    stream.write(json.dumps(record, sort_keys=True) + "\n")
+                    stream.flush()
+                    if self.stopped.wait(self.interval):
+                        return
+        except (OSError, ValueError, KeyError, IndexError):
+            return
+
+    def stop(self) -> dict[str, Any]:
+        self.stopped.set()
+        if self.thread.ident is not None:
+            self.thread.join(self.interval + 5)
+        phases: dict[str, dict[str, Any]] = {}
+        for before, after in zip(self.samples, self.samples[1:]):
+            delta = [b - a for a, b in zip(before["cpu"], after["cpu"])]
+            total = sum(delta) or 1
+            idle, iowait = delta[3], delta[4] if len(delta) > 4 else 0
+            row = phases.setdefault(
+                after["phase"], {"intervals": 0, "busy": 0.0, "iowait": 0.0}
+            )
+            row["intervals"] += 1
+            row["busy"] += (total - idle - iowait) / total
+            row["iowait"] += iowait / total
+            row["load1_max"] = max(row.get("load1_max", 0.0), after["load1"])
+            available = after["mem_kib"].get("MemAvailable")
+            if available is not None:
+                row["mem_available_min_kib"] = min(
+                    row.get("mem_available_min_kib", available), available
+                )
+            for kind, value in after["pressure_some_avg10"].items():
+                key = f"{kind}_pressure_avg10_max"
+                row[key] = max(row.get(key, 0.0), value)
+        for row in phases.values():
+            row["busy_mean"] = round(row.pop("busy") / row["intervals"], 3)
+            row["iowait_mean"] = round(row.pop("iowait") / row["intervals"], 3)
+        first = self.samples[0] if self.samples else {}
+        return {
+            "cpu_count": os.cpu_count(),
+            "mem_total_kib": first.get("mem_kib", {}).get("MemTotal"),
+            "interval_seconds": self.interval,
+            "samples": len(self.samples),
+            "phases": phases,
+        }
+
+
 def qualify(
     checkout: Path, artifacts: Path, evidence: Path, root: Path, sha: str
 ) -> None:
     runner = Commands(evidence)
+    sampler = ResourceSampler(evidence / "runner-resources.jsonl")
+    sampler.start()
     test_root: Path | None = None
     python = str(Path(sys.executable).resolve())
     metadata: dict[str, Any] = {
@@ -927,6 +1042,7 @@ def qualify(
             "verified PostgreSQL stop",
         ],
         "child_file_limit_bytes": MAX_LOG_BYTES,
+        "acceptance_shards": ACCEPTANCE_SHARDS,
     }
     try:
         runner.run(
@@ -1133,6 +1249,7 @@ def qualify(
             [installed_python, "-I", "prove_release_installation.py"],
             test_root,
         )
+        sampler.mark("acceptance")
         children = [
             runner.start(
                 f"acceptance-{i}",
@@ -1141,13 +1258,13 @@ def qualify(
                     "-I",
                     "run_installed_acceptance.py",
                     "--shard",
-                    f"{i}/3",
+                    f"{i}/{ACCEPTANCE_SHARDS}",
                     "--result-json",
                     f"acceptance-{i}.json",
                 ],
                 test_root,
             )
-            for i in range(1, 4)
+            for i in range(1, ACCEPTANCE_SHARDS + 1)
         ]
         exits = [
             runner.finish(child) for child in children
@@ -1157,6 +1274,7 @@ def qualify(
         if any(exits):
             raise RuntimeError("installed acceptance failed; every shard exit retained")
         check_shards(test_root)
+        sampler.mark("restarts")
         restart_failures = []
         for index, script in enumerate(RESTARTS, 1):
             try:
@@ -1185,6 +1303,7 @@ def qualify(
                     restart_failures.append(str(error))
         if restart_failures:
             raise RuntimeError("; ".join(restart_failures))
+        sampler.mark("host-proof")
         host_environment = prepare_host_binding(
             runner, test_root, installed_python, sha, wheel
         )
@@ -1200,6 +1319,10 @@ def qualify(
         metadata["failure"] = f"{type(error).__name__}: {error}"
         raise
     finally:
+        try:
+            metadata["runner_resources"] = sampler.stop()
+        except Exception as error:  # observation never decides the proof
+            metadata["runner_resources"] = {"error": type(error).__name__}
         try:
             runner.close()
         except BaseException as error:

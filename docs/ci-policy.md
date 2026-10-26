@@ -92,7 +92,7 @@ exact local authorization as a new hosted authorization.
 | PostgreSQL identity | Existing image index `postgres@sha256:a02db8cac496f15b094798a38254f14d6e00741f709360e5e00bb6668ea31636`; Linux amd64 child `sha256:4cc13dede823cab4e05290c7fb3350fb4e599ecabd9b07e6706b5d5e8f5bc929`; runtime server 18.4 asserted; Docker image ID and service state retained |
 | Same archive routes | Pinned build tools, `SOURCE_DATE_EPOCH=315532800`, independent sdist-to-wheel rebuild byte-identical to reviewed wheel, then one installed proof of those identical bytes per interpreter |
 | Installed isolation | Fresh venv and copied test directory, `python -I`, no `PYTHONPATH`, existing package-isolation and release-installation checks; installed acceptance guard denies checkout/home reads, subprocesses and non-loopback connections |
-| Full installed suite | All three acceptance shards run; every child exit/log retained. Reports must discover the same suite, cover every module exactly once, execute all discovered tests, and have zero skips/errors/failures. No selected subset substitutes |
+| Full installed suite | All four acceptance shards run; every child exit/log retained. Reports must discover the same suite, cover every module exactly once, execute all discovered tests, and have zero skips/errors/failures. No selected subset substitutes |
 | Fresh-process restart proof | Assessed relation, fold recovery, database time recovery and query result each execute prepare/recover/cleanup as distinct processes. Failure does not skip cleanup or later restart attempts |
 | Failure and cleanup truth | Command manifest is written before child launch, with actual exits, timestamps and log hashes. Deadlines/interruption stop owned process groups; a single reserved cleanup window and always-run exact-service stop retain failure metadata and PostgreSQL state. Missing/failed/cancelled proof is not qualification |
 
@@ -106,7 +106,8 @@ needs its own evidence. No live model/provider calls belong to this path.
 The package job remains capped at 15 minutes; each interpreter at 100 minutes.
 Within that, the helper has a 90-minute proof deadline and one shared additional
 2-minute cleanup allowance; the proof step is capped at 95 minutes, exact-service
-cleanup at 3 minutes. Three shards share each isolated service. Standard public
+cleanup at 3 minutes. Four shards, one per runner CPU, share each isolated
+service. Standard public
 repository runners use GitHub's documented standard resources (currently four
 CPUs, 16 GB memory and 14 GB disk for this Linux class); no larger or paid runner
 class is selected. See [GitHub runner specifications](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
@@ -117,7 +118,8 @@ limits additionally bound the environment; these harness limits change no core
 runtime contract. Broadening the resource/spend class needs explicit authority.
 
 Always-run uploads retain admission and complete qualification evidence for 30
-days, including failures, all child logs/exits, shard reports, dependency hashes,
+days, including failures, all child logs/exits, shard reports, runner CPU, memory
+and pressure samples (observed only, never a gate), dependency hashes,
 source/archive/input pins, versions and owned PostgreSQL cleanup state. GitHub
 retains job logs for failures before the helper can start. Artifact-upload or
 cleanup failure fails the job; an absent artifact is never a passing receipt.
