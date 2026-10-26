@@ -858,7 +858,16 @@ BEGIN
         IF existing.record_sha256 = digest THEN
             RETURN jsonb_build_object('outcome', 'already_accepted');
         END IF;
-        RETURN jsonb_build_object('outcome', 'conflict', 'stored', existing.record);
+        -- Only a caller who may read the scope is shown the stored record.
+        IF memoriesql.current_context_source_authorized(
+               source.access_scope_id, source.source_object_id, 'source.read', 'read'
+           )
+           AND memoriesql.current_context_scope_time_authorized(
+               source.access_scope_id, 'read', pg_catalog.clock_timestamp()
+           ) THEN
+            RETURN jsonb_build_object('outcome', 'conflict', 'stored', existing.record);
+        END IF;
+        RETURN jsonb_build_object('outcome', 'conflict');
     END IF;
 
     IF record_kind = 'chunk' THEN
@@ -870,7 +879,8 @@ $$;
 
 -- Accepts one batch of engine records in delivery order and answers one
 -- outcome per record: accepted, already_accepted, conflict (with the stored
--- record), rejected (final) or retryable. After the first retryable record,
+-- record when the caller may read it), rejected (final) or retryable. After
+-- the first retryable record,
 -- the rest are answered retryable unread, because the engine resends them in
 -- order and a later record may depend on an earlier one.
 CREATE FUNCTION memoriesql.accept_engine_records_v1(request jsonb)

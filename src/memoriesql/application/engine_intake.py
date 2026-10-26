@@ -36,10 +36,14 @@ class EngineRecordAlreadyAccepted(FrozenContractModel):
 
 
 class EngineRecordConflict(FrozenContractModel):
-    """A different record already holds the key. It is kept; this one is not."""
+    """A different record already holds the key. It is kept; this one is not.
+
+    `stored` is the held record, present only when the caller may read the
+    engine scope (`source.read` and `read`).
+    """
 
     outcome: Literal["conflict"]
-    stored: dict[str, JsonValue]
+    stored: dict[str, JsonValue] | None = None
 
 
 class EngineRecordRejected(FrozenContractModel):

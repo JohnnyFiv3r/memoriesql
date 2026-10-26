@@ -107,7 +107,7 @@
           },
           "EngineRecordConflict": {
             "additionalProperties": false,
-            "description": "A different record already holds the key. It is kept; this one is not.",
+            "description": "A different record already holds the key. It is kept; this one is not.\n\n`stored` is the held record, present only when the caller may read the\nengine scope (`source.read` and `read`).",
             "properties": {
               "outcome": {
                 "const": "conflict",
@@ -115,16 +115,23 @@
                 "type": "string"
               },
               "stored": {
-                "additionalProperties": {
-                  "$ref": "#/$defs/JsonValue"
-                },
-                "title": "Stored",
-                "type": "object"
+                "anyOf": [
+                  {
+                    "additionalProperties": {
+                      "$ref": "#/$defs/JsonValue"
+                    },
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Stored"
               }
             },
             "required": [
-              "outcome",
-              "stored"
+              "outcome"
             ],
             "title": "EngineRecordConflict",
             "type": "object"

@@ -10,7 +10,7 @@ import threading
 import unittest
 import uuid
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import psycopg
 from psycopg import sql
@@ -262,13 +262,18 @@ class EngineRecordIntake(unittest.TestCase):
                 ),
             )
 
-    def grant(self, source: uuid.UUID, principal: uuid.UUID) -> None:
+    def grant(
+        self,
+        source: uuid.UUID,
+        principal: uuid.UUID,
+        permissions: tuple[Literal["read", "write"], ...] = ("write",),
+    ) -> None:
         self.sources().grant(
             GrantExactSource(
                 request_id=uuid.uuid4(),
                 source_object_id=source,
                 target_principal_id=principal,
-                permission_keys=("write",),
+                permission_keys=permissions,
                 valid_from=self.now,
                 expires_at=self.now + timedelta(hours=1),
             )
@@ -372,8 +377,7 @@ class EngineRecordIntake(unittest.TestCase):
         altered = copy.deepcopy(chunk)
         altered["facets"] = {"lengths": {"bytes": 1}}
         self.assertEqual(
-            self.deliver(altered),
-            [EngineRecordConflict(outcome="conflict", stored=chunk)],
+            self.deliver(altered), [EngineRecordConflict(outcome="conflict")]
         )
 
         late = type_decision(
@@ -382,7 +386,7 @@ class EngineRecordIntake(unittest.TestCase):
         self.deliver(late)
         other = type_decision(chunk, assigned("outcome"), model())
         (result,) = self.deliver(other)
-        self.assertEqual(result, EngineRecordConflict(outcome="conflict", stored=late))
+        self.assertEqual(result, EngineRecordConflict(outcome="conflict"))
 
         (final,) = event_records(
             "acme", "orchard/3", ["Already final."], [(assigned("observation"), rule())]
@@ -396,6 +400,43 @@ class EngineRecordIntake(unittest.TestCase):
             ),
         )
         self.assertEqual(self.held(), [chunk, late, final])
+
+    def test_only_a_reader_is_shown_the_stored_record_in_a_conflict(self) -> None:
+        (chunk,) = event_records(
+            "acme", "orchard/14", ["Held text."], [(assigned("observation"), rule())]
+        )
+        self.deliver(chunk)
+        altered = copy.deepcopy(chunk)
+        altered["facets"] = {"lengths": {"bytes": 1}}
+        request = AcceptEngineRecords(records=(altered,))
+        writer: tuple[Literal["read", "write"], ...] = ("write",)
+        reader: tuple[Literal["read", "write"], ...] = ("read", "write")
+        engines = {}
+        for name, capabilities, permissions in (
+            ("capability only", ("engine.records.deliver", "source.read"), writer),
+            ("grant only", ("engine.records.deliver",), reader),
+            ("reader", ("engine.records.deliver", "source.read"), reader),
+        ):
+            principal = uuid.uuid4()
+            secret = sha("fictional engine credential: " + name)
+            self.pair(principal, secret, [self.acme.access_scope_id], capabilities)
+            self.grant(self.acme.source_object_id, principal, permissions)
+            engines[name] = secret
+        # A writer who may not read the scope learns only that the key is held.
+        for secret in (
+            self.engine_secret,
+            engines["capability only"],
+            engines["grant only"],
+        ):
+            self.assertEqual(
+                list(self.intake(secret).accept(request).results),
+                [EngineRecordConflict(outcome="conflict")],
+            )
+        self.assertEqual(
+            list(self.intake(engines["reader"]).accept(request).results),
+            [EngineRecordConflict(outcome="conflict", stored=chunk)],
+        )
+        self.assertEqual(self.held(), [chunk])
 
     def test_ungoverned_types_and_malformed_records_are_rejected(self) -> None:
         def reason(record: dict[str, Any]) -> str:

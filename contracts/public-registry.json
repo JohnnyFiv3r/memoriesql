@@ -1667,13 +1667,13 @@
       "version": "1"
     },
     {
-      "canonical_payload_sha256": "45f097b1b82572b389e1c30625a1c427e1422b5f547fd3e43b5ec5381c4d7d79",
+      "canonical_payload_sha256": "df997860017163102452e5ef45b7ecfefbe75ebec50a8dc7cad040902addce57",
       "catalog": "json_schema",
       "classification": "proposed_open_core",
       "id": "memoriesql.engine-intake.v1",
       "package_disposition": "include",
       "path": "contracts/records/memoriesql-engine-intake-v1.json",
-      "public_sha256": "8cc6104130451ebaafc7f1872f7e7792d53d764755547ba10586234ca5424b75",
+      "public_sha256": "ece87e8092da3e6c4befff0c52a99cbc306669864f942c84e84975a9d8bac4be",
       "reason": "Public-authored non-authoring intake of Core Memory engine records under the current authenticated context.",
       "version": "1"
     },

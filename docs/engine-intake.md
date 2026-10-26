@@ -33,7 +33,10 @@ slice can expose them to the agent SQL surface as their own relation family.
   pairing grant lists the new `engine.records.deliver` capability and the
   engine scopes' access scopes, with a `write` source grant on each. The
   capability is also granted to `personal_owner`; no other role holds it.
-- Reading needs `source.read` and `read` on the engine scope's source.
+- Reading needs `source.read` and `read` on the engine scope's source. A
+  conflict shows the stored record only to a caller holding both, so an
+  engine that should see it is paired with `source.read` and granted
+  `read` as well.
 
 ## Delivery
 
@@ -45,7 +48,7 @@ slice can expose them to the agent SQL surface as their own relation family.
 |---|---|
 | `accepted` | Stored under a new shared-ledger receipt (`engine_record.accept.v1`, keyed by `record_key`). |
 | `already_accepted` | The identical record is already held. |
-| `conflict` | A different record holds the key. The stored one is returned and kept: first writer wins. |
+| `conflict` | A different record holds the key. The stored one is kept, first writer wins, and returned only to a caller who may read the scope. |
 | `rejected` | Final for this record, with a reason: malformed, an unknown record kind or contract, a type that is not a current governed bead type, a catalog other than `memoriesql.bead_types`, text that does not match its hash or ranges, chunks that do not reproduce their event, or a second final type for one chunk. |
 | `retryable` | The engine scope is not enrolled, or this credential may not deliver to it. Every later record in the batch is answered the same, unread, because the engine resends from there in order. |
 
@@ -87,6 +90,7 @@ a record before sending it.
 
 Fictional fixtures: `tests/runtime/test_engine_intake.py` covers exact storage,
 replay, first-writer-wins, the single late type, ungoverned and malformed
-records, retryable scopes, authority, immutability, concurrent chunks of one
-event and writers taking turns in one scope. `tests/unit/test_engine_intake_migration.py` pins the grants, row-level
+records, retryable scopes, authority, conflicts shown only to readers,
+immutability, concurrent chunks of one event and writers taking turns in one
+scope. `tests/unit/test_engine_intake_migration.py` pins the grants, row-level
 security and immutability. Historical SQL 0001–0053 and records are unchanged.
