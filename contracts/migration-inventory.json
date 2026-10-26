@@ -209,6 +209,10 @@
     {
       "filename": "0052_agent_source_text_view.sql",
       "sha256": "fda14ccfef33d044e5f9baf044709b892a98be0670026830622afe1479d8f192"
+    },
+    {
+      "filename": "0053_population_family_budget.sql",
+      "sha256": "b69b586866974280f231ccdbbedeb31fd82f0bdb01e347960f91625098052886"
     }
   ]
 }
