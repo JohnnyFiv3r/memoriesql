@@ -2062,8 +2062,7 @@ class IntegratedSemanticWorker:
                     # once this transaction runs longer, whether it is running,
                     # waiting on a lock or idle because the client stalled.
                     connection.execute(
-                        "SELECT set_config('transaction_timeout', %s, true)",
-                        (str(timeout_ms),),
+                        f"SET LOCAL transaction_timeout='{int(timeout_ms)}ms'"
                     )
                 connection.execute("SET LOCAL ROLE memoriesql_worker")
                 try:
