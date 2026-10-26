@@ -1,8 +1,8 @@
 # Core Memory engine record intake (development contract)
 
-The `memoriesql.engine-intake.v1` contract and migration 0054 let the Core
-Memory engine deliver its records into memoriesQL. This is the first slice of
-the engine work package, a development candidate after migration 0053 and
+The `memoriesql.engine-intake.v1` contract and migrations 0054 and 0055 let the
+Core Memory engine deliver its records into memoriesQL. They are the first two
+slices of the engine work package: development candidates after migration 0053,
 not a published capability in `memoriesql==0.0.12`.
 
 The engine turns source events into deterministic chunks and assigns each one
@@ -46,7 +46,7 @@ slice can expose them to the agent SQL surface as their own relation family.
 
 | Outcome | Meaning |
 |---|---|
-| `accepted` | Stored under a new shared-ledger receipt (`engine_record.accept.v1`, keyed by `record_key`). |
+| `accepted` | Stored under a new shared-ledger receipt: `engine_record.accept.v2`, keyed by the engine scope's source id and `record_key` (schema 54 wrote `engine_record.accept.v1`, keyed by `record_key` alone). |
 | `already_accepted` | The identical record is already held. |
 | `conflict` | A different record holds the key. The stored one is kept, first writer wins, and returned only to a caller who may read the scope. |
 | `rejected` | Final for this record, with a reason: malformed, an unknown record kind or contract, a type that is not a current governed bead type, a catalog other than `memoriesql.bead_types`, text that does not match its hash or ranges, chunks that do not reproduce their event, or a second final type for one chunk. |
@@ -71,6 +71,22 @@ cannot hold that scope back.
 
 Every accepted record writes one outbox event: `engine_chunk.accepted` or
 `engine_type.decided`. No relay consumes them yet.
+
+## Identity within an engine scope
+
+Since migration 0055 every record key, chunk id and event id is identified
+within its engine scope: engine records, chunks, events, completions and type
+decisions are all keyed by the scope's source as well. The engine derives
+these ids from event keys that include the scope, so the same id in two scopes
+names two different things. A writer allowed into one scope therefore cannot
+take another scope's keys before that scope delivers them, and replays,
+conflicts, completions and late types are judged inside one scope only.
+
+Migration 0055 keeps every stored record exactly. It copies each chunk,
+completion and type decision's scope from the record or event that row already
+references, and the new foreign keys prove each copy. Requests and answers keep
+their shapes, so `memoriesql.engine-intake.v1` still sends
+`expected_schema_version: 54`.
 
 ## Reads and vocabulary
 
@@ -97,5 +113,9 @@ records, retryable scopes, authority, conflicts shown only to readers,
 immutability, concurrent chunks of one event, writers taking turns in one
 scope, a batch that cannot hold back a scope it may not write or whose ids it
 names, and an impossible zone offset rejected alone.
-`tests/unit/test_engine_intake_migration.py` pins the grants, row-level
-security and immutability. Historical SQL 0001–0053 and records are unchanged.
+`tests/runtime/test_engine_scope_identity.py` runs those tests again at schema
+55 and covers the same keys in two scopes and records accepted at schema 54
+that keep working after 0055. `tests/unit/test_engine_intake_migration.py` and
+`tests/unit/test_engine_scope_identity_migration.py` pin the grants, row-level
+security, immutability and scoped keys. Historical SQL 0001–0054 and records
+are unchanged.

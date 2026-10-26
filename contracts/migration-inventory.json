@@ -217,6 +217,10 @@
     {
       "filename": "0054_engine_record_intake.sql",
       "sha256": "64ce5fca151fd245b7362b6ebe042ceb26ab0cf60e3ae53a37fe55763d347870"
+    },
+    {
+      "filename": "0055_engine_scope_identity.sql",
+      "sha256": "85cbc746db2c03e5a38f03c78f8eef8597c6ad46fead22fe73723930f7f4a0d1"
     }
   ]
 }

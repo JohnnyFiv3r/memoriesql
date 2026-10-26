@@ -201,6 +201,16 @@ records. No beads, statements, semantic tasks, relationships, erasure, outbox
 relay, provider binding or release is part of this slice. See
 `docs/engine-intake.md`.
 
+The owner-authorized forward schema-55 slice (authorized 2026-10-26) keys every
+engine record, chunk, event, completion and type decision by its engine scope's
+source, so one scope's writer cannot take another scope's ids first. It adds a
+source column to three engine tables, copied from rows they already reference;
+replaces the four intake functions with scoped lookups; and writes
+`engine_record.accept.v2` receipts. Requests, answers and the
+`engine-intake.v1` contract are unchanged. Preserve migrations 0001–0054 and
+earlier records. No new capability, contract or release is part of this slice.
+See `docs/engine-intake.md`.
+
 The Q-owned forward schema-24 slice permits bounded, currently authorized stored
 bead/result and evidence inspection. Preserve migrations 0001–0023 and earlier
 records. No inference, canonical writes, provider binding or private consumption

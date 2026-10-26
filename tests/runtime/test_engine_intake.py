@@ -157,7 +157,12 @@ def type_decision(
     }
 
 
-class EngineRecordIntake(unittest.TestCase):
+class EngineIntakeFixture(unittest.TestCase):
+    """A fictional workspace with the acme engine scope; it holds no tests."""
+
+    schema_version = 54
+    receipt_kind = "engine_record.accept.v1"
+
     def setUp(self) -> None:
         self.admin_url = os.environ["N1_TEST_DATABASE_URL"]
         self.database = "pr_engine_" + uuid.uuid4().hex
@@ -168,7 +173,7 @@ class EngineRecordIntake(unittest.TestCase):
         self.url = make_conninfo(self.admin_url, dbname=self.database)
         self.db = psycopg.connect(self.url, autocommit=True)
         self.addCleanup(self.cleanup_database)
-        migrate(self.db, expected_current_version=0, target_version=54)
+        migrate(self.db, expected_current_version=0, target_version=self.schema_version)
         (
             self.tenant,
             user,
@@ -316,6 +321,50 @@ class EngineRecordIntake(unittest.TestCase):
         assert row is not None
         return int(row[0])
 
+    @contextlib.contextmanager
+    def held_open(self, *records: dict[str, Any]) -> Iterator[None]:
+        """Delivers `records` in a transaction left open until the block ends."""
+        holding = threading.Event()
+        release = threading.Event()
+        failures: list[BaseException] = []
+
+        def hold() -> None:
+            try:
+                with psycopg.connect(self.url) as connection:
+                    with connection.transaction():
+                        connection.execute("SET LOCAL ROLE memoriesql_application")
+                        connection.execute(
+                            "SELECT memoriesql.begin_authorization_context(%s,%s)",
+                            (self.engine_secret, self.workspace),
+                        )
+                        connection.execute(
+                            "SELECT memoriesql.accept_engine_records_v1(%s)",
+                            (
+                                Jsonb(
+                                    AcceptEngineRecords(records=records).model_dump(
+                                        mode="json"
+                                    )
+                                ),
+                            ),
+                        )
+                        holding.set()
+                        release.wait(10)
+            except BaseException as error:  # noqa: BLE001
+                failures.append(error)
+                holding.set()
+
+        thread = threading.Thread(target=hold)
+        thread.start()
+        self.assertTrue(holding.wait(10))
+        try:
+            yield
+        finally:
+            release.set()
+            thread.join(10)
+        self.assertEqual(failures, [])
+
+
+class EngineRecordIntake(EngineIntakeFixture):
     def test_chunks_and_a_late_type_are_kept_exactly(self) -> None:
         chunks = event_records(
             "acme",
@@ -356,7 +405,8 @@ class EngineRecordIntake(unittest.TestCase):
         )
         receipts = self.db.execute(
             "SELECT status, response_receipt ->> 'outcome' FROM memoriesql.idempotency_receipts "
-            "WHERE operation_kind = 'engine_record.accept.v1'"
+            "WHERE operation_kind = %s",
+            (self.receipt_kind,),
         ).fetchall()
         self.assertEqual(receipts, [("succeeded", "accepted")] * 3)
         kinds = self.db.execute(
@@ -608,48 +658,6 @@ class EngineRecordIntake(unittest.TestCase):
                             sql.Identifier(table)
                         )
                     )
-
-    @contextlib.contextmanager
-    def held_open(self, *records: dict[str, Any]) -> Iterator[None]:
-        """Delivers `records` in a transaction left open until the block ends."""
-        holding = threading.Event()
-        release = threading.Event()
-        failures: list[BaseException] = []
-
-        def hold() -> None:
-            try:
-                with psycopg.connect(self.url) as connection:
-                    with connection.transaction():
-                        connection.execute("SET LOCAL ROLE memoriesql_application")
-                        connection.execute(
-                            "SELECT memoriesql.begin_authorization_context(%s,%s)",
-                            (self.engine_secret, self.workspace),
-                        )
-                        connection.execute(
-                            "SELECT memoriesql.accept_engine_records_v1(%s)",
-                            (
-                                Jsonb(
-                                    AcceptEngineRecords(records=records).model_dump(
-                                        mode="json"
-                                    )
-                                ),
-                            ),
-                        )
-                        holding.set()
-                        release.wait(10)
-            except BaseException as error:  # noqa: BLE001
-                failures.append(error)
-                holding.set()
-
-        thread = threading.Thread(target=hold)
-        thread.start()
-        self.assertTrue(holding.wait(10))
-        try:
-            yield
-        finally:
-            release.set()
-            thread.join(10)
-        self.assertEqual(failures, [])
 
     def test_concurrent_chunks_of_one_event_complete_it_once(self) -> None:
         first, second = event_records(
