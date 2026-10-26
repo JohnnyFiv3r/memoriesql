@@ -47,6 +47,8 @@ ASSERTION_ROW = (
     "SELECT memoriesql.relation_assertion_row_v2("
     "%s,'assessed',%s,NULL,statement_timestamp(),'owner')"
 )
+# The assertion row's first gate: the repeatable-read frame holding the read fence.
+FRAME_AUTHORIZED = "SELECT memoriesql.relation_read_frame_authorized_v1(%s)"
 REVOKE_SOURCE = (
     "UPDATE memoriesql.protected_resources "
     "SET status='revoked',revoked_at=clock_timestamp() WHERE resource_id=%s"
@@ -170,10 +172,12 @@ class PopulationFamilyBudget(unittest.TestCase):
             }
         return tables
 
-    def withheld_on(self) -> list[str]:
-        """The SQLSTATE and message the deep family's assertion row raises in the
-        owner's canonical relation frame, where the population calls it. The
-        hook is private, so the call leaves the frame's application role."""
+    def withheld_on(self) -> tuple[bool, list[str]]:
+        """In the owner's canonical relation frame, where the population calls
+        it: whether the frame passes the assertion row's frame gate, then the
+        SQLSTATE and message that row raises for the deep family. The hooks are
+        private, so the calls leave the frame's application role."""
+        framed = False
         with relation_projection_frame(
             self.db,
             credential_sha256=self.fixture.secret_hash,
@@ -183,10 +187,14 @@ class PopulationFamilyBudget(unittest.TestCase):
             try:
                 with frame.transaction(force_rollback=True):
                     frame.execute("SET LOCAL ROLE NONE")
+                    row = frame.execute(
+                        FRAME_AUTHORIZED, (self.fixture.tenant,)
+                    ).fetchone()
+                    framed = row is not None and row[0] is True
                     frame.execute(ASSERTION_ROW, (self.fixture.tenant, UUID(self.deep)))
             except psycopg.Error as error:
-                return [str(error.sqlstate), str(error.diag.message_primary)]
-        return ["readable"]
+                return framed, [str(error.sqlstate), str(error.diag.message_primary)]
+        return framed, ["readable"]
 
     def test_a_lineage_over_the_root_budget_withholds_only_its_family(self) -> None:
         readers = (("owner", None), ("agent", self.agent))
@@ -219,9 +227,10 @@ class PopulationFamilyBudget(unittest.TestCase):
         # The control: the same state read again. Two reads may differ only in
         # evidence_ref, and not at all once refs are compared by what they bind.
         again = {label: self.relation_rows(secret) for label, secret in readers}
-        reasons = [self.withheld_on()]
+        checks = [self.withheld_on()]
         self.db.execute(REVOKE_SOURCE, (self.deep_source,))
-        reasons.append(self.withheld_on())
+        checks.append(self.withheld_on())
+        reasons = [reason for _, reason in checks]
         unreadable = {label: self.relation_rows(secret) for label, secret in readers}
         raw_equal = {}
         for label, tables in deep.items():
@@ -238,6 +247,9 @@ class PopulationFamilyBudget(unittest.TestCase):
                         self.assertEqual(later[label][table]["other"], forms["other"])
                         self.assertEqual(later[label][table]["bound"], forms["bound"])
         with self.subTest(check="withheld_on"):
+            # Both calls ran inside the population's own frame, so each refusal
+            # comes from past the frame gate.
+            self.assertEqual([framed for framed, _ in checks], [True, True])
             self.assertEqual(reasons[0], ["54000", "root_budget"])
             self.assertEqual(reasons[1], ["42501", "assertion_unavailable"])
         print(
@@ -245,6 +257,7 @@ class PopulationFamilyBudget(unittest.TestCase):
                 {
                     "population_family_budget": observed,
                     "withheld_on": reasons,
+                    "frame_authorized": [framed for framed, _ in checks],
                     # Per table: raw bytes equal to the first read, for the
                     # same-state read and for the revoked read.
                     "raw_equal": raw_equal,
