@@ -201,6 +201,10 @@
     {
       "filename": "0050_sealed_unit_query_facts.sql",
       "sha256": "2c39a4ada8de634a13b146316852d75b2f7fe7b80fad0eab5ff5913304a44f08"
+    },
+    {
+      "filename": "0051_automatic_investigation_checkpoints.sql",
+      "sha256": "052bc62432b29fd6526e416c7fbc176f16608829617114f84f5f2746cbf3fbc2"
     }
   ]
 }
