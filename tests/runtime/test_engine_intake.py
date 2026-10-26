@@ -279,6 +279,15 @@ class EngineRecordIntake(unittest.TestCase):
             )
         )
 
+    def beta_engine(self) -> str:
+        """Enrolls beta and pairs a second engine that may deliver only there."""
+        beta = self.enroll("beta")
+        principal = uuid.uuid4()
+        secret = sha("fictional beta engine credential")
+        self.pair(principal, secret, [beta.access_scope_id])
+        self.grant(beta.source_object_id, principal)
+        return secret
+
     def intake(
         self,
         secret: str | None = None,
@@ -670,11 +679,7 @@ class EngineRecordIntake(unittest.TestCase):
         (elsewhere,) = event_records(
             "beta", "orchard/13", ["Elsewhere."], [(assigned("observation"), rule())]
         )
-        beta = self.enroll("beta")
-        other_engine = uuid.uuid4()
-        other_secret = sha("fictional second engine credential")
-        self.pair(other_engine, other_secret, [beta.access_scope_id])
-        self.grant(beta.source_object_id, other_engine)
+        other_secret = self.beta_engine()
         with self.held_open(early):
             with psycopg.connect(self.url, autocommit=True) as other:
                 # Another event in the same scope waits for the open batch
@@ -704,11 +709,7 @@ class EngineRecordIntake(unittest.TestCase):
         (theirs,) = event_records(
             "beta", "orchard/17", ["Theirs."], [(assigned("observation"), rule())]
         )
-        beta = self.enroll("beta")
-        other_engine = uuid.uuid4()
-        other_secret = sha("fictional beta engine credential")
-        self.pair(other_engine, other_secret, [beta.access_scope_id])
-        self.grant(beta.source_object_id, other_engine)
+        other_secret = self.beta_engine()
         # The open batch names beta, which its engine may not write.
         with self.held_open(here, named):
             with psycopg.connect(self.url, autocommit=True) as other:
@@ -719,6 +720,51 @@ class EngineRecordIntake(unittest.TestCase):
                     list(accepted.results), [EngineRecordAccepted(outcome="accepted")]
                 )
         self.assertEqual(self.held(), [here])
+
+    def test_naming_another_scopes_ids_never_holds_it_back(self) -> None:
+        first, second = event_records(
+            "beta",
+            "orchard/18",
+            ["Theirs, first. ", "Theirs, second."],
+            [({"status": "pending", "reason": "capacity"}, None)]
+            + [(assigned("observation"), rule())],
+        )
+        other_secret = self.beta_engine()
+        self.intake(other_secret).accept(AcceptEngineRecords(records=(first,)))
+        # The open acme batch borrows beta's record key and beta's event id.
+        borrowed_key = copy.deepcopy(first)
+        borrowed_key["scope"] = "acme"
+        borrowed_key["event"]["key"]["scope"] = "acme"
+        (borrowed_event,) = event_records(
+            "acme", "orchard/19", ["Borrowed."], [(assigned("observation"), rule())]
+        )
+        borrowed_event["event"]["event_id"] = first["event"]["event_id"]
+        with self.held_open(borrowed_key, borrowed_event):
+            with psycopg.connect(self.url, autocommit=True) as other:
+                late = type_decision(first, assigned("observation"), model())
+                accepted = self.intake(other_secret, other).accept(
+                    AcceptEngineRecords(records=(second, late))
+                )
+                self.assertEqual(
+                    list(accepted.results),
+                    [EngineRecordAccepted(outcome="accepted")] * 2,
+                )
+        self.assertEqual(self.held(), [])
+        self.assertEqual(self.count("engine_event_completions"), 1)
+
+    def test_an_impossible_offset_is_rejected_without_failing_the_batch(self) -> None:
+        offset = rule()
+        offset["decided_at"] = "2026-10-26T15:00:01+99:00"
+        (bad,) = event_records(
+            "acme", "orchard/20", ["Bad offset."], [(assigned("observation"), offset)]
+        )
+        (good,) = event_records(
+            "acme", "orchard/21", ["Good offset."], [(assigned("observation"), rule())]
+        )
+        rejected, accepted = self.deliver(bad, good)
+        self.assertIsInstance(rejected, EngineRecordRejected)
+        self.assertEqual(accepted, EngineRecordAccepted(outcome="accepted"))
+        self.assertEqual(self.held(), [good])
 
 
 if __name__ == "__main__":

@@ -297,7 +297,9 @@ BEGIN
         RETURN NULL;
     END IF;
     RETURN (value #>> '{}')::timestamptz;
-EXCEPTION WHEN datetime_field_overflow OR invalid_datetime_format THEN
+-- Any data exception here (an impossible date, field or zone offset) means
+-- the record is malformed, never that the batch should fail.
+EXCEPTION WHEN data_exception THEN
     RETURN NULL;
 END;
 $$;
@@ -567,11 +569,9 @@ BEGIN
         RETURN memoriesql.engine_rejected(fields.problem);
     END IF;
 
-    -- One event lock orders the chunks of an event, so exactly one of them
-    -- sees itself complete the event.
-    PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
-        authority.tenant_id::text || ':engine_event:' || event_id::text, 0
-    ));
+    -- The scope's writer lock, held since this record was authorized, orders
+    -- the chunks of an event, so exactly one of them sees itself complete
+    -- the event.
     SELECT * INTO existing_event
       FROM memoriesql.engine_events AS engine_event
      WHERE engine_event.tenant_id = authority.tenant_id
@@ -858,12 +858,11 @@ BEGIN
     END IF;
 
     -- Already held when the batch locked its scopes; taken here as well for a
-    -- scope that became deliverable after that, so no record is written
-    -- without its scope's lock.
+    -- scope that became deliverable after that. It orders every check and
+    -- write below against the scope's other writers. Nothing else is locked:
+    -- a key or id from another scope is only compared, so naming one cannot
+    -- hold that scope back.
     PERFORM memoriesql.engine_lock_scope_v1(authority, source.source_object_id);
-    PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
-        authority.tenant_id::text || ':engine_chunk:' || chunk_ref::text, 0
-    ));
     digest := encode(sha256(convert_to(item::text, 'UTF8')), 'hex');
     SELECT held.* INTO existing
       FROM memoriesql.engine_records AS held
