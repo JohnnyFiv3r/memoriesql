@@ -202,6 +202,8 @@ jobs:
   qualification:
     # Runs after every part, even failed ones, so a missing or failed part is
     # recorded as an incomplete proof; it runs no tests and owns proof_complete.
+    # needs.compatibility.result covers every part of both interpreters, so a
+    # failed part of either interpreter also refuses the other's aggregation.
     if: always() && needs.package.outputs.qualify == 'true'
     needs: [package, compatibility]
     name: qualification (${{ matrix.python-version }})

@@ -1617,6 +1617,23 @@ def check_part(
     ]
     if [row.get("name") for row in rows] != names:
         raise ValueError(f"part {part} ran other than its planned commands")
+    reports = {
+        report.name
+        for report in evidence.iterdir()
+        if re.fullmatch(r"acceptance-\d+\.json", report.name)
+    }
+    if reports != {f"acceptance-{index}.json" for index in part_shards(part)}:
+        raise ValueError(f"part {part} holds other than its own shard reports")
+    if part == HOST_PROOF_PART:
+        shards_ended = max(
+            float(row["finished"])
+            for row in rows
+            if row["name"].startswith("acceptance-")
+        )
+        if min(
+            float(row["started"]) for row in rows if row["name"] in HOST_COMMANDS
+        ) < (shards_ended):
+            raise ValueError("restarts or host proof started before acceptance ended")
     for row in rows:
         log = evidence / str(row.get("log"))
         if (
@@ -1627,6 +1644,11 @@ def check_part(
             or file_hash(log) != row.get("log_sha256")
         ):
             raise ValueError(f"part {part} command {row['name']} is unproven")
+    record["driver_span_seconds"] = round(
+        max(float(row["finished"]) for row in rows)
+        - min(float(row["started"]) for row in rows),
+        1,
+    )
     identity = {
         "interpreter": {k: record["interpreter"][k] for k in INTERPRETER_IDENTITY},
         "dependency_hashes": json.loads(
@@ -1662,13 +1684,23 @@ def aggregate(
         "shards_per_part": SHARDS_PER_PART,
         "global_shards": ACCEPTANCE_SHARDS,
         "host_proof_part": HOST_PROOF_PART,
+        "shard_index_map": {
+            str(part): part_shards(part) for part in range(1, ACCEPTANCE_PARTS + 1)
+        },
+        # needs.compatibility.result covers every part of both interpreters, so
+        # a failed part of either interpreter also refuses this aggregation.
+        "parts_result_scope": "every part job of both interpreters",
+        "parts_result": parts_result,
         "proof_complete": False,
     }
     manifest: dict[str, Any] = {"source_sha": sha, "run_id": run_id, "parts": {}}
     try:
         if parts_result != "success":
             raise ValueError("every part job must succeed, not: " + parts_result)
-        if checkout_identity(checkout) != sha:
+        # The plan is recomputed from this checkout, so it must be the exact source.
+        head = checkout_identity(checkout)
+        metadata["checkout_head"] = head
+        if head != sha:
             raise ValueError("aggregation checkout differs from the exact source")
         wheels, sdists = list(package.glob("*.whl")), list(package.glob("*.tar.gz"))
         if len(wheels) != 1 or len(sdists) != 1:
@@ -1706,8 +1738,13 @@ def aggregate(
             manifest["parts"][str(part)] = {
                 **{k: v for k, v in artifact.items() if k != "directory"},
                 "record_sha256": file_hash(part_evidence / PART_RECORD),
+                "driver_span_seconds": record["driver_span_seconds"],
                 "runner_resources": record.get("runner_resources"),
             }
+        if sorted(report.name for report in shards.iterdir()) != sorted(
+            f"acceptance-{index}.json" for index in range(1, ACCEPTANCE_SHARDS + 1)
+        ):
+            raise ValueError("the parts do not hold every global shard exactly once")
         if any(identity != identities[0] for identity in identities):
             raise ValueError(
                 "parts differ in interpreter, dependencies, environment, image or inputs"

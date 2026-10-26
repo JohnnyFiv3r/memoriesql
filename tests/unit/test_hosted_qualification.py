@@ -596,9 +596,11 @@ class AggregationTests(unittest.TestCase):
             *(HOST_COMMANDS if part == HOST_PROOF_PART else ()),
         ]
         rows = []
-        for name in names:
+        for step, name in enumerate(names):
             log = f"{name} fictional ok\n".encode()
             evidence[f"{name}.log"] = log
+            # Shards run concurrently; every other command runs alone, in order.
+            started = 100.0 if name.startswith("acceptance-") else 10.0 * step
             rows.append(
                 {
                     "name": name,
@@ -606,6 +608,10 @@ class AggregationTests(unittest.TestCase):
                     "complete": True,
                     "exit_code": 0,
                     "log_sha256": hashlib.sha256(log).hexdigest(),
+                    "started": started + (2000.0 if name in HOST_COMMANDS else 0.0),
+                    "finished": started
+                    + (2000.0 if name in HOST_COMMANDS else 0.0)
+                    + (1500.0 + part if name.startswith("acceptance-") else 5.0),
                 }
             )
         evidence["commands.json"] = json.dumps(rows).encode()
@@ -760,6 +766,11 @@ class AggregationTests(unittest.TestCase):
             self.assertEqual(row["id"], 100 + int(part))
             self.assertTrue(row["digest"].startswith("sha256:"))
             self.assertEqual(len(row["record_sha256"]), 64)
+            self.assertGreater(row["driver_span_seconds"], 1500)
+        self.assertEqual(metadata["checkout_head"], SHA)
+        self.assertEqual(
+            metadata["shard_index_map"], {"1": [1, 2], "2": [3, 4], "3": [5, 6]}
+        )
 
     def test_a_failed_part_job_or_another_checkout_is_never_a_proof(self) -> None:
         for result in ("failure", "cancelled", "skipped", ""):
@@ -859,6 +870,23 @@ class AggregationTests(unittest.TestCase):
         del self.files[3]["qualification/acceptance-6.json"]
         self.assert_refused()
 
+    def test_each_part_holds_exactly_its_own_shard_reports(self) -> None:
+        original = deepcopy(self.files)
+        stray = self.files[1]["qualification/acceptance-1.json"]
+        self.files[2]["qualification/acceptance-1.json"] = stray
+        self.assert_refused()
+        self.files = deepcopy(original)
+        self.files[3]["qualification/acceptance-7.json"] = stray
+        self.assert_refused()
+
+    def test_restarts_and_host_proof_start_after_the_host_parts_shards(self) -> None:
+        def early(rows: list[dict[str, Any]]) -> None:
+            first = next(row for row in rows if row["name"] == HOST_COMMANDS[0])
+            first["started"] = 1000.0
+
+        self.edit(HOST_PROOF_PART, "commands.json", early)
+        self.assert_refused()
+
     def test_restarts_and_host_proof_run_exactly_once_in_the_host_part(self) -> None:
         original = deepcopy(self.files)
         host_row = {
@@ -867,6 +895,8 @@ class AggregationTests(unittest.TestCase):
             "complete": True,
             "exit_code": 0,
             "log_sha256": hashlib.sha256(b"query-host fictional ok\n").hexdigest(),
+            "started": 9000.0,
+            "finished": 9005.0,
         }
         self.edit(2, "commands.json", lambda rows: rows.append(host_row))
         self.files[2]["qualification/query-host.log"] = b"query-host fictional ok\n"
