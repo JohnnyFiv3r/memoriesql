@@ -205,6 +205,10 @@
     {
       "filename": "0051_automatic_investigation_checkpoints.sql",
       "sha256": "052bc62432b29fd6526e416c7fbc176f16608829617114f84f5f2746cbf3fbc2"
+    },
+    {
+      "filename": "0052_agent_source_text_view.sql",
+      "sha256": "fda14ccfef33d044e5f9baf044709b892a98be0670026830622afe1479d8f192"
     }
   ]
 }
