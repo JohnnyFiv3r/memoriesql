@@ -57,6 +57,12 @@ A type is accepted only when its key and revision name a current authorable
 bead type and the record's type catalog is `memoriesql.bead_types`. A pending
 type can be decided once, later; a final type is never replaced.
 
+Writers to one engine scope take turns: a batch locks each of its scopes, in
+sorted order, before it reads a record. A scope's records therefore commit in
+acceptance order, and a reader's `next` cursor never passes a record that
+commits later. A batch that waits more than 500 ms for a scope fails busy
+(`55P03`) with nothing written, and the engine resends it.
+
 Every accepted record writes one outbox event: `engine_chunk.accepted` or
 `engine_type.decided`. No relay consumes them yet.
 
@@ -81,6 +87,6 @@ a record before sending it.
 
 Fictional fixtures: `tests/runtime/test_engine_intake.py` covers exact storage,
 replay, first-writer-wins, the single late type, ungoverned and malformed
-records, retryable scopes, authority, immutability and concurrent chunks of one
-event. `tests/unit/test_engine_intake_migration.py` pins the grants, row-level
+records, retryable scopes, authority, immutability, concurrent chunks of one
+event and writers taking turns in one scope. `tests/unit/test_engine_intake_migration.py` pins the grants, row-level
 security and immutability. Historical SQL 0001–0053 and records are unchanged.

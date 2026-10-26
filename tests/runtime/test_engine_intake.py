@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import copy
 import hashlib
 import os
@@ -35,6 +36,8 @@ from memoriesql.infrastructure.postgres.source_enrollment import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from tests.runtime.test_postgres_runtime import migrate
 else:
     from test_postgres_runtime import migrate
@@ -556,18 +559,14 @@ class EngineRecordIntake(unittest.TestCase):
                         )
                     )
 
-    def test_concurrent_chunks_of_one_event_complete_it_once(self) -> None:
-        first, second = event_records(
-            "acme",
-            "orchard/10",
-            ["Concurrent one. ", "Concurrent two."],
-            [(assigned("observation"), rule())] * 2,
-        )
+    @contextlib.contextmanager
+    def held_open(self, *records: dict[str, Any]) -> Iterator[None]:
+        """Delivers `records` in a transaction left open until the block ends."""
         holding = threading.Event()
         release = threading.Event()
         failures: list[BaseException] = []
 
-        def hold_first() -> None:
+        def hold() -> None:
             try:
                 with psycopg.connect(self.url) as connection:
                     with connection.transaction():
@@ -580,7 +579,7 @@ class EngineRecordIntake(unittest.TestCase):
                             "SELECT memoriesql.accept_engine_records_v1(%s)",
                             (
                                 Jsonb(
-                                    AcceptEngineRecords(records=(first,)).model_dump(
+                                    AcceptEngineRecords(records=records).model_dump(
                                         mode="json"
                                     )
                                 ),
@@ -592,21 +591,67 @@ class EngineRecordIntake(unittest.TestCase):
                 failures.append(error)
                 holding.set()
 
-        thread = threading.Thread(target=hold_first)
+        thread = threading.Thread(target=hold)
         thread.start()
         self.assertTrue(holding.wait(10))
-        with psycopg.connect(self.url, autocommit=True) as other:
-            with self.assertRaises(EngineIntakeBusy):
-                self.intake(connection=other).accept(
-                    AcceptEngineRecords(records=(second,))
-                )
-        release.set()
-        thread.join(10)
+        try:
+            yield
+        finally:
+            release.set()
+            thread.join(10)
         self.assertEqual(failures, [])
+
+    def test_concurrent_chunks_of_one_event_complete_it_once(self) -> None:
+        first, second = event_records(
+            "acme",
+            "orchard/10",
+            ["Concurrent one. ", "Concurrent two."],
+            [(assigned("observation"), rule())] * 2,
+        )
+        with self.held_open(first):
+            with psycopg.connect(self.url, autocommit=True) as other:
+                with self.assertRaises(EngineIntakeBusy):
+                    self.intake(connection=other).accept(
+                        AcceptEngineRecords(records=(second,))
+                    )
         self.assertEqual(
             self.deliver(second), [EngineRecordAccepted(outcome="accepted")]
         )
         self.assertEqual(self.count("engine_event_completions"), 1)
+
+    def test_writers_to_one_scope_take_turns_so_reads_never_skip(self) -> None:
+        (early,) = event_records(
+            "acme", "orchard/11", ["Early."], [(assigned("observation"), rule())]
+        )
+        (late,) = event_records(
+            "acme", "orchard/12", ["Late."], [(assigned("observation"), rule())]
+        )
+        (elsewhere,) = event_records(
+            "beta", "orchard/13", ["Elsewhere."], [(assigned("observation"), rule())]
+        )
+        beta = self.enroll("beta")
+        other_engine = uuid.uuid4()
+        other_secret = sha("fictional second engine credential")
+        self.pair(other_engine, other_secret, [beta.access_scope_id])
+        self.grant(beta.source_object_id, other_engine)
+        with self.held_open(early):
+            with psycopg.connect(self.url, autocommit=True) as other:
+                # Another event in the same scope waits for the open batch
+                # instead of committing a later record_seq before it, which
+                # a reader's cursor would then pass.
+                with self.assertRaises(EngineIntakeBusy):
+                    self.intake(connection=other).accept(
+                        AcceptEngineRecords(records=(late,))
+                    )
+                # Another scope does not wait.
+                accepted = self.intake(other_secret, other).accept(
+                    AcceptEngineRecords(records=(elsewhere,))
+                )
+                self.assertEqual(
+                    list(accepted.results), [EngineRecordAccepted(outcome="accepted")]
+                )
+        self.assertEqual(self.deliver(late), [EngineRecordAccepted(outcome="accepted")])
+        self.assertEqual(self.held(), [early, late])
 
 
 if __name__ == "__main__":

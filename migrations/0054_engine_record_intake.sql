@@ -881,6 +881,7 @@ SET lock_timeout = '500ms'
 AS $$
 DECLARE
     authority memoriesql.authorization_contexts%ROWTYPE;
+    engine_scope text;
     item jsonb;
     outcome jsonb;
     deferred jsonb;
@@ -918,6 +919,20 @@ BEGIN
     ) THEN
         RAISE EXCEPTION 'engine record intake is unavailable' USING ERRCODE = '42501';
     END IF;
+    -- Writers to one engine scope take turns, so a scope's records commit in
+    -- record_seq order and a reader's cursor never passes a record that
+    -- commits later. Every scope is locked, in sorted order, before any
+    -- record is read, so two batches never wait on each other in a cycle.
+    FOR engine_scope IN
+        SELECT DISTINCT record ->> 'scope'
+          FROM jsonb_array_elements(request -> 'records') AS record
+         WHERE jsonb_typeof(record -> 'scope') = 'string'
+         ORDER BY 1
+    LOOP
+        PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
+            authority.tenant_id::text || ':engine_scope:' || engine_scope, 0
+        ));
+    END LOOP;
     FOR item IN SELECT value FROM jsonb_array_elements(request -> 'records') LOOP
         IF deferred IS NOT NULL THEN
             results := results || jsonb_build_array(deferred);
