@@ -1,5 +1,5 @@
 {
-  "_comment": "Planning weights: max reported module seconds from both Python minors in candidate run39979180509 (PR98 ac64ea9; its 3.14 runner was ~1.9x slower) (floor0.1s); test_investigation_checkpoints 946.9s = native attempt3 304.3s x 3.11 (test_agent_sql_helpers_runtime hosted3.14/native); test_checkpoint_access_control 60.0s estimated, unmeasured; test_agent_source_text_runtime 891.3s = native 22856e2 286.6s x 3.11 (same factor). 62modules/842occurrences/831identities/3workers. Weights do not qualify a run.",
+  "_comment": "Planning weights: max reported module seconds from both Python minors in candidate run39979180509 (PR98 ac64ea9; its 3.14 runner was ~1.9x slower) (floor0.1s); test_investigation_checkpoints 946.9s = native attempt3 304.3s x 3.11 (test_agent_sql_helpers_runtime hosted3.14/native); test_checkpoint_access_control 60.0s estimated, unmeasured; test_agent_source_text_runtime 891.3s = native 22856e2 286.6s x 3.11 (same factor); test_population_family_budget 1099.7s = native fe04396 353.6s (3.13, the larger) x 3.11 (same factor). 62modules/842occurrences/831identities/3workers. Weights do not qualify a run.",
   "seconds": {
     "test_agent_sql_authority": 2.0,
     "test_agent_sql_disclosure": 227.1,
@@ -63,6 +63,7 @@
     "test_terminal_settlement": 0.3,
     "test_investigation_checkpoints": 946.9,
     "test_checkpoint_access_control": 60.0,
-    "test_agent_source_text_runtime": 891.3
+    "test_agent_source_text_runtime": 891.3,
+    "test_population_family_budget": 1099.7
   }
 }
