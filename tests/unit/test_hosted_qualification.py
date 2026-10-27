@@ -5,9 +5,11 @@ import inspect
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 import textwrap
 import time
@@ -39,6 +41,7 @@ from scripts.run_hosted_qualification import (
     part_artifact_name,
     part_shards,
     qualify,
+    tree_digest,
 )
 from scripts.select_hosted_qualification import READY_LABEL, REPOSITORY, select
 
@@ -328,6 +331,128 @@ class QualificationProcessTests(unittest.TestCase):
             self.assertEqual(report["selected_modules"], ["test_fictional"])
             self.assertEqual(report["tests_run"], 2)
             self.assertEqual(report["skipped"], 1)
+
+
+class PinnedInterpreterTests(unittest.TestCase):
+    INSTALL = "      - name: Install the pinned CPython build into the tool cache\n"
+    BUILD_MTIME = 315532800
+
+    def compatibility(self) -> str:
+        workflow = (REPO / ".github/workflows/python-package.yml").read_text()
+        return workflow.split("  compatibility:")[1].split("  qualification:")[0]
+
+    def test_every_part_activates_its_interpreters_pinned_build(self) -> None:
+        compatibility = self.compatibility()
+        pins = re.findall(
+            r'          - python-version: "(3\.\d+)"\n'
+            r'            python-build: "(\S+)"\n'
+            r"            python-build-url: (\S+)\n"
+            r"            python-build-sha256: ([0-9a-f]{64})\n",
+            compatibility,
+        )
+        self.assertEqual([pin[0] for pin in pins], ["3.13", "3.14"])
+        for minor, build, url, _ in pins:
+            self.assertTrue(build.startswith(minor + "."))
+            self.assertRegex(
+                url,
+                "^https://github.com/actions/python-versions/releases/download/"
+                rf"{re.escape(build)}-\d+/python-{re.escape(build)}-linux-24.04-x64.tar.gz$",
+            )
+        # setup-python runs once, after the install, on the exact installed release.
+        self.assertEqual(compatibility.count("actions/setup-python@"), 1)
+        self.assertIn(
+            "      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065\n"
+            "        with:\n"
+            "          python-version: ${{ steps.python-build.outputs.version }}\n",
+            compatibility.split(self.INSTALL)[1],
+        )
+
+    def build_archive(self, root: Path) -> Path:
+        build = root / "build"
+        (build / "bin").mkdir(parents=True)
+        (build / "lib/python3.14/__pycache__").mkdir(parents=True)
+        (build / "bin/python3.14").write_text("fictional interpreter\n")
+        (build / "bin/python3.14").chmod(0o755)
+        (build / "bin/python3").symlink_to("python3.14")
+        (build / "lib/python3.14/os.py").write_text("fictional = True\n")
+        (build / "lib/python3.14/__pycache__/os.cpython-314.pyc").write_bytes(b"pyc")
+        (build / "setup.sh").write_text('touch "$RUNNER_TOOL_CACHE/setup-ran"\n')
+        for path in (*build.rglob("*"), build):
+            if not path.is_symlink():
+                os.utime(path, (self.BUILD_MTIME, self.BUILD_MTIME))
+        archive = root / "python-3.14.10-linux-24.04-x64.tar.gz"
+        with tarfile.open(archive, "w:gz") as tar:
+            tar.add(build, arcname=".")
+        return archive
+
+    def install(
+        self, root: Path, archive: Path, cache: Path, **overrides: str
+    ) -> subprocess.CompletedProcess[str]:
+        step = self.compatibility().split(self.INSTALL)[1].split("      - uses:")[0]
+        self.assertIn("        shell: bash\n", step)
+        body = textwrap.dedent(step.split("        run: |\n")[1])
+        (root / "temp").mkdir(exist_ok=True)
+        return subprocess.run(
+            ["bash", "--noprofile", "--norc", "-e", "-o", "pipefail", "-c", body],
+            cwd=root,
+            env=os.environ
+            | {
+                "PYTHON_MINOR": "3.14",
+                "PYTHON_BUILD": "3.14.10",
+                "PYTHON_BUILD_URL": archive.as_uri(),
+                "PYTHON_BUILD_SHA256": file_hash(archive),
+                "RUNNER_TEMP": str(root / "temp"),
+                "RUNNER_TOOL_CACHE": str(cache),
+                "GITHUB_OUTPUT": str(root / "output"),
+            }
+            | overrides,
+            capture_output=True,
+            text=True,
+        )
+
+    def test_parts_install_one_identical_tree_without_running_the_build(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            archive = self.build_archive(root)
+            image, fresh = root / "image-cache", root / "fresh-cache"
+            # A runner image's own copy of the same release is replaced, not merged.
+            (image / "Python/3.14.10/x64").mkdir(parents=True)
+            (image / "Python/3.14.10/x64/image-only").write_text("image\n")
+            for cache in (image, fresh):
+                result = self.install(root, archive, cache)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                prefix = cache / "Python/3.14.10/x64"
+                self.assertTrue((cache / "Python/3.14.10/x64.complete").is_file())
+                self.assertFalse((prefix / "image-only").exists())
+                self.assertFalse((prefix / "setup.sh").exists())
+                self.assertFalse((cache / "setup-ran").exists())
+                self.assertEqual(os.readlink(prefix / "python"), "./bin/python3.14")
+                self.assertEqual(os.readlink(prefix / "bin/python314"), "python3.14")
+                self.assertEqual(os.readlink(prefix / "bin/python"), "python3.14")
+                # Source times survive, so the build's compiled files stay current.
+                self.assertEqual(
+                    (prefix / "lib/python3.14/os.py").stat().st_mtime, self.BUILD_MTIME
+                )
+            self.assertEqual((root / "output").read_text(), "version=3.14.10\n" * 2)
+            self.assertEqual(
+                tree_digest(image / "Python/3.14.10/x64"),
+                tree_digest(fresh / "Python/3.14.10/x64"),
+            )
+
+    def test_an_altered_build_or_another_minor_installs_nothing(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            archive = self.build_archive(root)
+            for overrides in (
+                {"PYTHON_BUILD_SHA256": hashlib.sha256(b"other").hexdigest()},
+                {"PYTHON_MINOR": "3.13"},
+            ):
+                with self.subTest(overrides=overrides):
+                    cache = root / "cache"
+                    result = self.install(root, archive, cache, **overrides)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertFalse((cache / "Python").exists())
+                    self.assertFalse((root / "output").exists())
 
 
 class QualificationCoverageTests(unittest.TestCase):
