@@ -66,7 +66,7 @@ class Legacy7AvailabilityMigration(unittest.TestCase):
         )
         rows = inventory["migrations"]
         self.assertEqual(rows[44]["filename"], NAME)
-        self.assertEqual(len(rows), 53)
+        self.assertEqual(len(rows), 54)
         for row in rows:
             data = (ROOT / "migrations" / row["filename"]).read_bytes()
             self.assertEqual(hashlib.sha256(data).hexdigest(), row["sha256"])

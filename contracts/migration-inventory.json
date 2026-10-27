@@ -213,6 +213,10 @@
     {
       "filename": "0053_population_family_budget.sql",
       "sha256": "b69b586866974280f231ccdbbedeb31fd82f0bdb01e347960f91625098052886"
+    },
+    {
+      "filename": "0054_supervised_reapproval.sql",
+      "sha256": "c95bcac87641a80abd1283cdc08c9545b647e246215c342dfb10db02f94cede5"
     }
   ]
 }
