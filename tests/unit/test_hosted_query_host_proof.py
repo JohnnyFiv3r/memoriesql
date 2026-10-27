@@ -712,6 +712,33 @@ class HostedQueryHostProof(unittest.TestCase):
             self.assertEqual([v for _, v in view.search_paths()], [str(copy / "lib")])
             hosted.check_private_copy(copy)
 
+    def test_private_copy_keeps_each_digests_lines_as_evidence_only(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            base, root = self.toolcache(Path(directory))
+            evidence = Path(directory) / "evidence"
+            evidence.mkdir()
+            unlisted = hosted.tree_digest(base)
+            with patch.object(hosted, "private_root", return_value=root):
+                _, _, record = hosted.private_interpreter(base, listings=evidence)
+            self.assertEqual(record["source_tree_sha256"], unlisted)
+            for name, key in (
+                (hosted.SOURCE_TREE_LISTING, "source_tree_sha256"),
+                (hosted.COPY_TREE_LISTING, "normalized_copy_tree_sha256"),
+            ):
+                data = (evidence / name).read_bytes()
+                self.assertEqual(hashlib.sha256(data).hexdigest(), record[key])
+                self.assertNotIn(directory.encode(), data)  # relative entries only
+                entries = [json.loads(line) for line in data.splitlines()]
+                self.assertIn(["link", "bin/python3", "python3.13"], entries)
+                self.assertIn(
+                    [
+                        "file",
+                        "lib/python3.13/os.py",
+                        hashlib.sha256(b"# stdlib").hexdigest(),
+                    ],
+                    entries,
+                )
+
     def test_private_copy_refuses_escaping_links_paths_and_entries(self) -> None:
         cases: list[tuple[str, Any]] = [
             ("link leaves the copy", lambda b: (b / "bin/escape").symlink_to("/etc")),
@@ -800,7 +827,7 @@ class HostedQueryHostProof(unittest.TestCase):
     def test_qualify_runs_everything_from_the_venv_on_on_the_private_copy(self) -> None:
         source = (ROOT / "scripts/run_hosted_qualification.py").read_text()
         body = source[source.index("def qualify(") :]
-        copy = body.index("private_interpreter(base)")
+        copy = body.index("private_interpreter(base, listings=evidence)")
         cleared = body.index(
             'for name in ("LD_LIBRARY_PATH", "LD_PRELOAD", "PYTHONHOME", "PYTHONPATH")'
         )

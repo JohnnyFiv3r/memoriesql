@@ -103,6 +103,10 @@ INTERPRETER_IDENTITY = (
     "source_tree_sha256",
     "normalized_copy_tree_sha256",
 )
+# Evidence only, never read by a check: the exact lines each interpreter tree
+# digest hashes, so the sha256 of each file is that digest.
+SOURCE_TREE_LISTING = "interpreter-source-tree.jsonl"
+COPY_TREE_LISTING = "interpreter-normalized-copy-tree.jsonl"
 # The aggregation recomputes the shard plan from these exact-source files.
 PLAN_INPUTS = (
     "scripts/run_installed_acceptance.py",
@@ -752,13 +756,18 @@ def private_root(prefix: str, parent: Path = Path("/tmp")) -> Path:
 
 
 def tree_digest(
-    root: Path, reset: dict[str, list[int]] | None = None, prefix: bytes = b""
+    root: Path,
+    reset: dict[str, list[int]] | None = None,
+    prefix: bytes = b"",
+    listing: Path | None = None,
 ) -> str:
     """Sorted relative path, entry type, content sha256 or link text; no modes.
 
     With reset, each listed file's rewritten ranges are restored to prefix first.
+    With listing, the hashed lines are also written there.
     """
     digest = hashlib.sha256()
+    lines: list[bytes] = []
     for base, directories, files in os.walk(root):
         directories.sort()
         for name in sorted((*directories, *files)):
@@ -776,7 +785,10 @@ def tree_digest(
                 item = ["file", relative, hashlib.sha256(data).hexdigest()]
             else:
                 raise ValueError("private interpreter has an unsupported entry")
-            digest.update(json.dumps(item).encode() + b"\n")
+            lines.append(json.dumps(item).encode() + b"\n")
+            digest.update(lines[-1])
+    if listing is not None:
+        listing.write_bytes(b"".join(lines))
     return digest.hexdigest()
 
 
@@ -823,10 +835,12 @@ def check_private_copy(copy: Path) -> None:
 
 
 def private_interpreter(
-    base: Path, parent: Path = Path("/tmp")
+    base: Path, parent: Path = Path("/tmp"), listings: Path | None = None
 ) -> tuple[Path, Path, dict[str, Any]]:
     """R1-R6: an S-owned copy of the setup-python build whose library search path
-    is relocated into the copy by a verified same-length prefix rewrite."""
+    is relocated into the copy by a verified same-length prefix rewrite.
+
+    With listings, both relocation-independent digests' lines are kept there."""
     if len(base.parts) < 4 or base.parts[-3] != "Python":
         raise ValueError("interpreter is not a toolcache layout")
     prefix = str(base.parents[2])
@@ -880,8 +894,15 @@ def private_interpreter(
                 "after_sha256": hashlib.sha256(after).hexdigest(),
             }
         )
-    source_digest = tree_digest(base)
-    normalized = tree_digest(copy, rewritten, old)
+    source_digest = tree_digest(
+        base, listing=None if listings is None else listings / SOURCE_TREE_LISTING
+    )
+    normalized = tree_digest(
+        copy,
+        rewritten,
+        old,
+        None if listings is None else listings / COPY_TREE_LISTING,
+    )
     if normalized != source_digest:
         raise ValueError("private interpreter digest mismatch")
     return (
@@ -1243,7 +1264,7 @@ def qualify(
         base = Path(sys.base_prefix).resolve()
         if not Path(python).is_relative_to(base):
             raise ValueError("interpreter outside its base prefix")
-        private, copy, relocation = private_interpreter(base)
+        private, copy, relocation = private_interpreter(base, listings=evidence)
         copy_python = copy / Path(python).relative_to(base)
         metadata["interpreter"] = {
             "build": "setup-python",

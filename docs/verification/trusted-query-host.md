@@ -192,7 +192,11 @@ or version string shares those bytes; afterwards every search path must stay
 inside the copy. The source digest must equal the copy digest with each rewrite
 reset; both digests and each rewritten object's offsets and hashes are recorded in
 each part's `qualification-part.json`, and the aggregation requires the
-relocation-independent digests to be equal across parts. `LD_LIBRARY_PATH`, `LD_PRELOAD`, `PYTHONHOME` and
+relocation-independent digests to be equal across parts. Each part also keeps
+the exact lines both of those digests hash (relative path, entry type, content
+sha256 or link text) in `interpreter-source-tree.jsonl` and
+`interpreter-normalized-copy-tree.jsonl`, whose sha256 is the recorded digest;
+they are evidence only, and no check reads them. `LD_LIBRARY_PATH`, `LD_PRELOAD`, `PYTHONHOME` and
 `PYTHONPATH` are cleared for every command on the copy, the installed test root
 sits under the same private directory, and both the precheck and the run-as worker
 refuse any mapped object outside the bound copy, venv and import roots that is not
