@@ -921,8 +921,11 @@ class EngineRecordIntake(EngineIntakeFixture):
                         [UNAVAILABLE],
                     )
                 # A caller who may deliver to and read acme does wait for it.
-                with self.assertRaises(EngineIntakeBusy):
+                with self.assertRaises(EngineIntakeBusy) as busy:
                     self.intake(connection=other).accept(request)
+                self.assertIsInstance(
+                    busy.exception.__cause__, psycopg.errors.LockNotAvailable
+                )
         self.assertEqual(self.held(), [held_record])
 
     def test_delivery_and_reads_need_their_own_authority(self) -> None:
@@ -958,9 +961,15 @@ class EngineRecordIntake(EngineIntakeFixture):
     def test_cursors_are_examined_only_after_read_authorization(self) -> None:
         self.deliver(one("acme", "orchard/42"))
         beta_engine = self.beta_engine()
-        self.deliver(one("beta", "orchard/43"), secret=beta_engine)
+        first, second = one("beta", "orchard/43"), one("beta", "orchard/44")
+        self.deliver(first, second, secret=beta_engine)
         ((_, mine), _) = self.pages("acme")
-        ((_, theirs), _) = self.pages("beta")
+        ((_, theirs), *_) = self.pages("beta")
+        # The owner reads both scopes. Beta's cursor continues beta only.
+        page = self.intake(self.owner_secret).read(
+            ReadEngineRecords(engine_scope="beta", after=theirs, limit=1)
+        )
+        self.assertEqual(page.records, (second,))
         write: Permissions = ("write",)
         writer = self.engine_for(
             self.acme, capabilities=("engine.records.deliver",), permissions=write
@@ -1124,6 +1133,39 @@ class EngineRecordIntake(EngineIntakeFixture):
                 ("accept_engine_records_v1",),
                 ("engine_vocabulary_v1",),
                 ("read_engine_records_v1",),
+            ],
+        )
+        # Replacing a function keeps only its owner and grants, so 0056 states
+        # each one's definer, search path, volatility and lock timeout again.
+        attributes = self.db.execute(
+            "SELECT p.proname, p.prosecdef, p.provolatile, p.proconfig, EXISTS ("
+            " SELECT 1 FROM aclexplode(COALESCE(p.proacl, acldefault('f', p.proowner)))"
+            " AS entry WHERE entry.grantee = 0 AND entry.privilege_type = 'EXECUTE') "
+            "FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace "
+            "WHERE n.nspname = 'memoriesql' AND p.proname = ANY(%s) ORDER BY 1",
+            (
+                [
+                    "engine_deliverable_source_v1",
+                    "engine_accept_record_v1",
+                    "accept_engine_records_v1",
+                    "read_engine_records_v1",
+                ],
+            ),
+        ).fetchall()
+        path = "search_path=pg_catalog, memoriesql"
+        self.assertEqual(
+            attributes,
+            [
+                (
+                    "accept_engine_records_v1",
+                    True,
+                    "v",
+                    [path, "lock_timeout=500ms"],
+                    False,
+                ),
+                ("engine_accept_record_v1", True, "v", [path], False),
+                ("engine_deliverable_source_v1", True, "v", [path], False),
+                ("read_engine_records_v1", True, "s", [path], False),
             ],
         )
 

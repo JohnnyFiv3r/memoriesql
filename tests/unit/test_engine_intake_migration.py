@@ -227,6 +227,19 @@ class EngineIntakePrivacyMigration(unittest.TestCase):
                 PRIVACY,
                 rf"REVOKE ALL ON FUNCTION memoriesql\.{name}\([^;]*FROM PUBLIC;",
             )
+        # CREATE OR REPLACE keeps only the owner and grants, so every function
+        # states its definer, search path and 0055's volatility again.
+        for name, volatility in (
+            ("engine_deliverable_source_v1", "VOLATILE"),
+            ("engine_accept_record_v1", "VOLATILE"),
+            ("accept_engine_records_v1", "VOLATILE"),
+            ("read_engine_records_v1", "STABLE"),
+        ):
+            self.assertRegex(
+                body(name),
+                rf"\n(LANGUAGE \w+) {volatility} SECURITY DEFINER\n"
+                r"SET search_path = pg_catalog, memoriesql\n",
+            )
         for definer in re.finditer(r"SECURITY DEFINER\n(.*)\n", PRIVACY):
             self.assertEqual(
                 definer.group(1), "SET search_path = pg_catalog, memoriesql"
@@ -239,11 +252,13 @@ class EngineIntakePrivacyMigration(unittest.TestCase):
         helper = body("engine_deliverable_source_v1")
         for check in (
             "'engine.records.deliver', 'write'",
-            "'write', pg_catalog.clock_timestamp()",
+            "'write', instant.checked_at",
             "'source.read', 'read'",
-            "'read', pg_catalog.clock_timestamp()",
+            "'read', instant.checked_at",
         ):
             self.assertEqual(helper.count(check), 1, check)
+        # Both windows are judged at one instant.
+        self.assertEqual(helper.count("clock_timestamp()"), 1)
         batch = body("accept_engine_records_v1")
         record = body("engine_accept_record_v1")
         for caller in (batch, record):

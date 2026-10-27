@@ -20,29 +20,31 @@
 -- The enrolled source standing for `engine_scope` in the caller's workspace,
 -- only while the caller may both deliver to it and read it. Anything else,
 -- whether not enrolled, not granted or outside a window, is the same NULL.
+-- Both windows are judged at one instant.
 CREATE FUNCTION memoriesql.engine_deliverable_source_v1(
     authority memoriesql.authorization_contexts,
     engine_scope text
 )
 RETURNS memoriesql.source_objects
-LANGUAGE sql STABLE SECURITY DEFINER
+LANGUAGE sql VOLATILE SECURITY DEFINER
 SET search_path = pg_catalog, memoriesql
 AS $$
     SELECT enrolled.*
       FROM memoriesql.engine_scope_source_v1(authority, engine_scope) AS enrolled
+     CROSS JOIN (SELECT pg_catalog.clock_timestamp() AS checked_at) AS instant
      WHERE enrolled.source_object_id IS NOT NULL
        AND memoriesql.current_context_source_authorized(
            enrolled.access_scope_id, enrolled.source_object_id,
            'engine.records.deliver', 'write'
        )
        AND memoriesql.current_context_scope_time_authorized(
-           enrolled.access_scope_id, 'write', pg_catalog.clock_timestamp()
+           enrolled.access_scope_id, 'write', instant.checked_at
        )
        AND memoriesql.current_context_source_authorized(
            enrolled.access_scope_id, enrolled.source_object_id, 'source.read', 'read'
        )
        AND memoriesql.current_context_scope_time_authorized(
-           enrolled.access_scope_id, 'read', pg_catalog.clock_timestamp()
+           enrolled.access_scope_id, 'read', instant.checked_at
        )
 $$;
 
