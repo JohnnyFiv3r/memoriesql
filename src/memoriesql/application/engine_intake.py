@@ -1,4 +1,4 @@
-"""Core Memory engine record intake: requests and receipts (schema 54).
+"""Core Memory engine record intake: requests and receipts (schema 55).
 
 The engine delivers versioned records, one per deterministic chunk of a source
 event and later one type decision for a chunk it first delivered as pending.
@@ -23,7 +23,7 @@ ENGINE_RECORD_CONTRACT = "core_memory.record.v1"
 
 class AcceptEngineRecords(FrozenContractModel):
     contract_version: Literal[1] = 1
-    expected_schema_version: Literal[54] = 54
+    expected_schema_version: Literal[55] = 55
     records: tuple[dict[str, JsonValue], ...] = Field(min_length=1, max_length=256)
 
 

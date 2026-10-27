@@ -1,9 +1,15 @@
-"""Run the existing installed fictional proof, retaining every child outcome."""
+"""Run one part of the installed fictional proof, or aggregate every part.
+
+Each part retains every child outcome; only the aggregation of all parts of an
+interpreter can complete its proof.
+"""
 
 from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
+import io
 import json
 import os
 import platform
@@ -18,8 +24,10 @@ import string
 import struct
 import subprocess
 import sys
+import threading
 import time
 import zipfile
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any, NoReturn
 
@@ -47,6 +55,61 @@ RUNTIME_DEPS = (
 )
 MAX_LOG_BYTES = 16 * 1024 * 1024
 MAX_COMMANDS = 40
+# Acceptance is split into parts, each on its own runner with its own PostgreSQL
+# service: four processes on one four-CPU runner saturated it (F-3). Two shards per
+# part stay below the three-process load the shard weights were recorded under.
+ACCEPTANCE_PARTS = 3
+SHARDS_PER_PART = 2
+# One longest-first plan over every shard of the interpreter; part p runs its slice.
+ACCEPTANCE_SHARDS = ACCEPTANCE_PARTS * SHARDS_PER_PART
+# The restart triplets and the host proof run once per interpreter, in this part.
+HOST_PROOF_PART = 1
+REPOSITORY = "JohnnyFiv3r/memoriesql"
+# A part's record; only the aggregation writes qualification.json.
+PART_RECORD = "qualification-part.json"
+# Every part runs these, in order, before its own acceptance shards.
+SETUP_COMMANDS = (
+    "verify-source",
+    "source-head",
+    "verify-artifacts",
+    "dependencies",
+    "build-tools",
+    "sdist-wheel",
+    "venv",
+    "install-wheel",
+    "tracked-inputs",
+    "installed-environment",
+    "installed-import-roots",
+    "installed-mapped-objects",
+    "package-isolation",
+    "release-installation",
+)
+# Then the host part alone runs these, in order.
+HOST_COMMANDS = (
+    *(
+        f"restart-{index}-{step}"
+        for index in range(1, len(RESTARTS) + 1)
+        for step in ("prepare", "recover", "cleanup")
+    ),
+    "query-host-facts",
+    "query-host",
+)
+# Interpreter identity that does not depend on a part's private relocation path.
+INTERPRETER_IDENTITY = (
+    "build",
+    "version",
+    "architecture",
+    "source_python_sha256",
+    "source_tree_sha256",
+    "normalized_copy_tree_sha256",
+)
+# The aggregation recomputes the shard plan from these exact-source files.
+PLAN_INPUTS = (
+    "scripts/run_installed_acceptance.py",
+    "tests/fixtures/acceptance-shard-weights.json",
+)
+# Runner load is observed, never enforced: CPU, memory and pressure every 15 s.
+RESOURCE_SAMPLE_SECONDS = 15
 HOST_AUTHORITY_SHA256 = (
     "83e3a3d63a1a8a9da88d1a0688e9241527726dd856be33a0b039a735cb5b504c"
 )
@@ -833,17 +896,67 @@ def private_interpreter(
     )
 
 
-def check_shards(root: Path, count: int = 3) -> None:
+def part_shards(part: int) -> list[int]:
+    """The global shard indices one part runs."""
+    if not 1 <= part <= ACCEPTANCE_PARTS:
+        raise ValueError("unknown acceptance part")
+    first = (part - 1) * SHARDS_PER_PART + 1
+    return list(range(first, first + SHARDS_PER_PART))
+
+
+def acceptance_plan(
+    script: Path, weights: Path
+) -> Callable[[dict[str, int]], list[list[str]]]:
+    """Recompute the global shard plan with the acceptance runner's own placement."""
+    spec = importlib.util.spec_from_file_location("planned_acceptance", script)
+    if spec is None or spec.loader is None:
+        raise ValueError("acceptance runner cannot be loaded")
+    runner = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(runner)
+    seconds = json.loads(weights.read_text())["seconds"]
+    recorded = {str(module): float(value) for module, value in seconds.items()}
+
+    def plan(discovered: dict[str, int]) -> list[list[str]]:
+        return [
+            list(runner.shard_modules(discovered, recorded, index, ACCEPTANCE_SHARDS))
+            for index in range(1, ACCEPTANCE_SHARDS + 1)
+        ]
+
+    return plan
+
+
+def check_shards(
+    root: Path,
+    count: int = ACCEPTANCE_SHARDS,
+    indices: Sequence[int] | None = None,
+    plan: Callable[[dict[str, int]], list[list[str]]] | None = None,
+) -> None:
+    """Listed shards (default: all) ran their planned modules completely.
+
+    Only when every shard of the count is listed must the union be the suite.
+    """
+    listed = list(range(1, count + 1) if indices is None else indices)
+    if (
+        not listed
+        or len(set(listed)) != len(listed)
+        or not set(listed) <= set(range(1, count + 1))
+    ):
+        raise ValueError("invalid shard selection")
     discovered: dict[str, int] | None = None
     identities: dict[str, dict[str, int]] | None = None
+    planned: list[list[str]] | None = None
     selected: set[str] = set()
-    for index in range(1, count + 1):
+    for index in listed:
         report = json.loads((root / f"acceptance-{index}.json").read_text())
         if discovered is None:
             discovered = report["discovered_modules"]
             identities = identity_inventory(report.get("discovered_tests"))
             if {m: sum(c.values()) for m, c in identities.items()} != discovered:
                 raise ValueError("installed identity and module counts disagree")
+            if plan is not None:
+                planned = plan(discovered)
+                if len(planned) != count:
+                    raise ValueError("shard plan does not cover the shard count")
         if report["discovered_modules"] != discovered:
             raise ValueError("shards discovered different suites")
         if identity_inventory(report.get("discovered_tests")) != identities:
@@ -858,6 +971,8 @@ def check_shards(root: Path, count: int = 3) -> None:
             or report["failures"]
         ):
             raise ValueError("overlap, skips or failed installed tests")
+        if planned is not None and modules != set(planned[index - 1]):
+            raise ValueError("installed shard ran other than its planned modules")
         if report["tests_run"] != sum(discovered[m] for m in modules):
             raise ValueError("incomplete installed shard")
         assert identities is not None
@@ -866,7 +981,7 @@ def check_shards(root: Path, count: int = 3) -> None:
         }:
             raise ValueError("installed test identities or multiplicities differ")
         selected |= modules
-    if not discovered or selected != set(discovered):
+    if not discovered or (len(listed) == count and selected != set(discovered)):
         raise ValueError("missing installed test modules")
 
 
@@ -907,10 +1022,120 @@ def retain_containment_failure(
     metadata["containment_record_sha256"] = hashlib.sha256(data).hexdigest()
 
 
+class ResourceSampler:
+    """Runner CPU, memory and pressure while the proof runs, for its evidence.
+
+    Observation only: a read failure ends sampling, never the proof. Each sample
+    is one JSON line; `stop()` summarises CPU busy and iowait shares, load,
+    lowest available memory and the highest pressure per marked phase.
+    """
+
+    def __init__(
+        self,
+        path: Path,
+        proc: Path = Path("/proc"),
+        interval: float = RESOURCE_SAMPLE_SECONDS,
+    ) -> None:
+        self.path, self.proc, self.interval = path, proc, interval
+        self.samples: list[dict[str, Any]] = []
+        self.phase = "setup"
+        self.stopped = threading.Event()
+        self.thread = threading.Thread(target=self._loop, daemon=True)
+        self.started = time.monotonic()
+
+    def start(self) -> None:
+        self.thread.start()
+
+    def mark(self, phase: str) -> None:
+        self.phase = phase
+
+    def sample(self) -> dict[str, Any]:
+        cpu = [
+            int(v) for v in (self.proc / "stat").read_text().split("\n")[0].split()[1:]
+        ]
+        memory = {
+            key: int(value.split()[0])
+            for key, value in (
+                line.split(":", 1)
+                for line in (self.proc / "meminfo").read_text().splitlines()
+                if ":" in line
+            )
+            if key in ("MemTotal", "MemAvailable")
+        }
+        pressure: dict[str, float] = {}
+        for kind in ("cpu", "io", "memory"):
+            try:
+                first = (self.proc / "pressure" / kind).read_text().splitlines()[0]
+            except (OSError, IndexError):
+                continue
+            fields = dict(part.split("=", 1) for part in first.split()[1:])
+            pressure[kind] = float(fields["avg10"])
+        return {
+            "t": round(time.monotonic() - self.started, 1),
+            "phase": self.phase,
+            "load1": float((self.proc / "loadavg").read_text().split()[0]),
+            "cpu": cpu,
+            "mem_kib": memory,
+            "pressure_some_avg10": pressure,
+        }
+
+    def _loop(self) -> None:
+        try:
+            with self.path.open("a") as stream:
+                while True:
+                    record = self.sample()
+                    self.samples.append(record)
+                    stream.write(json.dumps(record, sort_keys=True) + "\n")
+                    stream.flush()
+                    if self.stopped.wait(self.interval):
+                        return
+        except (OSError, ValueError, KeyError, IndexError):
+            return
+
+    def stop(self) -> dict[str, Any]:
+        self.stopped.set()
+        if self.thread.ident is not None:
+            self.thread.join(self.interval + 5)
+        phases: dict[str, dict[str, Any]] = {}
+        for before, after in zip(self.samples, self.samples[1:]):
+            delta = [b - a for a, b in zip(before["cpu"], after["cpu"])]
+            total = sum(delta) or 1
+            idle, iowait = delta[3], delta[4] if len(delta) > 4 else 0
+            row = phases.setdefault(
+                after["phase"], {"intervals": 0, "busy": 0.0, "iowait": 0.0}
+            )
+            row["intervals"] += 1
+            row["busy"] += (total - idle - iowait) / total
+            row["iowait"] += iowait / total
+            row["load1_max"] = max(row.get("load1_max", 0.0), after["load1"])
+            available = after["mem_kib"].get("MemAvailable")
+            if available is not None:
+                row["mem_available_min_kib"] = min(
+                    row.get("mem_available_min_kib", available), available
+                )
+            for kind, value in after["pressure_some_avg10"].items():
+                key = f"{kind}_pressure_avg10_max"
+                row[key] = max(row.get(key, 0.0), value)
+        for row in phases.values():
+            row["busy_mean"] = round(row.pop("busy") / row["intervals"], 3)
+            row["iowait_mean"] = round(row.pop("iowait") / row["intervals"], 3)
+        first = self.samples[0] if self.samples else {}
+        return {
+            "cpu_count": os.cpu_count(),
+            "mem_total_kib": first.get("mem_kib", {}).get("MemTotal"),
+            "interval_seconds": self.interval,
+            "samples": len(self.samples),
+            "phases": phases,
+        }
+
+
 def qualify(
-    checkout: Path, artifacts: Path, evidence: Path, root: Path, sha: str
+    checkout: Path, artifacts: Path, evidence: Path, root: Path, sha: str, part: int
 ) -> None:
+    shards = part_shards(part)
     runner = Commands(evidence)
+    sampler = ResourceSampler(evidence / "runner-resources.jsonl")
+    sampler.start()
     test_root: Path | None = None
     python = str(Path(sys.executable).resolve())
     metadata: dict[str, Any] = {
@@ -921,10 +1146,17 @@ def qualify(
         "run_attempt": os.environ.get("GITHUB_RUN_ATTEMPT"),
         "runner_os": platform.platform(),
         "architecture": platform.machine(),
-        "proof_complete": False,
+        "part": part,
+        "parts": ACCEPTANCE_PARTS,
+        "shards": shards,
+        "global_shards": ACCEPTANCE_SHARDS,
+        "host_proof_part": HOST_PROOF_PART,
+        # A part record never completes a proof; only the aggregation does.
+        "part_complete": False,
         "qualification_requires": [
-            "successful interpreter job",
+            "successful part job",
             "verified PostgreSQL stop",
+            "aggregation of every part of the interpreter",
         ],
         "child_file_limit_bytes": MAX_LOG_BYTES,
     }
@@ -1133,6 +1365,7 @@ def qualify(
             [installed_python, "-I", "prove_release_installation.py"],
             test_root,
         )
+        sampler.mark("acceptance")
         children = [
             runner.start(
                 f"acceptance-{i}",
@@ -1141,22 +1374,36 @@ def qualify(
                     "-I",
                     "run_installed_acceptance.py",
                     "--shard",
-                    f"{i}/3",
+                    f"{i}/{ACCEPTANCE_SHARDS}",
                     "--result-json",
                     f"acceptance-{i}.json",
                 ],
                 test_root,
             )
-            for i in range(1, 4)
+            for i in shards
         ]
         exits = [
             runner.finish(child) for child in children
         ]  # collect every exit, including peers of failures
-        for report in test_root.glob("acceptance-*.json"):
-            shutil.copyfile(report, evidence / report.name)
+        for i in shards:
+            report = test_root / f"acceptance-{i}.json"
+            if report.is_file():
+                shutil.copyfile(report, evidence / report.name)
         if any(exits):
             raise RuntimeError("installed acceptance failed; every shard exit retained")
-        check_shards(test_root)
+        check_shards(
+            test_root,
+            ACCEPTANCE_SHARDS,
+            shards,
+            acceptance_plan(
+                test_root / "run_installed_acceptance.py",
+                test_root / "acceptance-shard-weights.json",
+            ),
+        )
+        if part != HOST_PROOF_PART:
+            metadata["part_complete"] = True
+            return
+        sampler.mark("restarts")
         restart_failures = []
         for index, script in enumerate(RESTARTS, 1):
             try:
@@ -1185,6 +1432,7 @@ def qualify(
                     restart_failures.append(str(error))
         if restart_failures:
             raise RuntimeError("; ".join(restart_failures))
+        sampler.mark("host-proof")
         host_environment = prepare_host_binding(
             runner, test_root, installed_python, sha, wheel
         )
@@ -1195,15 +1443,19 @@ def qualify(
             test_root,
             env=host_environment,
         )
-        metadata["proof_complete"] = True
+        metadata["part_complete"] = True
     except BaseException as error:
         metadata["failure"] = f"{type(error).__name__}: {error}"
         raise
     finally:
         try:
+            metadata["runner_resources"] = sampler.stop()
+        except Exception as error:  # observation never decides the proof
+            metadata["runner_resources"] = {"error": type(error).__name__}
+        try:
             runner.close()
         except BaseException as error:
-            metadata["proof_complete"] = False
+            metadata["part_complete"] = False
             metadata["cleanup_failure"] = f"{type(error).__name__}: {error}"
             raise
         finally:
@@ -1212,12 +1464,10 @@ def qualify(
                 if test_root is not None:
                     retain_containment_failure(test_root, evidence, metadata)
             except Exception as error:
-                metadata["proof_complete"] = False
+                metadata["part_complete"] = False
                 metadata["containment_evidence_failure"] = type(error).__name__
                 evidence_error = error
-            (evidence / "qualification.json").write_text(
-                json.dumps(metadata, indent=2) + "\n"
-            )
+            (evidence / PART_RECORD).write_text(json.dumps(metadata, indent=2) + "\n")
             if evidence_error is not None:
                 raise evidence_error
             if metadata.get("containment_fatal"):
@@ -1226,18 +1476,359 @@ def qualify(
                 )
 
 
+def part_artifact_name(
+    minor: str, part: int, sha: str, run_id: str, attempt: str
+) -> str:
+    return f"installed-qualification-part-{minor}-{part}-{sha}-{run_id}-{attempt}"
+
+
+def gh(arguments: list[str]) -> bytes:
+    """GitHub's CLI with the job's read token; its output is data, never run."""
+    return subprocess.run(
+        ["gh", *arguments], check=True, capture_output=True, timeout=120
+    ).stdout
+
+
+def checkout_identity(checkout: Path) -> str:
+    """The clean checkout's HEAD; the aggregation reads plan inputs from it."""
+    subprocess.run(
+        ["git", "diff", "--quiet", "--exit-code", "HEAD", "--"],
+        cwd=checkout,
+        check=True,
+    )
+    return subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=checkout,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+
+def extract_artifact(data: bytes, target: Path) -> None:
+    """Unpack an artifact zip into a fresh directory, refusing links and escapes."""
+    target.mkdir()
+    with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        for member in archive.infolist():
+            name = member.filename
+            parts = Path(name).parts
+            if (
+                not parts
+                or name.startswith("/")
+                or "\\" in name
+                or ".." in parts
+                or stat.S_ISLNK(member.external_attr >> 16)
+            ):
+                raise ValueError("unsafe artifact member: " + name)
+            destination = target / name
+            if member.is_dir():
+                destination.mkdir(parents=True, exist_ok=True)
+                continue
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            with archive.open(member) as source, destination.open("xb") as sink:
+                shutil.copyfileobj(source, sink)
+
+
+def fetch_parts(
+    fetch: Callable[[list[str]], bytes],
+    root: Path,
+    minor: str,
+    sha: str,
+    run_id: str,
+    attempt: str,
+) -> dict[int, dict[str, Any]]:
+    """Every part's artifact of this run attempt, verified against GitHub's digest."""
+    listing = json.loads(
+        fetch(
+            [
+                "api",
+                "--method",
+                "GET",
+                f"repos/{REPOSITORY}/actions/runs/{run_id}/artifacts",
+                "-F",
+                "per_page=100",
+            ]
+        )
+    )
+    artifacts = listing.get("artifacts")
+    if not isinstance(artifacts, list) or listing.get("total_count") != len(artifacts):
+        raise ValueError("incomplete run artifact listing")
+    parts: dict[int, dict[str, Any]] = {}
+    for part in range(1, ACCEPTANCE_PARTS + 1):
+        name = part_artifact_name(minor, part, sha, run_id, attempt)
+        rows = [row for row in artifacts if row.get("name") == name]
+        if len(rows) != 1:
+            raise ValueError("missing or duplicate part artifact: " + name)
+        row = rows[0]
+        digest = str(row.get("digest") or "")
+        run = row.get("workflow_run") or {}
+        if (
+            row.get("expired") is not False
+            or not re.fullmatch("sha256:[0-9a-f]{64}", digest)
+            or str(run.get("id")) != run_id
+            or run.get("head_sha") != sha
+        ):
+            raise ValueError("part artifact is not this run's intact upload: " + name)
+        data = fetch(
+            ["api", f"repos/{REPOSITORY}/actions/artifacts/{int(row['id'])}/zip"]
+        )
+        if "sha256:" + hashlib.sha256(data).hexdigest() != digest:
+            raise ValueError("part artifact differs from its recorded digest: " + name)
+        directory = root / f"part-{part}"
+        extract_artifact(data, directory)
+        parts[part] = {
+            "name": name,
+            "id": int(row["id"]),
+            "digest": digest,
+            "zip_bytes": len(data),
+            "directory": directory,
+        }
+    return parts
+
+
+def check_part(
+    evidence: Path,
+    part: int,
+    expected: dict[str, Any],
+    artifacts: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """One part's record and command manifest; returns it and its shared identity."""
+    record = json.loads((evidence / PART_RECORD).read_text())
+    for key, value in {
+        **expected,
+        "part": part,
+        "shards": part_shards(part),
+        "part_complete": True,
+        "sdist_wheel_equal": True,
+        "client_unwritable_inputs": True,
+        "artifacts": artifacts,
+    }.items():
+        if record.get(key) != value:
+            raise ValueError(f"part {part} record differs in {key}")
+    if part == HOST_PROOF_PART and not record.get("host_binding_sha256"):
+        raise ValueError("host proof part has no host binding")
+    if (evidence / "postgres-cleanup-exit.txt").read_text().strip() != "0":
+        raise ValueError(f"part {part} PostgreSQL stop is unverified")
+    rows = json.loads((evidence / "commands.json").read_text())
+    names = [
+        *SETUP_COMMANDS,
+        *(f"acceptance-{index}" for index in part_shards(part)),
+        *(HOST_COMMANDS if part == HOST_PROOF_PART else ()),
+    ]
+    if [row.get("name") for row in rows] != names:
+        raise ValueError(f"part {part} ran other than its planned commands")
+    reports = {
+        report.name
+        for report in evidence.iterdir()
+        if re.fullmatch(r"acceptance-\d+\.json", report.name)
+    }
+    if reports != {f"acceptance-{index}.json" for index in part_shards(part)}:
+        raise ValueError(f"part {part} holds other than its own shard reports")
+    if part == HOST_PROOF_PART:
+        shards_ended = max(
+            float(row["finished"])
+            for row in rows
+            if row["name"].startswith("acceptance-")
+        )
+        if min(
+            float(row["started"]) for row in rows if row["name"] in HOST_COMMANDS
+        ) < (shards_ended):
+            raise ValueError("restarts or host proof started before acceptance ended")
+    for row in rows:
+        log = evidence / str(row.get("log"))
+        if (
+            row.get("log") != f"{row['name']}.log"
+            or not row.get("complete")
+            or row.get("exit_code") != 0
+            or row.get("deadline_exhausted")
+            or file_hash(log) != row.get("log_sha256")
+        ):
+            raise ValueError(f"part {part} command {row['name']} is unproven")
+    record["driver_span_seconds"] = round(
+        max(float(row["finished"]) for row in rows)
+        - min(float(row["started"]) for row in rows),
+        1,
+    )
+    identity = {
+        "interpreter": {k: record["interpreter"][k] for k in INTERPRETER_IDENTITY},
+        "dependency_hashes": json.loads(
+            (evidence / "dependency-hashes.json").read_text()
+        ),
+        "installed_environment": record["installed_environment"],
+        "postgres_image_id": (evidence / "postgres-image-id.txt").read_text().strip(),
+        "copied_inputs": record["copied_inputs"],
+    }
+    return record, identity
+
+
+def aggregate(
+    checkout: Path,
+    package: Path,
+    evidence: Path,
+    root: Path,
+    sha: str,
+    minor: str,
+    parts_result: str,
+    run_id: str,
+    attempt: str,
+    fetch: Callable[[list[str]], bytes] = gh,
+) -> None:
+    """Complete an interpreter's proof from every part, or record why not."""
+    metadata: dict[str, Any] = {
+        "source_sha": sha,
+        "python_minor": minor,
+        "run_id": run_id,
+        "run_attempt": attempt,
+        "postgres_index": POSTGRES,
+        "parts": ACCEPTANCE_PARTS,
+        "shards_per_part": SHARDS_PER_PART,
+        "global_shards": ACCEPTANCE_SHARDS,
+        "host_proof_part": HOST_PROOF_PART,
+        "shard_index_map": {
+            str(part): part_shards(part) for part in range(1, ACCEPTANCE_PARTS + 1)
+        },
+        # needs.compatibility.result covers every part of both interpreters, so
+        # a failed part of either interpreter also refuses this aggregation.
+        "parts_result_scope": "every part job of both interpreters",
+        "parts_result": parts_result,
+        "proof_complete": False,
+    }
+    manifest: dict[str, Any] = {"source_sha": sha, "run_id": run_id, "parts": {}}
+    try:
+        if parts_result != "success":
+            raise ValueError("every part job must succeed, not: " + parts_result)
+        # The plan is recomputed from this checkout, so it must be the exact source.
+        head = checkout_identity(checkout)
+        metadata["checkout_head"] = head
+        if head != sha:
+            raise ValueError("aggregation checkout differs from the exact source")
+        wheels, sdists = list(package.glob("*.whl")), list(package.glob("*.tar.gz"))
+        if len(wheels) != 1 or len(sdists) != 1:
+            raise ValueError("expected one reviewed wheel and sdist")
+        artifacts = {
+            p.name: {"sha256": file_hash(p), "bytes": p.stat().st_size}
+            for p in (wheels[0], sdists[0])
+        }
+        metadata["artifacts"] = artifacts
+        expected = {
+            "source_sha": sha,
+            "run_id": run_id,
+            "run_attempt": attempt,
+            "postgres_index": POSTGRES,
+            "parts": ACCEPTANCE_PARTS,
+            "global_shards": ACCEPTANCE_SHARDS,
+            "host_proof_part": HOST_PROOF_PART,
+        }
+        shards = root / "shards"
+        shards.mkdir()
+        identities = []
+        for part, artifact in fetch_parts(
+            fetch, root, minor, sha, run_id, attempt
+        ).items():
+            part_evidence = artifact["directory"] / "qualification"
+            record, identity = check_part(part_evidence, part, expected, artifacts)
+            if not str(identity["interpreter"]["version"]).startswith(minor + "."):
+                raise ValueError(f"part {part} ran another interpreter")
+            identities.append(identity)
+            for index in part_shards(part):
+                shutil.copyfile(
+                    part_evidence / f"acceptance-{index}.json",
+                    shards / f"acceptance-{index}.json",
+                )
+            manifest["parts"][str(part)] = {
+                **{k: v for k, v in artifact.items() if k != "directory"},
+                "record_sha256": file_hash(part_evidence / PART_RECORD),
+                "driver_span_seconds": record["driver_span_seconds"],
+                "runner_resources": record.get("runner_resources"),
+            }
+        if sorted(report.name for report in shards.iterdir()) != sorted(
+            f"acceptance-{index}.json" for index in range(1, ACCEPTANCE_SHARDS + 1)
+        ):
+            raise ValueError("the parts do not hold every global shard exactly once")
+        if any(identity != identities[0] for identity in identities):
+            raise ValueError(
+                "parts differ in interpreter, dependencies, environment, image or inputs"
+            )
+        copied = identities[0]["copied_inputs"]
+        if not set(PLAN_INPUTS) <= set(copied) or copied != {
+            path: file_hash(checkout / path) for path in copied
+        }:
+            raise ValueError("copied inputs differ from the exact source")
+        check_shards(
+            shards,
+            ACCEPTANCE_SHARDS,
+            None,
+            acceptance_plan(checkout / PLAN_INPUTS[0], checkout / PLAN_INPUTS[1]),
+        )
+        report = json.loads((shards / "acceptance-1.json").read_text())
+        metadata["census"] = {
+            "occurrences": sum(report["discovered_modules"].values()),
+            "ids": sum(len(tests) for tests in report["discovered_tests"].values()),
+            "modules": len(report["discovered_modules"]),
+        }
+        metadata.update(
+            {k: v for k, v in identities[0].items() if k != "copied_inputs"}
+        )
+        metadata["copied_inputs"] = copied
+        metadata["proof_complete"] = True
+    except BaseException as error:
+        metadata["failure"] = f"{type(error).__name__}: {error}"
+        raise
+    finally:
+        (evidence / "aggregation-manifest.json").write_text(
+            json.dumps(manifest, indent=2) + "\n"
+        )
+        (evidence / "qualification.json").write_text(
+            json.dumps(metadata, indent=2) + "\n"
+        )
+
+
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--artifacts", type=Path, required=True)
-    parser.add_argument("--evidence", type=Path, required=True)
-    parser.add_argument("--root", type=Path, required=True)
-    parser.add_argument("--source-sha", required=True)
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    modes = parser.add_subparsers(dest="mode", required=True)
+    one = modes.add_parser("part", help="run one acceptance part of the proof")
+    one.add_argument(
+        "--part", type=int, choices=range(1, ACCEPTANCE_PARTS + 1), required=True
+    )
+    one.add_argument("--artifacts", type=Path, required=True)
+    combined = modes.add_parser("aggregate", help="complete one interpreter's proof")
+    combined.add_argument("--python-minor", required=True)
+    combined.add_argument("--package", type=Path, required=True)
+    combined.add_argument("--parts-result", required=True)
+    for mode in (one, combined):
+        mode.add_argument("--evidence", type=Path, required=True)
+        mode.add_argument("--root", type=Path, required=True)
+        mode.add_argument("--source-sha", required=True)
     args = parser.parse_args()
     if (
         os.environ.get("GITHUB_ACTIONS") != "true"
         or os.environ.get("RUNNER_OS") != "Linux"
     ):
         raise ValueError("this driver is restricted to isolated Linux Actions jobs")
+    if args.mode == "aggregate":
+        run_id = os.environ.get("GITHUB_RUN_ID", "")
+        attempt = os.environ.get("GITHUB_RUN_ATTEMPT", "")
+        if (
+            os.environ.get("GITHUB_REPOSITORY") != REPOSITORY
+            or not run_id.isdigit()
+            or not attempt.isdigit()
+            or args.python_minor not in ("3.13", "3.14")
+        ):
+            raise ValueError("aggregation needs this repository's exact run attempt")
+        args.root.mkdir()
+        args.evidence.mkdir(parents=True, exist_ok=True)
+        aggregate(
+            Path.cwd().resolve(),
+            args.package.resolve(),
+            args.evidence.resolve(),
+            args.root.resolve(),
+            args.source_sha,
+            args.python_minor,
+            args.parts_result,
+            run_id,
+            attempt,
+        )
+        return
     if os.environ.get("N1_TEST_DATABASE_URL") != (
         "postgresql://postgres:synthetic@127.0.0.1:5432/postgres"
     ):
@@ -1261,6 +1852,7 @@ def main() -> None:
         args.evidence.resolve(),
         args.root.resolve(),
         args.source_sha,
+        args.part,
     )
 
 

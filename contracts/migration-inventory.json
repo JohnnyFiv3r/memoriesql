@@ -215,8 +215,12 @@
       "sha256": "b69b586866974280f231ccdbbedeb31fd82f0bdb01e347960f91625098052886"
     },
     {
-      "filename": "0054_engine_record_intake.sql",
-      "sha256": "d6f188de4ab7a7afdb7ca5d1ed5faa83a3dde361abcdb564f1de6144e3cceb7d"
+      "filename": "0054_supervised_reapproval.sql",
+      "sha256": "c95bcac87641a80abd1283cdc08c9545b647e246215c342dfb10db02f94cede5"
+    },
+    {
+      "filename": "0055_engine_record_intake.sql",
+      "sha256": "b62cc2690fcb47af9f96b91aafcb2f0a147af606d69967350f85d6257c6c66eb"
     }
   ]
 }

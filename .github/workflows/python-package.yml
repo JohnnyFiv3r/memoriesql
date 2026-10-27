@@ -121,15 +121,18 @@ jobs:
   compatibility:
     if: needs.package.outputs.qualify == 'true'
     needs: package
+    name: compatibility (${{ matrix.python-version }}, part ${{ matrix.part }})
     runs-on: ubuntu-24.04
     timeout-minutes: 100
     concurrency:
-      group: qualification-${{ github.run_id }}-${{ matrix.python-version }}
+      group: qualification-${{ github.run_id }}-${{ matrix.python-version }}-${{ matrix.part }}
       cancel-in-progress: false
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.13", "3.14"]
+        # ACCEPTANCE_PARTS in scripts/run_hosted_qualification.py
+        part: [1, 2, 3]
     services:
       postgres:
         image: postgres@sha256:a02db8cac496f15b094798a38254f14d6e00741f709360e5e00bb6668ea31636
@@ -155,17 +158,18 @@ jobs:
         with:
           name: memoriesql-python-${{ needs.package.outputs.source_sha }}
           path: build/reviewed-package
-      - name: Qualify reviewed installed bytes, all shards and restart processes
+      - name: Qualify reviewed installed bytes for one acceptance part
         timeout-minutes: 95
         shell: bash
         env:
           SOURCE_SHA: ${{ needs.package.outputs.source_sha }}
+          PART: ${{ matrix.part }}
           N1_TEST_CLI_IDENTITY_AUTHORITY_SHA256: ${{ vars.N1_TEST_CLI_IDENTITY_AUTHORITY_SHA256 }}
-          PROOF_ROOT: ${{ runner.temp }}/qualification-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.python-version }}
+          PROOF_ROOT: ${{ runner.temp }}/qualification-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.python-version }}-${{ matrix.part }}
         run: |
           unset PYTHONPATH
           mkdir -p build/qualification
-          python scripts/run_hosted_qualification.py \
+          python scripts/run_hosted_qualification.py part --part "$PART" \
             --artifacts build/reviewed-package --evidence build/qualification \
             --root "$PROOF_ROOT" --source-sha "$SOURCE_SHA" \
             2>&1 | tee build/qualification/driver.log
@@ -185,13 +189,71 @@ jobs:
           python -c 'import json; s=json.load(open("build/qualification/postgres-state.json")); assert s["Running"] is False and s["Pid"] == 0' || failed=1
           echo "$failed" > build/qualification/postgres-cleanup-exit.txt
           test "$failed" -eq 0
-      - name: Retain complete proof exits and failures
+      - name: Retain complete part exits and failures
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: installed-qualification-part-${{ matrix.python-version }}-${{ matrix.part }}-${{ needs.package.outputs.source_sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            build/qualification/
+            build/reviewed-package/python-package-artifacts.json
+          if-no-files-found: error
+          retention-days: 30
+
+  qualification:
+    # Runs after every part, even failed ones, so a missing or failed part is
+    # recorded as an incomplete proof; it runs no tests and owns proof_complete.
+    # needs.compatibility.result covers every part of both interpreters, so a
+    # failed part of either interpreter also refuses the other's aggregation.
+    if: always() && needs.package.outputs.qualify == 'true'
+    needs: [package, compatibility]
+    name: qualification (${{ matrix.python-version }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    concurrency:
+      group: aggregation-${{ github.run_id }}-${{ matrix.python-version }}
+      cancel-in-progress: false
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ needs.package.outputs.source_sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: ${{ matrix.python-version }}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: memoriesql-python-${{ needs.package.outputs.source_sha }}
+          path: build/reviewed-package
+      - name: Aggregate every part into this interpreter's proof
+        timeout-minutes: 10
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ needs.package.outputs.source_sha }}
+          PARTS_RESULT: ${{ needs.compatibility.result }}
+          PYTHON_MINOR: ${{ matrix.python-version }}
+          GH_TOKEN: ${{ github.token }}
+          AGGREGATION_ROOT: ${{ runner.temp }}/aggregation-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.python-version }}
+        run: |
+          unset PYTHONPATH
+          mkdir -p build/qualification
+          python scripts/run_hosted_qualification.py aggregate \
+            --python-minor "$PYTHON_MINOR" --parts-result "$PARTS_RESULT" \
+            --package build/reviewed-package --evidence build/qualification \
+            --root "$AGGREGATION_ROOT" --source-sha "$SOURCE_SHA" \
+            2>&1 | tee build/qualification/aggregate.log
+      - name: Retain the interpreter's aggregated proof
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: installed-qualification-${{ matrix.python-version }}-${{ needs.package.outputs.source_sha }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            build/qualification/
-            build/reviewed-package/python-package-artifacts.json
+          path: build/qualification/
           if-no-files-found: error
           retention-days: 30

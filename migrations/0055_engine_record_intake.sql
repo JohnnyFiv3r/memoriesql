@@ -946,7 +946,7 @@ BEGIN
        OR (SELECT array_agg(key ORDER BY key) FROM jsonb_object_keys(request) AS key)
           IS DISTINCT FROM ARRAY['contract_version', 'expected_schema_version', 'records']
        OR request -> 'contract_version' IS DISTINCT FROM '1'::jsonb
-       OR request -> 'expected_schema_version' IS DISTINCT FROM '54'::jsonb
+       OR request -> 'expected_schema_version' IS DISTINCT FROM '55'::jsonb
        OR jsonb_typeof(request -> 'records') IS DISTINCT FROM 'array'
        OR jsonb_array_length(request -> 'records') NOT BETWEEN 1 AND 256
        OR octet_length(request::text) > 16777216 THEN

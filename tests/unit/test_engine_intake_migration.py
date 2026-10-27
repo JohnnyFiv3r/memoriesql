@@ -21,7 +21,7 @@ from memoriesql.application.engine_intake import (
 )
 
 ROOT = Path(__file__).resolve().parents[2]
-SQL = (ROOT / "migrations/0054_engine_record_intake.sql").read_text()
+SQL = (ROOT / "migrations/0055_engine_record_intake.sql").read_text()
 TABLES = (
     "engine_events",
     "engine_records",

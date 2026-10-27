@@ -265,3 +265,53 @@ client threads outside PostgreSQL: those remain owned until they return.
 The disposable producer-clock tests and separate-process restart proof exercise
 refusal, recovery and stale-write rejection; they do not identify the cause of
 the original observed database clock regression or promise host clock stability.
+
+## Authored output checks and the repair round
+
+Before the root run's output leaves the executor, the executor checks authored
+annotations against their own task (`application/authored_output_checks.py`):
+
+- bead coverage;
+- used and statement evidence inside the manifest, by identity and hash;
+- statement evidence declared as used;
+- context sources with statement evidence;
+- for v2 and complete units, the event and source-unit pins.
+
+Canonical apply refuses each of these too, and it stays authoritative and
+unchanged. No check is stricter than apply, and checks that need database state
+stay with apply. Some of these outputs reached apply as an authority or Python
+error, which the worker re-raised and which then stopped its later cycles.
+Checked here, they settle as `invalid_output`.
+
+When the output has issues, the model gets one repair round inside the same run
+and attempt (owner decision 2026-10-23, P1-f D1):
+
+- **The frame.** One repair round sends one repair frame (published output
+  retries of the repaired output still apply), with exactly these keys:
+  - `repair_frame`;
+  - `instruction`, which is fixed;
+  - `task_input`, the task's typed input exactly as this attempt already sent
+    it: identifiers and evidence references, and for authored-relation units
+    the candidate beads' accepted statement, mention and claim text. No
+    evidence frame or source-unit content is sent again;
+  - `previous_output`, the model's own prior output;
+  - `refusal_codes`, fixed codes with the identifiers they name.
+
+  No evidence is sent again, and no database text is ever included.
+- **Dispatch.** The dispatch guard admits only that exact frame. A repair
+  request delivers no evidence, so it records no complete-input exposure,
+  dispatch receipt or source delivery. Its provider intent and usage are
+  accounted like any other request.
+- **Admission.** A repair is admitted once per run, only when:
+  - the task is a tool-free direct leaf, so no tool or delegate can fetch
+    evidence;
+  - it is not a supervised turn, whose allowance is one turn;
+  - it is not a classified proposal, whose classification binds the original;
+  - a request is left in the run's existing budget.
+
+  The per-attempt dollar ceiling and token limits apply unchanged. A
+  reservation refused before dispatch leaves the first output's issues in
+  place.
+- **After the repair.** The repaired output goes through every check again. If
+  issues remain, it settles `invalid_output` with `output.<code>` naming the
+  first issue, and retry class `never`. There is no second repair.

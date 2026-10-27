@@ -1,8 +1,8 @@
 # Core Memory engine record intake (development contract)
 
-The `memoriesql.engine-intake.v1` contract and migration 0054 let the Core
+The `memoriesql.engine-intake.v1` contract and migration 0055 let the Core
 Memory engine deliver its records into memoriesQL. This is the first slice of
-the engine work package, a development candidate after migration 0053 and
+the engine work package, a development candidate after migration 0054 and
 not a published capability in `memoriesql==0.0.12`.
 
 The engine turns source events into deterministic chunks and assigns each one
@@ -41,7 +41,7 @@ slice can expose them to the agent SQL surface as their own relation family.
 ## Delivery
 
 `accept_engine_records_v1(request)` takes
-`{"contract_version": 1, "expected_schema_version": 54, "records": [...]}` with
+`{"contract_version": 1, "expected_schema_version": 55, "records": [...]}` with
 1–256 records (16 MiB at most) and answers one outcome per record, in order:
 
 | Outcome | Meaning |
@@ -110,4 +110,4 @@ scope, a batch that cannot hold back a scope it may not write or whose ids it
 names, a scope that cannot take another scope's keys first, and an impossible
 zone offset rejected alone.
 `tests/unit/test_engine_intake_migration.py` pins the grants, row-level
-security and immutability. Historical SQL 0001–0053 and records are unchanged.
+security and immutability. Historical SQL 0001–0054 and records are unchanged.

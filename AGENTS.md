@@ -192,12 +192,12 @@ relation kinds and bounded v2 relations and vocabulary reads. Preserve migration
 tracked claims after acceptance or release is part of this slice. See
 `docs/relation-assessment.md`.
 
-The owner-authorized forward schema-54 slice (authorized 2026-10-26) adds the
+The owner-authorized forward schema-55 slice (authorized 2026-10-26) adds the
 first part of the Core Memory engine work package: non-authoring intake of
 engine chunk and type-decision records into enrolled engine scopes, with every
 record key, chunk id and event id identified within its scope, the
 `engine.records.deliver` capability, an authorized reader and the governed bead
-types as the engine vocabulary. Preserve migrations 0001–0053 and earlier
+types as the engine vocabulary. Preserve migrations 0001–0054 and earlier
 records. No beads, statements, semantic tasks, relationships, erasure, outbox
 relay, provider binding or release is part of this slice. See
 `docs/engine-intake.md`.

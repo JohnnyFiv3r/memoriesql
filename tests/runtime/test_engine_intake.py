@@ -177,7 +177,7 @@ class EngineRecordIntake(unittest.TestCase):
         self.url = make_conninfo(self.admin_url, dbname=self.database)
         self.db = psycopg.connect(self.url, autocommit=True)
         self.addCleanup(self.cleanup_database)
-        migrate(self.db, expected_current_version=0, target_version=54)
+        migrate(self.db, expected_current_version=0, target_version=55)
         (
             self.tenant,
             user,
