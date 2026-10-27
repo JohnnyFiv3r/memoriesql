@@ -50,8 +50,8 @@ class PublicBootstrapTests(unittest.TestCase):
 
     def test_registry_is_explicit_complete_and_default_deny(self) -> None:
         records = load_registry()
-        self.assertEqual(len(records), 70)
-        self.assertEqual(len({record["id"] for record in records}), 70)
+        self.assertEqual(len(records), 71)
+        self.assertEqual(len({record["id"] for record in records}), 71)
         catalogs = load_catalog_definitions()
         self.assertEqual(tuple(item.kind for item in catalogs), CATALOG_KINDS)
         counts = {item.kind: 0 for item in catalogs}
@@ -59,11 +59,11 @@ class PublicBootstrapTests(unittest.TestCase):
             counts[str(record["catalog"])] += 1
             self.assertEqual(record["classification"], "proposed_open_core")
             self.assertEqual(record["package_disposition"], "include")
-        self.assertEqual(counts["json_schema"], 63)
+        self.assertEqual(counts["json_schema"], 64)
         self.assertEqual(counts["python"], 5)
         self.assertEqual(counts["connector"], 1)
         self.assertEqual(counts["cli"], 1)
-        self.assertEqual(sum(counts.values()), 70)
+        self.assertEqual(sum(counts.values()), 71)
 
     def test_generated_catalogs_have_no_drift(self) -> None:
         for path, expected in expected_outputs().items():
@@ -71,7 +71,7 @@ class PublicBootstrapTests(unittest.TestCase):
 
     def test_boundary_scan_is_clean(self) -> None:
         result = verify()
-        self.assertEqual(result["record_count"], 70)
+        self.assertEqual(result["record_count"], 71)
         self.assertEqual(result["default_policy"], "deny")
         self.assertEqual(result["private_boundary_leaks"], [])
 
@@ -158,9 +158,15 @@ class PublicBootstrapTests(unittest.TestCase):
         compatibility = workflow.split("  compatibility:")[1]
         self.assertIn('python-version: ["3.13", "3.14"]', compatibility)
         self.assertIn("run_hosted_qualification.py", compatibility)
-        self.assertIn("Retain complete proof exits and failures", compatibility)
+        self.assertIn("Retain complete part exits and failures", compatibility)
         self.assertIn("if: always()", compatibility)
         self.assertIn("runs-on: ubuntu-24.04", compatibility)
+        aggregation = workflow.split("  qualification:")[1]
+        self.assertIn("run_hosted_qualification.py aggregate", aggregation)
+        self.assertIn("Retain the interpreter's aggregated proof", aggregation)
+        self.assertIn(
+            "if: always() && needs.package.outputs.qualify == 'true'", aggregation
+        )
 
     def test_standing_matrix_is_selected_and_cheap_checks_cancel_only_superseded(
         self,
