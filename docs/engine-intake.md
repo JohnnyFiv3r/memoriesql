@@ -46,7 +46,7 @@ slice can expose them to the agent SQL surface as their own relation family.
 
 | Outcome | Meaning |
 |---|---|
-| `accepted` | Stored under a new shared-ledger receipt (`engine_record.accept.v1`, keyed by `record_key`). |
+| `accepted` | Stored under a new shared-ledger receipt (`engine_record.accept.v1`, keyed by the engine scope's source id and `record_key`). |
 | `already_accepted` | The identical record is already held. |
 | `conflict` | A different record holds the key. The stored one is kept, first writer wins, and returned only to a caller who may read the scope. |
 | `rejected` | Final for this record, with a reason: malformed, an unknown record kind or contract, a type that is not a current governed bead type, a catalog other than `memoriesql.bead_types`, text that does not match its hash or ranges, chunks that do not reproduce their event, or a second final type for one chunk. |
@@ -72,6 +72,17 @@ cannot hold that scope back.
 Every accepted record writes one outbox event: `engine_chunk.accepted` or
 `engine_type.decided`. No relay consumes them yet.
 
+## Identity within an engine scope
+
+Every record key, chunk id and event id is identified within its engine scope:
+engine records, chunks, events, completions and type decisions are all keyed by
+the scope's source as well. The engine derives these ids from event keys that
+include the scope, so the same id in two scopes names two different things. A
+writer allowed into one scope therefore cannot take another scope's keys
+before that scope delivers them, and replays, conflicts, completions and late
+types are judged within one scope only. Outbox payloads carry the scope's
+`source_object_id`.
+
 ## Reads and vocabulary
 
 `read_engine_records_v1` returns one engine scope's records in acceptance
@@ -96,6 +107,7 @@ replay, first-writer-wins, the single late type, ungoverned and malformed
 records, retryable scopes, authority, conflicts shown only to readers,
 immutability, concurrent chunks of one event, writers taking turns in one
 scope, a batch that cannot hold back a scope it may not write or whose ids it
-names, and an impossible zone offset rejected alone.
+names, a scope that cannot take another scope's keys first, and an impossible
+zone offset rejected alone.
 `tests/unit/test_engine_intake_migration.py` pins the grants, row-level
 security and immutability. Historical SQL 0001–0053 and records are unchanged.

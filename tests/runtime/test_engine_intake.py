@@ -140,6 +140,15 @@ def event_records(
     return records
 
 
+def in_scope(record: dict[str, Any], scope: str) -> dict[str, Any]:
+    """The same record, ids and all, delivered under another engine scope."""
+    moved = copy.deepcopy(record)
+    moved["scope"] = scope
+    if "event" in moved:
+        moved["event"]["key"]["scope"] = scope
+    return moved
+
+
 def type_decision(
     chunk: dict[str, Any], outcome: dict[str, Any], decision: dict[str, Any]
 ) -> dict[str, Any]:
@@ -731,10 +740,9 @@ class EngineRecordIntake(unittest.TestCase):
         )
         other_secret = self.beta_engine()
         self.intake(other_secret).accept(AcceptEngineRecords(records=(first,)))
-        # The open acme batch borrows beta's record key and beta's event id.
-        borrowed_key = copy.deepcopy(first)
-        borrowed_key["scope"] = "acme"
-        borrowed_key["event"]["key"]["scope"] = "acme"
+        # The open acme batch borrows beta's record key and beta's event id,
+        # which within acme name acme's own record and event.
+        borrowed_key = in_scope(first, "acme")
         (borrowed_event,) = event_records(
             "acme", "orchard/19", ["Borrowed."], [(assigned("observation"), rule())]
         )
@@ -749,8 +757,81 @@ class EngineRecordIntake(unittest.TestCase):
                     list(accepted.results),
                     [EngineRecordAccepted(outcome="accepted")] * 2,
                 )
-        self.assertEqual(self.held(), [])
+        # The borrowed event id met acme's own event, which carried another
+        # event object, so only the borrowed key was kept, as acme's record.
+        self.assertEqual(self.held(), [borrowed_key])
+        self.assertEqual(self.held("beta"), [first, second, late])
         self.assertEqual(self.count("engine_event_completions"), 1)
+
+    def test_a_scope_cannot_take_another_scopes_keys_first(self) -> None:
+        theirs = event_records(
+            "beta",
+            "orchard/30",
+            ["Shared one. ", "Shared two."],
+            [({"status": "pending", "reason": "capacity"}, None)]
+            + [(assigned("observation"), rule())],
+        )
+        taken = [in_scope(record, "acme") for record in theirs]
+        other_secret = self.beta_engine()
+        # Acme delivers beta's future record keys, chunk ids and event id first.
+        self.assertEqual(
+            self.deliver(*taken), [EngineRecordAccepted(outcome="accepted")] * 2
+        )
+        self.assertEqual(
+            list(
+                self.intake(other_secret)
+                .accept(AcceptEngineRecords(records=tuple(theirs)))
+                .results
+            ),
+            [EngineRecordAccepted(outcome="accepted")] * 2,
+        )
+        self.assertEqual(self.held(), taken)
+        self.assertEqual(self.held("beta"), theirs)
+        self.assertEqual(self.count("engine_event_completions"), 2)
+
+        # Replays, conflicts and late types stay inside their own scope.
+        self.assertEqual(
+            self.deliver(*taken),
+            [EngineRecordAlreadyAccepted(outcome="already_accepted")] * 2,
+        )
+        altered = copy.deepcopy(taken[0])
+        altered["facets"] = {"lengths": {"bytes": 1}}
+        self.assertEqual(
+            self.deliver(altered), [EngineRecordConflict(outcome="conflict")]
+        )
+        late = type_decision(taken[0], assigned("decision"), model())
+        self.assertEqual(self.deliver(late), [EngineRecordAccepted(outcome="accepted")])
+        # Beta's copy of the chunk is still pending and is decided on its own.
+        theirs_late = type_decision(theirs[0], assigned("action"), model())
+        self.assertEqual(
+            list(
+                self.intake(other_secret)
+                .accept(AcceptEngineRecords(records=(theirs_late,)))
+                .results
+            ),
+            [EngineRecordAccepted(outcome="accepted")],
+        )
+        self.assertEqual(self.held(), [*taken, late])
+        self.assertEqual(self.held("beta"), [*theirs, theirs_late])
+        # One ledger receipt per scope and record key.
+        keys = self.db.execute(
+            "SELECT idempotency_key FROM memoriesql.idempotency_receipts "
+            "WHERE operation_kind = 'engine_record.accept.v1' "
+            "AND idempotency_key LIKE %s ORDER BY idempotency_key",
+            ("%:" + theirs[0]["record_key"],),
+        ).fetchall()
+        beta_source = self.db.execute(
+            "SELECT source_object_id FROM memoriesql.source_objects "
+            "WHERE external_object_id = 'beta'"
+        ).fetchone()
+        assert beta_source is not None
+        self.assertEqual(
+            sorted(row[0] for row in keys),
+            sorted(
+                f"{source}:{theirs[0]['record_key']}"
+                for source in (self.acme.source_object_id, beta_source[0])
+            ),
+        )
 
     def test_an_impossible_offset_is_rejected_without_failing_the_batch(self) -> None:
         offset = rule()

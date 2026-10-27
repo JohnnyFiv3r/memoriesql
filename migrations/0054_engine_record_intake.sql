@@ -14,6 +14,11 @@
 -- Each engine scope is one enrolled exact source (source_system
 -- 'core-memory', object_kind 'engine_scope', no installation), so its records
 -- share that source's explicit access scope, grants and revocation.
+--
+-- Every record key, chunk id and event id is identified within its engine
+-- scope. The engine derives them from event keys that include the scope, so
+-- one id in two scopes names two different things, and no scope can take
+-- another scope's keys before that scope delivers them.
 
 INSERT INTO memoriesql.capabilities (capability_key, description)
 VALUES (
@@ -37,7 +42,7 @@ CREATE TABLE memoriesql.engine_events (
     content_hash text NOT NULL,
     chunk_count integer NOT NULL,
     recorded_at timestamptz NOT NULL,
-    PRIMARY KEY (tenant_id, event_id),
+    PRIMARY KEY (tenant_id, source_object_id, event_id),
     FOREIGN KEY (tenant_id, source_object_id)
         REFERENCES memoriesql.source_objects (tenant_id, source_object_id),
     CHECK (jsonb_typeof(event_info) = 'object'),
@@ -60,14 +65,14 @@ CREATE TABLE memoriesql.engine_records (
     idempotency_receipt_id uuid NOT NULL,
     accepted_by_principal_id uuid NOT NULL,
     accepted_at timestamptz NOT NULL,
-    PRIMARY KEY (tenant_id, record_key),
+    PRIMARY KEY (tenant_id, source_object_id, record_key),
     UNIQUE (record_seq),
     FOREIGN KEY (tenant_id, workspace_id, access_scope_id, idempotency_receipt_id)
         REFERENCES memoriesql.idempotency_receipts (
             tenant_id, workspace_id, access_scope_id, idempotency_receipt_id
         ),
-    FOREIGN KEY (tenant_id, event_id)
-        REFERENCES memoriesql.engine_events (tenant_id, event_id),
+    FOREIGN KEY (tenant_id, source_object_id, event_id)
+        REFERENCES memoriesql.engine_events (tenant_id, source_object_id, event_id),
     FOREIGN KEY (tenant_id, accepted_by_principal_id)
         REFERENCES memoriesql.principals (tenant_id, principal_id),
     CHECK (record_kind IN ('chunk', 'type_decision')),
@@ -82,6 +87,7 @@ CREATE INDEX engine_records_source_order_idx
 
 CREATE TABLE memoriesql.engine_chunks (
     tenant_id uuid NOT NULL,
+    source_object_id uuid NOT NULL,
     chunk_id uuid NOT NULL,
     event_id uuid NOT NULL,
     ordinal integer NOT NULL,
@@ -92,12 +98,12 @@ CREATE TABLE memoriesql.engine_chunks (
     content_text text NOT NULL,
     content_hash text NOT NULL,
     record_key text NOT NULL,
-    PRIMARY KEY (tenant_id, chunk_id),
-    UNIQUE (tenant_id, event_id, ordinal),
-    FOREIGN KEY (tenant_id, event_id)
-        REFERENCES memoriesql.engine_events (tenant_id, event_id),
-    FOREIGN KEY (tenant_id, record_key)
-        REFERENCES memoriesql.engine_records (tenant_id, record_key),
+    PRIMARY KEY (tenant_id, source_object_id, chunk_id),
+    UNIQUE (tenant_id, source_object_id, event_id, ordinal),
+    FOREIGN KEY (tenant_id, source_object_id, event_id)
+        REFERENCES memoriesql.engine_events (tenant_id, source_object_id, event_id),
+    FOREIGN KEY (tenant_id, source_object_id, record_key)
+        REFERENCES memoriesql.engine_records (tenant_id, source_object_id, record_key),
     CHECK (ordinal >= 0 AND byte_start >= 0 AND char_start >= 0),
     CHECK (byte_end - byte_start = octet_length(content_text)),
     CHECK (char_end - char_start = char_length(content_text)),
@@ -109,14 +115,15 @@ CREATE TABLE memoriesql.engine_chunks (
 -- are contiguous and reproduce the event's content hash.
 CREATE TABLE memoriesql.engine_event_completions (
     tenant_id uuid NOT NULL,
+    source_object_id uuid NOT NULL,
     event_id uuid NOT NULL,
     completed_by_record_key text NOT NULL,
     completed_at timestamptz NOT NULL,
-    PRIMARY KEY (tenant_id, event_id),
-    FOREIGN KEY (tenant_id, event_id)
-        REFERENCES memoriesql.engine_events (tenant_id, event_id),
-    FOREIGN KEY (tenant_id, completed_by_record_key)
-        REFERENCES memoriesql.engine_records (tenant_id, record_key)
+    PRIMARY KEY (tenant_id, source_object_id, event_id),
+    FOREIGN KEY (tenant_id, source_object_id, event_id)
+        REFERENCES memoriesql.engine_events (tenant_id, source_object_id, event_id),
+    FOREIGN KEY (tenant_id, source_object_id, completed_by_record_key)
+        REFERENCES memoriesql.engine_records (tenant_id, source_object_id, record_key)
 );
 
 -- Ordinal 0 is the outcome the chunk record carried. Ordinal 1 is the one
@@ -124,6 +131,7 @@ CREATE TABLE memoriesql.engine_event_completions (
 -- outcome is never replaced.
 CREATE TABLE memoriesql.engine_type_decisions (
     tenant_id uuid NOT NULL,
+    source_object_id uuid NOT NULL,
     chunk_id uuid NOT NULL,
     decision_ordinal smallint NOT NULL,
     status text NOT NULL,
@@ -142,11 +150,11 @@ CREATE TABLE memoriesql.engine_type_decisions (
     type_catalog_hash text,
     record_key text NOT NULL,
     recorded_at timestamptz NOT NULL,
-    PRIMARY KEY (tenant_id, chunk_id, decision_ordinal),
-    FOREIGN KEY (tenant_id, chunk_id)
-        REFERENCES memoriesql.engine_chunks (tenant_id, chunk_id),
-    FOREIGN KEY (tenant_id, record_key)
-        REFERENCES memoriesql.engine_records (tenant_id, record_key),
+    PRIMARY KEY (tenant_id, source_object_id, chunk_id, decision_ordinal),
+    FOREIGN KEY (tenant_id, source_object_id, chunk_id)
+        REFERENCES memoriesql.engine_chunks (tenant_id, source_object_id, chunk_id),
+    FOREIGN KEY (tenant_id, source_object_id, record_key)
+        REFERENCES memoriesql.engine_records (tenant_id, source_object_id, record_key),
     FOREIGN KEY (bead_type_id, bead_type_revision_id)
         REFERENCES memoriesql.bead_type_revisions (bead_type_id, bead_type_revision_id),
     CHECK (decision_ordinal IN (0, 1)),
@@ -181,7 +189,7 @@ CREATE TABLE memoriesql.engine_type_decisions (
 );
 
 CREATE UNIQUE INDEX engine_type_decisions_one_final_uq
-    ON memoriesql.engine_type_decisions (tenant_id, chunk_id)
+    ON memoriesql.engine_type_decisions (tenant_id, source_object_id, chunk_id)
     WHERE status <> 'pending';
 
 CREATE FUNCTION memoriesql.guard_engine_type_upgrade()
@@ -192,6 +200,7 @@ BEGIN
     IF NEW.decision_ordinal = 1 AND NOT EXISTS (
         SELECT 1 FROM memoriesql.engine_type_decisions AS first
          WHERE first.tenant_id = NEW.tenant_id
+           AND first.source_object_id = NEW.source_object_id
            AND first.chunk_id = NEW.chunk_id
            AND first.decision_ordinal = 0
            AND first.status = 'pending'
@@ -571,18 +580,19 @@ BEGIN
 
     -- The scope's writer lock, held since this record was authorized, orders
     -- the chunks of an event, so exactly one of them sees itself complete
-    -- the event.
+    -- the event. An event id names an event within its engine scope only.
     SELECT * INTO existing_event
       FROM memoriesql.engine_events AS engine_event
      WHERE engine_event.tenant_id = authority.tenant_id
+       AND engine_event.source_object_id = source.source_object_id
        AND engine_event.event_id = chunk_intake.event_id;
-    IF FOUND AND (existing_event.source_object_id <> source.source_object_id
-                  OR existing_event.event_info <> event_info) THEN
+    IF FOUND AND existing_event.event_info <> event_info THEN
         RETURN memoriesql.engine_rejected('the event differs from the one its earlier chunks carried');
     END IF;
     IF EXISTS (
         SELECT 1 FROM memoriesql.engine_chunks AS held
          WHERE held.tenant_id = authority.tenant_id
+           AND held.source_object_id = source.source_object_id
            AND held.event_id = chunk_intake.event_id
            AND held.ordinal = chunk_intake.ordinal
     ) THEN
@@ -593,6 +603,7 @@ BEGIN
     SELECT count(*)::integer INTO present
       FROM memoriesql.engine_chunks AS held
      WHERE held.tenant_id = authority.tenant_id
+       AND held.source_object_id = source.source_object_id
        AND held.event_id = chunk_intake.event_id;
     IF present + 1 = chunk_count THEN
         SELECT bool_and(
@@ -614,6 +625,7 @@ BEGIN
                            held.char_start, held.char_end, held.content_text
                       FROM memoriesql.engine_chunks AS held
                      WHERE held.tenant_id = authority.tenant_id
+                       AND held.source_object_id = source.source_object_id
                        AND held.event_id = chunk_intake.event_id
                     UNION ALL
                     SELECT chunk_intake.ordinal, chunk_intake.byte_start,
@@ -634,7 +646,9 @@ BEGIN
         lease_expires_at, created_at, updated_at, completed_at
     ) VALUES (
         authority.tenant_id, source.workspace_id, source.access_scope_id, receipt_id,
-        'engine_record.accept.v1', item ->> 'record_key', digest, 'in_progress',
+        'engine_record.accept.v1',
+        source.source_object_id::text || ':' || (item ->> 'record_key'),
+        digest, 'in_progress',
         'engine_chunk', chunk_id, NULL, 1, NULL, NULL, recorded_at, recorded_at, NULL
     );
     IF existing_event.event_id IS NULL THEN
@@ -654,11 +668,11 @@ BEGIN
         item, digest, receipt_id, authority.principal_id, recorded_at
     );
     INSERT INTO memoriesql.engine_chunks VALUES (
-        authority.tenant_id, chunk_id, event_id, ordinal, byte_start, byte_end,
+        authority.tenant_id, source.source_object_id, chunk_id, event_id, ordinal, byte_start, byte_end,
         char_start, char_end, chunk_text, chunk_hash, item ->> 'record_key'
     );
     INSERT INTO memoriesql.engine_type_decisions VALUES (
-        authority.tenant_id, chunk_id, 0, fields.status, fields.bead_type_id,
+        authority.tenant_id, source.source_object_id, chunk_id, 0, fields.status, fields.bead_type_id,
         fields.bead_type_revision_id, fields.reason, fields.method,
         fields.binding_ref, fields.binding_rev, fields.rule_profile_id,
         fields.rule_profile_rev, fields.rule_id, fields.decision_id,
@@ -667,7 +681,8 @@ BEGIN
     );
     IF completes THEN
         INSERT INTO memoriesql.engine_event_completions VALUES (
-            authority.tenant_id, event_id, item ->> 'record_key', recorded_at
+            authority.tenant_id, source.source_object_id, event_id,
+            item ->> 'record_key', recorded_at
         );
     END IF;
     INSERT INTO memoriesql.outbox_events VALUES (
@@ -675,7 +690,8 @@ BEGIN
         pg_catalog.uuidv7(), receipt_id, 'engine_chunk', chunk_id,
         'engine_chunk.accepted',
         jsonb_build_object('record_key', item ->> 'record_key', 'event_id', event_id,
-                           'event_complete', completes),
+                           'event_complete', completes,
+                           'source_object_id', source.source_object_id),
         '{"contract_version":1}'::jsonb, recorded_at, NULL
     );
     UPDATE memoriesql.idempotency_receipts
@@ -719,14 +735,17 @@ BEGIN
       FROM memoriesql.engine_chunks AS held
       JOIN memoriesql.engine_events AS engine_event
         ON engine_event.tenant_id = held.tenant_id
+       AND engine_event.source_object_id = held.source_object_id
        AND engine_event.event_id = held.event_id
      WHERE held.tenant_id = authority.tenant_id
+       AND held.source_object_id = source.source_object_id
        AND held.chunk_id = decision_intake.chunk_id;
     IF NOT FOUND THEN
-        RETURN memoriesql.engine_rejected('no accepted chunk has this chunk_id');
+        RETURN memoriesql.engine_rejected(
+            'no accepted chunk has this chunk_id in this engine scope'
+        );
     END IF;
-    IF held_event.source_object_id <> source.source_object_id
-       OR held_event.event_id <> decision_intake.event_id THEN
+    IF held_event.event_id <> decision_intake.event_id THEN
         RETURN memoriesql.engine_rejected('the type decision does not match its chunk');
     END IF;
     IF item #>> '{outcome,status}' = 'pending' THEN
@@ -741,11 +760,13 @@ BEGIN
     SELECT first.status INTO first_status
       FROM memoriesql.engine_type_decisions AS first
      WHERE first.tenant_id = authority.tenant_id
+       AND first.source_object_id = source.source_object_id
        AND first.chunk_id = decision_intake.chunk_id
        AND first.decision_ordinal = 0;
     IF first_status <> 'pending' OR EXISTS (
         SELECT 1 FROM memoriesql.engine_type_decisions AS later
          WHERE later.tenant_id = authority.tenant_id
+           AND later.source_object_id = source.source_object_id
            AND later.chunk_id = decision_intake.chunk_id
            AND later.decision_ordinal = 1
     ) THEN
@@ -759,7 +780,9 @@ BEGIN
         lease_expires_at, created_at, updated_at, completed_at
     ) VALUES (
         authority.tenant_id, source.workspace_id, source.access_scope_id, receipt_id,
-        'engine_record.accept.v1', item ->> 'record_key', digest, 'in_progress',
+        'engine_record.accept.v1',
+        source.source_object_id::text || ':' || (item ->> 'record_key'),
+        digest, 'in_progress',
         'engine_chunk', chunk_id, NULL, 1, NULL, NULL, recorded_at, recorded_at, NULL
     );
     INSERT INTO memoriesql.engine_records (
@@ -772,7 +795,7 @@ BEGIN
         event_id, item, digest, receipt_id, authority.principal_id, recorded_at
     );
     INSERT INTO memoriesql.engine_type_decisions VALUES (
-        authority.tenant_id, chunk_id, 1, fields.status, fields.bead_type_id,
+        authority.tenant_id, source.source_object_id, chunk_id, 1, fields.status, fields.bead_type_id,
         fields.bead_type_revision_id, fields.reason, fields.method,
         fields.binding_ref, fields.binding_rev, fields.rule_profile_id,
         fields.rule_profile_rev, fields.rule_id, fields.decision_id,
@@ -783,7 +806,8 @@ BEGIN
         authority.tenant_id, source.workspace_id, source.access_scope_id,
         pg_catalog.uuidv7(), receipt_id, 'engine_chunk', chunk_id,
         'engine_type.decided',
-        jsonb_build_object('record_key', item ->> 'record_key', 'event_id', event_id),
+        jsonb_build_object('record_key', item ->> 'record_key', 'event_id', event_id,
+                           'source_object_id', source.source_object_id),
         '{"contract_version":1}'::jsonb, recorded_at, NULL
     );
     UPDATE memoriesql.idempotency_receipts
@@ -859,19 +883,16 @@ BEGIN
 
     -- Already held when the batch locked its scopes; taken here as well for a
     -- scope that became deliverable after that. It orders every check and
-    -- write below against the scope's other writers. Nothing else is locked:
-    -- a key or id from another scope is only compared, so naming one cannot
-    -- hold that scope back.
+    -- write below against the scope's other writers. Nothing else is locked,
+    -- and every key and id below is looked up within this scope only.
     PERFORM memoriesql.engine_lock_scope_v1(authority, source.source_object_id);
     digest := encode(sha256(convert_to(item::text, 'UTF8')), 'hex');
     SELECT held.* INTO existing
       FROM memoriesql.engine_records AS held
      WHERE held.tenant_id = authority.tenant_id
+       AND held.source_object_id = source.source_object_id
        AND held.record_key = record_intake.record_key;
     IF FOUND THEN
-        IF existing.source_object_id <> source.source_object_id THEN
-            RETURN memoriesql.engine_rejected('the record key belongs to another engine scope');
-        END IF;
         IF existing.record_sha256 = digest THEN
             RETURN jsonb_build_object('outcome', 'already_accepted');
         END IF;

@@ -194,7 +194,8 @@ tracked claims after acceptance or release is part of this slice. See
 
 The owner-authorized forward schema-54 slice (authorized 2026-10-26) adds the
 first part of the Core Memory engine work package: non-authoring intake of
-engine chunk and type-decision records into enrolled engine scopes, the
+engine chunk and type-decision records into enrolled engine scopes, with every
+record key, chunk id and event id identified within its scope, the
 `engine.records.deliver` capability, an authorized reader and the governed bead
 types as the engine vocabulary. Preserve migrations 0001–0053 and earlier
 records. No beads, statements, semantic tasks, relationships, erasure, outbox

@@ -133,6 +133,37 @@ class EngineIntakeContracts(unittest.TestCase):
             with self.assertRaises(ValidationError):
                 ReadEngineRecords.model_validate(bad)
 
+    def test_every_engine_key_names_its_scope(self) -> None:
+        for table in TABLES:
+            block = SQL[SQL.index(f"CREATE TABLE memoriesql.{table} (") :]
+            block = block[: block.index("\n);")]
+            (key,) = re.findall(r"PRIMARY KEY \(([^)]*)\)", block)
+            self.assertTrue(key.startswith("tenant_id, source_object_id, "), table)
+        references = re.findall(r"REFERENCES memoriesql\.engine_\w+ \(([^)]*)\)", SQL)
+        self.assertEqual(len(references), 7)
+        for reference in references:
+            self.assertTrue(
+                reference.startswith("tenant_id, source_object_id, "), reference
+            )
+        self.assertIn(
+            "ON memoriesql.engine_type_decisions (tenant_id, source_object_id, chunk_id)",
+            SQL,
+        )
+
+    def test_every_intake_lookup_and_receipt_is_scoped(self) -> None:
+        lines = SQL.splitlines()
+        for index, line in enumerate(lines):
+            match = re.search(r"\b(\w+)\.tenant_id = (authority|NEW)\.tenant_id$", line)
+            if match and match.group(1) not in {"source", "credential"}:
+                self.assertIn("source_object_id", lines[index + 1], line)
+        self.assertEqual(
+            SQL.count(
+                "source.source_object_id::text || ':' || (item ->> 'record_key')"
+            ),
+            2,
+        )
+        self.assertNotIn("belongs to another engine scope", SQL)
+
 
 if __name__ == "__main__":
     unittest.main()
