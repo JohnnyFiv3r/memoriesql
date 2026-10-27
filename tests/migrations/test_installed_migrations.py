@@ -34,7 +34,7 @@ class InstalledMigrationResources(unittest.TestCase):
         self,
     ) -> None:
         stream = runner.discover_migrations()
-        self.assertEqual([m.version for m in stream], list(range(1, 56)))
+        self.assertEqual([m.version for m in stream], list(range(1, 57)))
         for migration in stream:
             self.assertEqual(
                 hashlib.sha256(migration.path.read_bytes()).hexdigest(),
@@ -82,7 +82,7 @@ class InstalledMigrations(unittest.TestCase):
         }
         self.assertIn(Path(runner.__file__).resolve(), owned)
         stream = runner.discover_migrations()
-        self.assertEqual(len(stream), 55)
+        self.assertEqual(len(stream), 56)
         for migration in stream:
             self.assertIn(Path(str(migration.path)).resolve(), owned)
             self.assertEqual(

@@ -1,4 +1,5 @@
-"""DB-free pins for Core Memory engine record intake; no SQL execution proof.
+"""DB-free pins for Core Memory engine record intake (0055 and its 0056 privacy
+fix); no SQL execution proof.
 
 The runtime proof is tests/runtime/test_engine_intake.py.
 """
@@ -16,12 +17,23 @@ from memoriesql.application.engine_intake import (
     AcceptEngineRecords,
     EngineRecordConflict,
     EngineRecordOutcome,
+    EngineRecordPage,
     EngineRecordRetryable,
     ReadEngineRecords,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
 SQL = (ROOT / "migrations/0055_engine_record_intake.sql").read_text()
+PRIVACY = (ROOT / "migrations/0056_engine_intake_privacy.sql").read_text()
+REPLACED = (
+    "engine_accept_record_v1",
+    "accept_engine_records_v1",
+    "read_engine_records_v1",
+)
+UNAVAILABLE = (
+    "'the engine scope is not enrolled, or this credential may not deliver to "
+    "and read it'"
+)
 TABLES = (
     "engine_events",
     "engine_records",
@@ -123,15 +135,43 @@ class EngineIntakeContracts(unittest.TestCase):
             ),
             EngineRecordRetryable,
         )
-        for bad in ({"outcome": "maybe"}, {"outcome": "rejected", "reason": ""}):
+        for bad in (
+            {"outcome": "maybe"},
+            {"outcome": "rejected", "reason": ""},
+            # Every deliverer may read its scope, so a conflict always shows it.
+            {"outcome": "conflict"},
+            {"outcome": "conflict", "stored": None},
+        ):
             with self.assertRaises(ValidationError):
                 adapter.validate_python(bad)
 
     def test_reads_are_bounded(self) -> None:
         ReadEngineRecords(engine_scope="acme", limit=1024)
-        for bad in ({"engine_scope": " "}, {"engine_scope": "acme", "limit": 1025}):
+        ReadEngineRecords(engine_scope="acme", after="chunk:" + "0" * 36)
+        for bad in (
+            {"engine_scope": " "},
+            {"engine_scope": "acme", "limit": 1025},
+            {"engine_scope": "acme", "after": 0},
+            {"engine_scope": "acme", "after": " "},
+            {"engine_scope": "acme", "after": "x" * 129},
+        ):
             with self.assertRaises(ValidationError):
                 ReadEngineRecords.model_validate(bad)
+
+    def test_cursors_are_opaque_strings(self) -> None:
+        for cursor in (None, "chunk:" + "0" * 36):
+            self.assertEqual(
+                EngineRecordPage.model_validate({"records": [], "next": cursor}).next,
+                cursor,
+            )
+        # A page always carries its cursor, and a cursor is never a number.
+        bad_pages: tuple[dict[str, Any], ...] = (
+            {"records": [], "next": 7},
+            {"records": []},
+        )
+        for bad in bad_pages:
+            with self.assertRaises(ValidationError):
+                EngineRecordPage.model_validate(bad)
 
     def test_every_engine_key_names_its_scope(self) -> None:
         for table in TABLES:
@@ -163,6 +203,100 @@ class EngineIntakeContracts(unittest.TestCase):
             2,
         )
         self.assertNotIn("belongs to another engine scope", SQL)
+
+
+def body(name: str) -> str:
+    start = PRIVACY.index(f"FUNCTION memoriesql.{name}(")
+    return PRIVACY[start : PRIVACY.index("\n$$;\n", start)]
+
+
+class EngineIntakePrivacyMigration(unittest.TestCase):
+    def test_one_revoked_helper_and_three_replacements_widen_nothing(self) -> None:
+        self.assertEqual(
+            re.findall(r"^CREATE FUNCTION memoriesql\.(\w+)\(", PRIVACY, re.M),
+            ["engine_deliverable_source_v1"],
+        )
+        self.assertEqual(
+            re.findall(
+                r"^CREATE OR REPLACE FUNCTION memoriesql\.(\w+)\(", PRIVACY, re.M
+            ),
+            list(REPLACED),
+        )
+        for name in ("engine_deliverable_source_v1", *REPLACED):
+            self.assertRegex(
+                PRIVACY,
+                rf"REVOKE ALL ON FUNCTION memoriesql\.{name}\([^;]*FROM PUBLIC;",
+            )
+        for definer in re.finditer(r"SECURITY DEFINER\n(.*)\n", PRIVACY):
+            self.assertEqual(
+                definer.group(1), "SET search_path = pg_catalog, memoriesql"
+            )
+        for widening in ("GRANT ", "CREATE TABLE", "ALTER TABLE", "INSERT INTO"):
+            self.assertNotIn(widening, PRIVACY)
+        self.assertIn("SET lock_timeout = '500ms'", body("accept_engine_records_v1"))
+
+    def test_one_predicate_decides_both_the_locks_and_each_answer(self) -> None:
+        helper = body("engine_deliverable_source_v1")
+        for check in (
+            "'engine.records.deliver', 'write'",
+            "'write', pg_catalog.clock_timestamp()",
+            "'source.read', 'read'",
+            "'read', pg_catalog.clock_timestamp()",
+        ):
+            self.assertEqual(helper.count(check), 1, check)
+        batch = body("accept_engine_records_v1")
+        record = body("engine_accept_record_v1")
+        for caller in (batch, record):
+            self.assertEqual(
+                caller.count("memoriesql.engine_deliverable_source_v1("), 1
+            )
+            self.assertNotIn("current_context_source_authorized", caller)
+            self.assertNotIn("engine_scope_source_v1", caller)
+        # The fence and credential check still come before any scope is resolved.
+        self.assertLess(
+            batch.index("semantic_outcome_authority"),
+            batch.index("authentication_credentials"),
+        )
+        self.assertLess(
+            batch.index("authentication_credentials"),
+            batch.index("engine_deliverable_source_v1"),
+        )
+        # One branch, one constant reason, before the lock and every lookup.
+        self.assertEqual(PRIVACY.count(UNAVAILABLE), 1)
+        self.assertEqual(record.count("engine_retryable("), 1)
+        answer = record.index(UNAVAILABLE)
+        for later in (
+            "engine_lock_scope_v1(",
+            "FROM memoriesql.engine_records",
+            "engine_accept_chunk_v1(",
+            "engine_accept_type_decision_v1(",
+        ):
+            self.assertLess(answer, record.index(later), later)
+        for gone in ("is not enrolled in this workspace", "may not deliver to engine"):
+            self.assertNotIn(gone, PRIVACY)
+
+    def test_a_conflict_always_shows_the_record_its_reader_may_read(self) -> None:
+        record = body("engine_accept_record_v1")
+        self.assertEqual(
+            record.count(
+                "jsonb_build_object('outcome', 'conflict', 'stored', existing.record)"
+            ),
+            1,
+        )
+        self.assertNotIn("'outcome', 'conflict')", PRIVACY)
+
+    def test_reads_return_no_global_sequence(self) -> None:
+        read = body("read_engine_records_v1")
+        returned = read[read.index("RETURN jsonb_build_object(") :]
+        self.assertNotIn("seq", returned)
+        self.assertIn("'next', COALESCE(last_key, after_key)", returned)
+        for message in re.findall(r"RAISE EXCEPTION ('[^']*')", read):
+            self.assertNotIn("seq", message)
+        self.assertNotRegex(read, r"(max|min|count)\([^)]*record_seq")
+        # The cursor is examined only once the caller may read the scope.
+        self.assertLess(
+            read.rindex("USING ERRCODE = '42501'"), read.index("request -> 'after'")
+        )
 
 
 if __name__ == "__main__":

@@ -43,6 +43,7 @@
           "JsonValue": {}
         },
         "additionalProperties": false,
+        "description": "One engine scope's records in acceptance order.\n\n`next` is an opaque cursor within this engine scope: pass it back as\n`after` to continue. It depends only on the scope's own records, and is\nnull only while no record has been returned.",
         "properties": {
           "contract_version": {
             "const": 1,
@@ -51,9 +52,15 @@
             "type": "integer"
           },
           "next": {
-            "minimum": 0,
-            "title": "Next",
-            "type": "integer"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next"
           },
           "records": {
             "items": {
@@ -107,7 +114,7 @@
           },
           "EngineRecordConflict": {
             "additionalProperties": false,
-            "description": "A different record already holds the key. It is kept; this one is not.\n\n`stored` is the held record, present only when the caller may read the\nengine scope (`source.read` and `read`).",
+            "description": "A different record already holds the key. It is kept; this one is not.\n\n`stored` is the held record. Every deliverer may read the engine scope.",
             "properties": {
               "outcome": {
                 "const": "conflict",
@@ -115,23 +122,16 @@
                 "type": "string"
               },
               "stored": {
-                "anyOf": [
-                  {
-                    "additionalProperties": {
-                      "$ref": "#/$defs/JsonValue"
-                    },
-                    "type": "object"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "title": "Stored"
+                "additionalProperties": {
+                  "$ref": "#/$defs/JsonValue"
+                },
+                "title": "Stored",
+                "type": "object"
               }
             },
             "required": [
-              "outcome"
+              "outcome",
+              "stored"
             ],
             "title": "EngineRecordConflict",
             "type": "object"
@@ -160,7 +160,7 @@
           },
           "EngineRecordRetryable": {
             "additionalProperties": false,
-            "description": "Configuration an operator can fix, such as an unenrolled or ungranted\nengine scope. This record and every later one in the batch are unread.",
+            "description": "Configuration an operator can fix: the engine scope is not enrolled,\nor this credential may not both deliver to it and read it. Those cases are\none answer, so it never shows whether a scope exists. This record and every\nlater one in the batch are unread.",
             "properties": {
               "outcome": {
                 "const": "retryable",
@@ -292,12 +292,22 @@
       },
       "ReadEngineRecords": {
         "additionalProperties": false,
+        "description": "`after` is a page's `next` cursor, or absent to start from the first record.",
         "properties": {
           "after": {
-            "default": 0,
-            "minimum": 0,
-            "title": "After",
-            "type": "integer"
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "\\S",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "After"
           },
           "contract_version": {
             "const": 1,

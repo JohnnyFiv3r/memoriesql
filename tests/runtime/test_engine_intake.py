@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import copy
 import hashlib
+import json
 import os
 import threading
 import unittest
@@ -45,6 +46,30 @@ else:
 OWNER_CREDENTIAL = "fictional orchard owner session credential"
 ENGINE_CREDENTIAL = "fictional orchard engine delivery credential"
 CATALOG = {"type": {"id": "memoriesql.bead_types", "hash": "ab" * 32}}
+# The one answer for every scope a caller may not both deliver to and read.
+UNAVAILABLE = EngineRecordRetryable(
+    outcome="retryable",
+    retry_after_ms=60000,
+    reason=(
+        "the engine scope is not enrolled, or this credential may not deliver to "
+        "and read it"
+    ),
+)
+Permissions = tuple[Literal["read", "write"], ...]
+DELIVER_AND_READ = ("engine.records.deliver", "source.read")
+READ_AND_WRITE: Permissions = ("read", "write")
+# Everything an accepted record writes.
+WRITTEN = (
+    "engine_events",
+    "engine_records",
+    "engine_chunks",
+    "engine_event_completions",
+    "engine_type_decisions",
+    "idempotency_receipts",
+    "outbox_events",
+)
+# A second tenant's owner: its credential secret and workspace.
+Owner = tuple[str, uuid.UUID]
 
 
 def sha(text: str) -> str:
@@ -140,6 +165,17 @@ def event_records(
     return records
 
 
+def one(scope: str, external_id: str) -> dict[str, Any]:
+    """A one-chunk event with a final type."""
+    (record,) = event_records(
+        scope,
+        external_id,
+        [f"Fictional {external_id}."],
+        [(assigned("observation"), rule())],
+    )
+    return record
+
+
 def in_scope(record: dict[str, Any], scope: str) -> dict[str, Any]:
     """The same record, ids and all, delivered under another engine scope."""
     moved = copy.deepcopy(record)
@@ -166,7 +202,11 @@ def type_decision(
     }
 
 
-class EngineRecordIntake(unittest.TestCase):
+class EngineIntakeFixture(unittest.TestCase):
+    """A fictional orchard workspace whose engine may deliver to and read acme."""
+
+    schema_version = 56
+
     def setUp(self) -> None:
         self.admin_url = os.environ["N1_TEST_DATABASE_URL"]
         self.database = "pr_engine_" + uuid.uuid4().hex
@@ -177,7 +217,7 @@ class EngineRecordIntake(unittest.TestCase):
         self.url = make_conninfo(self.admin_url, dbname=self.database)
         self.db = psycopg.connect(self.url, autocommit=True)
         self.addCleanup(self.cleanup_database)
-        migrate(self.db, expected_current_version=0, target_version=55)
+        migrate(self.db, expected_current_version=0, target_version=self.schema_version)
         (
             self.tenant,
             user,
@@ -226,13 +266,14 @@ class EngineRecordIntake(unittest.TestCase):
                 )
             )
 
-    def sources(self) -> PostgresSourceEnrollment:
+    def sources(self, owner: Owner | None = None) -> PostgresSourceEnrollment:
+        secret, workspace = owner or (self.owner_secret, self.workspace)
         return PostgresSourceEnrollment(
-            self.db, credential_sha256=self.owner_secret, workspace_id=self.workspace
+            self.db, credential_sha256=secret, workspace_id=workspace
         )
 
-    def enroll(self, scope: str) -> Any:
-        return self.sources().enroll(
+    def enroll(self, scope: str, owner: Owner | None = None) -> Any:
+        return self.sources(owner).enroll(
             EnrollExactSource(
                 request_id=uuid.uuid4(),
                 source_system="core-memory",
@@ -248,13 +289,15 @@ class EngineRecordIntake(unittest.TestCase):
         principal: uuid.UUID,
         secret: str,
         scopes: list[uuid.UUID],
-        capabilities: tuple[str, ...] = ("engine.records.deliver",),
+        capabilities: tuple[str, ...] = DELIVER_AND_READ,
+        owner: Owner | None = None,
     ) -> None:
+        owner_secret, workspace = owner or (self.owner_secret, self.workspace)
         with self.db.transaction():
             self.db.execute("SET LOCAL ROLE memoriesql_application")
             self.db.execute(
                 "SELECT memoriesql.begin_authorization_context(%s,%s)",
-                (self.owner_secret, self.workspace),
+                (owner_secret, workspace),
             )
             self.db.execute(
                 "SELECT memoriesql.pair_local_client(%s,%s,%s,%s,'service','background_service',%s,%s,%s,%s,%s)",
@@ -275,48 +318,217 @@ class EngineRecordIntake(unittest.TestCase):
         self,
         source: uuid.UUID,
         principal: uuid.UUID,
-        permissions: tuple[Literal["read", "write"], ...] = ("write",),
+        permissions: Permissions = READ_AND_WRITE,
+        owner: Owner | None = None,
+        valid_from: datetime | None = None,
     ) -> None:
-        self.sources().grant(
+        self.sources(owner).grant(
             GrantExactSource(
                 request_id=uuid.uuid4(),
                 source_object_id=source,
                 target_principal_id=principal,
                 permission_keys=permissions,
-                valid_from=self.now,
+                valid_from=valid_from or self.now,
                 expires_at=self.now + timedelta(hours=1),
             )
         )
 
+    def engine_for(
+        self,
+        *sources: Any,
+        capabilities: tuple[str, ...] = DELIVER_AND_READ,
+        permissions: Permissions = READ_AND_WRITE,
+        owner: Owner | None = None,
+    ) -> str:
+        """Pairs a new engine for `sources`, granted `permissions` on each."""
+        principal = uuid.uuid4()
+        secret = sha(f"fictional engine credential {principal}")
+        self.pair(
+            principal,
+            secret,
+            [source.access_scope_id for source in sources],
+            capabilities,
+            owner,
+        )
+        for source in sources:
+            self.grant(source.source_object_id, principal, permissions, owner)
+        return secret
+
     def beta_engine(self) -> str:
         """Enrolls beta and pairs a second engine that may deliver only there."""
-        beta = self.enroll("beta")
-        principal = uuid.uuid4()
-        secret = sha("fictional beta engine credential")
-        self.pair(principal, secret, [beta.access_scope_id])
-        self.grant(beta.source_object_id, principal)
-        return secret
+        return self.engine_for(self.enroll("beta"))
+
+    def other_tenant(self) -> Owner:
+        """A second fictional tenant's owner. Public fixture pattern
+        (test_agent_sql_results, test_authored_relations)."""
+        secret = sha("fictional other tenant owner credential")
+        tenant, user, identity, principal, workspace, scope, policy = (
+            uuid.uuid4() for _ in range(7)
+        )
+        credential, session, now = uuid.uuid4(), uuid.uuid4(), self.now
+        rows: tuple[tuple[str, tuple[Any, ...]], ...] = (
+            ("users", (tenant, user, "active", "Other fictional tenant", now, None)),
+            (
+                "auth_identities",
+                (
+                    tenant,
+                    identity,
+                    user,
+                    "memoriesql.local",
+                    str(identity),
+                    "local_interactive",
+                    "active",
+                    now,
+                    None,
+                ),
+            ),
+            (
+                "principals",
+                (tenant, principal, "human", user, user, "active", now, None),
+            ),
+            ("workspaces", (tenant, workspace, "personal_local", user, "active", now)),
+            (
+                "workspace_memberships",
+                (
+                    tenant,
+                    workspace,
+                    principal,
+                    "personal_owner",
+                    "active",
+                    1,
+                    now,
+                    now,
+                    None,
+                ),
+            ),
+            (
+                "access_scopes",
+                (
+                    tenant,
+                    workspace,
+                    scope,
+                    user,
+                    "owner_private",
+                    policy,
+                    "active",
+                    now,
+                ),
+            ),
+            (
+                "access_policy_revisions",
+                (
+                    tenant,
+                    workspace,
+                    scope,
+                    policy,
+                    1,
+                    "owner_private",
+                    user,
+                    "Fictional default scope",
+                    principal,
+                    now,
+                ),
+            ),
+            (
+                "authentication_credentials",
+                (
+                    tenant,
+                    credential,
+                    principal,
+                    "local_session",
+                    secret,
+                    "active",
+                    now,
+                    now + timedelta(hours=1),
+                    None,
+                ),
+            ),
+            ("local_auth_sessions", (tenant, session, credential, identity, now)),
+        )
+        with self.db.transaction():
+            for table, values in rows:
+                self.db.execute(
+                    sql.SQL("INSERT INTO memoriesql.{} VALUES ({})").format(
+                        sql.Identifier(table),
+                        sql.SQL(",").join(sql.Placeholder() for _ in values),
+                    ),
+                    values,
+                )
+        return secret, workspace
 
     def intake(
         self,
         secret: str | None = None,
         connection: psycopg.Connection[Any] | None = None,
+        workspace: uuid.UUID | None = None,
     ) -> PostgresEngineIntake:
         return PostgresEngineIntake(
             connection or self.db,
             credential_sha256=secret or self.engine_secret,
-            workspace_id=self.workspace,
+            workspace_id=workspace or self.workspace,
         )
 
-    def deliver(self, *records: dict[str, Any]) -> list[Any]:
+    def deliver(self, *records: dict[str, Any], secret: str | None = None) -> list[Any]:
         request = AcceptEngineRecords(records=records)
-        return list(self.intake().accept(request).results)
+        return list(self.intake(secret).accept(request).results)
 
-    def held(self, scope: str = "acme") -> list[dict[str, Any]]:
-        page = self.intake(self.owner_secret).read(
+    def held(
+        self, scope: str = "acme", owner: Owner | None = None
+    ) -> list[dict[str, Any]]:
+        secret, workspace = owner or (self.owner_secret, self.workspace)
+        page = self.intake(secret, workspace=workspace).read(
             ReadEngineRecords(engine_scope=scope)
         )
         return list(page.records)
+
+    def pages(
+        self, scope: str, owner: Owner | None = None
+    ) -> list[tuple[tuple[dict[str, Any], ...], str | None]]:
+        """Every page of `scope` one record at a time, with each page's cursor,
+        through the first empty page."""
+        secret, workspace = owner or (self.owner_secret, self.workspace)
+        reader = self.intake(secret, workspace=workspace)
+        pages = []
+        after = None
+        while True:
+            page = reader.read(
+                ReadEngineRecords(engine_scope=scope, after=after, limit=1)
+            )
+            pages.append((page.records, page.next))
+            if not page.records:
+                return pages
+            after = page.next
+
+    def call(
+        self,
+        function: str,
+        request: Any,
+        secret: str | None = None,
+        workspace: uuid.UUID | None = None,
+    ) -> str:
+        """One raw entry-point call: its exact JSON text, or its database error."""
+        with self.db.transaction():
+            self.db.execute("SET LOCAL ROLE memoriesql_application")
+            self.db.execute(
+                "SELECT memoriesql.begin_authorization_context(%s,%s)",
+                (secret or self.engine_secret, workspace or self.workspace),
+            )
+            row = self.db.execute(
+                sql.SQL("SELECT memoriesql.{}(%s)::text").format(
+                    sql.Identifier(function)
+                ),
+                (Jsonb(request),),
+            ).fetchone()
+        assert row is not None
+        return str(row[0])
+
+    def answer(self, record: dict[str, Any], secret: str | None = None) -> str:
+        """The exact JSON text of one record's batch."""
+        return self.call(
+            "accept_engine_records_v1",
+            AcceptEngineRecords(records=(record,)).model_dump(mode="json"),
+            secret,
+        )
 
     def count(self, table: str) -> int:
         row = self.db.execute(
@@ -325,6 +537,55 @@ class EngineRecordIntake(unittest.TestCase):
         assert row is not None
         return int(row[0])
 
+    def written(self) -> dict[str, int]:
+        return {table: self.count(table) for table in WRITTEN}
+
+    @contextlib.contextmanager
+    def held_open(
+        self, *records: dict[str, Any], secret: str | None = None
+    ) -> Iterator[None]:
+        """Delivers `records` in a transaction left open until the block ends."""
+        holding = threading.Event()
+        release = threading.Event()
+        failures: list[BaseException] = []
+
+        def hold() -> None:
+            try:
+                with psycopg.connect(self.url) as connection:
+                    with connection.transaction():
+                        connection.execute("SET LOCAL ROLE memoriesql_application")
+                        connection.execute(
+                            "SELECT memoriesql.begin_authorization_context(%s,%s)",
+                            (secret or self.engine_secret, self.workspace),
+                        )
+                        connection.execute(
+                            "SELECT memoriesql.accept_engine_records_v1(%s)",
+                            (
+                                Jsonb(
+                                    AcceptEngineRecords(records=records).model_dump(
+                                        mode="json"
+                                    )
+                                ),
+                            ),
+                        )
+                        holding.set()
+                        release.wait(10)
+            except BaseException as error:  # noqa: BLE001
+                failures.append(error)
+                holding.set()
+
+        thread = threading.Thread(target=hold)
+        thread.start()
+        self.assertTrue(holding.wait(10))
+        try:
+            yield
+        finally:
+            release.set()
+            thread.join(10)
+        self.assertEqual(failures, [])
+
+
+class EngineRecordIntake(EngineIntakeFixture):
     def test_chunks_and_a_late_type_are_kept_exactly(self) -> None:
         chunks = event_records(
             "acme",
@@ -395,7 +656,8 @@ class EngineRecordIntake(unittest.TestCase):
         altered = copy.deepcopy(chunk)
         altered["facets"] = {"lengths": {"bytes": 1}}
         self.assertEqual(
-            self.deliver(altered), [EngineRecordConflict(outcome="conflict")]
+            self.deliver(altered),
+            [EngineRecordConflict(outcome="conflict", stored=chunk)],
         )
 
         late = type_decision(
@@ -404,7 +666,7 @@ class EngineRecordIntake(unittest.TestCase):
         self.deliver(late)
         other = type_decision(chunk, assigned("outcome"), model())
         (result,) = self.deliver(other)
-        self.assertEqual(result, EngineRecordConflict(outcome="conflict"))
+        self.assertEqual(result, EngineRecordConflict(outcome="conflict", stored=late))
 
         (final,) = event_records(
             "acme", "orchard/3", ["Already final."], [(assigned("observation"), rule())]
@@ -419,42 +681,97 @@ class EngineRecordIntake(unittest.TestCase):
         )
         self.assertEqual(self.held(), [chunk, late, final])
 
-    def test_only_a_reader_is_shown_the_stored_record_in_a_conflict(self) -> None:
-        (chunk,) = event_records(
-            "acme", "orchard/14", ["Held text."], [(assigned("observation"), rule())]
+    def test_a_caller_who_may_not_read_learns_nothing_about_held_records(
+        self,
+    ) -> None:
+        pending, undelivered = event_records(
+            "acme",
+            "orchard/14",
+            ["Held one. ", "Held two."],
+            [({"status": "pending", "reason": "capacity"}, None)]
+            + [(assigned("observation"), rule())],
         )
-        self.deliver(chunk)
-        altered = copy.deepcopy(chunk)
-        altered["facets"] = {"lengths": {"bytes": 1}}
-        request = AcceptEngineRecords(records=(altered,))
-        writer: tuple[Literal["read", "write"], ...] = ("write",)
-        reader: tuple[Literal["read", "write"], ...] = ("read", "write")
-        engines = {}
-        for name, capabilities, permissions in (
-            ("capability only", ("engine.records.deliver", "source.read"), writer),
-            ("grant only", ("engine.records.deliver",), reader),
-            ("reader", ("engine.records.deliver", "source.read"), reader),
-        ):
-            principal = uuid.uuid4()
-            secret = sha("fictional engine credential: " + name)
-            self.pair(principal, secret, [self.acme.access_scope_id], capabilities)
-            self.grant(self.acme.source_object_id, principal, permissions)
-            engines[name] = secret
-        # A writer who may not read the scope learns only that the key is held.
-        for secret in (
-            self.engine_secret,
-            engines["capability only"],
-            engines["grant only"],
-        ):
+        final = one("acme", "orchard/15")
+        self.deliver(pending, final)
+        conflicting = copy.deepcopy(pending)
+        conflicting["facets"] = {"lengths": {"bytes": 1}}
+        ordinal_taken = copy.deepcopy(pending)
+        other_id = str(uuid.uuid4())
+        ordinal_taken["record_key"] = "chunk:" + other_id
+        ordinal_taken["memory"]["chunk"]["chunk_id"] = other_id
+        event_differs = copy.deepcopy(undelivered)
+        event_differs["event"]["chunk_count"] = 3
+        # Each probe's answer to a caller who may read acme.
+        probes = {
+            "identical": (
+                pending,
+                EngineRecordAlreadyAccepted(outcome="already_accepted"),
+            ),
+            "conflicting": (
+                conflicting,
+                EngineRecordConflict(outcome="conflict", stored=pending),
+            ),
+            "ordinal taken": (
+                ordinal_taken,
+                EngineRecordRejected(
+                    outcome="rejected",
+                    reason="another chunk already holds ordinal 0 of its event",
+                ),
+            ),
+            "event differs": (
+                event_differs,
+                EngineRecordRejected(
+                    outcome="rejected",
+                    reason="the event differs from the one its earlier chunks carried",
+                ),
+            ),
+            "absent chunk": (
+                type_decision(undelivered, assigned("decision"), model()),
+                EngineRecordRejected(
+                    outcome="rejected",
+                    reason="no accepted chunk has this chunk_id in this engine scope",
+                ),
+            ),
+            "final chunk": (
+                type_decision(final, assigned("decision"), model()),
+                EngineRecordRejected(
+                    outcome="rejected", reason="the chunk already has a final type"
+                ),
+            ),
+        }
+        deliver_only: tuple[str, ...] = ("engine.records.deliver",)
+        write: Permissions = ("write",)
+        read: Permissions = ("read",)
+        callers = {
+            "deliver only": self.engine_for(
+                self.acme, capabilities=deliver_only, permissions=write
+            ),
+            "capability only": self.engine_for(self.acme, permissions=write),
+            "grant only": self.engine_for(self.acme, capabilities=deliver_only),
+            "read only": self.engine_for(self.acme, permissions=read),
+        }
+        before = self.written()
+        nowhere = {
+            name: self.answer(in_scope(record, "nowhere"))
+            for name, (record, _) in probes.items()
+        }
+        self.assertEqual(set(nowhere.values()), {self.answer(one("nowhere", "x"))})
+        for caller, secret in callers.items():
+            for name, (record, _) in probes.items():
+                self.assertEqual(
+                    self.answer(record, secret), nowhere[name], (caller, name)
+                )
             self.assertEqual(
-                list(self.intake(secret).accept(request).results),
-                [EngineRecordConflict(outcome="conflict")],
+                self.deliver(*(record for record, _ in probes.values()), secret=secret),
+                [UNAVAILABLE] * len(probes),
+                caller,
             )
-        self.assertEqual(
-            list(self.intake(engines["reader"]).accept(request).results),
-            [EngineRecordConflict(outcome="conflict", stored=chunk)],
-        )
-        self.assertEqual(self.held(), [chunk])
+        self.assertEqual(self.written(), before)
+        # A caller who delivers and reads is told what it may read anyway.
+        for name, (record, expected) in probes.items():
+            self.assertEqual(self.deliver(record), [expected], name)
+        self.assertEqual(self.written(), before)
+        self.assertEqual(self.held(), [pending, final])
 
     def test_ungoverned_types_and_malformed_records_are_rejected(self) -> None:
         def reason(record: dict[str, Any]) -> str:
@@ -514,48 +831,99 @@ class EngineRecordIntake(unittest.TestCase):
         self.assertEqual(self.held(), [first, good])
         self.assertEqual(self.count("engine_event_completions"), 1)
 
-    def test_unenrolled_and_ungranted_scopes_retry_without_reading_later_records(
+    def test_every_scope_a_caller_may_not_deliver_to_and_read_gets_one_answer(
         self,
     ) -> None:
-        (elsewhere,) = event_records(
-            "beta",
-            "orchard/6",
-            ["Not enrolled yet."],
-            [(assigned("observation"), rule())],
+        elsewhere = one("beta", "orchard/6")
+        here = one("acme", "orchard/7")
+        later = self.now + timedelta(minutes=30)
+        write: Permissions = ("write",)
+        read: Permissions = ("read",)
+        # Each case's answer to [elsewhere, here], where here alone is deliverable.
+        answers = {
+            "not enrolled": self.call(
+                "accept_engine_records_v1",
+                AcceptEngineRecords(records=(elsewhere, here)).model_dump(mode="json"),
+            )
+        }
+        self.assertEqual(self.count("engine_records"), 0)
+        beta = self.enroll("beta")
+        cases: dict[str, list[tuple[Permissions, datetime | None]]] = {
+            "no grant": [],
+            "write only": [(write, None)],
+            "read only": [(read, None)],
+            "write window not open": [(read, None), (write, later)],
+            "read window not open": [(write, None), (read, later)],
+        }
+        for case, grants in cases.items():
+            principal = uuid.uuid4()
+            secret = sha("fictional engine credential: " + case)
+            self.pair(
+                principal, secret, [self.acme.access_scope_id, beta.access_scope_id]
+            )
+            self.grant(self.acme.source_object_id, principal)
+            for permissions, valid_from in grants:
+                self.grant(
+                    beta.source_object_id, principal, permissions, valid_from=valid_from
+                )
+            answers[case] = self.call(
+                "accept_engine_records_v1",
+                AcceptEngineRecords(records=(elsewhere, here)).model_dump(mode="json"),
+                secret,
+            )
+        # Granted beta but not paired for its scope.
+        self.grant(beta.source_object_id, self.engine)
+        answers["not paired"] = self.call(
+            "accept_engine_records_v1",
+            AcceptEngineRecords(records=(elsewhere, here)).model_dump(mode="json"),
         )
-        (here,) = event_records(
-            "acme", "orchard/7", ["Enrolled."], [(assigned("observation"), rule())]
+        self.assertEqual(len(set(answers.values())), 1, answers)
+        (answer,) = set(answers.values())
+        self.assertEqual(
+            json.loads(answer)["results"], [UNAVAILABLE.model_dump(mode="json")] * 2
         )
-        results = self.deliver(elsewhere, here)
-        self.assertTrue(all(isinstance(r, EngineRecordRetryable) for r in results))
-        self.assertIn("not enrolled", results[0].reason)
-        self.assertEqual(results[0], results[1])
         self.assertEqual(self.count("engine_records"), 0)
 
-        beta = self.enroll("beta")
-        (result, _) = self.deliver(elsewhere, here)
-        self.assertIsInstance(result, EngineRecordRetryable)
-        self.assertIn("may not deliver", result.reason)
-
-        self.grant(beta.source_object_id, self.engine)
-        # The pairing still lists only acme's scope.
-        (result, _) = self.deliver(elsewhere, here)
-        self.assertIsInstance(result, EngineRecordRetryable)
-
-        second = uuid.uuid4()
-        second_secret = sha("fictional second engine credential")
-        self.pair(
-            second, second_secret, [self.acme.access_scope_id, beta.access_scope_id]
+        allowed = self.engine_for(self.acme, beta)
+        self.assertEqual(
+            self.deliver(elsewhere, here, secret=allowed),
+            [EngineRecordAccepted(outcome="accepted")] * 2,
         )
-        self.grant(self.acme.source_object_id, second)
-        self.grant(beta.source_object_id, second)
-        results = list(
-            self.intake(second_secret)
-            .accept(AcceptEngineRecords(records=(elsewhere, here)))
-            .results
-        )
-        self.assertEqual(results, [EngineRecordAccepted(outcome="accepted")] * 2)
         self.assertEqual(self.held("beta"), [elsewhere])
+
+    def test_an_undeliverable_scope_answers_without_waiting_on_its_lock(
+        self,
+    ) -> None:
+        held_record = one("acme", "orchard/40")
+        probe = one("acme", "orchard/41")
+        deliver_only: tuple[str, ...] = ("engine.records.deliver",)
+        write: Permissions = ("write",)
+        read: Permissions = ("read",)
+        writer = self.engine_for(
+            self.acme, capabilities=deliver_only, permissions=write
+        )
+        reader = self.engine_for(self.acme, permissions=read)
+        request = AcceptEngineRecords(records=(probe,))
+        with self.held_open(held_record):
+            with psycopg.connect(self.url, autocommit=True) as other:
+                # Neither waits on acme's writer lock, nor does a scope that
+                # does not exist; all three answers are the same.
+                for secret, delivered in (
+                    (writer, request),
+                    (reader, request),
+                    (
+                        self.engine_secret,
+                        AcceptEngineRecords(records=(in_scope(probe, "nowhere"),)),
+                    ),
+                ):
+                    self.assertEqual(
+                        list(self.intake(secret, other).accept(delivered).results),
+                        [UNAVAILABLE],
+                    )
+                # A caller who may deliver to and read acme does wait for it.
+                with self.assertRaises(EngineIntakeBusy):
+                    self.intake(connection=other).accept(request)
+        self.assertEqual(self.held(), [held_record])
 
     def test_delivery_and_reads_need_their_own_authority(self) -> None:
         (record,) = event_records(
@@ -567,18 +935,143 @@ class EngineRecordIntake(unittest.TestCase):
         with self.assertRaises(PermissionError):
             self.intake(reader_secret).accept(AcceptEngineRecords(records=(record,)))
         self.deliver(record)
+        write: Permissions = ("write",)
+        writer = self.engine_for(
+            self.acme, capabilities=("engine.records.deliver",), permissions=write
+        )
         with self.assertRaises(PermissionError):
-            self.intake().read(ReadEngineRecords(engine_scope="acme"))
+            self.intake(writer).read(ReadEngineRecords(engine_scope="acme"))
         with self.assertRaises(PermissionError):
             self.intake(self.owner_secret).read(ReadEngineRecords(engine_scope="nope"))
-        page = self.intake(self.owner_secret).read(
-            ReadEngineRecords(engine_scope="acme", after=0, limit=1)
-        )
+        page = self.intake().read(ReadEngineRecords(engine_scope="acme", limit=1))
         self.assertEqual(page.records, (record,))
         empty = self.intake(self.owner_secret).read(
             ReadEngineRecords(engine_scope="acme", after=page.next)
         )
         self.assertEqual((empty.records, empty.next), ((), page.next))
+        self.enroll("beta")
+        nothing = self.intake(self.owner_secret).read(
+            ReadEngineRecords(engine_scope="beta")
+        )
+        self.assertEqual((nothing.records, nothing.next), ((), None))
+
+    def test_cursors_are_examined_only_after_read_authorization(self) -> None:
+        self.deliver(one("acme", "orchard/42"))
+        beta_engine = self.beta_engine()
+        self.deliver(one("beta", "orchard/43"), secret=beta_engine)
+        ((_, mine), _) = self.pages("acme")
+        ((_, theirs), _) = self.pages("beta")
+        write: Permissions = ("write",)
+        writer = self.engine_for(
+            self.acme, capabilities=("engine.records.deliver",), permissions=write
+        )
+        cursors: list[Any] = [None, mine, theirs, "nope", " ", "x" * 129, 7, {}]
+        # A scope that does not exist and one the caller may not read: every
+        # cursor gets the same refusal.
+        for scope, secret in (("nowhere", self.owner_secret), ("acme", writer)):
+            for cursor in cursors:
+                with self.subTest(scope=scope, cursor=cursor):
+                    with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+                        self.call(
+                            "read_engine_records_v1",
+                            {
+                                "contract_version": 1,
+                                "engine_scope": scope,
+                                "after": cursor,
+                            },
+                            secret,
+                        )
+        # A readable scope: only its own cursors continue a read.
+        for cursor in cursors:
+            request = {"contract_version": 1, "engine_scope": "acme", "after": cursor}
+            with self.subTest(cursor=cursor):
+                if cursor in (None, mine):
+                    page = json.loads(
+                        self.call("read_engine_records_v1", request, self.owner_secret)
+                    )
+                    self.assertEqual(set(page), {"contract_version", "records", "next"})
+                else:
+                    with self.assertRaises(psycopg.errors.InvalidParameterValue):
+                        self.call("read_engine_records_v1", request, self.owner_secret)
+
+    def test_other_scopes_and_tenants_never_change_a_readers_cursors(self) -> None:
+        quiet, busy, beta = (self.enroll(name) for name in ("quiet", "busy", "beta"))
+        ours = self.engine_for(quiet, busy, beta)
+        other_owner = self.other_tenant()
+        other_busy = self.enroll("busy", other_owner)
+        theirs = self.engine_for(other_busy, owner=other_owner)
+        records = [one("quiet", f"orchard/5{n}") for n in range(3)]
+        for record in records:
+            self.deliver(record, secret=ours)
+
+        def rolled_back(record: dict[str, Any]) -> None:
+            with self.db.transaction():
+                self.db.execute("SET LOCAL ROLE memoriesql_application")
+                self.db.execute(
+                    "SELECT memoriesql.begin_authorization_context(%s,%s)",
+                    (ours, self.workspace),
+                )
+                self.db.execute(
+                    "SELECT memoriesql.accept_engine_records_v1(%s)",
+                    (
+                        Jsonb(
+                            AcceptEngineRecords(records=(record,)).model_dump(
+                                mode="json"
+                            )
+                        ),
+                    ),
+                )
+                raise psycopg.Rollback()
+
+        # The same records in busy, each after foreign acceptances: another
+        # scope, another tenant's scope of the same name, and a rollback.
+        foreign = []
+        for n, record in enumerate(records):
+            self.deliver(one("beta", f"orchard/6{n}"), secret=ours)
+            foreign.append(one("busy", f"orchard/7{n}"))
+            accepted = self.intake(theirs, workspace=other_owner[1]).accept(
+                AcceptEngineRecords(records=(foreign[-1],))
+            )
+            self.assertEqual(
+                list(accepted.results), [EngineRecordAccepted(outcome="accepted")]
+            )
+            rolled_back(one("beta", f"orchard/8{n}"))
+            self.deliver(in_scope(record, "busy"), secret=ours)
+
+        quiet_pages = self.pages("quiet")
+        busy_pages = self.pages("busy")
+        self.assertEqual(
+            [cursor for _, cursor in busy_pages], [cursor for _, cursor in quiet_pages]
+        )
+        self.assertEqual(
+            [page for page, _ in busy_pages],
+            [
+                tuple(in_scope(record, "busy") for record in page)
+                for page, _ in quiet_pages
+            ],
+        )
+        # No gaps: one record per page, every record once, in acceptance order.
+        self.assertEqual(
+            [page for page, _ in quiet_pages], [(r,) for r in records] + [()]
+        )
+        self.assertEqual(quiet_pages[-1][1], quiet_pages[-2][1])
+        for _, cursor in quiet_pages:
+            assert cursor is not None
+            self.assertFalse(cursor.isdigit(), cursor)
+        # The foreign acceptances did consume global sequence numbers between
+        # busy's records, which a global cursor would have shown.
+        sequence = [
+            row[0]
+            for row in self.db.execute(
+                "SELECT record_seq FROM memoriesql.engine_records "
+                "WHERE source_object_id = %s ORDER BY record_seq",
+                (busy.source_object_id,),
+            ).fetchall()
+        ]
+        self.assertTrue(
+            all(b - a > 1 for a, b in zip(sequence, sequence[1:])), sequence
+        )
+        self.assertEqual(self.held("busy", other_owner), foreign)
 
     def test_the_vocabulary_is_the_governed_bead_types(self) -> None:
         vocabulary = self.intake().vocabulary()
@@ -617,48 +1110,22 @@ class EngineRecordIntake(unittest.TestCase):
                             sql.Identifier(table)
                         )
                     )
-
-    @contextlib.contextmanager
-    def held_open(self, *records: dict[str, Any]) -> Iterator[None]:
-        """Delivers `records` in a transaction left open until the block ends."""
-        holding = threading.Event()
-        release = threading.Event()
-        failures: list[BaseException] = []
-
-        def hold() -> None:
-            try:
-                with psycopg.connect(self.url) as connection:
-                    with connection.transaction():
-                        connection.execute("SET LOCAL ROLE memoriesql_application")
-                        connection.execute(
-                            "SELECT memoriesql.begin_authorization_context(%s,%s)",
-                            (self.engine_secret, self.workspace),
-                        )
-                        connection.execute(
-                            "SELECT memoriesql.accept_engine_records_v1(%s)",
-                            (
-                                Jsonb(
-                                    AcceptEngineRecords(records=records).model_dump(
-                                        mode="json"
-                                    )
-                                ),
-                            ),
-                        )
-                        holding.set()
-                        release.wait(10)
-            except BaseException as error:  # noqa: BLE001
-                failures.append(error)
-                holding.set()
-
-        thread = threading.Thread(target=hold)
-        thread.start()
-        self.assertTrue(holding.wait(10))
-        try:
-            yield
-        finally:
-            release.set()
-            thread.join(10)
-        self.assertEqual(failures, [])
+        executable = self.db.execute(
+            "SELECT p.proname FROM pg_proc p "
+            "JOIN pg_namespace n ON n.oid = p.pronamespace "
+            "WHERE n.nspname = 'memoriesql' "
+            "AND (p.proname LIKE 'engine%%' OR p.proname LIKE '%%engine_records_v1') "
+            "AND has_function_privilege('memoriesql_application', p.oid, 'EXECUTE') "
+            "ORDER BY 1"
+        ).fetchall()
+        self.assertEqual(
+            executable,
+            [
+                ("accept_engine_records_v1",),
+                ("engine_vocabulary_v1",),
+                ("read_engine_records_v1",),
+            ],
+        )
 
     def test_concurrent_chunks_of_one_event_complete_it_once(self) -> None:
         first, second = event_records(
@@ -692,8 +1159,8 @@ class EngineRecordIntake(unittest.TestCase):
         with self.held_open(early):
             with psycopg.connect(self.url, autocommit=True) as other:
                 # Another event in the same scope waits for the open batch
-                # instead of committing a later record_seq before it, which
-                # a reader's cursor would then pass.
+                # instead of committing a later record before it, which a
+                # reader's cursor would then pass.
                 with self.assertRaises(EngineIntakeBusy):
                     self.intake(connection=other).accept(
                         AcceptEngineRecords(records=(late,))
@@ -797,7 +1264,8 @@ class EngineRecordIntake(unittest.TestCase):
         altered = copy.deepcopy(taken[0])
         altered["facets"] = {"lengths": {"bytes": 1}}
         self.assertEqual(
-            self.deliver(altered), [EngineRecordConflict(outcome="conflict")]
+            self.deliver(altered),
+            [EngineRecordConflict(outcome="conflict", stored=taken[0])],
         )
         late = type_decision(taken[0], assigned("decision"), model())
         self.assertEqual(self.deliver(late), [EngineRecordAccepted(outcome="accepted")])
@@ -846,6 +1314,58 @@ class EngineRecordIntake(unittest.TestCase):
         self.assertIsInstance(rejected, EngineRecordRejected)
         self.assertEqual(accepted, EngineRecordAccepted(outcome="accepted"))
         self.assertEqual(self.held(), [good])
+
+
+class EngineIntakeUpgrade(EngineIntakeFixture):
+    schema_version = 55
+
+    def test_records_accepted_under_0055_page_by_scope_after_0056(self) -> None:
+        beta_engine = self.beta_engine()
+        other_owner = self.other_tenant()
+        other_acme = self.enroll("acme", other_owner)
+        theirs = self.engine_for(other_acme, owner=other_owner)
+        delivered: dict[tuple[str, int], list[dict[str, Any]]] = {
+            ("acme", 1): [],
+            ("beta", 1): [],
+            ("acme", 2): [],
+        }
+        # Interleaved across two scopes of one tenant and a second tenant.
+        for n in range(2):
+            for scope, tenant, secret, workspace in (
+                ("acme", 1, self.engine_secret, self.workspace),
+                ("beta", 1, beta_engine, self.workspace),
+                ("acme", 2, theirs, other_owner[1]),
+            ):
+                record = one(scope, f"orchard/9{n}-{scope}-{tenant}")
+                accepted = self.intake(secret, workspace=workspace).accept(
+                    AcceptEngineRecords(records=(record,))
+                )
+                self.assertEqual(
+                    list(accepted.results), [EngineRecordAccepted(outcome="accepted")]
+                )
+                delivered[(scope, tenant)].append(record)
+
+        migrate(self.db, expected_current_version=55, target_version=56)
+
+        owners: dict[int, Owner] = {
+            1: (self.owner_secret, self.workspace),
+            2: other_owner,
+        }
+        for (scope, tenant), records in delivered.items():
+            pages = self.pages(scope, owners[tenant])
+            self.assertEqual(
+                [page for page, _ in pages], [(r,) for r in records] + [()]
+            )
+        # A cursor taken over records from 0055 continues into later ones.
+        last = self.pages("acme")[-1][1]
+        newer = one("acme", "orchard/99")
+        self.assertEqual(
+            self.deliver(newer), [EngineRecordAccepted(outcome="accepted")]
+        )
+        page = self.intake(self.owner_secret).read(
+            ReadEngineRecords(engine_scope="acme", after=last)
+        )
+        self.assertEqual(page.records, (newer,))
 
 
 if __name__ == "__main__":
