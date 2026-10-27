@@ -1446,7 +1446,7 @@
     },
     {
       "disposition": "include",
-      "expected_record_count": 63,
+      "expected_record_count": 64,
       "filename": "json-schema.json",
       "kind": "json_schema",
       "note": "Provider-neutral capture, host, source-range, transcript-fold, and harness-lifecycle schemas. Runtime availability: memory.semantic.author-complete-unit revision 7 is unavailable for activation, source delivery and canonical apply; memoriesql.local-entity-mentions.v2 is retained for historical schemas and authorized inspection only."
@@ -1664,6 +1664,17 @@
       "path": "contracts/records/memoriesql-declared-evidence-scope-v1.json",
       "public_sha256": "41408ef175658947c296a0b39dde44c4ee962c39aad83917f2d67f08572f9cfd",
       "reason": "Public-authored scoped materialization and inspection; no private export.",
+      "version": "1"
+    },
+    {
+      "canonical_payload_sha256": "e5428d796ed155f9d4a88ea8cdbca65b36c8179fdb862df78a9cb55ad4fc10a1",
+      "catalog": "json_schema",
+      "classification": "proposed_open_core",
+      "id": "memoriesql.engine-intake.v1",
+      "package_disposition": "include",
+      "path": "contracts/records/memoriesql-engine-intake-v1.json",
+      "public_sha256": "f17fc000f3a5c7fe71fb2a5ef1ea7e6f3e8d27104a5fd0d30cdf91ef79ad24f7",
+      "reason": "Public-authored non-authoring intake of Core Memory engine records under the current authenticated context.",
       "version": "1"
     },
     {
