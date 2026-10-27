@@ -161,6 +161,12 @@ class PublicBootstrapTests(unittest.TestCase):
         self.assertIn("Retain complete part exits and failures", compatibility)
         self.assertIn("if: always()", compatibility)
         self.assertIn("runs-on: ubuntu-24.04", compatibility)
+        # Every part resolves the newest patch, not its runner image's cached one.
+        self.assertIn(
+            "          python-version: ${{ matrix.python-version }}\n"
+            "          check-latest: true\n",
+            compatibility.split("  qualification:")[0],
+        )
         aggregation = workflow.split("  qualification:")[1]
         self.assertIn("run_hosted_qualification.py aggregate", aggregation)
         self.assertIn("Retain the interpreter's aggregated proof", aggregation)
