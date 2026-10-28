@@ -1,5 +1,5 @@
 {
-  "_comment": "Planning weights: max reported module seconds from both Python minors in candidate run40340231552 (PR112 c7f712d; a slow image: its 3.14 qualify step took 75.9 min) (floor0.1s); test_population_family_budget 1417.9s = its larger observed minor (3.13; 3.14 1395.6s) in candidate run40356506616 (PR103 37bd4ae); test_authored_output_refusal 19.4s, test_repair_frame 0.5s and test_supervised_reapproval 20.0s = native eaefd9c 6.254s, 0.172s and 6.436s (3.13, the only minor run natively) x 3.11 (same factor), until observed hosted; test_partial_observation_acceptance 24.1s and test_partial_acceptance 0.7s = native 8f44855 7.736s (3.13, the larger; 3.14 7.589s) and a525574 0.230s (3.13; unchanged module) x 3.11 (same factor), until observed hosted. 65modules/886occurrences/875identities/3workers. Weights do not qualify a run.",
+  "_comment": "Planning weights: max reported module seconds from both Python minors in candidate run40340231552 (PR112 c7f712d; a slow image: its 3.14 qualify step took 75.9 min) (floor0.1s); test_population_family_budget 1417.9s = its larger observed minor (3.13; 3.14 1395.6s) in candidate run40356506616 (PR103 37bd4ae); test_authored_output_refusal 19.4s, test_repair_frame 0.5s and test_supervised_reapproval 20.0s = native eaefd9c 6.254s, 0.172s and 6.436s (3.13, the only minor run natively) x 3.11 (same factor), until observed hosted; test_partial_observation_acceptance 24.1s and test_partial_acceptance 1.6s = native 8f44855 7.736s (3.13, the larger; 3.14 7.589s) and 9f9747e 0.501s (3.13, the larger; 3.14 0.471s; 11 cases) x 3.11 (same factor), until observed hosted. 65modules/886occurrences/875identities/3workers. Weights do not qualify a run.",
   "seconds": {
     "test_agent_source_text_runtime": 773.7,
     "test_agent_sql_authority": 2.5,
@@ -70,6 +70,6 @@
     "test_repair_frame": 0.5,
     "test_supervised_reapproval": 20.0,
     "test_partial_observation_acceptance": 24.1,
-    "test_partial_acceptance": 0.7
+    "test_partial_acceptance": 1.6
   }
 }
