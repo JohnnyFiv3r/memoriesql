@@ -41,8 +41,10 @@ from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import RequestUsage, RunUsage, UsageLimits
 
 from memoriesql.application.authored_output_checks import (
+    PARTIAL_ACCEPTANCE,
     AuthoredOutputIssue,
     authored_annotation_issues,
+    partial_annotations,
 )
 from memoriesql.application.authored_relations import (
     RelatedAuthorStep,
@@ -146,6 +148,7 @@ from memoriesql.application.semantic_task_contracts import (
     SemanticTaskResult,
     UsageSummary,
     ValidationResult,
+    WithheldOutputItem,
     canonical_json_bytes,
     canonical_sha256,
     retry_class_for_status,
@@ -672,6 +675,8 @@ class _TreeState:
     # The executor-built repair frame while its one dispatch is admitted.
     repair_frame: str | None = None
     repair_used: bool = False
+    # The beads a partially accepted root output withholds.
+    withheld_items: tuple[WithheldOutputItem, ...] = ()
 
     def __post_init__(self) -> None:
         self.delegations_closed.set()
@@ -2258,7 +2263,12 @@ class PydanticAISemanticExecutor:
                 )
                 else cast(AuthoredSemanticOutput[BaseModel], result.output)
             )
-            self._guard_authored_output(run_deps, authored)
+            authored = self._guard_authored_output(
+                run_deps,
+                authored,
+                drop_unmanifested=parent_run_id is None
+                and self._accepts_in_part(state),
+            )
             if parent_run_id is None:
                 authored = await self._repaired_root_output(
                     state, run_deps, invoke, authored
@@ -2311,7 +2321,9 @@ class PydanticAISemanticExecutor:
         self,
         run_deps: _AgentRunDeps,
         authored: AuthoredSemanticOutput[BaseModel],
-    ) -> None:
+        *,
+        drop_unmanifested: bool = False,
+    ) -> AuthoredSemanticOutput[BaseModel]:
         if type(authored.typed_output) is not run_deps.binding.output_model_type:
             raise RuntimeContractError(
                 "runtime.output_contract_mismatch",
@@ -2325,6 +2337,20 @@ class PydanticAISemanticExecutor:
                 "runtime.output_contract_mismatch",
                 run_deps.binding.output_contract.contract_id,
             ) from error
+        if drop_unmanifested:
+            # A root observation output keeps its acceptable part (guard audit
+            # P1-f (b)): a used reference outside the manifest is dropped here,
+            # before the scope guard and the repair frame, so it is never echoed
+            # or recorded. Citing nothing inside the manifest still refuses.
+            kept = tuple(
+                ref
+                for ref in authored.used_evidence_refs
+                if ref in run_deps.allowed_evidence_refs
+            )
+            if kept and len(kept) < len(authored.used_evidence_refs):
+                authored = type(authored)(
+                    typed_output=authored.typed_output, used_evidence_refs=kept
+                )
         if run_deps.allowed_evidence_refs and not authored.used_evidence_refs:
             raise EvidenceGuardError(
                 "runtime.evidence_required",
@@ -2344,6 +2370,12 @@ class PydanticAISemanticExecutor:
                 "runtime.evidence_not_visible",
                 ", ".join(sorted(not_visible)),
             )
+        return authored
+
+    @staticmethod
+    def _accepts_in_part(state: _TreeState) -> bool:
+        definition = state.task.definition
+        return (definition.task_kind, definition.contract_revision) in PARTIAL_ACCEPTANCE
 
     @staticmethod
     def _annotation_issues(
@@ -2404,15 +2436,55 @@ class PydanticAISemanticExecutor:
             finally:
                 state.repair_frame = None
             if repaired is not None:
-                authored = cast(AuthoredSemanticOutput[BaseModel], repaired.output)
-                self._guard_authored_output(run_deps, authored)
+                authored = self._guard_authored_output(
+                    run_deps,
+                    cast(AuthoredSemanticOutput[BaseModel], repaired.output),
+                    drop_unmanifested=self._accepts_in_part(state),
+                )
                 issues = self._annotation_issues(state.task, authored)
         if issues:
+            partial = self._partial_root_output(state, run_deps, authored, issues)
+            if partial is not None:
+                return partial
             raise EvidenceGuardError(
                 "output." + issues[0].code,
                 "; ".join(issue.feedback() for issue in issues),
             )
         return authored
+
+    def _partial_root_output(
+        self,
+        state: _TreeState,
+        run_deps: _AgentRunDeps,
+        authored: AuthoredSemanticOutput[BaseModel],
+        issues: tuple[AuthoredOutputIssue, ...],
+    ) -> AuthoredSemanticOutput[BaseModel] | None:
+        # Observation authoring keeps its acceptable beads (guard audit P1-f
+        # (b)): each bead with an issue is withheld whole and recorded for the
+        # owner, and canonical apply checks the rest exactly as before.
+        definition = state.task.definition
+        plan = partial_annotations(
+            state.task.task_input.model_dump(mode="json"),
+            authored.typed_output.model_dump(mode="json"),
+            authored.used_evidence_refs,
+            issues,
+            task_kind=definition.task_kind,
+            contract_revision=definition.contract_revision,
+        )
+        if plan is None:
+            return None
+        partial = type(authored)(
+            typed_output=type(authored.typed_output).model_validate_json(
+                json.dumps(plan.payload)
+            ),
+            used_evidence_refs=plan.used_evidence_refs,
+        )
+        self._guard_authored_output(run_deps, partial)
+        state.withheld_items = tuple(
+            WithheldOutputItem(item_kind="bead", item_id=bead, reason_code=reason)
+            for bead, reason in plan.withheld
+        )
+        return partial
 
     async def _author_relations(
         self,
@@ -3262,6 +3334,7 @@ class PydanticAISemanticExecutor:
                 ),
                 used_evidence_refs=authored.used_evidence_refs,
                 model_run_refs=tuple(state.run_refs),
+                withheld_items=state.withheld_items,
                 validation_results=(
                     ValidationResult(
                         validator_key="runtime.run_reference",

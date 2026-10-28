@@ -272,7 +272,7 @@ Before the root run's output leaves the executor, the executor checks authored
 annotations against their own task (`application/authored_output_checks.py`):
 
 - bead coverage;
-- used and statement evidence inside the manifest, by identity and hash;
+- statement evidence inside the manifest, by identity and hash;
 - statement evidence declared as used;
 - context sources with statement evidence;
 - for v2 and complete units, the event and source-unit pins.
@@ -314,4 +314,65 @@ and attempt (owner decision 2026-10-23, P1-f D1):
   place.
 - **After the repair.** The repaired output goes through every check again. If
   issues remain, it settles `invalid_output` with `output.<code>` naming the
-  first issue, and retry class `never`. There is no second repair.
+  first issue, and retry class `never`. There is no second repair. Observation
+  authoring may still be accepted in part, as below.
+
+## Partial acceptance of authored observations
+
+A multi-bead observation authoring task (`memory.semantic.author-observations`
+revisions 1 and 2) no longer loses every bead to one bead's flawed annotation
+(owner decision 2026-10-23, P1-f D3 and D4). When issues remain after the
+repair round, or no repair was admitted:
+
+- **What is withheld.** Each task bead with an issue is withheld whole: its
+  annotation is left out, never edited. It takes the fixed reason of its first
+  issue:
+
+  | Issue | Reason |
+  |---|---|
+  | `annotation.bead_missing` | `withheld.not_authored` |
+  | `annotation.bead_duplicated` | `withheld.duplicated` |
+  | `annotation.event_mismatch`, `annotation.source_unit_mismatch` | `withheld.pin_mismatch` |
+  | `evidence.outside_manifest` | `withheld.evidence_outside_manifest` |
+  | `evidence.not_declared_as_used` | `withheld.evidence_not_declared_as_used` |
+  | `statement.context_without_evidence` | `withheld.context_without_evidence` |
+
+  An annotation of a bead outside the task is dropped; it names no task bead.
+- **Used references outside the manifest.** The executor's scope guard checks
+  used references before these checks, and for every other run a used
+  reference outside the manifest refuses it (`runtime.evidence_scope_widened`).
+  For this task's root output, first or repaired, the guard instead drops each
+  such reference while at least one used reference inside the manifest
+  remains. It drops them before the repair round, so the repair frame never
+  names one, and nothing about a dropped reference is recorded or withheld.
+  If every used reference is outside the manifest, the run is still refused.
+  A delegated run keeps the guard unchanged.
+- **What is kept.** The other annotations, unchanged, with the remaining
+  checks passing. The result settles `succeeded` and carries the withheld
+  items in `SemanticTaskResult.withheld_items`. If nothing acceptable is left,
+  the output still settles `invalid_output`.
+- **Recording.** In the same transaction and before canonical apply, the
+  worker records each withheld bead with
+  `record_withheld_semantic_output_v1`. That function takes apply's lock order
+  and fence: the attempt's leased service worker, the outcome-authority fence,
+  the relation-lineage lock, then the running task and attempt rows. It
+  accepts only these task kinds, beads of the task, fixed reasons, and at least
+  one bead left to apply.
+- **Apply.** `apply_semantic_annotations_schema29` counts the attempt's
+  recorded beads as covered. Annotations and withheld beads must partition the
+  task's beads exactly, and no withheld bead may also be annotated. Every
+  accepted annotation is checked exactly as before; a refused apply rolls the
+  withheld rows back too. Without a recorded row, a missing bead is refused as
+  before.
+- **Who sees it.** `semantic_withheld_output_items` is immutable, forced
+  row-level security, and readable by no role. Only
+  `withheld_semantic_output_v1(task_id)` reads it. It returns rows only to a
+  human principal with `memory.maintain` read on the task's scope; that is the
+  owner's re-author signal. A paired agent, a service and the worker get none,
+  and no inspection, query population or agent reply reads the table. A
+  withheld bead stays thin, exactly as before it was authored.
+- **No re-run.** Nothing is retried or re-enqueued automatically; the owner
+  decides whether to author the withheld beads again.
+
+A complete unit has one bead, so it stays all or nothing, as does every other
+task kind.

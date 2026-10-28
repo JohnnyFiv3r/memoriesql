@@ -16,13 +16,20 @@ from pydantic_ai.models.function import FunctionModel
 
 from memoriesql.application.authored_output_checks import (
     ISSUE_REFUSALS,
+    PARTIAL_ACCEPTANCE,
+    WITHHELD_REASONS,
     AuthoredOutputIssue,
     authored_annotation_issues,
+    partial_annotations,
 )
 from memoriesql.application.bead_classification import ClassificationExecutionInput
 from memoriesql.application.semantic_task_contracts import (
+    WITHHELD_REASON_CODES,
     DispatchMode,
     SemanticResultStatus,
+    SemanticTaskResult,
+    WithheldOutputItem,
+    canonical_sha256,
 )
 from memoriesql.infrastructure.models.pydanticai_executor import (
     REPAIR_INSTRUCTION,
@@ -229,6 +236,129 @@ class AuthoredOutputChecks(unittest.TestCase):
             for refusal in refusals:
                 with self.subTest(code=code, refusal=refusal):
                     self.assertRegex(body, r"RAISE EXCEPTION\s+'" + re.escape(refusal) + "'")
+
+
+def partial(
+    payload: dict[str, Any],
+    used: list[str] = UNITS,
+    kind: tuple[str, int] = OBSERVATIONS,
+) -> Any:
+    found = authored_annotation_issues(
+        task_input(), payload, used, task_kind=kind[0], contract_revision=kind[1]
+    )
+    return partial_annotations(
+        task_input(), payload, used, found, task_kind=kind[0], contract_revision=kind[1]
+    )
+
+
+class PartialObservationAcceptance(unittest.TestCase):
+    """Guard audit P1-f (b): each bead with an issue is withheld whole."""
+
+    def test_a_bead_with_an_issue_is_withheld_and_the_rest_kept_unchanged(self) -> None:
+        for kind in (OBSERVATIONS, LEGACY):
+            with self.subTest(kind=kind):
+                payload = output()
+                payload["annotations"][1]["statements"][0]["context_source_ids"] = [UNITS[0]]
+                plan = partial(payload, kind=kind)
+                self.assertEqual(plan.payload, {"annotations": [annotation(0)]})
+                self.assertEqual(plan.used_evidence_refs, tuple(UNITS))
+                self.assertEqual(
+                    plan.withheld, ((BEADS[1], "withheld.context_without_evidence"),)
+                )
+
+    def test_each_issue_withholds_its_bead_with_a_fixed_reason(self) -> None:
+        missing = output()
+        missing["annotations"] = [annotation(0)]
+        duplicated = output()
+        duplicated["annotations"] = [annotation(0), annotation(1), annotation(1)]
+        pinned = output()
+        pinned["annotations"][1]["event_id"] = OTHER_EVENT
+        rehashed = output()
+        rehashed["annotations"][1]["statements"][0]["evidence"][0]["content_hash"] = "9" * 64
+        cases = (
+            (missing, UNITS, "withheld.not_authored"),
+            (duplicated, UNITS, "withheld.duplicated"),
+            (pinned, UNITS, "withheld.pin_mismatch"),
+            (rehashed, UNITS, "withheld.evidence_outside_manifest"),
+            (output(), UNITS[:1], "withheld.evidence_not_declared_as_used"),
+        )
+        for payload, used, reason in cases:
+            with self.subTest(reason=reason):
+                plan = partial(payload, used=used)
+                self.assertEqual(plan.payload["annotations"], [annotation(0)])
+                self.assertEqual(plan.withheld, ((BEADS[1], reason),))
+
+    def test_an_annotation_outside_the_task_is_dropped_not_withheld(self) -> None:
+        payload = output()
+        payload["annotations"].append(
+            {**annotation(1), "bead_id": "c" * 8 + "-0000-7000-8000-000000000009"}
+        )
+        plan = partial(payload)
+        self.assertEqual(plan.payload, output())
+        self.assertEqual(plan.withheld, ())
+
+    def test_nothing_is_kept_when_every_bead_has_an_issue(self) -> None:
+        payload = output()
+        for item in payload["annotations"]:
+            item["statements"][0]["context_source_ids"] = [UNITS[0], UNITS[1]]
+        self.assertIsNone(partial(payload))
+        self.assertIsNone(partial({"annotations": []}))
+
+    def test_only_multi_bead_observation_authoring_is_accepted_in_part(self) -> None:
+        payload = output()
+        payload["annotations"] = [annotation(0)]
+        self.assertIsNone(partial(payload, kind=COMPLETE))
+        self.assertIsNone(partial(payload, kind=("memory.semantic.correct-observation", 2)))
+        self.assertEqual(
+            PARTIAL_ACCEPTANCE,
+            {
+                ("memory.semantic.author-observations", 1),
+                ("memory.semantic.author-observations", 2),
+            },
+        )
+
+    def test_every_bead_issue_has_a_registered_reason(self) -> None:
+        self.assertEqual(
+            set(WITHHELD_REASONS), set(ISSUE_REFUSALS) - {"annotation.bead_outside_task"}
+        )
+        self.assertEqual(set(WITHHELD_REASONS.values()), set(WITHHELD_REASON_CODES))
+        with self.assertRaises(ValueError):
+            WithheldOutputItem(item_kind="bead", item_id=BEADS[0], reason_code="withheld.other")
+
+    def test_only_a_succeeded_result_withholds_items_and_each_once(self) -> None:
+        item = WithheldOutputItem(
+            item_kind="bead", item_id=BEADS[1], reason_code="withheld.not_authored"
+        )
+        failed = {
+            "status": SemanticResultStatus.INVALID_OUTPUT,
+            "task_id": "orchard.task",
+            "attempt_id": "orchard.attempt",
+            "task_kind": OBSERVATIONS[0],
+            "contract_revision": 2,
+            "output_contract_hash": "0" * 64,
+            "error_code": "output.annotation.bead_missing",
+            "retry_class": "never",
+        }
+        self.assertEqual(SemanticTaskResult.model_validate(failed).withheld_items, ())
+        with self.assertRaisesRegex(ValueError, "only succeeded results withhold items"):
+            SemanticTaskResult.model_validate({**failed, "withheld_items": [item]})
+        # Any typed output will do; this one is the item itself.
+        succeeded = {
+            **failed,
+            "status": SemanticResultStatus.SUCCEEDED,
+            "error_code": None,
+            "retry_class": None,
+            "typed_output": item,
+            "output_hash": canonical_sha256(item.model_dump(mode="json")),
+        }
+        result = SemanticTaskResult[WithheldOutputItem].model_validate(
+            {**succeeded, "withheld_items": [item]}
+        )
+        self.assertEqual(result.withheld_items, (item,))
+        with self.assertRaisesRegex(ValueError, "withheld items must be unique"):
+            SemanticTaskResult[WithheldOutputItem].model_validate(
+                {**succeeded, "withheld_items": [item, item]}
+            )
 
 
 class RepairAdmissionAndGuard(unittest.IsolatedAsyncioTestCase):

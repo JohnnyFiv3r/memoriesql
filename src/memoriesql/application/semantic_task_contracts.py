@@ -350,6 +350,34 @@ def stamp_statement_run_reference[OutputT: BaseModel](
     return output.model_copy(update={"annotations": tuple(rebuilt)}), True
 
 
+WITHHELD_REASON_CODES: tuple[str, ...] = (
+    "withheld.not_authored",
+    "withheld.duplicated",
+    "withheld.pin_mismatch",
+    "withheld.evidence_outside_manifest",
+    "withheld.evidence_not_declared_as_used",
+    "withheld.context_without_evidence",
+)
+
+
+class WithheldOutputItem(FrozenContractModel):
+    """One task item left out of a partially accepted result, with a fixed reason.
+
+    A withheld item is never applied. The worker records it, owner-only, as the
+    signal to author it again.
+    """
+
+    item_kind: Literal["bead"]
+    item_id: str = Field(min_length=1)
+    reason_code: str
+
+    @model_validator(mode="after")
+    def reject_unregistered_reason(self) -> WithheldOutputItem:
+        if self.reason_code not in WITHHELD_REASON_CODES:
+            raise ValueError(f"unregistered withheld reason: {self.reason_code}")
+        return self
+
+
 class SemanticTaskResult[OutputT: BaseModel](FrozenContractModel):
     status: SemanticResultStatus
     task_id: str = Field(min_length=1)
@@ -368,6 +396,8 @@ class SemanticTaskResult[OutputT: BaseModel](FrozenContractModel):
         pattern=IDENTIFIER_PATTERN.pattern,
     )
     retry_class: RetryClass | None = None
+    # Task items a partially accepted result leaves out of typed_output.
+    withheld_items: tuple[WithheldOutputItem, ...] = ()
 
     @model_validator(mode="after")
     def enforce_discriminated_envelope(self) -> SemanticTaskResult[OutputT]:
@@ -395,6 +425,12 @@ class SemanticTaskResult[OutputT: BaseModel](FrozenContractModel):
                 )
         if len(self.used_evidence_refs) != len(set(self.used_evidence_refs)):
             raise ValueError("used evidence references must be unique")
+        if self.withheld_items and self.status != SemanticResultStatus.SUCCEEDED:
+            raise ValueError("only succeeded results withhold items")
+        if len({(item.item_kind, item.item_id) for item in self.withheld_items}) != len(
+            self.withheld_items
+        ):
+            raise ValueError("withheld items must be unique")
         return self
 
 
