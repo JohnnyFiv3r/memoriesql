@@ -61,7 +61,7 @@ def main() -> None:
             Path(str(installed.locate_file(p))).resolve() for p in installed.files or ()
         }
         migrations = discover_migrations()
-        assert len(migrations) == 57
+        assert len(migrations) == 58
         for migration in migrations:
             assert Path(str(migration.path)).resolve() in owned
             assert (
@@ -116,13 +116,13 @@ def main() -> None:
         )
         assert (
             ActivateRepairableCompleteInput.model_fields["expected_schema_version"].default
-            == 57
+            == 58
         )
         assert (
             ActivateRepairableRelationAssessment.model_fields[
                 "expected_schema_version"
             ].default
-            == 57
+            == 58
         )
         assert "bead_id" in InspectStoredBead.model_fields
         assert callable(PostgresStoredBeadInspection.inspect)

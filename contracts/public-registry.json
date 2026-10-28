@@ -1645,13 +1645,13 @@
       "version": "1"
     },
     {
-      "canonical_payload_sha256": "ae638fb55f3e55a39ce4a8cc3e501c6bdfd35b226d9baf78606efd364712d13d",
+      "canonical_payload_sha256": "a7f2e83bafb85404556065e4938511a758018f5c0ecf06ff2c3cf1afc30e2715",
       "catalog": "json_schema",
       "classification": "proposed_open_core",
       "id": "memoriesql.complete-input-execution.v2",
       "package_disposition": "include",
       "path": "contracts/records/memoriesql-complete-input-execution-v2.json",
-      "public_sha256": "803b5a1f235527b4883081e28262edc47aea48e3ec11f4539e41b39494b61ca2",
+      "public_sha256": "40f57a773ddc6411008fba39e632443f5567a3f8f697f6c6753e87b9d93cd2db",
       "reason": "Public-authored revision-8 complete-input execution: revision 2 with one more request for the evidence-free repair round.",
       "version": "2"
     },
@@ -1678,13 +1678,13 @@
       "version": "1"
     },
     {
-      "canonical_payload_sha256": "e5428d796ed155f9d4a88ea8cdbca65b36c8179fdb862df78a9cb55ad4fc10a1",
+      "canonical_payload_sha256": "4388648e761a6bfc9ec6b52e51a947f57801121794cb6fa982f756a4936a8d76",
       "catalog": "json_schema",
       "classification": "proposed_open_core",
       "id": "memoriesql.engine-intake.v1",
       "package_disposition": "include",
       "path": "contracts/records/memoriesql-engine-intake-v1.json",
-      "public_sha256": "f17fc000f3a5c7fe71fb2a5ef1ea7e6f3e8d27104a5fd0d30cdf91ef79ad24f7",
+      "public_sha256": "6ab42670d509222980a96aa5ae7bc0b36e142d9486a35d4721d66e0c2aa0c8a6",
       "reason": "Public-authored non-authoring intake of Core Memory engine records under the current authenticated context.",
       "version": "1"
     },
@@ -1973,13 +1973,13 @@
       "version": "1"
     },
     {
-      "canonical_payload_sha256": "779c52f085b850b622f3dae482fe7159a5f34e62093adad78cd0ff5a29edc70b",
+      "canonical_payload_sha256": "a88cf9ba1cef774877ed2d4d0b99b4201a354dacb9656cb8f542d88233a3808f",
       "catalog": "json_schema",
       "classification": "proposed_open_core",
       "id": "memoriesql.relation-assessment.v2",
       "package_disposition": "include",
       "path": "contracts/records/memoriesql-relation-assessment-v2.json",
-      "public_sha256": "46f2a7f359eff3e9bdb1de62660c2473f7968e02d943072023c396ae161eaf40",
+      "public_sha256": "b69aeb58ff6363ad60a6fe712e36c1a81b62a005588fab5a47a623f96b47976a",
       "reason": "Public-authored revision-2 relation assessment: revision 1 with one more request for the evidence-free author repair frame.",
       "version": "2"
     },

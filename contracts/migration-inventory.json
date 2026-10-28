@@ -223,12 +223,16 @@
       "sha256": "b62cc2690fcb47af9f96b91aafcb2f0a147af606d69967350f85d6257c6c66eb"
     },
     {
-      "filename": "0056_partial_observation_acceptance.sql",
+      "filename": "0056_engine_intake_privacy.sql",
+      "sha256": "17c5ecc67b0ecf332ef1bc4376afbf8db71eb7a5c5daa27ea795599baee3fd3a"
+    },
+    {
+      "filename": "0057_partial_observation_acceptance.sql",
       "sha256": "7d0f2a97959d736092d43b4b449272c9885845295a63d92b7990e8795d99f5ab"
     },
     {
-      "filename": "0057_repair_headroom.sql",
-      "sha256": "cc6e66c1879775a2730a3e5adbae54562c26a8424046846175791e55ed71d422"
+      "filename": "0058_repair_headroom.sql",
+      "sha256": "adfc302865f1e42b31d0a7b6330025a91c4abab8e9d43b85c95185f9ac2c1611"
     }
   ]
 }

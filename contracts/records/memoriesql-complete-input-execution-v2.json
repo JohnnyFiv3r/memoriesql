@@ -25,8 +25,8 @@
             "type": "string"
           },
           "expected_schema_version": {
-            "const": 57,
-            "default": 57,
+            "const": 58,
+            "default": 58,
             "title": "Expected Schema Version",
             "type": "integer"
           },
@@ -357,8 +357,8 @@
             "type": "integer"
           },
           "expected_schema_version": {
-            "const": 57,
-            "default": 57,
+            "const": 58,
+            "default": 58,
             "title": "Expected Schema Version",
             "type": "integer"
           },

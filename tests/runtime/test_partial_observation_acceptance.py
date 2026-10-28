@@ -429,7 +429,7 @@ class PartialObservationAcceptance(PostgresRuntime):
                 self.db.execute(f"UPDATE {TABLE} SET reason_code='withheld.duplicated'")
 
     def test_function_grants_are_exactly_the_documented_ones(self) -> None:
-        # Custody B-6: the effective EXECUTE privileges after 0056. Apply stays
+        # Custody B-6: the effective EXECUTE privileges after 0057. Apply stays
         # reachable only through its wrapper; the recorder is the worker's and
         # the owner read the application's.
         grants = {

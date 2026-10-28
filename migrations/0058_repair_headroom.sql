@@ -34,7 +34,7 @@
 -- revision 1:
 -- - an admission policy pins the revision-2 task contract and registry;
 -- - activate_relation_assessment_v2 activates revision 2, as v1 does revision 1;
--- - apply_relation_assessment_v1 accepts command version 2 (schema 57) for a
+-- - apply_relation_assessment_v1 accepts command version 2 (schema 58) for a
 --   revision-2 task and its author agent, and nothing else changed;
 -- - record_relation_delivery_v1, record_semantic_run_event,
 --   reauthorize_semantic_task, consume_supervised_dispatch and
@@ -153,7 +153,7 @@ BEGIN
             OR (requested_command->>'contract_version'='8' AND requested_command->>'expected_schema_version'='41'
                 AND requested_command->>'task_kind'='memory.semantic.author-complete-unit' AND requested_command->>'contract_revision'='7'
                 AND requested_command->>'output_contract_hash'='360953819cc83cc29ccaaa629e4d505aab2e289c0618dd6e42f0a7cc9213c638')
-            OR (requested_command->>'contract_version'='9' AND requested_command->>'expected_schema_version'='57'
+            OR (requested_command->>'contract_version'='9' AND requested_command->>'expected_schema_version'='58'
                 AND requested_command->>'task_kind'='memory.semantic.author-complete-unit' AND requested_command->>'contract_revision'='8'
                 AND requested_command->>'output_contract_hash'='7399c5039812e98d4d53566cb028350effb476a395a83c6fa17b8445ad9f1124')
             OR (is_v2
@@ -1904,7 +1904,7 @@ BEGIN
                 AND requested_command->>'expected_schema_version' IS NOT DISTINCT FROM '29'
                 AND requested_command->>'contract_revision' IS NOT DISTINCT FROM '1')
             OR (requested_command->>'contract_version' IS NOT DISTINCT FROM '2'
-                AND requested_command->>'expected_schema_version' IS NOT DISTINCT FROM '57'
+                AND requested_command->>'expected_schema_version' IS NOT DISTINCT FROM '58'
                 AND requested_command->>'contract_revision' IS NOT DISTINCT FROM '2'))
        OR requested_command->>'task_kind' IS DISTINCT FROM 'memory.semantic.assess-relations'
        OR requested_command->>'output_contract_hash' IS DISTINCT FROM '7b069836b3c71657aa5ade422e3310b4a5d203d15ebfb32bbdee2054889647b5'
@@ -2855,7 +2855,7 @@ DECLARE c memoriesql.authorization_contexts%ROWTYPE; b memoriesql.logical_unit_m
     original memoriesql.semantic_tasks%ROWTYPE; p memoriesql.evidence_packages%ROWTYPE;
     rid uuid:=uuidv7(); tid uuid:=uuidv7(); eid uuid; input jsonb; result jsonb; request_hash text; started timestamptz:=clock_timestamp();
 BEGIN
-    IF request->>'contract_version' IS DISTINCT FROM '7' OR request->>'expected_schema_version' IS DISTINCT FROM '57' OR
+    IF request->>'contract_version' IS DISTINCT FROM '7' OR request->>'expected_schema_version' IS DISTINCT FROM '58' OR
        request-ARRAY['contract_version','expected_schema_version','idempotency_key','binding_task_id','dispatch_policy_id']<>'{}'::jsonb OR
        COALESCE(length(request->>'idempotency_key'),0) NOT BETWEEN 1 AND 512 OR octet_length(request::text)>16384 THEN
         RAISE EXCEPTION 'invalid_complete_input_activation' USING ERRCODE='22023'; END IF;
@@ -2923,7 +2923,7 @@ DECLARE
     uuid_pattern constant text := '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
 BEGIN
     IF jsonb_typeof(request) IS DISTINCT FROM 'object'
-       OR request->>'contract_version' IS DISTINCT FROM '2' OR request->>'expected_schema_version' IS DISTINCT FROM '57'
+       OR request->>'contract_version' IS DISTINCT FROM '2' OR request->>'expected_schema_version' IS DISTINCT FROM '58'
        OR request - ARRAY['contract_version', 'expected_schema_version', 'idempotency_key', 'subject_bead_id',
                           'candidate_bead_ids', 'relation_vocabulary', 'dispatch_policy_id', 'reconsiders_task_id'] <> '{}'::jsonb
        OR COALESCE(length(request->>'idempotency_key'), 0) NOT BETWEEN 1 AND 512 OR octet_length(request::text) > 16384

@@ -1,8 +1,8 @@
-"""Database-free structure of migration 0057 (request headroom, guard audit P1-f D2).
+"""Database-free structure of migration 0058 (request headroom, guard audit P1-f D2).
 
 Part 1: author-complete-unit revision 8 is revision 2 with one more request.
 Part 2: assess-relations revision 2 is revision 1 with one more request, and
-its author agent is memory.semantic.relation-author.v2. So 0057 restates every
+its author agent is memory.semantic.relation-author.v2. So 0058 restates every
 installed function that treats complete-unit revision 2 or relation revision 1
 specially, with the new revision handled exactly like it and nothing else
 changed. Each restatement is held here to its installed text plus exactly the
@@ -36,7 +36,7 @@ from memoriesql.application.relation_assessment import (
 
 ROOT = Path(__file__).resolve().parents[2]
 MIGRATIONS = ROOT / "migrations"
-NAME = "0057_repair_headroom.sql"
+NAME = "0058_repair_headroom.sql"
 SQL = (MIGRATIONS / NAME).read_text() if (MIGRATIONS / NAME).exists() else ""
 MODULES = BuiltInModuleRegistry._from_source_controlled(
     (), (ProfileDefinition("core", ()),), {}
@@ -76,7 +76,7 @@ def function(text: str, name: str) -> str:
 
 
 def installed(name: str) -> tuple[str, str]:
-    """(migration, definition) of the newest definition before 0057."""
+    """(migration, definition) of the newest definition before 0058."""
     found: tuple[str, str] | None = None
     for path in sorted(MIGRATIONS.glob("[0-9][0-9][0-9][0-9]_*.sql")):
         if path.name >= NAME:
@@ -94,16 +94,16 @@ CLAUSE8 = (
     "                AND requested_command->>'output_contract_hash'='360953819cc83cc29ccaaa629e4d505aab2e289c0618dd6e42f0a7cc9213c638')\n"
 )
 CLAUSE9 = (
-    "            OR (requested_command->>'contract_version'='9' AND requested_command->>'expected_schema_version'='57'\n"
+    "            OR (requested_command->>'contract_version'='9' AND requested_command->>'expected_schema_version'='58'\n"
     "                AND requested_command->>'task_kind'='memory.semantic.author-complete-unit' AND requested_command->>'contract_revision'='8'\n"
     f"                AND requested_command->>'output_contract_hash'='{OUTPUT}')\n"
 )
 
 # Function: (its latest installed source, the edits). Each edit is
-# (installed text, 0057 text, occurrences).
+# (installed text, 0058 text, occurrences).
 RESTATED: dict[str, tuple[str, tuple[tuple[str, str, int], ...]]] = {
     "apply_semantic_annotations_schema29": (
-        "0056_partial_observation_acceptance.sql",
+        "0057_partial_observation_acceptance.sql",
         (
             (
                 "is_complete := requested_command->>'contract_version' IN ('3','4','5','6','7','8');",
@@ -235,7 +235,7 @@ RESTATED: dict[str, tuple[str, tuple[tuple[str, str, int], ...]]] = {
                 "                AND requested_command->>'expected_schema_version' IS NOT DISTINCT FROM '29'\n"
                 "                AND requested_command->>'contract_revision' IS NOT DISTINCT FROM '1')\n"
                 "            OR (requested_command->>'contract_version' IS NOT DISTINCT FROM '2'\n"
-                "                AND requested_command->>'expected_schema_version' IS NOT DISTINCT FROM '57'\n"
+                "                AND requested_command->>'expected_schema_version' IS NOT DISTINCT FROM '58'\n"
                 "                AND requested_command->>'contract_revision' IS NOT DISTINCT FROM '2'))\n"
                 "       OR requested_command->>'task_kind' IS DISTINCT FROM 'memory.semantic.assess-relations'\n",
                 1,
@@ -290,7 +290,7 @@ RELATION_ACTIVATION: tuple[tuple[str, str, int], ...] = (
     ),
     (
         "OR request->>'contract_version' IS DISTINCT FROM '1' OR request->>'expected_schema_version' IS DISTINCT FROM '29'",
-        "OR request->>'contract_version' IS DISTINCT FROM '2' OR request->>'expected_schema_version' IS DISTINCT FROM '57'",
+        "OR request->>'contract_version' IS DISTINCT FROM '2' OR request->>'expected_schema_version' IS DISTINCT FROM '58'",
         1,
     ),
     ("'relation_assessment.activate.v1'", "'relation_assessment.activate.v2'", 2),
@@ -328,7 +328,7 @@ ACTIVATION: tuple[tuple[str, str, int], ...] = (
     ),
     (
         "IF request->>'contract_version' IS DISTINCT FROM '1' OR request->>'expected_schema_version' IS DISTINCT FROM '18' OR",
-        "IF request->>'contract_version' IS DISTINCT FROM '7' OR request->>'expected_schema_version' IS DISTINCT FROM '57' OR",
+        "IF request->>'contract_version' IS DISTINCT FROM '7' OR request->>'expected_schema_version' IS DISTINCT FROM '58' OR",
         1,
     ),
     (
@@ -509,8 +509,8 @@ class RepairHeadroomMigration(unittest.TestCase):
     def test_inventory_pins_the_migration(self) -> None:
         rows = json.loads((ROOT / "contracts/migration-inventory.json").read_text())["migrations"]
         self.assertEqual([int(r["filename"][:4]) for r in rows], list(range(1, len(rows) + 1)))
-        self.assertEqual(rows[56]["filename"], NAME)
-        self.assertEqual(rows[56]["sha256"], hashlib.sha256((MIGRATIONS / NAME).read_bytes()).hexdigest())
+        self.assertEqual(rows[57]["filename"], NAME)
+        self.assertEqual(rows[57]["sha256"], hashlib.sha256((MIGRATIONS / NAME).read_bytes()).hexdigest())
 
 
 if __name__ == "__main__":
