@@ -910,7 +910,7 @@ BEGIN
   -- Accepted provenance is bound to its own receipt, never the newest source task.
   SELECT * INTO execution FROM memoriesql.complete_input_executions
    WHERE tenant_id=r.tenant_id AND execution_task_id=ir.resource_id;
-  IF ir.operation_kind IN ('complete_input.apply.v1','complete_input.apply.v2','complete_input.apply.v3','complete_input.apply.v4','complete_input.apply.v5','complete_input.apply.v6')
+  IF ir.operation_kind IN ('complete_input.apply.v1','complete_input.apply.v2','complete_input.apply.v3','complete_input.apply.v4','complete_input.apply.v5','complete_input.apply.v6','complete_input.apply.v7')
    AND execution.execution_task_id IS NULL THEN RAISE EXCEPTION 'stored_bead_unavailable' USING ERRCODE='42501'; END IF;
   SELECT q.status INTO status FROM memoriesql.semantic_tasks q
    WHERE q.tenant_id=r.tenant_id AND q.task_id=execution.execution_task_id;

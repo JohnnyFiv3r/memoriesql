@@ -59,12 +59,10 @@ class PostgresFoldRecovery:
             raise ValueError("fold recovery request exceeds bound")
         if self._connection.info.transaction_status != TransactionStatus.IDLE:
             raise RuntimeError("fold recovery requires transaction ownership")
+        timeout_ms = statement_timeout_ms("recover_transcript_fold_v1")
         with self._connection.transaction():
             self._connection.execute("SET TRANSACTION ISOLATION LEVEL READ COMMITTED")
-            self._connection.execute(
-                "SELECT set_config('statement_timeout', %s, true)",
-                (str(statement_timeout_ms("recover_transcript_fold_v1")),),
-            )
+            self._connection.execute(f"SET LOCAL statement_timeout = '{timeout_ms}ms'")
             self._connection.execute("SET LOCAL lock_timeout = '500ms'")
             self._connection.execute("SET LOCAL ROLE memoriesql_application")
             PostgresAuthorizationPort(self._connection).begin_context(

@@ -1,4 +1,4 @@
-# Work deadlines exclude lock waits (provisional migration 0051)
+# Work deadlines exclude lock waits (migration 0059)
 
 ## The defect
 
@@ -41,8 +41,10 @@ Relation inspection (`relation_inspection_frame_v1`) needs no change. Its read
 frame takes the fence and query-access locks in an earlier transaction, so its
 statement starts after them.
 
-The number is provisional; the coordinator assigns the final one (0053 or
-later). Forward-only; earlier migrations keep their bytes.
+It lands as 0059, after #109's 0058. `inspect_stored_bead_v1` is restated
+from 0058's definition, which admits `complete_input.apply.v7`; the other
+five are restated from their unchanged definitions (0016, 0019, 0021, 0025).
+Forward-only; earlier migrations keep their bytes.
 
 ## What `waited` covers
 

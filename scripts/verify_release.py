@@ -18,6 +18,20 @@ APPROVED_VERSION = "0.0.12"
 RELEASE_INVENTORY = (
     ROOT / "docs/verification/runtime-0.0.12-package-artifact-inventory.json"
 )
+# Exactly the jobs of python-package.yml: each interpreter's acceptance parts
+# and the aggregation that alone completes that interpreter's proof.
+QUALIFICATION_JOBS = frozenset(
+    {
+        "package",
+        *(
+            f"compatibility ({minor}, part {part})"
+            for minor in ("3.13", "3.14")
+            for part in (1, 2, 3)
+        ),
+        "qualification (3.13)",
+        "qualification (3.14)",
+    }
+)
 
 
 def select_ci_run(
@@ -53,11 +67,13 @@ def verify_qualification_jobs(
 ) -> None:
     """A green workflow with skipped database jobs cannot qualify a release."""
     jobs = document.get("jobs", [])
-    required = {"package", "compatibility (3.13)", "compatibility (3.14)"}
+    required = QUALIFICATION_JOBS
     if document.get("total_count") != len(jobs) or len(jobs) != len(required):
         raise ValueError("incomplete or unexpected qualification job inventory")
     if {job.get("name") for job in jobs} != required:
-        raise ValueError("qualification requires package and both supported interpreters")
+        raise ValueError(
+            "qualification requires package, every part and both interpreters' aggregation"
+        )
     for job in jobs:
         if (
             job.get("run_id") != run_id
