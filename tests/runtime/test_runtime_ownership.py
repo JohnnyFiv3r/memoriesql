@@ -19,14 +19,14 @@ class RuntimeOwnership(unittest.TestCase):
         }
         rows = json.loads(Path("runtime-inventory.json").read_text())["runtime"]
         paths = [row["path"] for row in rows]
-        self.assertEqual(len(paths), 91)
-        self.assertEqual(len(set(paths)), 91)
+        self.assertEqual(len(paths), 94)
+        self.assertEqual(len(set(paths)), 94)
         # Independently reviewed path census, checked before any runtime import.
         self.assertEqual(
             hashlib.sha256(
                 "".join(p + "\n" for p in sorted(paths)).encode()
             ).hexdigest(),
-            "5489b8e5df387e350e80be198488b1a95614c30640ac7f05e670bade58bd5e77",
+            "38b49e531851ada5fe71335538d3d04e87976cadd918e58244814a815db12bfa",
         )
         for row in rows:
             module_name = (

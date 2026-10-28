@@ -61,7 +61,7 @@ def main() -> None:
             Path(str(installed.locate_file(p))).resolve() for p in installed.files or ()
         }
         migrations = discover_migrations()
-        assert len(migrations) == 53
+        assert len(migrations) == 57
         for migration in migrations:
             assert Path(str(migration.path)).resolve() in owned
             assert (
@@ -77,7 +77,7 @@ def main() -> None:
                     .rstrip("=")
                     == record.hash.value
                 )
-        assert len(tuple(iter_contracts())) == 72
+        assert len(tuple(iter_contracts())) == 73
         assert (
             get_contract("memoriesql.source-stable-identity.v1")["id"]
             == "memoriesql.source-stable-identity.v1"
@@ -116,13 +116,13 @@ def main() -> None:
         )
         assert (
             ActivateRepairableCompleteInput.model_fields["expected_schema_version"].default
-            == 53
+            == 57
         )
         assert (
             ActivateRepairableRelationAssessment.model_fields[
                 "expected_schema_version"
             ].default
-            == 53
+            == 57
         )
         assert "bead_id" in InspectStoredBead.model_fields
         assert callable(PostgresStoredBeadInspection.inspect)

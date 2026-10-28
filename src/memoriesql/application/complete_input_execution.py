@@ -294,7 +294,7 @@ class RepairableExecutionInput(CompleteExecutionInput):
 
 class ActivateRepairableCompleteInput(ActivateCompleteInput):
     contract_version: Literal[7] = 7  # type: ignore[assignment]
-    expected_schema_version: Literal[53] = 53  # type: ignore[assignment]
+    expected_schema_version: Literal[57] = 57  # type: ignore[assignment]
 
 
 class RepairableActivationReceipt(CompleteInputActivationReceipt):
@@ -340,7 +340,7 @@ def load_repairable_complete_input_task_registry(
 
 class ApplyRepairableCompleteInput(ApplyCompleteInput):
     contract_version: Literal[9] = 9  # type: ignore[assignment]
-    expected_schema_version: Literal[53] = 53  # type: ignore[assignment]
+    expected_schema_version: Literal[57] = 57  # type: ignore[assignment]
     contract_revision: Literal[8] = 8  # type: ignore[assignment]
 
 

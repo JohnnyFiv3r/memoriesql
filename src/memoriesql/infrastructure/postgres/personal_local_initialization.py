@@ -58,10 +58,8 @@ class PostgresPersonalLocalInitialization:
         ids = initialization_identities(command.request_id)
         try:
             with self._connection.transaction():
-                self._connection.execute(
-                    "SELECT set_config('statement_timeout','2500',true), "
-                    "set_config('lock_timeout','500',true)"
-                )
+                self._connection.execute("SET LOCAL statement_timeout='2500ms'")
+                self._connection.execute("SET LOCAL lock_timeout='500ms'")
                 self._connection.execute("SET LOCAL ROLE memoriesql_application")
                 self._connection.execute(
                     "SELECT memoriesql.bootstrap_personal_local("

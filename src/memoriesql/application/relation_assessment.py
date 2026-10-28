@@ -800,7 +800,7 @@ class RepairableRelationAssessmentInput(RelationAssessmentInput):
 
 class ActivateRepairableRelationAssessment(ActivateRelationAssessment):
     contract_version: Literal[2] = 2  # type: ignore[assignment]
-    expected_schema_version: Literal[53] = 53  # type: ignore[assignment]
+    expected_schema_version: Literal[57] = 57  # type: ignore[assignment]
 
 
 class RepairableRelationActivationReceipt(RelationAssessmentActivationReceipt):
@@ -860,7 +860,7 @@ def load_repairable_relation_assessment_task_registry(
 
 class ApplyRepairableRelationAssessment(ApplyRelationAssessment):
     contract_version: Literal[2] = 2  # type: ignore[assignment]
-    expected_schema_version: Literal[53] = 53  # type: ignore[assignment]
+    expected_schema_version: Literal[57] = 57  # type: ignore[assignment]
     contract_revision: Literal[2] = 2  # type: ignore[assignment]
 
 

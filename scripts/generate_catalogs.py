@@ -109,9 +109,9 @@ def _records(
     if not all(isinstance(record, dict) for record in raw_records):
         raise ValueError("public registry records must be objects")
     records = tuple(cast(dict[str, object], record) for record in raw_records)
-    if len(records) != 72:
+    if len(records) != 73:
         raise ValueError(
-            f"expected 72 explicitly approved records, found {len(records)}"
+            f"expected 73 explicitly approved records, found {len(records)}"
         )
     identifiers = [record.get("id") for record in records]
     if len(set(identifiers)) != len(identifiers):

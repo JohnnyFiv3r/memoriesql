@@ -35,6 +35,16 @@ type pins, actor metadata or hashes. Pair coverage authorizes the complete captu
 task bead population and all recorded proposals before disclosing even not_assessed
 pairs, including tasks with no accepted assertion. No task-status claim is added.
 
+A family whose derivation roots exceed the lineage budget (128 beads; the root
+walk's `root_budget`) is withheld exactly as an unreadable family is (forward
+migration `population_family_budget`): its dependants are dropped by the same
+closure, and owner pair coverage that recorded it is withheld as before.
+Before that fix, the family block withheld only `insufficient_privilege`. One
+deep lineage therefore failed the whole population, and every query in its
+workspace (owner and agent) returned `budget_exhausted/storage`. A DB repro
+confirmed this, and `tests/runtime/test_population_family_budget.py` keeps it
+fixed. Every other limit, the population byte budget included, still fails.
+
 `prepare_relation_population` owns the canonical shared session authority fence
 before its repeatable-read snapshot. NULL known time resolves once on the database
 clock; finite explicit time cannot exceed snapshot time. Preparation and a final

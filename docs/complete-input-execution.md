@@ -164,7 +164,7 @@ other ceiling are unchanged.
 | Record | `memoriesql.complete-input-execution.v1` | `memoriesql.complete-input-execution.v2` |
 
 Inputs, the output contract, trusted exposure, apply and render semantics are
-revision 2's. Migration `0053_repair_headroom` restates every database function
+revision 2's. Migration `0057_repair_headroom` restates every database function
 that treats revision 2 specially, with revision 8 handled exactly like it, and
 nothing else changed.
 

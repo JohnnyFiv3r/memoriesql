@@ -1446,7 +1446,7 @@
     },
     {
       "disposition": "include",
-      "expected_record_count": 65,
+      "expected_record_count": 66,
       "filename": "json-schema.json",
       "kind": "json_schema",
       "note": "Provider-neutral capture, host, source-range, transcript-fold, and harness-lifecycle schemas. Runtime availability: memory.semantic.author-complete-unit revision 7 is unavailable for activation, source delivery and canonical apply; memoriesql.local-entity-mentions.v2 is retained for historical schemas and authorized inspection only."
@@ -1645,13 +1645,13 @@
       "version": "1"
     },
     {
-      "canonical_payload_sha256": "10e4fe91724f71b3b821f6f49caccf108edce5e91c33b8b88f1d5d022d4a62ae",
+      "canonical_payload_sha256": "ae638fb55f3e55a39ce4a8cc3e501c6bdfd35b226d9baf78606efd364712d13d",
       "catalog": "json_schema",
       "classification": "proposed_open_core",
       "id": "memoriesql.complete-input-execution.v2",
       "package_disposition": "include",
       "path": "contracts/records/memoriesql-complete-input-execution-v2.json",
-      "public_sha256": "eb96c2f84c5853f3c318b5877b8386a1d37f37484700e0a794641e11ced37bcd",
+      "public_sha256": "803b5a1f235527b4883081e28262edc47aea48e3ec11f4539e41b39494b61ca2",
       "reason": "Public-authored revision-8 complete-input execution: revision 2 with one more request for the evidence-free repair round.",
       "version": "2"
     },
@@ -1675,6 +1675,17 @@
       "path": "contracts/records/memoriesql-declared-evidence-scope-v1.json",
       "public_sha256": "41408ef175658947c296a0b39dde44c4ee962c39aad83917f2d67f08572f9cfd",
       "reason": "Public-authored scoped materialization and inspection; no private export.",
+      "version": "1"
+    },
+    {
+      "canonical_payload_sha256": "e5428d796ed155f9d4a88ea8cdbca65b36c8179fdb862df78a9cb55ad4fc10a1",
+      "catalog": "json_schema",
+      "classification": "proposed_open_core",
+      "id": "memoriesql.engine-intake.v1",
+      "package_disposition": "include",
+      "path": "contracts/records/memoriesql-engine-intake-v1.json",
+      "public_sha256": "f17fc000f3a5c7fe71fb2a5ef1ea7e6f3e8d27104a5fd0d30cdf91ef79ad24f7",
+      "reason": "Public-authored non-authoring intake of Core Memory engine records under the current authenticated context.",
       "version": "1"
     },
     {
@@ -1962,13 +1973,13 @@
       "version": "1"
     },
     {
-      "canonical_payload_sha256": "2c6bd5ed99146461114506a53ab44d97bf58185cc671fe1cd0181087377ec783",
+      "canonical_payload_sha256": "779c52f085b850b622f3dae482fe7159a5f34e62093adad78cd0ff5a29edc70b",
       "catalog": "json_schema",
       "classification": "proposed_open_core",
       "id": "memoriesql.relation-assessment.v2",
       "package_disposition": "include",
       "path": "contracts/records/memoriesql-relation-assessment-v2.json",
-      "public_sha256": "ca0296434a44f55a6c04a61c0787589d247fccdb4bee49320d6cb3f2a519ef23",
+      "public_sha256": "46f2a7f359eff3e9bdb1de62660c2473f7968e02d943072023c396ae161eaf40",
       "reason": "Public-authored revision-2 relation assessment: revision 1 with one more request for the evidence-free author repair frame.",
       "version": "2"
     },
