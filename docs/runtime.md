@@ -272,7 +272,7 @@ Before the root run's output leaves the executor, the executor checks authored
 annotations against their own task (`application/authored_output_checks.py`):
 
 - bead coverage;
-- used and statement evidence inside the manifest, by identity and hash;
+- statement evidence inside the manifest, by identity and hash;
 - statement evidence declared as used;
 - context sources with statement evidence;
 - for v2 and complete units, the event and source-unit pins.
@@ -337,8 +337,16 @@ repair round, or no repair was admitted:
   | `evidence.not_declared_as_used` | `withheld.evidence_not_declared_as_used` |
   | `statement.context_without_evidence` | `withheld.context_without_evidence` |
 
-  An annotation of a bead outside the task, and a used reference outside the
-  manifest, are dropped; neither names a task bead.
+  An annotation of a bead outside the task is dropped; it names no task bead.
+- **Used references outside the manifest.** The executor's scope guard checks
+  used references before these checks, and for every other run a used
+  reference outside the manifest refuses it (`runtime.evidence_scope_widened`).
+  For this task's root output, first or repaired, the guard instead drops each
+  such reference while at least one used reference inside the manifest
+  remains. It drops them before the repair round, so the repair frame never
+  names one, and nothing about a dropped reference is recorded or withheld.
+  If every used reference is outside the manifest, the run is still refused.
+  A delegated run keeps the guard unchanged.
 - **What is kept.** The other annotations, unchanged, with the remaining
   checks passing. The result settles `succeeded` and carries the withheld
   items in `SemanticTaskResult.withheld_items`. If nothing acceptable is left,
