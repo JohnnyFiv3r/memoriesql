@@ -221,6 +221,10 @@
     {
       "filename": "0055_engine_record_intake.sql",
       "sha256": "b62cc2690fcb47af9f96b91aafcb2f0a147af606d69967350f85d6257c6c66eb"
+    },
+    {
+      "filename": "0056_engine_intake_privacy.sql",
+      "sha256": "17c5ecc67b0ecf332ef1bc4376afbf8db71eb7a5c5daa27ea795599baee3fd3a"
     }
   ]
 }
