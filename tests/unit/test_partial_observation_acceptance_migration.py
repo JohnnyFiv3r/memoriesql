@@ -13,7 +13,7 @@ from memoriesql.application.semantic_task_contracts import WITHHELD_REASON_CODES
 
 ROOT = Path(__file__).resolve().parents[2]
 MIGRATIONS = ROOT / "migrations"
-MIGRATION = MIGRATIONS / "0056_partial_observation_acceptance.sql"
+MIGRATION = MIGRATIONS / "0057_partial_observation_acceptance.sql"
 SQL = MIGRATION.read_text() if MIGRATION.exists() else ""
 TABLE = "semantic_withheld_output_items"
 APPLY = "apply_semantic_annotations_schema29"
@@ -161,8 +161,8 @@ class PartialObservationAcceptanceMigration(unittest.TestCase):
     def test_inventory_pins_the_migration(self) -> None:
         rows = json.loads((ROOT / "contracts/migration-inventory.json").read_text())["migrations"]
         self.assertEqual([int(r["filename"][:4]) for r in rows], list(range(1, len(rows) + 1)))
-        self.assertEqual(rows[55]["filename"], MIGRATION.name)
-        self.assertEqual(rows[55]["sha256"], hashlib.sha256(MIGRATION.read_bytes()).hexdigest())
+        self.assertEqual(rows[56]["filename"], MIGRATION.name)
+        self.assertEqual(rows[56]["sha256"], hashlib.sha256(MIGRATION.read_bytes()).hexdigest())
 
 
 if __name__ == "__main__":

@@ -225,6 +225,10 @@
     {
       "filename": "0056_engine_intake_privacy.sql",
       "sha256": "17c5ecc67b0ecf332ef1bc4376afbf8db71eb7a5c5daa27ea795599baee3fd3a"
+    },
+    {
+      "filename": "0057_partial_observation_acceptance.sql",
+      "sha256": "7d0f2a97959d736092d43b4b449272c9885845295a63d92b7990e8795d99f5ab"
     }
   ]
 }
