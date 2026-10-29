@@ -636,6 +636,8 @@ class QueryAuditAttribution(unittest.TestCase):
     """M0047: connections opened for a delivery's work name it; no others do."""
 
     CLAIM = "SELECT set_config('memoriesql.query_audit_delivery',%s,false)"
+    # Each claim's transaction switches role before running any function.
+    SWITCH = "SET LOCAL ROLE memoriesql_application"
 
     def test_only_connections_opened_for_a_delivery_name_it(self) -> None:
         opened: list[MagicMock] = []
@@ -663,7 +665,8 @@ class QueryAuditAttribution(unittest.TestCase):
         with service._control():
             pass
         self.assertEqual(
-            opened[0].execute.call_args_list, [call(self.CLAIM, (delivery,))]
+            opened[0].execute.call_args_list,
+            [call(self.SWITCH), call(self.CLAIM, (delivery,))],
         )
         opened[0].transaction.assert_called_once_with()
         opened[1].execute.assert_not_called()
@@ -696,16 +699,24 @@ class QueryAuditAttribution(unittest.TestCase):
         delivery = self.deliver_opening(kept, closed)
         self.assertEqual(
             kept.execute.call_args_list,
-            [call(self.CLAIM, (delivery,)), call(self.CLAIM, ("",))],
+            [
+                call(self.SWITCH),
+                call(self.CLAIM, (delivery,)),
+                call(self.SWITCH),
+                call(self.CLAIM, ("",)),
+            ],
         )
-        self.assertEqual(closed.execute.call_args_list, [call(self.CLAIM, (delivery,))])
+        self.assertEqual(
+            closed.execute.call_args_list,
+            [call(self.SWITCH), call(self.CLAIM, (delivery,))],
+        )
         kept.close.assert_not_called()
 
     def test_a_connection_that_cannot_stop_naming_its_delivery_is_closed(
         self,
     ) -> None:
         broken = MagicMock(closed=False)
-        broken.execute.side_effect = [None, OperationalError("fictional lost")]
+        broken.execute.side_effect = [None, None, None, OperationalError("fictional lost")]
         self.deliver_opening(broken)
         broken.close.assert_called_once_with()
 
@@ -736,7 +747,10 @@ class QueryAuditAttribution(unittest.TestCase):
             service._executor._control_factory()
         finally:
             _AUDIT_DELIVERY.reset(token)
-        control.return_value.execute.assert_called_once_with(self.CLAIM, (delivery,))
+        self.assertEqual(
+            control.return_value.execute.call_args_list,
+            [call(self.SWITCH), call(self.CLAIM, (delivery,))],
+        )
 
     def test_host_compositions_open_a_fresh_control_connection_per_call(
         self,

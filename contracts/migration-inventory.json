@@ -201,6 +201,42 @@
     {
       "filename": "0050_sealed_unit_query_facts.sql",
       "sha256": "2c39a4ada8de634a13b146316852d75b2f7fe7b80fad0eab5ff5913304a44f08"
+    },
+    {
+      "filename": "0051_automatic_investigation_checkpoints.sql",
+      "sha256": "052bc62432b29fd6526e416c7fbc176f16608829617114f84f5f2746cbf3fbc2"
+    },
+    {
+      "filename": "0052_agent_source_text_view.sql",
+      "sha256": "fda14ccfef33d044e5f9baf044709b892a98be0670026830622afe1479d8f192"
+    },
+    {
+      "filename": "0053_population_family_budget.sql",
+      "sha256": "b69b586866974280f231ccdbbedeb31fd82f0bdb01e347960f91625098052886"
+    },
+    {
+      "filename": "0054_supervised_reapproval.sql",
+      "sha256": "c95bcac87641a80abd1283cdc08c9545b647e246215c342dfb10db02f94cede5"
+    },
+    {
+      "filename": "0055_engine_record_intake.sql",
+      "sha256": "b62cc2690fcb47af9f96b91aafcb2f0a147af606d69967350f85d6257c6c66eb"
+    },
+    {
+      "filename": "0056_engine_intake_privacy.sql",
+      "sha256": "17c5ecc67b0ecf332ef1bc4376afbf8db71eb7a5c5daa27ea795599baee3fd3a"
+    },
+    {
+      "filename": "0057_partial_observation_acceptance.sql",
+      "sha256": "7d0f2a97959d736092d43b4b449272c9885845295a63d92b7990e8795d99f5ab"
+    },
+    {
+      "filename": "0058_repair_headroom.sql",
+      "sha256": "adfc302865f1e42b31d0a7b6330025a91c4abab8e9d43b85c95185f9ac2c1611"
+    },
+    {
+      "filename": "0059_work_deadlines_after_lock_waits.sql",
+      "sha256": "dd3518eade6ab525e888faa31215c2df17e9edfabc9ed6ffbc8bcef8da65741e"
     }
   ]
 }

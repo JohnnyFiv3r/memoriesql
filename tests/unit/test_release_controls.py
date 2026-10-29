@@ -19,6 +19,7 @@ from scripts.inspect_python_distribution import (
 )
 from scripts.verify_release import (
     APPROVED_VERSION,
+    QUALIFICATION_JOBS,
     RELEASE_INVENTORY,
     REPOSITORY,
     REPOSITORY_ID,
@@ -28,6 +29,7 @@ from scripts.verify_release import (
 )
 
 SHA = "a" * 40
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def good_run() -> dict[str, Any]:
@@ -113,10 +115,12 @@ class ReleaseControlTests(unittest.TestCase):
                 "status": "completed",
                 "conclusion": "success",
             }
-            for name in ("package", "compatibility (3.13)", "compatibility (3.14)")
+            for name in sorted(QUALIFICATION_JOBS)
         ]
-        verify_qualification_jobs({"total_count": 3, "jobs": jobs}, run_id=123, sha=SHA)
-        for index in range(3):
+        total = len(jobs)
+        self.assertEqual(total, 9)
+        verify_qualification_jobs({"total_count": total, "jobs": jobs}, run_id=123, sha=SHA)
+        for index in range(total):
             for field, wrong in (
                 ("run_id", 124),
                 ("head_sha", "b" * 40),
@@ -132,17 +136,32 @@ class ReleaseControlTests(unittest.TestCase):
                 with self.subTest(index=index, field=field, wrong=wrong):
                     with self.assertRaises(ValueError):
                         verify_qualification_jobs(
-                            {"total_count": 3, "jobs": altered}, run_id=123, sha=SHA
+                            {"total_count": total, "jobs": altered}, run_id=123, sha=SHA
                         )
         for invalid in (
             {},
-            {"total_count": 3, "jobs": jobs[:2]},
-            {"total_count": 2, "jobs": jobs[:2]},
-            {"total_count": 3, "jobs": [jobs[0], jobs[1], jobs[1]]},
-            {"total_count": 4, "jobs": jobs + [jobs[0]]},
+            {"total_count": total, "jobs": jobs[:-1]},
+            {"total_count": total - 1, "jobs": jobs[:-1]},
+            {"total_count": total, "jobs": [*jobs[:-1], jobs[0]]},
+            {"total_count": total + 1, "jobs": [*jobs, jobs[0]]},
         ):
             with self.subTest(invalid=invalid), self.assertRaises(ValueError):
                 verify_qualification_jobs(invalid, run_id=123, sha=SHA)
+
+    def test_pinned_jobs_are_exactly_the_workflow_graph(self) -> None:
+        workflow = (ROOT / ".github/workflows/python-package.yml").read_text()
+        self.assertIn(
+            "    name: compatibility (${{ matrix.python-version }}, part ${{ matrix.part }})\n",
+            workflow,
+        )
+        self.assertIn('        python-version: ["3.13", "3.14"]\n', workflow)
+        self.assertIn("        part: [1, 2, 3]\n", workflow)
+        self.assertIn("    name: qualification (${{ matrix.python-version }})\n", workflow)
+        self.assertEqual(
+            {name for name in QUALIFICATION_JOBS if name.startswith("compatibility")},
+            {f"compatibility ({m}, part {p})" for m in ("3.13", "3.14") for p in (1, 2, 3)},
+        )
+        self.assertNotIn("continue-on-error", workflow)
 
     def test_verifies_exact_files_and_ignores_non_authoritative_ci_receipt(
         self,

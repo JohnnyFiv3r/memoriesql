@@ -32,6 +32,8 @@ from memoriesql.application.evidence_packages import (
 )
 from memoriesql.application.semantic_task_contracts import canonical_json_bytes
 from memoriesql.infrastructure.postgres.authorization import PostgresAuthorizationPort
+from memoriesql.infrastructure.postgres.transient_retry import run_owned
+from memoriesql.infrastructure.postgres.work_deadlines import statement_timeout_for
 
 
 class PostgresEvidencePackages:
@@ -87,20 +89,26 @@ class PostgresEvidencePackages:
             "read": "SELECT memoriesql.read_evidence_package_v1(%s)",
             "inspect_scope": "SELECT memoriesql.inspect_scoped_evidence_package_v2(%s)",
         }[operation]
-        with self._connection.transaction():
-            self._connection.execute(
-                "SELECT set_config('statement_timeout', %s, true), set_config('lock_timeout', %s, true)",
-                (str(OPERATION_TIMEOUT_MS), str(LOCK_TIMEOUT_MS)),
-            )
-            self._connection.execute("SET LOCAL ROLE memoriesql_application")
-            PostgresAuthorizationPort(self._connection).begin_context(
-                credential_sha256=self._credential,
-                requested_workspace_id=self._workspace,
-            )
-            row = self._connection.execute(query, (Jsonb(payload),)).fetchone()
-            if row is None or row[0] is None:
-                raise PermissionError("evidence unavailable")
-            if len(canonical_json_bytes(row[0])) > RESPONSE_MAX_JSON_BYTES:
-                raise ValueError("evidence response exceeds byte bound")
-            result = response_type.model_validate(row[0])
-        return result
+
+        def attempt() -> ResultT:
+            with self._connection.transaction():
+                self._connection.execute(
+                    f"SET LOCAL statement_timeout='{statement_timeout_for(query) or OPERATION_TIMEOUT_MS}ms'"
+                )
+                self._connection.execute(
+                    f"SET LOCAL lock_timeout='{LOCK_TIMEOUT_MS}ms'"
+                )
+                self._connection.execute("SET LOCAL ROLE memoriesql_application")
+                PostgresAuthorizationPort(self._connection).begin_context(
+                    credential_sha256=self._credential,
+                    requested_workspace_id=self._workspace,
+                )
+                row = self._connection.execute(query, (Jsonb(payload),)).fetchone()
+                if row is None or row[0] is None:
+                    raise PermissionError("evidence unavailable")
+                if len(canonical_json_bytes(row[0])) > RESPONSE_MAX_JSON_BYTES:
+                    raise ValueError("evidence response exceeds byte bound")
+                result = response_type.model_validate(row[0])
+            return result
+
+        return run_owned(attempt)

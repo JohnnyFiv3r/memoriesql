@@ -26,10 +26,12 @@ from memoriesql.application.bead_classification import (
 from memoriesql.application.complete_input_execution import (
     READER_RESPONSE_BYTES,
     ActivateCompleteInput,
+    ActivateRepairableCompleteInput,
     CompleteEvidenceBatch,
     CompleteInputActivationReceipt,
     EvidenceExecutionWindow,
     ReadCompleteEvidence,
+    RepairableActivationReceipt,
 )
 from memoriesql.application.local_entity_mentions import (
     ActivateAuthoredMentions,
@@ -44,6 +46,7 @@ from memoriesql.application.source_revisiting import (
     SourceRevisitingActivationReceipt,
 )
 from memoriesql.infrastructure.postgres.authorization import PostgresAuthorizationPort
+from memoriesql.infrastructure.postgres.transient_retry import run_owned
 
 
 async def _await_owned_write(write: Callable[[], None]) -> None:
@@ -180,6 +183,20 @@ class PostgresCompleteInput:
             )
         )
 
+    def activate_repairable(
+        self, request: ActivateRepairableCompleteInput
+    ) -> RepairableActivationReceipt:
+        request = ActivateRepairableCompleteInput.model_validate(
+            request.model_dump(mode="json")
+        )
+        return RepairableActivationReceipt.model_validate(
+            self._call(
+                "SELECT memoriesql.activate_complete_input_v7(%s)",
+                (Jsonb(request.model_dump(mode="json")),),
+                role="memoriesql_application",
+            )
+        )
+
     def read(self, request: ReadCompleteEvidence) -> CompleteEvidenceBatch:
         request = ReadCompleteEvidence.model_validate(request.model_dump(mode="json"))
         return CompleteEvidenceBatch.model_validate(
@@ -193,23 +210,27 @@ class PostgresCompleteInput:
     def _call(self, query: str, parameters: tuple[Any, ...], *, role: str) -> Any:
         if self.connection.info.transaction_status != TransactionStatus.IDLE:
             raise RuntimeError("complete input session requires transaction ownership")
-        with self.connection.transaction():
-            self.connection.execute("SET TRANSACTION ISOLATION LEVEL READ COMMITTED")
-            self.connection.execute("SET LOCAL statement_timeout='2s'")
-            self.connection.execute("SET LOCAL lock_timeout='500ms'")
-            if role == "memoriesql_worker":
-                self.connection.execute("SET LOCAL ROLE memoriesql_worker")
-            else:
-                self.connection.execute("SET LOCAL ROLE memoriesql_application")
-            PostgresAuthorizationPort(self.connection).begin_context(
-                credential_sha256=self.credential, requested_workspace_id=self.workspace
-            )
-            row = self.connection.execute(query, parameters).fetchone()
-            if row is None or row[0] is None:
-                raise PermissionError("complete input unavailable")
-            if len(canonical_json_bytes(row[0])) > READER_RESPONSE_BYTES:
-                raise ValueError("complete input response bound")
-            return row[0]
+
+        def attempt() -> Any:
+            with self.connection.transaction():
+                self.connection.execute("SET TRANSACTION ISOLATION LEVEL READ COMMITTED")
+                self.connection.execute("SET LOCAL statement_timeout='2s'")
+                self.connection.execute("SET LOCAL lock_timeout='500ms'")
+                if role == "memoriesql_worker":
+                    self.connection.execute("SET LOCAL ROLE memoriesql_worker")
+                else:
+                    self.connection.execute("SET LOCAL ROLE memoriesql_application")
+                PostgresAuthorizationPort(self.connection).begin_context(
+                    credential_sha256=self.credential, requested_workspace_id=self.workspace
+                )
+                row = self.connection.execute(query, parameters).fetchone()
+                if row is None or row[0] is None:
+                    raise PermissionError("complete input unavailable")
+                if len(canonical_json_bytes(row[0])) > READER_RESPONSE_BYTES:
+                    raise ValueError("complete input response bound")
+                return row[0]
+
+        return run_owned(attempt)
 
 
 class PostgresEvidenceExposureRecorder:
