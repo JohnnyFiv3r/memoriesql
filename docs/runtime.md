@@ -412,3 +412,8 @@ inside another error is not mistaken for one. Every other accounting failure
 keeps its existing handling: a ceiling reached is `budget_exhausted`, an
 exhausted or unknown allowance is `policy_paused`, and a failure to persist is
 `unavailable` and retried. Spend already accounted to the attempt is kept.
+
+A repair round's request records its intent through the same path, so a
+misconfiguration it meets pauses the task for the owner exactly as on a first
+request. A refused repair never settles as `invalid_output` on the first
+output's issues.

@@ -3,7 +3,8 @@
 Fictional task with annotation-shaped output. A first output canonical apply
 would refuse gets one repair frame: the task input, the model's own output and
 fixed refusal codes, never evidence or database text. The repaired output is
-checked again; a second failure still settles invalid_output.
+checked again; a second failure still settles invalid_output. An accounting
+misconfiguration the repair request meets pauses for the owner, as on the first.
 """
 
 from __future__ import annotations
@@ -24,6 +25,7 @@ from pydantic_ai.messages import (
 from pydantic_ai.models.function import FunctionModel
 from pydantic_ai.usage import RequestUsage
 
+from memoriesql.application.model_accounting import accounting_configuration_refusal
 from memoriesql.application.module_registry import (
     BuiltInModuleRegistry,
     ProfileDefinition,
@@ -343,6 +345,40 @@ class RepairFrame(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.status, "succeeded", result)
         self.assertEqual(ports.order.count("model"), 1)
         self.assertEqual(len(prompts), 1)
+
+    async def test_an_accounting_misconfiguration_pauses_the_repair_as_the_first(
+        self,
+    ) -> None:
+        # Guard P1-f (d): the repair frame's request records its intent through
+        # the same accounting path as the first request, so a misconfiguration
+        # either one meets pauses the task for owner action alike. The first
+        # output's issues never settle a refused repair as invalid_output.
+        for refused in (1, 2):
+            with self.subTest(refused_request=refused):
+                executor, task, deps, ports, prompts = fixture([STRAY, BEAD])
+                record = ports.record_intent
+
+                async def refuse(intent: Any, refused: int = refused) -> None:
+                    if ports.order.count("intent") + 1 == refused:
+                        ports.order.append("intent")
+                        refusal = accounting_configuration_refusal(
+                            "pinned pricing revision is unavailable"
+                        )
+                        assert refusal is not None
+                        raise refusal
+                    await record(intent)
+
+                ports.record_intent = refuse  # type: ignore[method-assign]
+                result = await executor.execute(task, deps)
+                self.assertEqual(
+                    (result.status, result.error_code, result.retry_class),
+                    ("policy_paused", "accounting.pricing_revision_unavailable", "policy"),
+                )
+                self.assertIsNone(result.typed_output)
+                # Refused before dispatch: the refused request reaches no model.
+                self.assertEqual(ports.order.count("model"), refused - 1)
+                self.assertEqual(len(ports.intents), refused - 1)
+                self.assertEqual(len(prompts), refused - 1)
 
 
 if __name__ == "__main__":
