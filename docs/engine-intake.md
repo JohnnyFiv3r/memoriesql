@@ -70,9 +70,12 @@ each of its scopes that the caller may deliver to and read, in source order,
 and never any other scope, whether or not it exists. A scope's records
 therefore commit in acceptance order, and a reader's `next` cursor never passes
 a record that commits later. A batch that waits more than 500 ms for a scope
-fails busy (`55P03`) with nothing written, and the engine resends it. No other
-intake lock is taken, so a record that names another scope's record key or
-event id is only compared with it and cannot hold that scope back.
+is rolled back and re-run, at most four attempts in all
+(`docs/verification/owned-transaction-retry.md`). Only after four such waits
+plus backoff, about 2.35 s, does it fail busy (`55P03`) with nothing written,
+and the engine resends it. No other intake lock is taken, so a record that
+names another scope's record key or event id is only compared with it and
+cannot hold that scope back.
 
 Every accepted record writes one outbox event: `engine_chunk.accepted` or
 `engine_type.decided`. No relay consumes them yet.

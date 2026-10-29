@@ -24,6 +24,7 @@ from memoriesql.application.local_client_pairing import (
     RevokeLocalClient,
 )
 from memoriesql.infrastructure.postgres.authorization import PostgresAuthorizationPort
+from memoriesql.infrastructure.postgres.transient_retry import run_owned
 
 # Identities derive from the request so a blind retry cannot pair a second client.
 _PAIRING_NAMESPACE = UUID("6d2f4f0e-6f4b-5d1f-9d8e-3c9a1b7e2a51")
@@ -77,23 +78,27 @@ class PostgresLocalClientPairing:
             command.request_id
         )
         try:
-            with self._connection.transaction():
-                self._begin()
-                self._connection.execute(
-                    "SELECT memoriesql.pair_local_client("
-                    "%s,%s,%s,%s,'agent','paired_agent',%s,%s,%s,"
-                    "pg_catalog.statement_timestamp(),%s)",
-                    (
-                        principal_id,
-                        pairing_id,
-                        grant_id,
-                        credential_id,
-                        list(command.capabilities),
-                        list(command.access_scope_ids),
-                        client_secret_sha256,
-                        command.expires_at,
-                    ),
-                )
+
+            def attempt() -> None:
+                with self._connection.transaction():
+                    self._begin()
+                    self._connection.execute(
+                        "SELECT memoriesql.pair_local_client("
+                        "%s,%s,%s,%s,'agent','paired_agent',%s,%s,%s,"
+                        "pg_catalog.statement_timestamp(),%s)",
+                        (
+                            principal_id,
+                            pairing_id,
+                            grant_id,
+                            credential_id,
+                            list(command.capabilities),
+                            list(command.access_scope_ids),
+                            client_secret_sha256,
+                            command.expires_at,
+                        ),
+                    )
+
+            run_owned(attempt)
         except (
             InsufficientPrivilege,
             InvalidAuthorizationSpecification,
@@ -118,23 +123,28 @@ class PostgresLocalClientPairing:
         self._require_idle()
         command = RevokeLocalClient.model_validate(request.model_dump(mode="json"))
         try:
-            with self._connection.transaction():
-                self._begin()
-                row = self._connection.execute(
-                    "SELECT memoriesql.revise_pairing_grant("
-                    "%s,%s,%s,%s,'revoked',pg_catalog.statement_timestamp(),"
-                    "pg_catalog.statement_timestamp() + interval '1 second',"
-                    "pg_catalog.statement_timestamp()), "
-                    "pg_catalog.statement_timestamp()",
-                    (
-                        command.pairing_grant_id,
-                        command.expected_revision,
-                        list(command.capabilities),
-                        list(command.access_scope_ids),
-                    ),
-                ).fetchone()
-                if row is None:
-                    raise RuntimeError("pairing revocation returned no revision")
+
+            def attempt() -> Any:
+                with self._connection.transaction():
+                    self._begin()
+                    row = self._connection.execute(
+                        "SELECT memoriesql.revise_pairing_grant("
+                        "%s,%s,%s,%s,'revoked',pg_catalog.statement_timestamp(),"
+                        "pg_catalog.statement_timestamp() + interval '1 second',"
+                        "pg_catalog.statement_timestamp()), "
+                        "pg_catalog.statement_timestamp()",
+                        (
+                            command.pairing_grant_id,
+                            command.expected_revision,
+                            list(command.capabilities),
+                            list(command.access_scope_ids),
+                        ),
+                    ).fetchone()
+                    if row is None:
+                        raise RuntimeError("pairing revocation returned no revision")
+                return row
+
+            row = run_owned(attempt)
         except SerializationFailure as error:
             raise PairingRevisionConflict("pairing grant revision changed") from error
         except (

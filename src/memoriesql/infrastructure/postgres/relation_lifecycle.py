@@ -34,6 +34,7 @@ from memoriesql.infrastructure.postgres.authorization import PostgresAuthorizati
 from memoriesql.infrastructure.postgres.relation_projection import (
     read_relation_projection,
 )
+from memoriesql.infrastructure.postgres.transient_retry import run_owned
 
 INSPECTION_RESPONSE_BYTES = 262144
 COMMAND_RESPONSE_BYTES = 16384
@@ -122,23 +123,27 @@ class PostgresRelationLifecycle:
             if len(canonical_json_bytes(projected)) > bound:
                 raise ValueError("relation inspection response exceeds bound")
             return result_type.model_validate(projected)
-        with self._connection.transaction():
-            self._connection.execute("SET TRANSACTION ISOLATION LEVEL READ COMMITTED")
-            self._connection.execute(
-                f"SET LOCAL statement_timeout='{int(statement_timeout_ms)}ms'"
-            )
-            self._connection.execute("SET LOCAL lock_timeout='500ms'")
-            self._connection.execute("SET LOCAL ROLE memoriesql_application")
-            PostgresAuthorizationPort(self._connection).begin_context(
-                credential_sha256=self._credential,
-                requested_workspace_id=self._workspace,
-            )
-            row = self._connection.execute(
-                query, (Jsonb(payload.model_dump(mode="json")),)
-            ).fetchone()
-            if row is None or row[0] is None:
-                raise PermissionError("relation lifecycle unavailable")
-            if len(canonical_json_bytes(row[0])) > bound:
-                raise ValueError("relation lifecycle response exceeds bound")
-            result = result_type.model_validate(row[0])
-        return result
+
+        def attempt() -> ResultT:
+            with self._connection.transaction():
+                self._connection.execute("SET TRANSACTION ISOLATION LEVEL READ COMMITTED")
+                self._connection.execute(
+                    f"SET LOCAL statement_timeout='{int(statement_timeout_ms)}ms'"
+                )
+                self._connection.execute("SET LOCAL lock_timeout='500ms'")
+                self._connection.execute("SET LOCAL ROLE memoriesql_application")
+                PostgresAuthorizationPort(self._connection).begin_context(
+                    credential_sha256=self._credential,
+                    requested_workspace_id=self._workspace,
+                )
+                row = self._connection.execute(
+                    query, (Jsonb(payload.model_dump(mode="json")),)
+                ).fetchone()
+                if row is None or row[0] is None:
+                    raise PermissionError("relation lifecycle unavailable")
+                if len(canonical_json_bytes(row[0])) > bound:
+                    raise ValueError("relation lifecycle response exceeds bound")
+                result = result_type.model_validate(row[0])
+            return result
+
+        return run_owned(attempt)
