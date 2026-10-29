@@ -96,7 +96,8 @@ PRs, branch pushes, manual dispatch, wildcard and historical tags cannot upload.
 The tag must target current main with genuine 0.0.12 metadata. Under the current
 cost policy, the latest explicitly requested full package qualification on main
 at that exact SHA must be successful, including actual successful `package`,
-`compatibility (3.13)` and `compatibility (3.14)` jobs. A cheap main-push run,
+every `compatibility (<minor>, part <n>)` job and both `qualification (<minor>)`
+aggregations for 3.13 and 3.14. A cheap main-push run,
 skipped jobs or PR qualification alone is insufficient. The pre-policy main-push
 publication evidence above remains a historical record, not a new dispatch.
 

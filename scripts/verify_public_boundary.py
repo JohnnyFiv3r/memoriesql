@@ -10,6 +10,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 IGNORED_PARTS = {".git", ".mypy_cache", ".ruff_cache", "__pycache__", "build", "dist"}
 DENIED_ROOTS = {"apps", "artifacts"}
+# The only repositories tracked text may link: this one, and the public CPython
+# builds whose hash-pinned releases the hosted qualification installs.
+LINKED_REPOSITORIES = {("JohnnyFiv3r", "memoriesql"), ("actions", "python-versions")}
 
 
 def repository_files() -> tuple[Path, ...]:
@@ -67,7 +70,7 @@ def verify() -> dict[str, object]:
         for owner, repository in re.findall(
             r"https://github\.com/([\w-]+)/([\w.-]+)", text
         ):
-            if (owner, repository) != ("JohnnyFiv3r", "memoriesql"):
+            if (owner, repository) not in LINKED_REPOSITORIES:
                 text_failures.append(
                     f"{path.relative_to(ROOT)}:non-public repository URL"
                 )

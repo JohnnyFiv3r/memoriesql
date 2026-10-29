@@ -63,10 +63,10 @@ class InstalledDiscoveryTests(unittest.TestCase):
                 })
                 reports.append(report)
             if not failure and not skip:
-                check_shards(root)
+                check_shards(root, 3)
             else:
                 with self.assertRaises(ValueError):
-                    check_shards(root)
+                    check_shards(root, 3)
             return reports
 
     def test_imported_inherited_and_custom_loaded_instances_execute_once_as_planned(self) -> None:
@@ -103,7 +103,7 @@ class IdentityCoverageTests(unittest.TestCase):
             root = Path(directory)
             for index, report in enumerate(reports, 1):
                 (root / f"acceptance-{index}.json").write_text(json.dumps(report))
-            check_shards(root)
+            check_shards(root, 3)
 
     def test_explicit_discovered_multiplicity_is_preserved(self) -> None:
         self.check(self.reports())

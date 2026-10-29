@@ -1,0 +1,346 @@
+{
+  "contract": {
+    "schemas": {
+      "AcceptEngineRecords": {
+        "$defs": {
+          "JsonValue": {}
+        },
+        "additionalProperties": false,
+        "properties": {
+          "contract_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Contract Version",
+            "type": "integer"
+          },
+          "expected_schema_version": {
+            "const": 55,
+            "default": 55,
+            "title": "Expected Schema Version",
+            "type": "integer"
+          },
+          "records": {
+            "items": {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "type": "object"
+            },
+            "maxItems": 256,
+            "minItems": 1,
+            "title": "Records",
+            "type": "array"
+          }
+        },
+        "required": [
+          "records"
+        ],
+        "title": "AcceptEngineRecords",
+        "type": "object"
+      },
+      "EngineRecordPage": {
+        "$defs": {
+          "JsonValue": {}
+        },
+        "additionalProperties": false,
+        "description": "One engine scope's records in acceptance order.\n\n`next` is an opaque cursor within this engine scope: pass it back as\n`after` to continue. It depends only on the scope's own records, and is\nnull only while no record has been returned.",
+        "properties": {
+          "contract_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Contract Version",
+            "type": "integer"
+          },
+          "next": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next"
+          },
+          "records": {
+            "items": {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "type": "object"
+            },
+            "title": "Records",
+            "type": "array"
+          }
+        },
+        "required": [
+          "records",
+          "next"
+        ],
+        "title": "EngineRecordPage",
+        "type": "object"
+      },
+      "EngineRecordResults": {
+        "$defs": {
+          "EngineRecordAccepted": {
+            "additionalProperties": false,
+            "properties": {
+              "outcome": {
+                "const": "accepted",
+                "title": "Outcome",
+                "type": "string"
+              }
+            },
+            "required": [
+              "outcome"
+            ],
+            "title": "EngineRecordAccepted",
+            "type": "object"
+          },
+          "EngineRecordAlreadyAccepted": {
+            "additionalProperties": false,
+            "properties": {
+              "outcome": {
+                "const": "already_accepted",
+                "title": "Outcome",
+                "type": "string"
+              }
+            },
+            "required": [
+              "outcome"
+            ],
+            "title": "EngineRecordAlreadyAccepted",
+            "type": "object"
+          },
+          "EngineRecordConflict": {
+            "additionalProperties": false,
+            "description": "A different record already holds the key. It is kept; this one is not.\n\n`stored` is the held record. Every deliverer may read the engine scope.",
+            "properties": {
+              "outcome": {
+                "const": "conflict",
+                "title": "Outcome",
+                "type": "string"
+              },
+              "stored": {
+                "additionalProperties": {
+                  "$ref": "#/$defs/JsonValue"
+                },
+                "title": "Stored",
+                "type": "object"
+              }
+            },
+            "required": [
+              "outcome",
+              "stored"
+            ],
+            "title": "EngineRecordConflict",
+            "type": "object"
+          },
+          "EngineRecordRejected": {
+            "additionalProperties": false,
+            "description": "Final for this record: it is malformed, names an ungoverned type, or\ncontradicts what memoriesQL already holds.",
+            "properties": {
+              "outcome": {
+                "const": "rejected",
+                "title": "Outcome",
+                "type": "string"
+              },
+              "reason": {
+                "minLength": 1,
+                "title": "Reason",
+                "type": "string"
+              }
+            },
+            "required": [
+              "outcome",
+              "reason"
+            ],
+            "title": "EngineRecordRejected",
+            "type": "object"
+          },
+          "EngineRecordRetryable": {
+            "additionalProperties": false,
+            "description": "Configuration an operator can fix: the engine scope is not enrolled,\nor this credential may not both deliver to it and read it. Those cases are\none answer, so it never shows whether a scope exists. This record and every\nlater one in the batch are unread.",
+            "properties": {
+              "outcome": {
+                "const": "retryable",
+                "title": "Outcome",
+                "type": "string"
+              },
+              "reason": {
+                "minLength": 1,
+                "title": "Reason",
+                "type": "string"
+              },
+              "retry_after_ms": {
+                "minimum": 0,
+                "title": "Retry After Ms",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "outcome",
+              "retry_after_ms",
+              "reason"
+            ],
+            "title": "EngineRecordRetryable",
+            "type": "object"
+          },
+          "JsonValue": {}
+        },
+        "additionalProperties": false,
+        "properties": {
+          "contract_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Contract Version",
+            "type": "integer"
+          },
+          "results": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "accepted": "#/$defs/EngineRecordAccepted",
+                  "already_accepted": "#/$defs/EngineRecordAlreadyAccepted",
+                  "conflict": "#/$defs/EngineRecordConflict",
+                  "rejected": "#/$defs/EngineRecordRejected",
+                  "retryable": "#/$defs/EngineRecordRetryable"
+                },
+                "propertyName": "outcome"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/EngineRecordAccepted"
+                },
+                {
+                  "$ref": "#/$defs/EngineRecordAlreadyAccepted"
+                },
+                {
+                  "$ref": "#/$defs/EngineRecordConflict"
+                },
+                {
+                  "$ref": "#/$defs/EngineRecordRejected"
+                },
+                {
+                  "$ref": "#/$defs/EngineRecordRetryable"
+                }
+              ]
+            },
+            "title": "Results",
+            "type": "array"
+          }
+        },
+        "required": [
+          "results"
+        ],
+        "title": "EngineRecordResults",
+        "type": "object"
+      },
+      "EngineVocabulary": {
+        "$defs": {
+          "EngineVocabularyType": {
+            "additionalProperties": false,
+            "properties": {
+              "definition": {
+                "minLength": 1,
+                "title": "Definition",
+                "type": "string"
+              },
+              "key": {
+                "pattern": "^[a-z][a-z0-9_]*$",
+                "title": "Key",
+                "type": "string"
+              },
+              "rev": {
+                "minimum": 1,
+                "title": "Rev",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "key",
+              "rev",
+              "definition"
+            ],
+            "title": "EngineVocabularyType",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "description": "The governed bead types, in the engine's vocabulary shape.",
+        "properties": {
+          "id": {
+            "const": "memoriesql.bead_types",
+            "title": "Id",
+            "type": "string"
+          },
+          "types": {
+            "items": {
+              "$ref": "#/$defs/EngineVocabularyType"
+            },
+            "minItems": 1,
+            "title": "Types",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "types"
+        ],
+        "title": "EngineVocabulary",
+        "type": "object"
+      },
+      "ReadEngineRecords": {
+        "additionalProperties": false,
+        "description": "`after` is a page's `next` cursor, or absent to start from the first record.",
+        "properties": {
+          "after": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "\\S",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "After"
+          },
+          "contract_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Contract Version",
+            "type": "integer"
+          },
+          "engine_scope": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Engine Scope",
+            "type": "string"
+          },
+          "limit": {
+            "default": 256,
+            "maximum": 1024,
+            "minimum": 1,
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "engine_scope"
+        ],
+        "title": "ReadEngineRecords",
+        "type": "object"
+      }
+    }
+  },
+  "id": "memoriesql.engine-intake.v1",
+  "kind": "json_schema",
+  "status": "available",
+  "summary": "Non-authoring intake of Core Memory engine chunk and type-decision records into enrolled engine scopes, with one outcome per record, an authorized reader and the governed bead types as the engine vocabulary.",
+  "version": "1"
+}

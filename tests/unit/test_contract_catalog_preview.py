@@ -68,7 +68,7 @@ class ContractCatalogPreviewTests(unittest.TestCase):
         schema_entries = schemas.get("entries")
         self.assertIsInstance(schema_entries, list)
         assert isinstance(schema_entries, list)
-        self.assertEqual(len(schema_entries), 63)
+        self.assertEqual(len(schema_entries), 66)
 
         cursor = get_contract("memoriesql.capture.connector-cursor")
         self.assertEqual(cursor["version"], "1")
@@ -82,7 +82,7 @@ class ContractCatalogPreviewTests(unittest.TestCase):
         self.assertEqual(unavailable["status"], "not_implemented")
         self.assertEqual(unavailable["entries"], [])
 
-        self.assertEqual(len(iter_contracts()), 70)
+        self.assertEqual(len(iter_contracts()), 73)
         cli = load_catalog("cli")
         self.assertEqual(cli["status"], "available")
         entries = cli["entries"]

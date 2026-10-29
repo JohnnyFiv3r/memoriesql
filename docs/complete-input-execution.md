@@ -143,6 +143,37 @@ raising storage limits. It neither assembles a whole session nor changes genuine
 unit boundaries. Reader calls and model interactions are measured separately in
 [fictional throughput evidence](verification/complete-input-execution.md).
 
+## Revision 8: one request for the repair round
+
+Revision 2 spends its whole request ceiling on its inspection windows. A unit
+that uses all eight therefore gets no evidence-free repair round
+([runtime](runtime.md#authored-output-checks-and-the-repair-round)): output
+canonical apply would refuse settles `invalid_output` at once. Revision 8 of
+`memory.semantic.author-complete-unit` is revision 2 with `request_limit` 9
+(owner decision 2026-10-23, guard audit P1-f D2), so that unit keeps one request
+for the repair frame. The per-attempt dollar ceiling, the token limits and every
+other ceiling are unchanged.
+
+| | Revision 2 | Revision 8 |
+|---|---|---|
+| Requests | 8 | 9 |
+| Input contract | `memory.semantic.complete-input-execution.input` revision 1 | revision 2 (`contract_revision` 8) |
+| Agent | `memory.semantic.complete-unit-author` | `memory.semantic.complete-unit-author.v2` |
+| Activation | `activate_complete_input_v1`, command version 1 | `activate_complete_input_v7`, command version 7 |
+| Apply command | contract version 3, `complete_input.apply.v1` | contract version 9, `complete_input.apply.v7` |
+| Record | `memoriesql.complete-input-execution.v1` | `memoriesql.complete-input-execution.v2` |
+
+Inputs, the output contract, trusted exposure, apply and render semantics are
+revision 2's. Migration `0058_repair_headroom` restates every database function
+that treats revision 2 specially, with revision 8 handled exactly like it, and
+nothing else changed.
+
+Revision 8 is opt-in. Its activation runs only under a dispatch policy
+provisioned for execution revision 8 (`PostgresCompleteInput.activate_repairable`).
+Revision-2 tasks, executions, dispatch policies and receipts keep their pins
+and their budget; nothing moves them, and `activate` still creates revision-2
+tasks.
+
 ## Canonical apply and cleanup
 
 The existing canonical sink dispatches `ApplyCompleteInput` into an explicit

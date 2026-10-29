@@ -100,7 +100,7 @@ the metadata inbox retain their original distinct policies and behavior.
 | Raw validation | One original receipt, at most 256 existing chunks and 256 KiB accumulated bytes per read, plus the selected slice; no history hydration |
 | Envelope validation | At most the existing 1 MiB stored envelope per read, bounded independently of history; hash and slice without semantic reinterpretation |
 | Request 8 KiB; response 128 KiB | Explicit rejection rather than silent truncation |
-| Lock 500 ms; operation 2 s | Adapter per-statement timeout, SQL lock timeout and final recovery-body elapsed-time check; standalone SQL callers must also set a statement timeout for interruption rather than only deadline rejection |
+| Lock 500 ms; work 2 s; statement 3 s | SQL lock timeout; a final recovery-body elapsed-time check of 2 s of work, which excludes lock waits; and an adapter statement timeout of that work plus its two possible lock waits (`docs/verification/work-deadlines-after-lock-waits.md`). Standalone SQL callers must also set a statement timeout for interruption rather than only deadline rejection |
 
 Each adapter operation executes six SQL statements plus transaction control:
 isolation, two timeouts, application role, context, recovery. Those are database
@@ -113,8 +113,10 @@ Malformed/stale selection raises a request error; missing/corrupt retained evide
 raises `fold_recovery_unavailable` (`P0002`); absent/revoked authority fails closed;
 lock/work/response limits raise explicit database errors. There is no truncated
 success result or fallback to filesystem/provider access. SQL failures roll back
-that operation's transaction and audit work. Callers may retry a bounded operation
-with current credentials; recovery owns no maintenance or retry machinery.
+that operation's transaction and audit work. The adapter re-runs an operation
+that lock contention alone stopped, at most four times
+(`docs/verification/owned-transaction-retry.md`). Callers may retry any other
+bounded failure with current credentials; recovery owns no maintenance machinery.
 
 ## Compatibility and dependent work
 

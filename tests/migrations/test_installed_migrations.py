@@ -34,7 +34,7 @@ class InstalledMigrationResources(unittest.TestCase):
         self,
     ) -> None:
         stream = runner.discover_migrations()
-        self.assertEqual([m.version for m in stream], list(range(1, 51)))
+        self.assertEqual([m.version for m in stream], list(range(1, 60)))
         for migration in stream:
             self.assertEqual(
                 hashlib.sha256(migration.path.read_bytes()).hexdigest(),
@@ -82,7 +82,7 @@ class InstalledMigrations(unittest.TestCase):
         }
         self.assertIn(Path(runner.__file__).resolve(), owned)
         stream = runner.discover_migrations()
-        self.assertEqual(len(stream), 50)
+        self.assertEqual(len(stream), 59)
         for migration in stream:
             self.assertIn(Path(str(migration.path)).resolve(), owned)
             self.assertEqual(
@@ -118,10 +118,11 @@ class InstalledMigrations(unittest.TestCase):
         self.assertEqual(output.getvalue().strip(), __version__)
         registry = json.loads(Path("public-registry.json").read_text())
         entries = {entry["id"]: entry for entry in iter_contracts()}
-        self.assertEqual(len(entries), 70)
+        self.assertEqual(len(entries), 73)
         self.assertIn("memoriesql.core-cli.v1", entries)
         self.assertIn("memoriesql.local-client-pairing.v1", entries)
         self.assertIn("memoriesql.source-enrollment.v1", entries)
+        self.assertIn("memoriesql.engine-intake.v1", entries)
         for row in registry["records"]:
             payload = json.dumps(
                 entries[row["id"]],
