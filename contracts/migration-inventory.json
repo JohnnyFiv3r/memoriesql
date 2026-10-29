@@ -233,6 +233,10 @@
     {
       "filename": "0058_repair_headroom.sql",
       "sha256": "adfc302865f1e42b31d0a7b6330025a91c4abab8e9d43b85c95185f9ac2c1611"
+    },
+    {
+      "filename": "0059_work_deadlines_after_lock_waits.sql",
+      "sha256": "dd3518eade6ab525e888faa31215c2df17e9edfabc9ed6ffbc8bcef8da65741e"
     }
   ]
 }

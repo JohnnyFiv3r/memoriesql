@@ -61,7 +61,7 @@ def main() -> None:
             Path(str(installed.locate_file(p))).resolve() for p in installed.files or ()
         }
         migrations = discover_migrations()
-        assert len(migrations) == 58
+        assert len(migrations) == 59
         for migration in migrations:
             assert Path(str(migration.path)).resolve() in owned
             assert (

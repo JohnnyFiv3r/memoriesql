@@ -32,6 +32,7 @@ from memoriesql.application.evidence_packages import (
 )
 from memoriesql.application.semantic_task_contracts import canonical_json_bytes
 from memoriesql.infrastructure.postgres.authorization import PostgresAuthorizationPort
+from memoriesql.infrastructure.postgres.work_deadlines import statement_timeout_for
 
 
 class PostgresEvidencePackages:
@@ -89,7 +90,7 @@ class PostgresEvidencePackages:
         }[operation]
         with self._connection.transaction():
             self._connection.execute(
-                f"SET LOCAL statement_timeout='{OPERATION_TIMEOUT_MS}ms'"
+                f"SET LOCAL statement_timeout='{statement_timeout_for(query) or OPERATION_TIMEOUT_MS}ms'"
             )
             self._connection.execute(f"SET LOCAL lock_timeout='{LOCK_TIMEOUT_MS}ms'")
             self._connection.execute("SET LOCAL ROLE memoriesql_application")

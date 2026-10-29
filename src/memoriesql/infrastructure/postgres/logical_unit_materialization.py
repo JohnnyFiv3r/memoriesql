@@ -31,6 +31,7 @@ from memoriesql.application.source_stable_identity import (
     SourceStableMaterializationReceipt,
 )
 from memoriesql.infrastructure.postgres.authorization import PostgresAuthorizationPort
+from memoriesql.infrastructure.postgres.work_deadlines import statement_timeout_for
 
 
 class PostgresLogicalUnitMaterialization:
@@ -92,7 +93,7 @@ class PostgresLogicalUnitMaterialization:
             # Do not inherit a caller-configured repeatable-read snapshot.
             self._connection.execute("SET TRANSACTION ISOLATION LEVEL READ COMMITTED")
             self._connection.execute(
-                f"SET LOCAL statement_timeout='{OPERATION_TIMEOUT_MS}ms'"
+                f"SET LOCAL statement_timeout='{statement_timeout_for(query) or OPERATION_TIMEOUT_MS}ms'"
             )
             self._connection.execute(f"SET LOCAL lock_timeout='{LOCK_TIMEOUT_MS}ms'")
             self._connection.execute("SET LOCAL ROLE memoriesql_application")
