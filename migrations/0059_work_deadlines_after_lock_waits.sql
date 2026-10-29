@@ -12,8 +12,8 @@
 -- added. Every wait point is bracketed by `lock_at:=clock_timestamp()` and
 -- `waited:=waited+(clock_timestamp()-lock_at)`, and every 2 s check subtracts
 -- `waited`. The deadline itself, every lock, authorization check, refusal and
--- response are unchanged; waits inside other callees still count. Migration
--- number provisional. Forward-only; earlier migrations keep their bytes.
+-- response are unchanged; waits inside other callees still count.
+-- Forward-only; earlier migrations keep their bytes.
 
 CREATE OR REPLACE FUNCTION memoriesql.write_evidence_package_v1(request jsonb) RETURNS jsonb
 LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = pg_catalog, memoriesql
