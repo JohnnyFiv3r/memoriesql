@@ -320,11 +320,12 @@ class FoldRecovery(PostgresRuntime):
     def test_lock_timeout_and_strong_snapshot_fail_closed(self) -> None:
         key = seed(self)[0]
         # Every owned attempt waits out the lock, with backoff between attempts.
+        waits = ATTEMPTS * LOCK_TIMEOUT_MS / 1000
         backoff = sum(
             min(FIRST_BACKOFF_SECONDS * 2**n, MAX_BACKOFF_SECONDS)
             for n in range(ATTEMPTS - 1)
         )
-        bound = ATTEMPTS * LOCK_TIMEOUT_MS / 1000 + backoff + 1.0
+        bound = waits + backoff + 1.0
         with self.connect() as blocker, blocker.transaction():
             blocker.execute(
                 "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
@@ -333,7 +334,9 @@ class FoldRecovery(PostgresRuntime):
             start = time.monotonic()
             with self.assertRaises(psycopg.errors.LockNotAvailable):
                 self.api.inspect(InspectFoldOutcome(key=key))
-            self.assertLess(time.monotonic() - start, bound)
+            elapsed = time.monotonic() - start
+            self.assertGreaterEqual(elapsed, waits)
+            self.assertLess(elapsed, bound)
         with (
             self.assertRaises(psycopg.errors.ActiveSqlTransaction),
             self.db.transaction(),

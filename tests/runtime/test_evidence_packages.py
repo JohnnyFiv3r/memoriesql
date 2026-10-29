@@ -797,11 +797,12 @@ class EvidencePackages(PostgresRuntime):
         part = self.part("Fictional bounded wait.")
         package = self.create((part,))
         # Every owned attempt waits out the lock, with backoff between attempts.
+        waits = ATTEMPTS * LOCK_TIMEOUT_MS / 1000
         backoff = sum(
             min(FIRST_BACKOFF_SECONDS * 2**n, MAX_BACKOFF_SECONDS)
             for n in range(ATTEMPTS - 1)
         )
-        bound = ATTEMPTS * LOCK_TIMEOUT_MS / 1000 + backoff + 1.5
+        bound = waits + backoff + 1.5
         with psycopg.connect(
             make_conninfo(self.admin, dbname=self.database), autocommit=True
         ) as blocker:
@@ -813,7 +814,9 @@ class EvidencePackages(PostgresRuntime):
                 started = monotonic()
                 with self.assertRaises(psycopg.errors.LockNotAvailable):
                     self.append(package, part, "held.append")
-                self.assertLess(monotonic() - started, bound)
+                elapsed = monotonic() - started
+                self.assertGreaterEqual(elapsed, waits)
+                self.assertLess(elapsed, bound)
         self.assertEqual(self.status(package).appended_parts, 0)
         self.assertEqual(
             self.db.execute(

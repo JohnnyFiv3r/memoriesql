@@ -47,7 +47,10 @@ PostgreSQL grants a lock in queue order. So the stall has three steps:
    holder in the tenant, including long query frames.
 2. While it waits, every new shared request queues behind it. Settlements,
    inspections and new query frames all stop.
-3. Each waiter gives up at its 500 ms lock timeout.
+3. Each waiter gives up at its 500 ms lock timeout. An owned transaction is
+   then re-run, at most four attempts in all
+   (`docs/verification/owned-transaction-retry.md`); agent-SQL frames and
+   settlements are not.
 
 One grant change therefore stalls every query in the tenant. A personal-local
 installation has one tenant with one workspace, so scoping by workspace alone
