@@ -19,6 +19,7 @@ from memoriesql.application.capture.transcript_fold import (
     TranscriptFoldOutcomeKind,
 )
 from memoriesql.application.fold_recovery import (
+    LOCK_TIMEOUT_MS,
     DiscoverFoldOutcomes,
     FoldDiscoveryCursor,
     FoldOutcomeKey,
@@ -27,6 +28,11 @@ from memoriesql.application.fold_recovery import (
     ReadFoldEvidence,
 )
 from memoriesql.infrastructure.postgres.fold_recovery import PostgresFoldRecovery
+from memoriesql.infrastructure.postgres.transient_retry import (
+    ATTEMPTS,
+    FIRST_BACKOFF_SECONDS,
+    MAX_BACKOFF_SECONDS,
+)
 
 if TYPE_CHECKING:
     from tests.runtime.fold_recovery_fixture import digest, insert, seed, service
@@ -313,6 +319,13 @@ class FoldRecovery(PostgresRuntime):
 
     def test_lock_timeout_and_strong_snapshot_fail_closed(self) -> None:
         key = seed(self)[0]
+        # Every owned attempt waits out the lock, with backoff between attempts.
+        waits = ATTEMPTS * LOCK_TIMEOUT_MS / 1000
+        backoff = sum(
+            min(FIRST_BACKOFF_SECONDS * 2**n, MAX_BACKOFF_SECONDS)
+            for n in range(ATTEMPTS - 1)
+        )
+        bound = waits + backoff + 1.0
         with self.connect() as blocker, blocker.transaction():
             blocker.execute(
                 "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
@@ -321,7 +334,9 @@ class FoldRecovery(PostgresRuntime):
             start = time.monotonic()
             with self.assertRaises(psycopg.errors.LockNotAvailable):
                 self.api.inspect(InspectFoldOutcome(key=key))
-            self.assertLess(time.monotonic() - start, 1.5)
+            elapsed = time.monotonic() - start
+            self.assertGreaterEqual(elapsed, waits)
+            self.assertLess(elapsed, bound)
         with (
             self.assertRaises(psycopg.errors.ActiveSqlTransaction),
             self.db.transaction(),

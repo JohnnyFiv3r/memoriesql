@@ -254,6 +254,9 @@
       "path": "src/memoriesql/infrastructure/postgres/query_reader_provisioning.py"
     },
     {
+      "path": "src/memoriesql/infrastructure/postgres/transient_retry.py"
+    },
+    {
       "path": "src/memoriesql/infrastructure/postgres/work_deadlines.py"
     },
     {

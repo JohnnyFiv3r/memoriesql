@@ -23,6 +23,7 @@ from memoriesql.application.engine_intake import (
     ReadEngineRecords,
 )
 from memoriesql.infrastructure.postgres.authorization import PostgresAuthorizationPort
+from memoriesql.infrastructure.postgres.transient_retry import run_owned
 
 
 class EngineIntakeBusy(RuntimeError):
@@ -56,12 +57,16 @@ class PostgresEngineIntake:
         if self._connection.info.transaction_status != TransactionStatus.IDLE:
             raise RuntimeError("engine record intake requires transaction ownership")
         try:
-            with self._connection.transaction():
-                self._begin()
-                row = self._connection.execute(query, params).fetchone()
-                if row is None:
-                    raise RuntimeError(f"{unavailable}: no result")
-                return row[0]
+
+            def attempt() -> Any:
+                with self._connection.transaction():
+                    self._begin()
+                    row = self._connection.execute(query, params).fetchone()
+                    if row is None:
+                        raise RuntimeError(f"{unavailable}: no result")
+                    return row[0]
+
+            return run_owned(attempt)
         except InsufficientPrivilege as error:
             raise PermissionError(unavailable) from error
         except (QueryCanceled, LockNotAvailable, DeadlockDetected) as error:
