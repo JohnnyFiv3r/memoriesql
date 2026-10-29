@@ -20,6 +20,7 @@ from memoriesql.application.stored_bead_inspection import (
 )
 from memoriesql.infrastructure.postgres.authorization import PostgresAuthorizationPort
 from memoriesql.infrastructure.postgres.transient_retry import run_owned
+from memoriesql.infrastructure.postgres.work_deadlines import statement_timeout_for
 
 
 class PostgresStoredBeadInspection:
@@ -59,9 +60,9 @@ class PostgresStoredBeadInspection:
         def attempt() -> ResultT:
             with self._connection.transaction():
                 self._connection.execute(
-                    "SELECT set_config('statement_timeout','2500',true), "
-                    "set_config('lock_timeout','500',true)"
+                    f"SET LOCAL statement_timeout='{statement_timeout_for(query) or 2500}ms'"
                 )
+                self._connection.execute("SET LOCAL lock_timeout='500ms'")
                 self._connection.execute("SET LOCAL ROLE memoriesql_application")
                 PostgresAuthorizationPort(self._connection).begin_context(
                     credential_sha256=self._credential,

@@ -17,7 +17,7 @@ owns these semantics; Desktop has its own workflow policy.
 | Every PR/main push | `package`: database-free tests, contracts, boundary, lint/types, archive inspection and deterministic rebuild | Automatic, inexpensive required check |
 | Ready fictional candidate / material proof-input change | Exact-head installed wheel and sdist equality, isolation, all installed tests and four restart proofs, Python 3.13 and 3.14, pinned PostgreSQL | Standing eligible hosted path below |
 | Local diagnostic | Focused source/CPU checks; DB work only with its coordinator slot | No duplicate full local run required when matching hosted proof is complete |
-| Release | Latest explicitly requested successful full run at exact release main, approved archive hashes and actual successful package/3.13/3.14 jobs | Separate explicit release authority and existing publication gates |
+| Release | Latest explicitly requested successful full run at exact release main, approved archive hashes and actual successful package, part and aggregation jobs for 3.13/3.14 | Separate explicit release authority and existing publication gates |
 
 `package` remains the sole routine required status. Do not make an intentionally
 skipped compatibility job a required check. Keep review resolution, main/tag
@@ -77,9 +77,10 @@ conflicting local database runs and verify cleanup before resource reuse.
 
 ## Installed proof and claim equivalence
 
-The `compatibility` job and `run_hosted_qualification.py` are the executable proof.
-Each interpreter has its own standard `ubuntu-24.04` runner and disposable
-PostgreSQL service. Only tracked public scripts, inventories, test modules and
+The `compatibility` part jobs, each interpreter's `qualification` aggregation
+and `run_hosted_qualification.py` are the executable proof. Each interpreter's
+acceptance is split into three parts, each on its own standard `ubuntu-24.04`
+runner with its own disposable PostgreSQL service. Only tracked public scripts, inventories, test modules and
 fictional JSON fixtures are copied; no local evidence directory is uploaded.
 A public file remains subject to source review: tracking a file is not privacy
 classification. Never port a held one-attempt local packet or treat a historical
@@ -88,13 +89,13 @@ exact local authorization as a new hosted authorization.
 | Required claim | Hosted evidence / limit |
 | --- | --- |
 | Exact reviewed source and archives | Clean tracked checkout, full source SHA, archive inventory verification, sizes/hashes; exact artifacts transferred from `package` |
-| Python coverage | Actual separate `compatibility (3.13)` and `compatibility (3.14)` jobs; interpreter and installed dependency versions retained |
+| Python coverage | Actual separate jobs per interpreter, `compatibility (<minor>, part 1–3)` and `qualification (<minor>)` for 3.13 and 3.14; each part extracts its interpreter's one hash-pinned `actions/python-versions` build into the tool cache without running the build's setup script, and `setup-python` activates that exact release, so the parts' interpreter trees are byte-identical whatever their runner images cache. A new patch release is a reviewed change of the pinned version, URL and SHA-256. Interpreter and installed dependency versions retained, and equal across an interpreter's parts |
 | PostgreSQL identity | Existing image index `postgres@sha256:a02db8cac496f15b094798a38254f14d6e00741f709360e5e00bb6668ea31636`; Linux amd64 child `sha256:4cc13dede823cab4e05290c7fb3350fb4e599ecabd9b07e6706b5d5e8f5bc929`; runtime server 18.4 asserted; Docker image ID and service state retained |
-| Same archive routes | Pinned build tools, `SOURCE_DATE_EPOCH=315532800`, independent sdist-to-wheel rebuild byte-identical to reviewed wheel, then one installed proof of those identical bytes per interpreter |
+| Same archive routes | Pinned build tools, `SOURCE_DATE_EPOCH=315532800`, independent sdist-to-wheel rebuild byte-identical to reviewed wheel in every part, each installing those identical bytes; the aggregation requires every part's wheel, interpreter, dependencies, environment, image and copied inputs to be equal |
 | Installed isolation | Fresh venv and copied test directory, `python -I`, no `PYTHONPATH`, existing package-isolation and release-installation checks; installed acceptance guard denies checkout/home reads, subprocesses and non-loopback connections |
-| Full installed suite | All three acceptance shards run; every child exit/log retained. Reports must discover the same suite, cover every module exactly once, execute all discovered tests, and have zero skips/errors/failures. No selected subset substitutes |
-| Fresh-process restart proof | Assessed relation, fold recovery, database time recovery and query result each execute prepare/recover/cleanup as distinct processes. Failure does not skip cleanup or later restart attempts |
-| Failure and cleanup truth | Command manifest is written before child launch, with actual exits, timestamps and log hashes. Deadlines/interruption stop owned process groups; a single reserved cleanup window and always-run exact-service stop retain failure metadata and PostgreSQL state. Missing/failed/cancelled proof is not qualification |
+| Full installed suite | All six shards of one longest-first plan run, two per part; every child exit/log retained. The aggregation recomputes the plan from the exact source: every report must discover the same suite and run exactly its planned modules, together covering every module exactly once, executing all discovered tests, with zero skips/errors/failures. No selected subset substitutes |
+| Fresh-process restart proof | Once per interpreter, in its host part (part 1) after that part's acceptance: assessed relation, fold recovery, database time recovery and query result each execute prepare/recover/cleanup as distinct processes. Failure does not skip cleanup or later restart attempts |
+| Failure and cleanup truth | Command manifest is written before child launch, with actual exits, timestamps and log hashes. Deadlines/interruption stop owned process groups; a single reserved cleanup window and always-run exact-service stop retain failure metadata and PostgreSQL state. A part record never claims a proof: only the aggregation writes `proof_complete`, after every part job of the same run attempt succeeded and each part artifact matched GitHub's recorded digest. The part result it reads covers both interpreters, so a failed part of either refuses both aggregations. Missing/failed/cancelled proof is not qualification |
 
 The pinned image is a multi-platform index; this runner selects its Linux amd64
 child, not an owner's macOS image. This is equivalent fictional Linux installed
@@ -103,10 +104,12 @@ a local-only fault reproduction, semantic quality, custody, live recall or
 integrated product acceptance. A separately scoped local-specific claim still
 needs its own evidence. No live model/provider calls belong to this path.
 
-The package job remains capped at 15 minutes; each interpreter at 100 minutes.
-Within that, the helper has a 90-minute proof deadline and one shared additional
+The package job remains capped at 15 minutes; each part job at 100 minutes and
+each aggregation at 15. Within a part, the helper has a 90-minute proof deadline and one shared additional
 2-minute cleanup allowance; the proof step is capped at 95 minutes, exact-service
-cleanup at 3 minutes. Three shards share each isolated service. Standard public
+cleanup at 3 minutes. Two shards share each part's isolated service: four on one
+runner saturated its CPUs without finishing sooner (F-3), so more runners, not more
+processes per runner, shorten the proof. Standard public
 repository runners use GitHub's documented standard resources (currently four
 CPUs, 16 GB memory and 14 GB disk for this Linux class); no larger or paid runner
 class is selected. See [GitHub runner specifications](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
@@ -117,13 +120,16 @@ limits additionally bound the environment; these harness limits change no core
 runtime contract. Broadening the resource/spend class needs explicit authority.
 
 Always-run uploads retain admission and complete qualification evidence for 30
-days, including failures, all child logs/exits, shard reports, dependency hashes,
+days, per part and per aggregation, including failures, all child logs/exits,
+shard reports, runner CPU, memory and pressure samples in every part (observed
+only, never a gate), the aggregation manifest binding each part artifact's
+name, ID and digest, dependency hashes,
 source/archive/input pins, versions and owned PostgreSQL cleanup state. GitHub
 retains job logs for failures before the helper can start. Artifact-upload or
 cleanup failure fails the job; an absent artifact is never a passing receipt.
 No harness can finish uploads after a hard runner loss: that run is incomplete
 and cannot qualify. Only cheap superseded package jobs cancel; compatibility
-jobs have unique per-run/interpreter concurrency, fail-fast disabled, and are
+jobs have unique per-run/interpreter/part concurrency, fail-fast disabled, and are
 not cancelled by a later documentation-only push. No duplicate local full run is
 required after complete equivalent hosted evidence.
 
@@ -154,9 +160,10 @@ release verifier selects manual main runs. Automatic main candidate proof has
 `event=push` and cannot satisfy that gate. An input reference records approval;
 it does not grant it. Check the actual owner authority before release dispatch.
 
-The unchanged publishing verifier requires the latest manual qualification at
-exact current release main to succeed, with exactly `package`,
-`compatibility (3.13)` and `compatibility (3.14)` actually successful. Skipped,
+The publishing verifier requires the latest manual qualification at exact
+current release main to succeed, with exactly `package`, the six
+`compatibility (<minor>, part <n>)` jobs and both `qualification (<minor>)`
+aggregations actually successful. Skipped,
 missing, cancelled, failed or partial jobs are refused; no older-pass fallback.
 Only its exact-head archives can be compared with the committed approved release
 inventory. Immutable hashes, approved tag/repository identity and owner-only
@@ -166,8 +173,8 @@ incremental merge and approved isolated candidate integration remain subject to
 the standing engineering and substantive gates above.
 
 The host/CLI refresh additionally requires the separately invoked
-`prove_query_host.py` on both supported interpreters after the four restart
-triplets and before proof completion. It requires exactly 17 named cases in
+`prove_query_host.py` on both supported interpreters, in each interpreter's host
+part after the four restart triplets and before proof completion. It requires exactly 17 named cases in
 `query_host_acceptance.py`: the 16 existing host cases and the public CLI case
 using the real Unix socket. `query_host_fault.py` is support code, not a second
 acceptance module. Missing, extra, duplicate, failed or skipped cases prevent

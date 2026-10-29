@@ -21,10 +21,12 @@ from pydantic import BaseModel
 
 from memoriesql.application.relation_assessment import (
     ActivateRelationAssessment,
+    ActivateRepairableRelationAssessment,
     RelationAssessmentActivationReceipt,
     RelationAuthorPacket,
     RelationSpecialistDecision,
     RelationSpecialistPacket,
+    RepairableRelationActivationReceipt,
 )
 from memoriesql.application.relation_inspection import (
     BeadRelationsInspectionV2,
@@ -60,6 +62,17 @@ class PostgresRelationAssessments:
             "SELECT memoriesql.activate_relation_assessment_v1(%s)",
             command,
             RelationAssessmentActivationReceipt,
+            bound=COMMAND_RESPONSE_BYTES,
+            statement_timeout_ms=5000,
+        )
+
+    def activate_repairable(
+        self, command: ActivateRepairableRelationAssessment
+    ) -> RepairableRelationActivationReceipt:
+        return self._transaction(
+            "SELECT memoriesql.activate_relation_assessment_v2(%s)",
+            command,
+            RepairableRelationActivationReceipt,
             bound=COMMAND_RESPONSE_BYTES,
             statement_timeout_ms=5000,
         )
@@ -117,10 +130,9 @@ class PostgresRelationAssessments:
             with self._connection.transaction():
                 self._connection.execute("SET TRANSACTION ISOLATION LEVEL READ COMMITTED")
                 self._connection.execute(
-                    "SELECT set_config('statement_timeout',%s,true), "
-                    "set_config('lock_timeout','500',true)",
-                    (str(statement_timeout_ms),),
+                    f"SET LOCAL statement_timeout='{int(statement_timeout_ms)}ms'"
                 )
+                self._connection.execute("SET LOCAL lock_timeout='500ms'")
                 self._connection.execute("SET LOCAL ROLE memoriesql_application")
                 PostgresAuthorizationPort(self._connection).begin_context(
                     credential_sha256=self._credential,

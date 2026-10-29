@@ -41,6 +41,7 @@ transaction that its caller owns, when lock contention alone stopped it:
 - fold recovery;
 - complete-input calls;
 - evidence-package and materialization calls;
+- engine record intake, reads and vocabulary;
 - the lock-taking transaction of the relation read frame, for inspection reads
   only (`read_relation_projection`).
 
@@ -56,7 +57,11 @@ transaction that its caller owns, when lock contention alone stopped it:
 **Session locks.** The read frame takes its fence and query-access lock at
 session level, and a session lock outlives the rolled-back transaction that took
 it. So a failed attempt releases whatever it had taken before it runs again or
-raises.
+raises. Each release switches role before its unlock, as every transaction does.
+
+**Role switch.** Each re-run closure keeps its adapter's static `SET LOCAL`
+prologue, so the role switch still comes before any function on every attempt.
+`tests/unit/test_role_switch_prologues.py` covers every closure.
 
 A re-run repeats only database statements, from a rolled-back transaction. No
 request, receipt, refusal shape or authority check changes.

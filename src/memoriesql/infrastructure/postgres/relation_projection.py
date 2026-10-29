@@ -49,7 +49,9 @@ def relation_projection_frame(
         try:
             with connection.transaction():
                 connection.execute("SET LOCAL lock_timeout='500ms'")
-                connection.execute(timeout)
+                connection.execute(
+                    f"SET LOCAL statement_timeout='{statement_timeout_ms}ms'"
+                )
                 connection.execute("SET LOCAL ROLE memoriesql_application")
                 PostgresAuthorizationPort(connection).begin_context(
                     credential_sha256=credential_sha256,
@@ -96,9 +98,11 @@ def relation_projection_frame(
 def _release(connection: Connection[Any], key: int | None, access: int | None) -> None:
     if access is not None and not connection.closed:
         with connection.transaction():
+            connection.execute("SET LOCAL ROLE memoriesql_application")
             connection.execute("SELECT pg_advisory_unlock(%s)", (access,))
     if key is not None and not connection.closed:
         with connection.transaction():
+            connection.execute("SET LOCAL ROLE memoriesql_application")
             connection.execute("SELECT pg_advisory_unlock_shared(%s)", (key,))
 
 

@@ -149,6 +149,11 @@ class HiddenPackageLengthMigration(unittest.TestCase):
                 # 0046 helper frames: a {kind,id,content_sha256} pin and its read.
                 "prepare_query_inspection_v1",
                 "read_query_helper_artifact_v1",
+                # The source text view: it compares the delivering result's
+                # unit_package record with the current one (both digests) and
+                # pins frames as 0046 does.
+                "bind_query_source_text_v1",
+                "prepare_query_source_text_v1",
             },
         )
         # The full record is only ever hashed, or gates the population's text.
@@ -161,19 +166,23 @@ class HiddenPackageLengthMigration(unittest.TestCase):
         for name in builders - {"query_unit_package_v1"}:
             with self.subTest(builder=name):
                 self.assertIn("lifecycle_hash_v1(", installed[name][1])
-        # Only the population asks for package text, and only when normalized.
+        # Only the population and the source text view (which serves the same
+        # search_text) ask for package text, and only when normalized.
         readers = {
             name
             for name, (_, body) in installed.items()
             if "query_unit_package_v1(" in body
         }
-        self.assertEqual(readers, {"prepare_query_sql_population_v2"})
-        population = compact(installed["prepare_query_sql_population_v2"][1])
-        self.assertEqual(population.count("pkg->>'text'"), 1)
-        self.assertIn(
-            "CASE WHEN (pkg->>'normalized')::boolean THEN pkg->>'text' END",
-            population,
+        self.assertEqual(
+            readers, {"prepare_query_sql_population_v2", "query_unit_source_text_v1"}
         )
+        for reader in sorted(readers):
+            body = compact(installed[reader][1])
+            self.assertEqual(body.count("pkg->>'text'"), 1, reader)
+            self.assertIn(
+                "CASE WHEN (pkg->>'normalized')::boolean THEN pkg->>'text' END",
+                body,
+            )
 
     def test_digest_records_keep_the_saved_frame_shape(self) -> None:
         # 0044 refuses any saved record other than {kind,id,row} with an object

@@ -26,10 +26,12 @@ from memoriesql.application.bead_classification import (
 from memoriesql.application.complete_input_execution import (
     READER_RESPONSE_BYTES,
     ActivateCompleteInput,
+    ActivateRepairableCompleteInput,
     CompleteEvidenceBatch,
     CompleteInputActivationReceipt,
     EvidenceExecutionWindow,
     ReadCompleteEvidence,
+    RepairableActivationReceipt,
 )
 from memoriesql.application.local_entity_mentions import (
     ActivateAuthoredMentions,
@@ -176,6 +178,20 @@ class PostgresCompleteInput:
         return CompleteInputActivationReceipt.model_validate(
             self._call(
                 "SELECT memoriesql.activate_complete_input_v1(%s)",
+                (Jsonb(request.model_dump(mode="json")),),
+                role="memoriesql_application",
+            )
+        )
+
+    def activate_repairable(
+        self, request: ActivateRepairableCompleteInput
+    ) -> RepairableActivationReceipt:
+        request = ActivateRepairableCompleteInput.model_validate(
+            request.model_dump(mode="json")
+        )
+        return RepairableActivationReceipt.model_validate(
+            self._call(
+                "SELECT memoriesql.activate_complete_input_v7(%s)",
                 (Jsonb(request.model_dump(mode="json")),),
                 role="memoriesql_application",
             )
