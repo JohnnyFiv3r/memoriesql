@@ -107,6 +107,7 @@ def fixture(
     binding_factory: Any = None,
     budget_update: dict[str, Any] | None = None,
     access_scope_ids: frozenset[str] = frozenset({"orchard.scope"}),
+    task_kind: str = "orchard.author", request_limit: int = 2,
 ) -> tuple[Any, Any, SemanticRunDeps, Ports]:
     ports = Ports()
     modules = BuiltInModuleRegistry._from_source_controlled(
@@ -131,7 +132,7 @@ def fixture(
     )
     budget = RunBudget(
         wall_clock_seconds=10,
-        request_limit=2,
+        request_limit=request_limit,
         input_token_limit=1000,
         output_token_limit=1000,
         total_token_limit=2000,
@@ -145,7 +146,7 @@ def fixture(
         tool_retries=0,
     ).model_copy(update=budget_update or {})
     task = SemanticTaskDefinition(
-        task_kind="orchard.author",
+        task_kind=task_kind,
         contract_revision=1,
         owning_module="memoriesql.kernel",
         input_contract=input_contract,

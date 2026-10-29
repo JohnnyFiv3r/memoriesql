@@ -148,8 +148,11 @@ source completeness. Complete-input correction/reauthoring remains deferred.
 ## Bounds, compatibility and later acceptance
 
 Commands/responses are bounded to 16,384 JSON bytes and event metadata to 8,192
-bytes. Adapters own a short transaction with a two-second statement timeout and
-500 ms lock timeout; the write function also checks its elapsed deadline. Writes
+bytes. Adapters own a short transaction with a 500 ms lock timeout and a
+statement timeout of two seconds of work plus every lock wait the function can
+meet (6 s for the source-stable and declared-scope materializations, see
+`docs/verification/work-deadlines-after-lock-waits.md`); the write function also checks its elapsed work
+deadline, which excludes lock waits. Writes
 inspect one sealed package's stored totals and indexed identities, without
 hydrating content or scanning an event. Inventory storage and reader limits from
 schema 16 are unchanged. Oversized evidence remains explicit pending work if it
@@ -245,7 +248,8 @@ This does not independently verify normalization or omitted source evidence.
 One comparison scans only the submitted sealed package: at most 256 parts and
 16 MiB UTF-8. Component aggregation may hold a component up to that package bound
 in database memory; no whole source history or model prompt is assembled. Existing
-500-ms lock waits and two-second operation deadlines remain. A timeout rolls back
+500-ms lock waits and two-second work deadlines remain; the deadline excludes the
+lock waits. A timeout rolls back
 the materialization and receipt, leaving already retained evidence intact. Same-source
 materializations serialize through the compatibility fence, including legacy calls.
 A nonpartial tenant/source/mode expression index supports first/last mode

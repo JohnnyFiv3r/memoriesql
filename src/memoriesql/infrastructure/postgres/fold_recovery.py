@@ -24,6 +24,7 @@ from memoriesql.application.fold_recovery import (
 )
 from memoriesql.application.semantic_task_contracts import canonical_json_bytes
 from memoriesql.infrastructure.postgres.authorization import PostgresAuthorizationPort
+from memoriesql.infrastructure.postgres.work_deadlines import statement_timeout_ms
 
 
 class PostgresFoldRecovery:
@@ -58,9 +59,10 @@ class PostgresFoldRecovery:
             raise ValueError("fold recovery request exceeds bound")
         if self._connection.info.transaction_status != TransactionStatus.IDLE:
             raise RuntimeError("fold recovery requires transaction ownership")
+        timeout_ms = statement_timeout_ms("recover_transcript_fold_v1")
         with self._connection.transaction():
             self._connection.execute("SET TRANSACTION ISOLATION LEVEL READ COMMITTED")
-            self._connection.execute("SET LOCAL statement_timeout = '2s'")
+            self._connection.execute(f"SET LOCAL statement_timeout = '{timeout_ms}ms'")
             self._connection.execute("SET LOCAL lock_timeout = '500ms'")
             self._connection.execute("SET LOCAL ROLE memoriesql_application")
             PostgresAuthorizationPort(self._connection).begin_context(

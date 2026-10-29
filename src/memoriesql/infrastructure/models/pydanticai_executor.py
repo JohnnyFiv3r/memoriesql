@@ -40,6 +40,12 @@ from pydantic_ai.models.wrapper import WrapperModel
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import RequestUsage, RunUsage, UsageLimits
 
+from memoriesql.application.authored_output_checks import (
+    PARTIAL_ACCEPTANCE,
+    AuthoredOutputIssue,
+    authored_annotation_issues,
+    partial_annotations,
+)
 from memoriesql.application.authored_relations import (
     RelatedAuthorStep,
     RelatedExecutionInput,
@@ -99,6 +105,20 @@ from memoriesql.application.model_accounting import (
 )
 from memoriesql.application.module_registry import CompositionHealthReport
 from memoriesql.application.relation_assessment import (
+    RELATION_REPAIR_INSTRUCTION,
+    RELATION_REPAIR_REVISIONS,
+    RelationAssessmentInput,
+    RelationAssessmentOutput,
+    RelationAssessmentPayload,
+    RelationAuthorOutput,
+    RelationAuthorPacket,
+    RelationAuthorStep,
+    RelationSpecialistContribution,
+    RelationSpecialistDecision,
+    RelationSpecialistPacket,
+    required_pairs,
+)
+from memoriesql.application.relation_assessment import (
     SPECIALIST_INPUT as RELATION_SPECIALIST_INPUT,
 )
 from memoriesql.application.relation_assessment import (
@@ -109,17 +129,6 @@ from memoriesql.application.relation_assessment import (
 )
 from memoriesql.application.relation_assessment import (
     SPECIALIST_PROFILE as RELATION_SPECIALIST_PROFILE,
-)
-from memoriesql.application.relation_assessment import (
-    RelationAssessmentInput,
-    RelationAssessmentOutput,
-    RelationAuthorOutput,
-    RelationAuthorPacket,
-    RelationAuthorStep,
-    RelationSpecialistContribution,
-    RelationSpecialistDecision,
-    RelationSpecialistPacket,
-    required_pairs,
 )
 from memoriesql.application.relation_assessment import (
     digest as relation_digest,
@@ -144,6 +153,7 @@ from memoriesql.application.semantic_task_contracts import (
     SemanticTaskResult,
     UsageSummary,
     ValidationResult,
+    WithheldOutputItem,
     canonical_json_bytes,
     canonical_sha256,
     retry_class_for_status,
@@ -667,6 +677,11 @@ class _TreeState:
     pending_terminal_event_tasks: set[asyncio.Task[None]] = field(default_factory=set)
     open_delegations: int = 0
     delegations_closed: asyncio.Event = field(default_factory=asyncio.Event)
+    # The executor-built repair frame while its one dispatch is admitted.
+    repair_frame: str | None = None
+    repair_used: bool = False
+    # The beads a partially accepted root output withholds.
+    withheld_items: tuple[WithheldOutputItem, ...] = ()
 
     def __post_init__(self) -> None:
         self.delegations_closed.set()
@@ -819,7 +834,23 @@ class _DispatchGuardedModel(WrapperModel):
         await state.require_dispatch_open()
         exposed_window: EvidenceExecutionWindow | None = None
         source_delivery: SourceDelivery | None = None
-        if (
+        repair = state.repair_frame if self._run_deps.parent_run_id is None else None
+        if repair is not None:
+            # The task input, the model's own prior output and fixed refusal
+            # codes, nothing else: no evidence is delivered, none is recorded.
+            supplied_repair = [
+                p.content
+                for m in messages
+                if isinstance(m, ModelRequest)
+                for p in m.parts
+                if isinstance(p, UserPromptPart)
+            ]
+            if supplied_repair != [repair]:
+                raise EvidenceGuardError(
+                    "runtime.repair_frame_mismatch",
+                    "a repair dispatch carries exactly its frame",
+                )
+        elif (
             isinstance(state.task.task_input, RevisitingExecutionInput)
             and self._run_deps.parent_run_id is None
         ):
@@ -863,7 +894,7 @@ class _DispatchGuardedModel(WrapperModel):
                     "source_revisiting.delivery_budget",
                 )
             state.delivered_source_units += source_delivery.delivered_units
-        if isinstance(state.task.task_input, CompleteExecutionInput):
+        if repair is None and isinstance(state.task.task_input, CompleteExecutionInput):
             if (
                 state.deps.complete_input is None
                 or state.deps.exposure_recorder is None
@@ -902,7 +933,9 @@ class _DispatchGuardedModel(WrapperModel):
                     "actual dispatch substituted evidence",
                 )
         relation_packet: RelationAuthorPacket | RelationSpecialistPacket | None = None
-        if isinstance(state.task.task_input, RelationAssessmentInput):
+        if repair is None and isinstance(state.task.task_input, RelationAssessmentInput):
+            # A repair frame delivers no packet: it is neither verified as one
+            # nor authorized or recorded as a delivery.
             relation_packet = self._verified_relation_packet(messages)
         classification_packet = None
         if self._run_deps.binding.agent_key == CLASSIFIER_KEY:
@@ -2241,7 +2274,16 @@ class PydanticAISemanticExecutor:
                 )
                 else cast(AuthoredSemanticOutput[BaseModel], result.output)
             )
-            self._guard_authored_output(run_deps, authored)
+            authored = self._guard_authored_output(
+                run_deps,
+                authored,
+                drop_unmanifested=parent_run_id is None
+                and self._accepts_in_part(state),
+            )
+            if parent_run_id is None:
+                authored = await self._repaired_root_output(
+                    state, run_deps, invoke, authored
+                )
             if parent_run_id is not None:
                 if state.deps.cancellation.is_cancelled():
                     raise RunCancelled("semantic run cancelled before acceptance")
@@ -2290,7 +2332,9 @@ class PydanticAISemanticExecutor:
         self,
         run_deps: _AgentRunDeps,
         authored: AuthoredSemanticOutput[BaseModel],
-    ) -> None:
+        *,
+        drop_unmanifested: bool = False,
+    ) -> AuthoredSemanticOutput[BaseModel]:
         if type(authored.typed_output) is not run_deps.binding.output_model_type:
             raise RuntimeContractError(
                 "runtime.output_contract_mismatch",
@@ -2304,6 +2348,20 @@ class PydanticAISemanticExecutor:
                 "runtime.output_contract_mismatch",
                 run_deps.binding.output_contract.contract_id,
             ) from error
+        if drop_unmanifested:
+            # A root observation output keeps its acceptable part (guard audit
+            # P1-f (b)): a used reference outside the manifest is dropped here,
+            # before the scope guard and the repair frame, so it is never echoed
+            # or recorded. Citing nothing inside the manifest still refuses.
+            kept = tuple(
+                ref
+                for ref in authored.used_evidence_refs
+                if ref in run_deps.allowed_evidence_refs
+            )
+            if kept and len(kept) < len(authored.used_evidence_refs):
+                authored = type(authored)(
+                    typed_output=authored.typed_output, used_evidence_refs=kept
+                )
         if run_deps.allowed_evidence_refs and not authored.used_evidence_refs:
             raise EvidenceGuardError(
                 "runtime.evidence_required",
@@ -2323,6 +2381,121 @@ class PydanticAISemanticExecutor:
                 "runtime.evidence_not_visible",
                 ", ".join(sorted(not_visible)),
             )
+        return authored
+
+    @staticmethod
+    def _accepts_in_part(state: _TreeState) -> bool:
+        definition = state.task.definition
+        return (definition.task_kind, definition.contract_revision) in PARTIAL_ACCEPTANCE
+
+    @staticmethod
+    def _annotation_issues(
+        task: ResolvedSemanticTask[BaseModel, BaseModel],
+        authored: AuthoredSemanticOutput[BaseModel],
+    ) -> tuple[AuthoredOutputIssue, ...]:
+        return authored_annotation_issues(
+            task.task_input.model_dump(mode="json"),
+            authored.typed_output.model_dump(mode="json"),
+            authored.used_evidence_refs,
+            task_kind=task.definition.task_kind,
+            contract_revision=task.definition.contract_revision,
+        )
+
+    @staticmethod
+    def _repair_admitted(state: _TreeState, run_deps: _AgentRunDeps) -> bool:
+        # One per run, on a tool-free direct leaf (no tool or delegate can fetch
+        # evidence), never for a supervised turn (its allowance is one turn) or
+        # a classified proposal (its classification binds the original), and
+        # only with a request left in the run's existing budget.
+        definition = state.task.definition
+        return (
+            not state.repair_used
+            and definition.dispatch_mode is DispatchMode.DIRECT_LEAF
+            and not definition.allowed_delegate_keys
+            and not definition.allowed_tool_keys
+            and run_deps.binding.evidence_tool_key is None
+            and run_deps.model_profile.binding.supervision is None
+            and not isinstance(state.task.task_input, ClassificationExecutionInput)
+            and state.reserved_requests < state.task.effective_budget.request_limit
+        )
+
+    async def _repaired_root_output(
+        self,
+        state: _TreeState,
+        run_deps: _AgentRunDeps,
+        invoke: Callable[[str], Awaitable[Any]],
+        authored: AuthoredSemanticOutput[BaseModel],
+    ) -> AuthoredSemanticOutput[BaseModel]:
+        # Refuse here what canonical apply would refuse, naming what is wrong:
+        # some of these reach apply as an authority or Python error, not as
+        # invalid output. First the model gets one evidence-free repair round
+        # (guard audit P1-f); canonical apply still decides.
+        issues = self._annotation_issues(state.task, authored)
+        if issues and self._repair_admitted(state, run_deps):
+            state.repair_used = True
+            state.repair_frame = _repair_frame(state.task.task_input, authored, issues)
+            dispatched = state.usage.requests
+            repaired = None
+            try:
+                repaired = await invoke(state.repair_frame)
+            except UsageLimitExceeded:
+                # Refused before dispatch: the first output's issues stand.
+                if state.usage.requests != dispatched:
+                    raise
+            except TimeoutError as error:
+                raise ProviderRequestTimeout from error
+            finally:
+                state.repair_frame = None
+            if repaired is not None:
+                authored = self._guard_authored_output(
+                    run_deps,
+                    cast(AuthoredSemanticOutput[BaseModel], repaired.output),
+                    drop_unmanifested=self._accepts_in_part(state),
+                )
+                issues = self._annotation_issues(state.task, authored)
+        if issues:
+            partial = self._partial_root_output(state, run_deps, authored, issues)
+            if partial is not None:
+                return partial
+            raise EvidenceGuardError(
+                "output." + issues[0].code,
+                "; ".join(issue.feedback() for issue in issues),
+            )
+        return authored
+
+    def _partial_root_output(
+        self,
+        state: _TreeState,
+        run_deps: _AgentRunDeps,
+        authored: AuthoredSemanticOutput[BaseModel],
+        issues: tuple[AuthoredOutputIssue, ...],
+    ) -> AuthoredSemanticOutput[BaseModel] | None:
+        # Observation authoring keeps its acceptable beads (guard audit P1-f
+        # (b)): each bead with an issue is withheld whole and recorded for the
+        # owner, and canonical apply checks the rest exactly as before.
+        definition = state.task.definition
+        plan = partial_annotations(
+            state.task.task_input.model_dump(mode="json"),
+            authored.typed_output.model_dump(mode="json"),
+            authored.used_evidence_refs,
+            issues,
+            task_kind=definition.task_kind,
+            contract_revision=definition.contract_revision,
+        )
+        if plan is None:
+            return None
+        partial = type(authored)(
+            typed_output=type(authored.typed_output).model_validate_json(
+                json.dumps(plan.payload)
+            ),
+            used_evidence_refs=plan.used_evidence_refs,
+        )
+        self._guard_authored_output(run_deps, partial)
+        state.withheld_items = tuple(
+            WithheldOutputItem(item_kind="bead", item_id=bead, reason_code=reason)
+            for bead, reason in plan.withheld
+        )
+        return partial
 
     async def _author_relations(
         self,
@@ -2379,7 +2552,9 @@ class PydanticAISemanticExecutor:
             raise CompleteInputError(
                 SemanticResultStatus.INVALID_OUTPUT, "relation_assessment.author_incomplete"
             )
-        authored: RelationAuthorOutput = step.typed_output
+        authored: RelationAuthorOutput = await self._repaired_relation_output(
+            parent, invoke, packet, step
+        )
         if {(d.first_bead_id, d.second_bead_id) for d in authored.dispositions} != (
             required_pairs(payload.beads)
         ):
@@ -2416,6 +2591,52 @@ class PydanticAISemanticExecutor:
             used_evidence_refs=tuple(
                 sorted(r.reference_id for r in task_input.evidence_manifest.references)
             ),
+        )
+
+    async def _repaired_relation_output(
+        self,
+        parent: _AgentRunDeps,
+        invoke: Callable[[str, Any], Awaitable[Any]],
+        packet: RelationAuthorPacket,
+        step: RelationAuthorStep,
+    ) -> RelationAuthorOutput:
+        # One evidence-free repair round for the author (guard audit P1-f D2,
+        # custody ruling R-1 to R-6): only for revisions with headroom for it
+        # and the pending specialist request, never for a supervised turn, and
+        # only when every issue is a missing pair or an unregistered label.
+        state = parent.state
+        authored = cast(RelationAuthorOutput, step.typed_output)
+        task_input = cast(RelationAssessmentInput, state.task.task_input)
+        issues = _relation_repair_issues(task_input.payload, authored)
+        if (
+            issues is None
+            or not (issues[0] or issues[1])
+            or state.repair_used
+            or state.task.definition.contract_revision not in RELATION_REPAIR_REVISIONS
+            or parent.model_profile.binding.supervision is not None
+            or state.reserved_requests + 1 >= state.task.effective_budget.request_limit
+        ):
+            return authored
+        missing, unregistered = issues
+        state.repair_used = True
+        state.repair_frame = _relation_repair_frame(packet, step, missing, unregistered)
+        dispatched = state.usage.requests
+        try:
+            repaired = await invoke(state.repair_frame, RelationAuthorStep)
+        except UsageLimitExceeded:
+            # Refused before dispatch: the author's own issues stand.
+            if state.usage.requests != dispatched:
+                raise
+            return authored
+        except TimeoutError as error:
+            raise ProviderRequestTimeout from error
+        finally:
+            state.repair_frame = None
+        return _checked_relation_repair(
+            authored,
+            RelationAuthorStep.model_validate(repaired.output),
+            missing,
+            unregistered,
         )
 
     async def _assess_relation_proposals(
@@ -3172,6 +3393,7 @@ class PydanticAISemanticExecutor:
                 ),
                 used_evidence_refs=authored.used_evidence_refs,
                 model_run_refs=tuple(state.run_refs),
+                withheld_items=state.withheld_items,
                 validation_results=(
                     ValidationResult(
                         validator_key="runtime.run_reference",
@@ -3317,6 +3539,139 @@ def _usage_summary(usage: RunUsage) -> UsageSummary:
         output_tokens=usage.output_tokens,
         tool_calls=usage.tool_calls,
     )
+
+
+REPAIR_INSTRUCTION = (
+    "Your previous output would be refused for the reasons listed. Return the "
+    "corrected typed result: change what the reasons name and keep everything "
+    "else. No evidence is sent again; add nothing that needs evidence you "
+    "cannot see in this frame."
+)
+
+
+def _repair_frame(
+    task_input: BaseModel,
+    authored: AuthoredSemanticOutput[BaseModel],
+    issues: tuple[AuthoredOutputIssue, ...],
+) -> str:
+    """The one repair frame: the task input, the model's own prior output and
+    fixed refusal codes with identifiers. No evidence and no database text."""
+
+    return json.dumps(
+        {
+            "repair_frame": 1,
+            "instruction": REPAIR_INSTRUCTION,
+            "task_input": task_input.model_dump(mode="json", warnings="error"),
+            # Dumped field by field: a source-revisiting output is held as
+            # AuthoredSemanticOutput[BaseModel], whose own dump would drop the
+            # typed output's fields.
+            "previous_output": {
+                "typed_output": authored.typed_output.model_dump(mode="json", warnings="error"),
+                "used_evidence_refs": list(authored.used_evidence_refs),
+            },
+            "refusal_codes": [issue.feedback() for issue in issues],
+        },
+        ensure_ascii=True,
+        separators=(",", ":"),
+    )
+
+
+def _relation_repair_issues(
+    payload: RelationAssessmentPayload, authored: RelationAuthorOutput
+) -> tuple[tuple[tuple[UUID, UUID], ...], tuple[UUID, ...]] | None:
+    """Missing pairs and unregistered labels, or None when another issue needs
+    more than a repair round can change (a disposition outside the pins)."""
+
+    required = required_pairs(payload.beads)
+    given = {(d.first_bead_id, d.second_bead_id) for d in authored.dispositions}
+    if given - required:
+        return None
+    pins = {(d.key, d.revision) for d in payload.relation_vocabulary}
+    return (
+        tuple(sorted(required - given, key=lambda pair: (str(pair[0]), str(pair[1])))),
+        tuple(
+            p.proposal_id
+            for p in authored.proposals
+            if (p.relation_type.key, p.relation_type.revision) not in pins
+        ),
+    )
+
+
+def _relation_repair_frame(
+    packet: RelationAuthorPacket,
+    step: RelationAuthorStep,
+    missing: tuple[tuple[UUID, UUID], ...],
+    unregistered: tuple[UUID, ...],
+) -> str:
+    """The author's repair frame: the packet it already received without its
+    evidence, its own prior step and fixed codes with identifiers."""
+
+    delivered = packet.model_dump(mode="json", warnings="error")
+    del delivered["evidence"]
+    return json.dumps(
+        {
+            "repair_frame": 1,
+            "instruction": RELATION_REPAIR_INSTRUCTION,
+            "relation_packet": delivered,
+            "previous_output": step.model_dump(mode="json", warnings="error"),
+            "refusal_codes": [
+                *(f"relation.pair_missing: {first}/{second}" for first, second in missing),
+                *(f"relation.label_unregistered: {proposal}" for proposal in unregistered),
+            ],
+        },
+        ensure_ascii=True,
+        separators=(",", ":"),
+    )
+
+
+def _checked_relation_repair(
+    original: RelationAuthorOutput,
+    step: RelationAuthorStep,
+    missing: tuple[tuple[UUID, UUID], ...],
+    unregistered: tuple[UUID, ...],
+) -> RelationAuthorOutput:
+    """The repaired output, held to the repair's edit rules by the executor."""
+
+    repaired = step.typed_output
+    if step.action != "finish" or repaired is None:
+        raise CompleteInputError(
+            SemanticResultStatus.INVALID_OUTPUT, "relation_assessment.author_incomplete"
+        )
+    # Proposals are unchanged, except that a listed one may be dropped.
+    kept_ids = {p.proposal_id for p in repaired.proposals}
+    dropped = {p.proposal_id for p in original.proposals} - kept_ids
+    kept = [p for p in original.proposals if p.proposal_id in kept_ids]
+    # Dispositions already given are unchanged; new ones are only for the
+    # listed pairs, related where an unchanged proposal relates the pair, or
+    # not_assessed with a reason.
+    before = {(d.first_bead_id, d.second_bead_id): d for d in original.dispositions}
+    after = {(d.first_bead_id, d.second_bead_id): d for d in repaired.dispositions}
+    related = {
+        tuple(sorted((p.source.bead_id, p.target.bead_id), key=str)) for p in kept
+    }
+    added = [after[pair] for pair in after.keys() - before.keys()]
+    if (
+        not dropped <= set(unregistered)
+        or [p.model_dump(mode="json") for p in repaired.proposals]
+        != [p.model_dump(mode="json") for p in kept]
+        or len(after) != len(repaired.dispositions)
+        or any(
+            after.get(pair) is None or after[pair].model_dump(mode="json") != d.model_dump(mode="json")
+            for pair, d in before.items()
+        )
+        or {(d.first_bead_id, d.second_bead_id) for d in added} != set(missing)
+        or any(
+            not (
+                (d.disposition == "related" and (d.first_bead_id, d.second_bead_id) in related)
+                or (d.disposition == "not_assessed" and d.reason is not None)
+            )
+            for d in added
+        )
+    ):
+        raise CompleteInputError(
+            SemanticResultStatus.INVALID_OUTPUT, "relation_assessment.repair_out_of_bounds"
+        )
+    return repaired
 
 
 def _self_contained_prompt(
