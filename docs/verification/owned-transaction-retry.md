@@ -26,6 +26,10 @@ transaction that its caller owns, when lock contention alone stopped it:
 - **Bounds.** At most four attempts. The backoff doubles from 50 ms to 200 ms,
   keeping at least half of each wait and filling the rest with jitter.
 - **Total wait.** Lock waiting stays within about 2.4 s.
+- **Worst case.** Each attempt keeps its own statement deadline, so one call
+  can take about four deadlines plus 0.35 s of backoff, where before it took
+  one: about 40.4 s for engine intake (was 10 s), 24.4 s for materializations
+  and 8.4 s for complete-input calls.
 - **Mapping.** After the last attempt the original error is raised unchanged,
   so every caller maps it exactly as before: `source_authority_busy`,
   `budget_exhausted` and so on.
