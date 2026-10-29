@@ -103,6 +103,20 @@ from memoriesql.application.model_accounting import (
 )
 from memoriesql.application.module_registry import CompositionHealthReport
 from memoriesql.application.relation_assessment import (
+    RELATION_REPAIR_INSTRUCTION,
+    RELATION_REPAIR_REVISIONS,
+    RelationAssessmentInput,
+    RelationAssessmentOutput,
+    RelationAssessmentPayload,
+    RelationAuthorOutput,
+    RelationAuthorPacket,
+    RelationAuthorStep,
+    RelationSpecialistContribution,
+    RelationSpecialistDecision,
+    RelationSpecialistPacket,
+    required_pairs,
+)
+from memoriesql.application.relation_assessment import (
     SPECIALIST_INPUT as RELATION_SPECIALIST_INPUT,
 )
 from memoriesql.application.relation_assessment import (
@@ -113,17 +127,6 @@ from memoriesql.application.relation_assessment import (
 )
 from memoriesql.application.relation_assessment import (
     SPECIALIST_PROFILE as RELATION_SPECIALIST_PROFILE,
-)
-from memoriesql.application.relation_assessment import (
-    RelationAssessmentInput,
-    RelationAssessmentOutput,
-    RelationAuthorOutput,
-    RelationAuthorPacket,
-    RelationAuthorStep,
-    RelationSpecialistContribution,
-    RelationSpecialistDecision,
-    RelationSpecialistPacket,
-    required_pairs,
 )
 from memoriesql.application.relation_assessment import (
     digest as relation_digest,
@@ -928,7 +931,9 @@ class _DispatchGuardedModel(WrapperModel):
                     "actual dispatch substituted evidence",
                 )
         relation_packet: RelationAuthorPacket | RelationSpecialistPacket | None = None
-        if isinstance(state.task.task_input, RelationAssessmentInput):
+        if repair is None and isinstance(state.task.task_input, RelationAssessmentInput):
+            # A repair frame delivers no packet: it is neither verified as one
+            # nor authorized or recorded as a delivery.
             relation_packet = self._verified_relation_packet(messages)
         classification_packet = None
         if self._run_deps.binding.agent_key == CLASSIFIER_KEY:
@@ -2541,7 +2546,9 @@ class PydanticAISemanticExecutor:
             raise CompleteInputError(
                 SemanticResultStatus.INVALID_OUTPUT, "relation_assessment.author_incomplete"
             )
-        authored: RelationAuthorOutput = step.typed_output
+        authored: RelationAuthorOutput = await self._repaired_relation_output(
+            parent, invoke, packet, step
+        )
         if {(d.first_bead_id, d.second_bead_id) for d in authored.dispositions} != (
             required_pairs(payload.beads)
         ):
@@ -2578,6 +2585,52 @@ class PydanticAISemanticExecutor:
             used_evidence_refs=tuple(
                 sorted(r.reference_id for r in task_input.evidence_manifest.references)
             ),
+        )
+
+    async def _repaired_relation_output(
+        self,
+        parent: _AgentRunDeps,
+        invoke: Callable[[str, Any], Awaitable[Any]],
+        packet: RelationAuthorPacket,
+        step: RelationAuthorStep,
+    ) -> RelationAuthorOutput:
+        # One evidence-free repair round for the author (guard audit P1-f D2,
+        # custody ruling R-1 to R-6): only for revisions with headroom for it
+        # and the pending specialist request, never for a supervised turn, and
+        # only when every issue is a missing pair or an unregistered label.
+        state = parent.state
+        authored = cast(RelationAuthorOutput, step.typed_output)
+        task_input = cast(RelationAssessmentInput, state.task.task_input)
+        issues = _relation_repair_issues(task_input.payload, authored)
+        if (
+            issues is None
+            or not (issues[0] or issues[1])
+            or state.repair_used
+            or state.task.definition.contract_revision not in RELATION_REPAIR_REVISIONS
+            or parent.model_profile.binding.supervision is not None
+            or state.reserved_requests + 1 >= state.task.effective_budget.request_limit
+        ):
+            return authored
+        missing, unregistered = issues
+        state.repair_used = True
+        state.repair_frame = _relation_repair_frame(packet, step, missing, unregistered)
+        dispatched = state.usage.requests
+        try:
+            repaired = await invoke(state.repair_frame, RelationAuthorStep)
+        except UsageLimitExceeded:
+            # Refused before dispatch: the author's own issues stand.
+            if state.usage.requests != dispatched:
+                raise
+            return authored
+        except TimeoutError as error:
+            raise ProviderRequestTimeout from error
+        finally:
+            state.repair_frame = None
+        return _checked_relation_repair(
+            authored,
+            RelationAuthorStep.model_validate(repaired.output),
+            missing,
+            unregistered,
         )
 
     async def _assess_relation_proposals(
@@ -3515,6 +3568,104 @@ def _repair_frame(
         ensure_ascii=True,
         separators=(",", ":"),
     )
+
+
+def _relation_repair_issues(
+    payload: RelationAssessmentPayload, authored: RelationAuthorOutput
+) -> tuple[tuple[tuple[UUID, UUID], ...], tuple[UUID, ...]] | None:
+    """Missing pairs and unregistered labels, or None when another issue needs
+    more than a repair round can change (a disposition outside the pins)."""
+
+    required = required_pairs(payload.beads)
+    given = {(d.first_bead_id, d.second_bead_id) for d in authored.dispositions}
+    if given - required:
+        return None
+    pins = {(d.key, d.revision) for d in payload.relation_vocabulary}
+    return (
+        tuple(sorted(required - given, key=lambda pair: (str(pair[0]), str(pair[1])))),
+        tuple(
+            p.proposal_id
+            for p in authored.proposals
+            if (p.relation_type.key, p.relation_type.revision) not in pins
+        ),
+    )
+
+
+def _relation_repair_frame(
+    packet: RelationAuthorPacket,
+    step: RelationAuthorStep,
+    missing: tuple[tuple[UUID, UUID], ...],
+    unregistered: tuple[UUID, ...],
+) -> str:
+    """The author's repair frame: the packet it already received without its
+    evidence, its own prior step and fixed codes with identifiers."""
+
+    delivered = packet.model_dump(mode="json", warnings="error")
+    del delivered["evidence"]
+    return json.dumps(
+        {
+            "repair_frame": 1,
+            "instruction": RELATION_REPAIR_INSTRUCTION,
+            "relation_packet": delivered,
+            "previous_output": step.model_dump(mode="json", warnings="error"),
+            "refusal_codes": [
+                *(f"relation.pair_missing: {first}/{second}" for first, second in missing),
+                *(f"relation.label_unregistered: {proposal}" for proposal in unregistered),
+            ],
+        },
+        ensure_ascii=True,
+        separators=(",", ":"),
+    )
+
+
+def _checked_relation_repair(
+    original: RelationAuthorOutput,
+    step: RelationAuthorStep,
+    missing: tuple[tuple[UUID, UUID], ...],
+    unregistered: tuple[UUID, ...],
+) -> RelationAuthorOutput:
+    """The repaired output, held to the repair's edit rules by the executor."""
+
+    repaired = step.typed_output
+    if step.action != "finish" or repaired is None:
+        raise CompleteInputError(
+            SemanticResultStatus.INVALID_OUTPUT, "relation_assessment.author_incomplete"
+        )
+    # Proposals are unchanged, except that a listed one may be dropped.
+    kept_ids = {p.proposal_id for p in repaired.proposals}
+    dropped = {p.proposal_id for p in original.proposals} - kept_ids
+    kept = [p for p in original.proposals if p.proposal_id in kept_ids]
+    # Dispositions already given are unchanged; new ones are only for the
+    # listed pairs, related where an unchanged proposal relates the pair, or
+    # not_assessed with a reason.
+    before = {(d.first_bead_id, d.second_bead_id): d for d in original.dispositions}
+    after = {(d.first_bead_id, d.second_bead_id): d for d in repaired.dispositions}
+    related = {
+        tuple(sorted((p.source.bead_id, p.target.bead_id), key=str)) for p in kept
+    }
+    added = [after[pair] for pair in after.keys() - before.keys()]
+    if (
+        not dropped <= set(unregistered)
+        or [p.model_dump(mode="json") for p in repaired.proposals]
+        != [p.model_dump(mode="json") for p in kept]
+        or len(after) != len(repaired.dispositions)
+        or any(
+            after.get(pair) is None or after[pair].model_dump(mode="json") != d.model_dump(mode="json")
+            for pair, d in before.items()
+        )
+        or {(d.first_bead_id, d.second_bead_id) for d in added} != set(missing)
+        or any(
+            not (
+                (d.disposition == "related" and (d.first_bead_id, d.second_bead_id) in related)
+                or (d.disposition == "not_assessed" and d.reason is not None)
+            )
+            for d in added
+        )
+    ):
+        raise CompleteInputError(
+            SemanticResultStatus.INVALID_OUTPUT, "relation_assessment.repair_out_of_bounds"
+        )
+    return repaired
 
 
 def _self_contained_prompt(

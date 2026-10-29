@@ -229,6 +229,10 @@
     {
       "filename": "0057_partial_observation_acceptance.sql",
       "sha256": "7d0f2a97959d736092d43b4b449272c9885845295a63d92b7990e8795d99f5ab"
+    },
+    {
+      "filename": "0058_repair_headroom.sql",
+      "sha256": "adfc302865f1e42b31d0a7b6330025a91c4abab8e9d43b85c95185f9ac2c1611"
     }
   ]
 }

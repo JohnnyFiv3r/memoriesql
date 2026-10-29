@@ -1446,7 +1446,7 @@
     },
     {
       "disposition": "include",
-      "expected_record_count": 64,
+      "expected_record_count": 66,
       "filename": "json-schema.json",
       "kind": "json_schema",
       "note": "Provider-neutral capture, host, source-range, transcript-fold, and harness-lifecycle schemas. Runtime availability: memory.semantic.author-complete-unit revision 7 is unavailable for activation, source delivery and canonical apply; memoriesql.local-entity-mentions.v2 is retained for historical schemas and authorized inspection only."
@@ -1643,6 +1643,17 @@
       "public_sha256": "34a7d0d91a6c4ea5d78435fd1f9dab2a677df02320376914692dd0202ffdf899",
       "reason": "Public-authored forward complete-input execution and bounded reader contracts.",
       "version": "1"
+    },
+    {
+      "canonical_payload_sha256": "a7f2e83bafb85404556065e4938511a758018f5c0ecf06ff2c3cf1afc30e2715",
+      "catalog": "json_schema",
+      "classification": "proposed_open_core",
+      "id": "memoriesql.complete-input-execution.v2",
+      "package_disposition": "include",
+      "path": "contracts/records/memoriesql-complete-input-execution-v2.json",
+      "public_sha256": "40f57a773ddc6411008fba39e632443f5567a3f8f697f6c6753e87b9d93cd2db",
+      "reason": "Public-authored revision-8 complete-input execution: revision 2 with one more request for the evidence-free repair round.",
+      "version": "2"
     },
     {
       "canonical_payload_sha256": "984a1899a9ef20a9f9a1239be0bb70b992c7d083f51e34ceaa7e314dcfc4acf2",
@@ -1960,6 +1971,17 @@
       "public_sha256": "292938ab85539b71795a3ec42879cd532ca4aa0f36892a531a215659b6693c98",
       "reason": "Public-authored relation assessment after acceptance: pinned-pair coverage, provider-neutral specialist agreement and append-only retirements.",
       "version": "1"
+    },
+    {
+      "canonical_payload_sha256": "a88cf9ba1cef774877ed2d4d0b99b4201a354dacb9656cb8f542d88233a3808f",
+      "catalog": "json_schema",
+      "classification": "proposed_open_core",
+      "id": "memoriesql.relation-assessment.v2",
+      "package_disposition": "include",
+      "path": "contracts/records/memoriesql-relation-assessment-v2.json",
+      "public_sha256": "b69aeb58ff6363ad60a6fe712e36c1a81b62a005588fab5a47a623f96b47976a",
+      "reason": "Public-authored revision-2 relation assessment: revision 1 with one more request for the evidence-free author repair frame.",
+      "version": "2"
     },
     {
       "canonical_payload_sha256": "cc47541bab14a472a7cdcc2c238dfbb26c6a1121db4969df8dcd0c4895db2670",

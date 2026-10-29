@@ -26,9 +26,15 @@ def main() -> None:
         from memoriesql.application.bead_classification import (
             ActivateClassifiedAuthorship,
         )
+        from memoriesql.application.complete_input_execution import (
+            ActivateRepairableCompleteInput,
+        )
         from memoriesql.application.local_entity_mentions import (
             ActivateAuthoredMentions,
             ActivateMentionAuthorship,
+        )
+        from memoriesql.application.relation_assessment import (
+            ActivateRepairableRelationAssessment,
         )
         from memoriesql.application.source_stable_identity import (
             MaterializeSourceStableUnit,
@@ -55,7 +61,7 @@ def main() -> None:
             Path(str(installed.locate_file(p))).resolve() for p in installed.files or ()
         }
         migrations = discover_migrations()
-        assert len(migrations) == 57
+        assert len(migrations) == 58
         for migration in migrations:
             assert Path(str(migration.path)).resolve() in owned
             assert (
@@ -71,7 +77,7 @@ def main() -> None:
                     .rstrip("=")
                     == record.hash.value
                 )
-        assert len(tuple(iter_contracts())) == 71
+        assert len(tuple(iter_contracts())) == 73
         assert (
             get_contract("memoriesql.source-stable-identity.v1")["id"]
             == "memoriesql.source-stable-identity.v1"
@@ -85,11 +91,13 @@ def main() -> None:
         for identifier in (
             "memoriesql.local-entity-mentions.v1",
             "memoriesql.local-entity-mentions.v2",
+            "memoriesql.complete-input-execution.v2",
             "memoriesql.authored-relations.v1",
             "memoriesql.relation-profile.v1",
             "memoriesql.bead-classification.v1",
             "memoriesql.stored-bead-inspection.v1",
             "memoriesql.relation-assessment.v1",
+            "memoriesql.relation-assessment.v2",
             "memoriesql.core-cli.v1",
             "memoriesql.source-enrollment.v1",
         ):
@@ -105,6 +113,16 @@ def main() -> None:
         assert (
             ActivateClassifiedAuthorship.model_fields["expected_schema_version"].default
             == 23
+        )
+        assert (
+            ActivateRepairableCompleteInput.model_fields["expected_schema_version"].default
+            == 58
+        )
+        assert (
+            ActivateRepairableRelationAssessment.model_fields[
+                "expected_schema_version"
+            ].default
+            == 58
         )
         assert "bead_id" in InspectStoredBead.model_fields
         assert callable(PostgresStoredBeadInspection.inspect)
