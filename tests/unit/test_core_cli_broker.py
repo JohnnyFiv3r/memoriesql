@@ -108,6 +108,56 @@ class SocketClientTests(unittest.TestCase):
         self.assertNotIn(SECRET, request.decode())
         self.assertNotIn("never-used", request.decode())
 
+    def test_an_admission_refused_for_work_in_flight_is_resent_identically(
+        self,
+    ) -> None:
+        busy = json.dumps(
+            {
+                "contract_version": 1,
+                "outcome": "budget_exhausted",
+                "receipt_ref": None,
+                "access_receipt_ref": None,
+                "error": {"code": "database"},
+                "remaining": {
+                    "accesses": 120,
+                    "db_ms": 250000,
+                    "run_expires_at": "2099-01-01T00:00:00Z",
+                },
+            }
+        ).encode()
+        replies = [busy, REPLY]
+
+        def handle(host: FakeHost, request: bytes) -> bytes:
+            host.requests.append(request)
+            return replies.pop(0)
+
+        sql = self.root / "query.sql"
+        sql.write_text("SELECT o.bead_id FROM memory_v1.observations o", "utf-8")
+        waits: list[float] = []
+        with (
+            patch.object(FakeHost, "handle", handle),
+            patch("memoriesql.query_client.time.sleep", waits.append),
+        ):
+            status, output = invoke(
+                [
+                    "query",
+                    "--file",
+                    str(sql),
+                    "--intent",
+                    "enumerate",
+                    "--view",
+                    "resolved",
+                    "--json",
+                ],
+                self.environment,
+            )
+        self.assertEqual(status, 0, output)
+        self.assertEqual(output.encode(), REPLY + b"\n")
+        (host,) = FakeHost.instances
+        first, second = host.requests
+        self.assertEqual(first, second)
+        self.assertEqual(len(waits), 1)
+
     def test_reads_go_only_to_the_host(self) -> None:
         status, output = invoke(["inspect", str(BEAD), "--json"], self.environment)
         self.assertEqual(status, 2, output)

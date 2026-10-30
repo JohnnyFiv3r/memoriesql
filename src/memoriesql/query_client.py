@@ -3,7 +3,10 @@
 The executor is the sole holder of the trusted control and restricted reader
 connections. This client only assembles closed request bytes, persists the
 caller's current run reference and prints the executor's closed reply; it never
-executes SQL, repairs a refusal or retries a budgeted operation.
+executes SQL or repairs a refusal. The one thing it repeats is a request that
+admission refused while other work in the workspace was in flight or settling:
+that refusal wrote nothing, so the identical bytes, with the same step key, are
+resent a bounded number of times.
 """
 
 from __future__ import annotations
@@ -11,7 +14,9 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import random
 import sys
+import time
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -40,8 +45,21 @@ UNAVAILABLE_REPLY = result_json_bytes(
     }
 )
 
-# Rotate before the database refuses an expired run; never retry a refusal.
+# Rotate before the database refuses an expired run.
 RUN_ROTATION_MARGIN = timedelta(seconds=60)
+# Waits before each resend of an admission refusal for work in flight, about one
+# operation's 30 s reservation in all; each wait is jittered down to half.
+RETRY_DELAYS = (0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 8.0, 8.0)
+# Refusals that admission returns before writing anything: another delivery in
+# the workspace is executing (`database`), is settling or hit a serialization
+# conflict (`settlement`), or this same step is still open (`settlement_pending`).
+RETRYABLE_ADMISSION = frozenset(
+    {
+        ("budget_exhausted", "database"),
+        ("budget_exhausted", "settlement"),
+        ("settlement_pending", "settlement"),
+    }
+)
 MAX_SQL_BYTES = 32768
 MAX_PARAMETER_FILE_BYTES = 65536 + 4096
 EVALUATION_RELATION = "evaluation_v1.candidates"
@@ -189,6 +207,59 @@ class TrustedHostTransport:
             return bytes(self._service().handle(request))
         except Exception:
             return UNAVAILABLE_REPLY
+
+
+def retryable_admission(reply: bytes, *, now: datetime, wait: float) -> bool:
+    """Whether resending the identical request may clear this refusal.
+
+    Only a refusal with no access receipt qualifies: admission wrote nothing, so
+    the same step key is admitted afresh, never twice. A run whose `remaining`
+    shows no access or database time left, or that expires within the wait, is
+    exhausted rather than busy: `database` also reports a spent run.
+    """
+
+    try:
+        data = json.loads(reply)
+    except ValueError:
+        return False
+    error = data.get("error") if isinstance(data, dict) else None
+    if not isinstance(error, dict) or data.get("access_receipt_ref") is not None:
+        return False
+    if (data.get("outcome"), error.get("code")) not in RETRYABLE_ADMISSION:
+        return False
+    remaining = data.get("remaining")
+    if not isinstance(remaining, dict):
+        return True
+    try:
+        if int(remaining["accesses"]) < 1 or int(remaining["db_ms"]) < 1:
+            return False
+        return _expires({"expires_at": remaining["run_expires_at"]}) > now + timedelta(
+            seconds=wait
+        )
+    except (KeyError, TypeError, ValueError):
+        return False
+
+
+def handle_with_retry(
+    transport: ResultsTransport,
+    request: bytes,
+    *,
+    now: Callable[[], datetime] | None = None,
+    sleep: Callable[[float], None] | None = None,
+    jitter: Callable[[], float] | None = None,
+) -> bytes:
+    """Send one request; resend the identical bytes while admission refuses it
+    for other work in flight, up to `RETRY_DELAYS`. Any other reply is final."""
+
+    reply = transport.handle(request)
+    for delay in RETRY_DELAYS:
+        wait = delay * (0.5 + (jitter or random.random)() / 2)
+        current = now() if now is not None else datetime.now(UTC)
+        if not retryable_admission(reply, now=current, wait=wait):
+            break
+        (sleep or time.sleep)(wait)
+        reply = transport.handle(request)
+    return reply
 
 
 class RunStore:

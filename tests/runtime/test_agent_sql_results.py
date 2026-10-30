@@ -58,6 +58,7 @@ from memoriesql.infrastructure.postgres.relation_sql_population import (
 from memoriesql.infrastructure.postgres.stored_bead_inspection import (
     PostgresStoredBeadInspection,
 )
+from memoriesql.query_client import handle_with_retry, query_request
 
 if TYPE_CHECKING:
     from tests.runtime import agent_relation_fixtures as relation_agents
@@ -3316,6 +3317,104 @@ class AgentSqlResults(unittest.TestCase):
         self.assertEqual(
             lineage["page"]["rows"][0]["values"], [str(target), str(corrected)]
         )
+
+    def test_two_agents_in_one_workspace_both_complete_through_admission_retry(
+        self,
+    ) -> None:
+        # One operation executes per workspace. While the first agent's delivery
+        # is unsettled, the second's admission is refused before it writes
+        # anything; the CLI's bounded resend of the identical request (same step
+        # key) is admitted once the first settles, and both complete.
+        scope, source_object, _ = self.fixture.remote_scope()
+        self.fixture.assertion(scope=scope, source_object=source_object)
+        caps = ["memory.query", "source.read"]
+        _, first_agent = self.pair_agent(scope, caps, label="first")
+        _, second_agent = self.pair_agent(scope, caps, label="second")
+        first_run, second_run = self.start(first_agent), self.start(second_agent)
+        text = "SELECT o.bead_id FROM memory_v1.observations o ORDER BY o.bead_id"
+
+        def request(run: dict[str, Any]) -> bytes:
+            return query_request(
+                run,
+                sql=text,
+                parameters=[],
+                intent="enumerate",
+                view="historical",
+                known_at=None,
+                page_size=50,
+            )
+
+        def count(statement: str, run: dict[str, Any]) -> int:
+            row = self.db.execute(statement, (run["run_ref"],)).fetchone()
+            assert row is not None
+            return int(row[0])
+
+        unsettled = (
+            "SELECT count(*) FROM memoriesql.query_deliveries "
+            "WHERE run_ref=%s AND state<>'settled'"
+        )
+        gate = threading.Event()
+        self.addCleanup(gate.set)
+
+        def gated_reader() -> psycopg.Connection[Any]:
+            # Holds the first agent's admitted delivery open, unsettled.
+            if not gate.wait(60):
+                raise AssertionError("the first delivery was never released")
+            return self.reader_connection()
+
+        first_service = self.service(first_agent, reader=gated_reader)
+        replies: dict[str, Any] = {}
+        first = threading.Thread(
+            target=lambda: replies.update(
+                first=json.loads(first_service.handle(request(first_run)))
+            )
+        )
+        first.start()
+        # A state wait with a generous backstop, never a fixed sleep.
+        deadline = time.monotonic() + 60
+        while count(unsettled, first_run) != 1:
+            self.assertLess(time.monotonic(), deadline, "first never admitted")
+            time.sleep(0.02)
+
+        second_service = self.service(second_agent)
+        sent: list[bytes] = []
+        waits: list[float] = []
+
+        class Recording:
+            def start_run(self) -> bytes:  # pragma: no cover - unused here
+                raise AssertionError("no run is started here")
+
+            def handle(self, data: bytes) -> bytes:
+                sent.append(data)
+                return bytes(second_service.handle(data))
+
+        def release_first(wait: float) -> None:
+            waits.append(wait)
+            gate.set()
+            first.join(60)
+            self.assertFalse(first.is_alive())
+
+        second = json.loads(
+            handle_with_retry(Recording(), request(second_run), sleep=release_first)
+        )
+        self.assertEqual(second["outcome"], "available", second)
+        self.assertEqual(replies["first"]["outcome"], "available", replies)
+        # Each agent's rows carry its own opaque references; the values match.
+        self.assertEqual(
+            [row["values"] for row in replies["first"]["page"]["rows"]],
+            [row["values"] for row in second["page"]["rows"]],
+            replies,
+        )
+        self.assertEqual(len(sent), 2)
+        self.assertEqual(sent[0], sent[1])
+        self.assertEqual(len(waits), 1)
+        # The refused attempt wrote nothing: one step, one delivery, both settled.
+        steps = "SELECT count(*) FROM memoriesql.query_steps WHERE run_ref=%s"
+        deliveries = "SELECT count(*) FROM memoriesql.query_deliveries WHERE run_ref=%s"
+        for run in (first_run, second_run):
+            self.assertEqual(count(steps, run), 1)
+            self.assertEqual(count(deliveries, run), 1)
+            self.assertEqual(count(unsettled, run), 0)
 
     def test_run_admission_expiry_and_no_budget_reset(self) -> None:
         first = self.start()
