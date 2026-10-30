@@ -22,6 +22,7 @@ from memoriesql.application.capture.source_range import (
     build_capture_source_range_command,
 )
 from memoriesql.application.evidence_packages import (
+    LOCK_TIMEOUT_MS,
     AppendEvidencePart,
     CreateEvidencePackage,
     EvidenceContinuation,
@@ -43,6 +44,11 @@ from memoriesql.infrastructure.postgres.evidence_packages import (
 )
 from memoriesql.infrastructure.postgres.source_range import (
     PostgresAuthorizedSourceRangeSession,
+)
+from memoriesql.infrastructure.postgres.transient_retry import (
+    ATTEMPTS,
+    FIRST_BACKOFF_SECONDS,
+    MAX_BACKOFF_SECONDS,
 )
 
 if TYPE_CHECKING:
@@ -790,6 +796,13 @@ class EvidencePackages(PostgresRuntime):
     def test_lock_wait_fails_boundedly_without_partial_receipt(self) -> None:
         part = self.part("Fictional bounded wait.")
         package = self.create((part,))
+        # Every owned attempt waits out the lock, with backoff between attempts.
+        waits = ATTEMPTS * LOCK_TIMEOUT_MS / 1000
+        backoff = sum(
+            min(FIRST_BACKOFF_SECONDS * 2**n, MAX_BACKOFF_SECONDS)
+            for n in range(ATTEMPTS - 1)
+        )
+        bound = waits + backoff + 1.5
         with psycopg.connect(
             make_conninfo(self.admin, dbname=self.database), autocommit=True
         ) as blocker:
@@ -801,7 +814,9 @@ class EvidencePackages(PostgresRuntime):
                 started = monotonic()
                 with self.assertRaises(psycopg.errors.LockNotAvailable):
                     self.append(package, part, "held.append")
-                self.assertLess(monotonic() - started, 2)
+                elapsed = monotonic() - started
+                self.assertGreaterEqual(elapsed, waits)
+                self.assertLess(elapsed, bound)
         self.assertEqual(self.status(package).appended_parts, 0)
         self.assertEqual(
             self.db.execute(

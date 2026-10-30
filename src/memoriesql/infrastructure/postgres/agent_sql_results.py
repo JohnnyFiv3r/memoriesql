@@ -17,6 +17,7 @@ import importlib.util
 import math
 import time
 from collections.abc import Callable
+from contextvars import ContextVar
 from datetime import datetime
 from typing import Any
 from uuid import UUID, uuid4
@@ -43,12 +44,17 @@ from memoriesql.application.agent_sql_results import (
     stable_reply_bytes,
 )
 from memoriesql.application.investigation_contracts import (
+    AutomaticBasis,
+    CheckpointManifest,
+    CheckpointRequest,
+    CheckpointResultAccess,
     HydrateRequest,
     InspectRequest,
     InvestigationRequestError,
     QueryRequest,
+    ReadCheckpointRequest,
+    ReadSourceTextRequest,
     ReuseRequest,
-    StandaloneAccess,
     parse_investigation_request,
     request_fingerprint,
     result_json_bytes,
@@ -76,7 +82,49 @@ from memoriesql.infrastructure.postgres.result_preparation import (
 )
 
 ConnectionFactory = Callable[[], Connection[Any]]
-AccessRequest = QueryRequest | ReuseRequest | InspectRequest | HydrateRequest
+HelperRequest = InspectRequest | HydrateRequest | ReadSourceTextRequest
+AccessRequest = (
+    QueryRequest
+    | ReuseRequest
+    | HelperRequest
+    | CheckpointRequest
+    | ReadCheckpointRequest
+)
+# The admitted delivery whose work runs in this context, and the connections
+# opened for it (M0047). They name it for the session; the kernel's audit
+# writer attributes a row only while it is a live, reserved delivery of the
+# same principal, and any still open when it ends stop naming it.
+_AUDIT_DELIVERY: ContextVar[tuple[str, list[Connection[Any]]] | None] = ContextVar(
+    "memoriesql_query_audit_delivery", default=None
+)
+_AUDIT_CLAIM = "SELECT set_config('memoriesql.query_audit_delivery',%s,false)"
+# Attributed audit rows one governed expiry call removes at most.
+_AUDIT_EXPIRY_ROWS = 4096
+# Earlier schemas have no audit retention; their cleanup and status are as before.
+_AUDIT_RETENTION_SQL = (
+    "SELECT to_regprocedure('memoriesql.query_audit_retention_v1()') IS NOT NULL"
+)
+CHECKPOINT_ALLOCATION_PROFILE_HASH = hashlib.sha256(
+    result_json_bytes(
+        {
+            "kind": "automatic-checkpoint-v1",
+            "manifest_encoding": "result-json-v1",
+            "control_and_lineage_bytes": 40960,
+            "bytes_per_unique_hold": 1024,
+            "physical_measurement": "separate-unavailable-until-qualified",
+        }
+    )
+).hexdigest()
+_CHECKPOINT_BACKEND_CAPABILITY_SQL = "SELECT " + " AND ".join(
+    "to_regprocedure('memoriesql." + signature + "') IS NOT NULL"
+    for signature in (
+        "prepare_automatic_checkpoint_v1(uuid,jsonb)",
+        "publish_automatic_checkpoint_v1(uuid,jsonb,bytea,text)",
+        "record_checkpoint_disclosure_v1(uuid,uuid,text,text,bigint,bigint)",
+        "query_result_access_v1(uuid,text,jsonb)",
+        "read_query_result_page_v2(uuid,uuid,text,bigint,integer,jsonb)",
+    )
+)
 
 # Presence is a fail-closed capability check, never authorization or SQL proof.
 # A registered, reviewed forward migration and installed tests remain required.
@@ -122,6 +170,50 @@ _HELPER_BACKEND_CAPABILITY_SQL = (
     "AND NOT tgisinternal AND tgenabled IN ('O','A') "
     "AND tgname IN ('query_helper_clear_pin','query_helper_purge'))"
 )
+# The source text view is a separate kind; its absence never disables the others.
+_SOURCE_TEXT_BACKEND_CAPABILITY_SQL = (
+    "SELECT to_regprocedure('memoriesql.prepare_query_source_text_v1(uuid,jsonb)') "
+    "IS NOT NULL AND to_regprocedure("
+    "'memoriesql.query_unit_source_text_v1(uuid,uuid)') IS NOT NULL "
+    "AND EXISTS (SELECT 1 FROM pg_catalog.pg_constraint "
+    "WHERE conrelid=to_regclass('memoriesql.query_steps') "
+    "AND conname='query_steps_helper_kind_check' AND contype='c' AND convalidated "
+    "AND pg_catalog.pg_get_constraintdef(oid) LIKE '%''read_source_text''%')"
+)
+
+
+def _attributed(factory: ConnectionFactory) -> ConnectionFactory:
+    """Control connections that name the current delivery, if any, for audit."""
+
+    def connect() -> Connection[Any]:
+        connection = factory()
+        claim = _AUDIT_DELIVERY.get()
+        if claim is not None:
+            delivery, opened = claim
+            try:
+                with connection.transaction():
+                    connection.execute("SET LOCAL ROLE memoriesql_application")
+                    connection.execute(_AUDIT_CLAIM, (delivery,))
+            except BaseException:
+                connection.close()
+                raise
+            opened.append(connection)
+        return connection
+
+    return connect
+
+
+def _end_audit_claims(opened: list[Connection[Any]]) -> None:
+    """A connection still open when its delivery ends stops naming it."""
+    for connection in opened:
+        if connection.closed:
+            continue
+        try:
+            with connection.transaction():
+                connection.execute("SET LOCAL ROLE memoriesql_application")
+                connection.execute(_AUDIT_CLAIM, ("",))
+        except Error:
+            connection.close()
 
 
 def _helper_module_available() -> bool:
@@ -136,6 +228,11 @@ def _helper_module_available() -> bool:
         return False
 
 
+# The construct admission refused for, for the trusted host's owner-only request
+# log. Replies keep the conflated, agent-visible code from _REFUSALS.
+ADMISSION_REFUSAL: ContextVar[str | None] = ContextVar(
+    "memoriesql_admission_refusal", default=None
+)
 # Admission refusals write nothing and disclose no other principal's work.
 _REFUSALS = {
     "unavailable": ("unavailable", "unavailable"),
@@ -146,6 +243,8 @@ _REFUSALS = {
     "accesses": ("budget_exhausted", "database"),
     "time": ("budget_exhausted", "time"),
     "transport": ("budget_exhausted", "transport"),
+    # The workspace's query audit allowance is spent until expiry (M0047).
+    "audit": ("budget_exhausted", "storage"),
 }
 _STATE_CODES = {
     "22003": "arithmetic",
@@ -190,6 +289,11 @@ def _busy(error: BaseException) -> str | None:
     """
     code = _state_code(error)
     return code if code in ("time", "storage", "settlement") else None
+
+
+def _refused_state(error: BaseException) -> str:
+    """The SQLSTATE a refused control call failed with, for the owner's log."""
+    return "sqlstate:" + (getattr(error, "sqlstate", None) or "none")
 
 
 def _refusal(error: BaseException) -> tuple[str, str]:
@@ -300,12 +404,12 @@ class PostgresAgentSqlResults:
         credential_sha256: str,
         workspace_id: UUID,
     ) -> None:
-        self._control = control_factory
+        self._control = _attributed(control_factory)
         self._credential = credential_sha256
         self._workspace = workspace_id
         self._executor = PostgresRestrictedQuery(
             reader_factory=reader_factory,
-            control_factory=control_factory,
+            control_factory=self._control,
             authority_profile=authority_profile,
             credential_sha256=credential_sha256,
             workspace_id=workspace_id,
@@ -325,6 +429,7 @@ class PostgresAgentSqlResults:
         workspace's admission lock, is `budget_exhausted` / `time` and starts
         nothing.
         """
+        ADMISSION_REFUSAL.set(None)
         self._cleanup_workspace()
         try:
             with self._control() as connection:
@@ -340,6 +445,7 @@ class PostgresAgentSqlResults:
                     ).fetchone()
         except (PermissionError, Error) as error:
             outcome, code = _refusal(error)
+            ADMISSION_REFUSAL.set(_refused_state(error))
             return result_json_bytes(
                 {
                     "contract_version": CONTRACT_VERSION,
@@ -349,6 +455,7 @@ class PostgresAgentSqlResults:
             )
         data: dict[str, Any] = row[0] if row else {"refused": "unavailable"}
         if "run" not in data:
+            ADMISSION_REFUSAL.set(str(data.get("refused")))
             code = "settlement" if data.get("refused") == "cleanup" else "database"
             return result_json_bytes(
                 {
@@ -440,6 +547,7 @@ class PostgresAgentSqlResults:
         if not 1 <= batch_size <= 256 or not 1 <= max_batches <= 1024:
             raise ValueError("invalid cleanup bounds")
         totals = {"runs": 0, "results": 0, "tombstones": 0}
+        audits = {"audit_rows": 0, "released_bytes": 0}
         pending = failed = batches = 0
         try:
             with self._control() as connection:
@@ -461,6 +569,24 @@ class PostgresAgentSqlResults:
                     failed = int(data.get("failed", 0))
                     if not any(int(purged.get(key, 0)) for key in totals):
                         break
+                # Governed expiry of query-attributed audit rows (M0047).
+                with connection.transaction():
+                    connection.execute("SET LOCAL ROLE memoriesql_application")
+                    retained = connection.execute(_AUDIT_RETENTION_SQL).fetchone()
+                for _ in range(max_batches if retained and retained[0] else 0):
+                    with connection.transaction():
+                        connection.execute("SET LOCAL lock_timeout='500ms'")
+                        connection.execute("SET LOCAL statement_timeout='10000ms'")
+                        connection.execute("SET LOCAL ROLE memoriesql_application")
+                        row = connection.execute(
+                            "SELECT memoriesql.expire_query_audits_v1(%s)",
+                            (_AUDIT_EXPIRY_ROWS,),
+                        ).fetchone()
+                    expired: dict[str, Any] = row[0] if row else {}
+                    for key in audits:
+                        audits[key] += int(expired.get(key, 0))
+                    if not int(expired.get("audit_rows", 0)):
+                        break
         except Error as error:
             busy = _busy(error)
             return result_json_bytes(
@@ -473,6 +599,7 @@ class PostgresAgentSqlResults:
                         "pending": pending,
                         "failed": failed,
                         "batches": batches,
+                        "audits": audits,
                     },
                 }
             )
@@ -485,6 +612,7 @@ class PostgresAgentSqlResults:
                     "pending": pending,
                     "failed": failed,
                     "batches": batches,
+                    "audits": audits,
                 },
             }
         )
@@ -501,6 +629,13 @@ class PostgresAgentSqlResults:
                     row = frame.execute(
                         "SELECT memoriesql.query_cleanup_status_v1()"
                     ).fetchone()
+                    audit = (
+                        frame.execute(
+                            "SELECT memoriesql.query_audit_retention_v1()"
+                        ).fetchone()
+                        if frame.execute(_AUDIT_RETENTION_SQL).fetchone() == (True,)
+                        else None
+                    )
         except (PermissionError, Error) as error:
             outcome, code = _refusal(error)
             return result_json_bytes(
@@ -515,6 +650,7 @@ class PostgresAgentSqlResults:
                 "contract_version": CONTRACT_VERSION,
                 "outcome": "available",
                 "cleanup": row[0] if row else None,
+                "audit_retention": audit[0] if audit else None,
             }
         )
 
@@ -528,7 +664,12 @@ class PostgresAgentSqlResults:
         except InvestigationRequestError as error:
             return self._bare(None, None, error.outcome, {"code": error.code}, None)
         if not isinstance(
-            request, QueryRequest | ReuseRequest | InspectRequest | HydrateRequest
+            request,
+            QueryRequest
+            | ReuseRequest
+            | HelperRequest
+            | CheckpointRequest
+            | ReadCheckpointRequest,
         ):
             return self._bare(
                 request.run_ref,
@@ -540,6 +681,7 @@ class PostgresAgentSqlResults:
         kind = request.kind
         fingerprint = request_fingerprint(request)
         admission: dict[str, Any] = {}
+        ADMISSION_REFUSAL.set(None)
         for attempt in range(2):
             try:
                 admission = self._admit(request, kind, fingerprint)
@@ -555,6 +697,7 @@ class PostgresAgentSqlResults:
                 # Nothing was admitted or charged: a timed-out admission is a
                 # budget refusal, not missing authority.
                 outcome, code = _refusal(error)
+                ADMISSION_REFUSAL.set(_refused_state(error))
                 return self._bare(
                     request.run_ref,
                     request.step_key,
@@ -563,6 +706,8 @@ class PostgresAgentSqlResults:
                     None,
                 )
             refused = admission.get("refused")
+            if refused:
+                ADMISSION_REFUSAL.set(str(refused))
             if refused == "pending_self" and attempt == 0:
                 # The same step is open. Only a confirmed-dead owner may be
                 # abandoned (full reservation charged); a live one stays pending,
@@ -606,6 +751,23 @@ class PostgresAgentSqlResults:
         admission: dict[str, Any],
         start: float,
     ) -> bytes:
+        # Every connection opened for this delivery's work names it (M0047).
+        opened: list[Connection[Any]] = []
+        token = _AUDIT_DELIVERY.set((str(admission["delivery_ref"]), opened))
+        try:
+            return self._owned_delivery(request, kind, fingerprint, admission, start)
+        finally:
+            _AUDIT_DELIVERY.reset(token)
+            _end_audit_claims(opened)
+
+    def _owned_delivery(
+        self,
+        request: AccessRequest,
+        kind: str,
+        fingerprint: str,
+        admission: dict[str, Any],
+        start: float,
+    ) -> bytes:
         deadline = start + int(admission["reserved_db_ms"]) / 1000
         key = int(admission["owner_lock_key"])
         try:
@@ -625,7 +787,9 @@ class PostgresAgentSqlResults:
             try:
                 if admission["replay"] and step["state"] == "failed":
                     raise _Failure(step["outcome"], step["error_code"])
-                if isinstance(request, InspectRequest | HydrateRequest):
+                if isinstance(request, CheckpointRequest | ReadCheckpointRequest):
+                    return self._checkpoint(request, admission, start, deadline, owner)
+                if isinstance(request, HelperRequest):
                     return self._helper(
                         request, fingerprint, admission, start, deadline, owner
                     )
@@ -659,9 +823,224 @@ class PostgresAgentSqlResults:
                 pass
             owner.close()
 
+    def _checkpoint(
+        self,
+        request: CheckpointRequest | ReadCheckpointRequest,
+        admission: dict[str, Any],
+        start: float,
+        deadline: float,
+        owner: Connection[Any],
+    ) -> bytes:
+        """Publish/read automatic manifests through the admitted owning backend.
+
+        SQL retains current authority, allocation and investigation locks through
+        final disclosure. No root row/evidence becomes visible by saving metadata.
+        A lost commit acknowledgement remains pending, never a second append.
+        """
+        delivery = UUID(admission["delivery_ref"])
+        try:
+            with relation_projection_frame(
+                owner,
+                credential_sha256=self._credential,
+                workspace_id=self._workspace,
+                statement_timeout_ms=self._remaining_ms(deadline),
+            ) as frame:
+
+                def execute(statement: str, values: tuple[Any, ...] = ()) -> Any:
+                    frame.execute(
+                        f"SET LOCAL statement_timeout='{self._remaining_ms(deadline)}ms'"
+                    )
+                    return frame.execute(statement, values)
+
+                body = Jsonb(request.model_dump(mode="json"))
+                row = execute(
+                    "SELECT memoriesql.prepare_automatic_checkpoint_v1(%s,%s)",
+                    (delivery, body),
+                ).fetchone()
+                if not row or not isinstance(row[0], dict):
+                    raise _Failure("unavailable", "unavailable")
+                packet = row[0]
+                if "pending" in packet:
+                    if not isinstance(request, CheckpointRequest):
+                        raise ValueError("pending checkpoint read")
+                    # The request validator bounds a minimum manifest. Trusted
+                    # assigned sequences can make the actual encoding larger;
+                    # allocation failure is not an execution/database failure.
+                    if len(result_json_bytes(packet["pending"])) > 32768:
+                        raise _Failure("budget_exhausted", "storage")
+                    manifest = CheckpointManifest.model_validate(packet["pending"])
+                    self._check_checkpoint_request(request, manifest)
+                    encoded = result_json_bytes(manifest.model_dump(mode="json"))
+                    row = execute(
+                        "SELECT memoriesql.publish_automatic_checkpoint_v1(%s,%s,%s,%s)",
+                        (delivery, body, encoded, manifest.content_digest()),
+                    ).fetchone()
+                    if not row or not isinstance(row[0], dict):
+                        raise _Failure("unavailable", "unavailable")
+                    packet = row[0]
+                manifest, extra = self._checkpoint_payload(request, packet)
+                before = execute(
+                    "SELECT memoriesql.query_delivery_remaining_v1(%s)", (delivery,)
+                ).fetchone()
+                if not before:
+                    raise _Failure("unavailable", "unavailable")
+                observed = math.ceil((time.monotonic() - start) * 1000)
+
+                def build(transport: int, remaining: dict[str, Any]) -> dict[str, Any]:
+                    return reply(
+                        run_ref=request.run_ref,
+                        step_key=request.step_key,
+                        outcome="available",
+                        receipt_ref=admission["receipt_ref"],
+                        access_receipt_ref=admission["delivery_ref"],
+                        remaining=remaining,
+                        extra={
+                            **extra,
+                            "work": {
+                                "reserved_ms": int(admission["reserved_db_ms"]),
+                                "observed_db_ms": observed,
+                                "charged_ms": observed,
+                                "transport_bytes": transport,
+                                "retained_bytes": int(
+                                    packet["retention"]["unique_bytes"]
+                                ),
+                                "allocation_profile_hash": CHECKPOINT_ALLOCATION_PROFILE_HASH,
+                                "measured_physical_bytes": None,
+                                "measurement_state": "unavailable",
+                                "cancellation_state": "none",
+                            },
+                        },
+                    )
+
+                data, transport = stable_reply_bytes(
+                    build, charge={"db_ms": observed}, remaining_before=before[0]
+                )
+                if transport > min(
+                    MAX_RESPONSE_BYTES, int(admission["reserved_transport"])
+                ):
+                    raise _Failure("budget_exhausted", "transport")
+                execute(
+                    "SELECT memoriesql.record_checkpoint_disclosure_v1(%s,%s,%s,%s,%s,%s)",
+                    (
+                        delivery,
+                        UUID(manifest.checkpoint_id),
+                        manifest.content_digest(),
+                        hashlib.sha256(data).hexdigest(),
+                        transport,
+                        observed,
+                    ),
+                )
+                self._remaining_ms(deadline)
+            return data
+        except Error as error:
+            if (
+                not error.sqlstate
+                or error.sqlstate.startswith("08")
+                or error.sqlstate == "55000"
+            ):
+                raise _pending() from None
+            if error.diag.message_primary == "checkpoint_branch_conflict":
+                raise _Failure("invalid_request", "branch_conflict") from None
+            if error.sqlstate == "22023":
+                raise _Failure("invalid_request", "binding") from None
+            raise _disclosure_failure(error) from None
+
+    @staticmethod
+    def _check_checkpoint_request(
+        request: CheckpointRequest, manifest: CheckpointManifest
+    ) -> None:
+        if (
+            manifest.question != request.question
+            or manifest.progress != request.progress
+            or manifest.findings != request.findings
+            or tuple(root.result for root in manifest.roots)
+            != tuple(root.result for root in request.roots)
+            or manifest.predecessor != request.expected_head
+            or manifest.fork_origin is not None
+            or manifest.working_state_source is not None
+            or (
+                request.investigation_id is not None
+                and (
+                    manifest.investigation_id != request.investigation_id
+                    or manifest.branch_id != request.branch_id
+                )
+            )
+        ):
+            raise ValueError("checkpoint request/manifest substitution")
+
+    @staticmethod
+    def _checkpoint_payload(
+        request: CheckpointRequest | ReadCheckpointRequest,
+        packet: dict[str, Any],
+    ) -> tuple[CheckpointManifest, dict[str, Any]]:
+        if set(packet) != {"checkpoint", "retention", "root_contexts"}:
+            raise ValueError("unexpected checkpoint payload fields")
+        manifest = CheckpointManifest.model_validate(packet["checkpoint"])
+        digest = manifest.content_digest()
+        pin = {"checkpoint_id": manifest.checkpoint_id, "manifest_digest": digest}
+        if isinstance(request, CheckpointRequest):
+            PostgresAgentSqlResults._check_checkpoint_request(request, manifest)
+        elif (
+            not isinstance(request.access.basis, AutomaticBasis)
+            or request.access.checkpoint.model_dump(mode="json") != pin
+        ):
+            raise ValueError("checkpoint read pin/basis substitution")
+        expected = [
+            CheckpointResultAccess(
+                kind="checkpoint",
+                checkpoint_id=manifest.checkpoint_id,
+                manifest_digest=digest,
+                root=root.result,
+                basis=AutomaticBasis(kind="automatic"),
+            ).model_dump(mode="json")
+            for root in manifest.roots
+        ]
+        contexts = [
+            CheckpointResultAccess.model_validate(c).model_dump(mode="json")
+            for c in packet["root_contexts"]
+        ]
+        if len(contexts) != len(expected) or {
+            result_json_bytes(c) for c in contexts
+        } != {result_json_bytes(c) for c in expected}:
+            raise ValueError("checkpoint root context substitution")
+        retention = packet["retention"]
+        if (
+            not isinstance(retention, dict)
+            or set(retention)
+            != {
+                "automatic_until",
+                "automatic_retained",
+                "named_holds",
+                "retained",
+                "hold_ref",
+                "unique_bytes",
+                "context_end",
+            }
+            or retention["automatic_until"] != manifest.automatic_expires_at
+            or retention["automatic_retained"] is not True
+            or retention["retained"] is not True
+            or retention["named_holds"] != []
+            or retention["hold_ref"] != manifest.checkpoint_id
+            or retention["context_end"] != "automatic_expiry_or_prune"
+            or type(retention["unique_bytes"]) is not str
+            or not retention["unique_bytes"].isascii()
+            or not retention["unique_bytes"].isdigit()
+            or int(retention["unique_bytes"]) > 536870912
+        ):
+            raise ValueError("invalid checkpoint retention state")
+        extra: dict[str, Any] = {
+            "checkpoint": manifest.model_dump(mode="json"),
+            "retention": retention,
+        }
+        if isinstance(request, CheckpointRequest):
+            extra["branch"] = {"branch_id": manifest.branch_id, "head": pin}
+        else:
+            extra["root_contexts"] = contexts
+        return manifest, extra
+
     def _helper(
         self,
-        request: InspectRequest | HydrateRequest,
+        request: HelperRequest,
         fingerprint: str,
         admission: dict[str, Any],
         start: float,
@@ -862,7 +1241,7 @@ class PostgresAgentSqlResults:
 
     def _helper_reply(
         self,
-        request: InspectRequest | HydrateRequest,
+        request: HelperRequest,
         admission: dict[str, Any],
         start: float,
         packet: dict[str, Any],
@@ -897,6 +1276,7 @@ class PostgresAgentSqlResults:
                 first=first,
                 count=count,
                 cursor=cursor if more else None,
+                witnesses=packet.get("witnesses"),
             )
             refs = {ref_key(ref): ref for ref in page["refs"]}
             observed = math.ceil((time.monotonic() - start) * 1000)
@@ -1363,9 +1743,7 @@ class PostgresAgentSqlResults:
         start: float,
         deadline: float,
     ) -> bytes:
-        if not isinstance(request.access, StandaloneAccess):
-            # No checkpoint or named save exists in this contract cut.
-            raise _Failure("unavailable", "unavailable")
+        context = request.access.model_dump(mode="json")
         first_row = 1
         if request.cursor is not None:
             try:
@@ -1389,14 +1767,22 @@ class PostgresAgentSqlResults:
                             # its requested result under the existing whole
                             # authority fence, without disclosing a page or
                             # recording a disclosure for an invalid cursor.
+                            contextual = isinstance(
+                                request.access, CheckpointResultAccess
+                            )
                             usable = frame.execute(
-                                "SELECT memoriesql.check_query_result_closure_v2(%s,%s)",
+                                "SELECT memoriesql.query_result_access_v1(%s,%s,%s)"
+                                if contextual
+                                else "SELECT memoriesql.check_query_result_closure_v2(%s,%s)",
                                 (
                                     UUID(request.result.result_id),
                                     request.result.content_digest,
-                                ),
+                                )
+                                + ((Jsonb(context),) if contextual else ()),
                             ).fetchone()
-                            if usable is None or usable[0] is not True:
+                            if usable is None or (
+                                not contextual and usable[0] is not True
+                            ):
                                 raise _Failure("unavailable", "unavailable")
             except PermissionError:
                 raise _Failure("unavailable", "unavailable") from None
@@ -1406,7 +1792,7 @@ class PostgresAgentSqlResults:
                 binding is None
                 or binding["result_id"] != request.result.result_id
                 or binding["content_digest"] != request.result.content_digest
-                or binding["access_context"] != {"kind": "standalone"}
+                or binding["access_context"] != context
             ):
                 raise _Failure("invalid_request", "cursor")
             first_row = int(binding["next_row"])
@@ -1436,6 +1822,14 @@ class PostgresAgentSqlResults:
     ) -> bytes:
         delivery = UUID(admission["delivery_ref"])
         limit = min(MAX_RESPONSE_BYTES, int(admission["reserved_transport"]))
+        contextual = isinstance(request, ReuseRequest) and isinstance(
+            request.access, CheckpointResultAccess
+        )
+        context = (
+            request.access.model_dump(mode="json")
+            if isinstance(request, ReuseRequest)
+            else {"kind": "standalone"}
+        )
         with self._control() as connection:
             try:
                 with relation_projection_frame(
@@ -1445,8 +1839,11 @@ class PostgresAgentSqlResults:
                     statement_timeout_ms=self._remaining_ms(deadline),
                 ) as frame:
                     row = frame.execute(
-                        "SELECT memoriesql.read_query_result_page_v1(%s,%s,%s,%s,%s)",
-                        (delivery, result_id, digest, first_row, page_size),
+                        "SELECT memoriesql.read_query_result_page_v2(%s,%s,%s,%s,%s,%s)"
+                        if contextual
+                        else "SELECT memoriesql.read_query_result_page_v1(%s,%s,%s,%s,%s)",
+                        (delivery, result_id, digest, first_row, page_size)
+                        + ((Jsonb(context),) if contextual else ()),
                     ).fetchone()
                     if row is None:
                         raise _Failure("unavailable", "unavailable")
@@ -1465,8 +1862,15 @@ class PostgresAgentSqlResults:
                         frame,
                     )
                     frame.execute(
-                        "SELECT memoriesql.record_query_disclosure_v1("
-                        "%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s,%s,%s,%s)",
+                        (
+                            "SELECT memoriesql.record_query_disclosure_v2("
+                            "%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s,%s,%s,%s,%s)"
+                        )
+                        if contextual
+                        else (
+                            "SELECT memoriesql.record_query_disclosure_v1("
+                            "%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s,%s,%s,%s)"
+                        ),
                         (
                             delivery,
                             result_id,
@@ -1483,7 +1887,8 @@ class PostgresAgentSqlResults:
                             ),
                             UUID(response["cursor"]) if response["cursor"] else None,
                             response["next_row"],
-                        ),
+                        )
+                        + ((Jsonb(context),) if contextual else ()),
                     )
             except Error as error:
                 if error.diag.message_primary == "query_delivery_settled":
@@ -1565,6 +1970,19 @@ class PostgresAgentSqlResults:
                 "hold_ref": None,
             }
         ]
+        if isinstance(request, ReuseRequest) and isinstance(
+            request.access, CheckpointResultAccess
+        ):
+            access_bases = page["access_bases"]
+            if (
+                not isinstance(access_bases, list)
+                or len(access_bases) != 1
+                or access_bases[0]["context"] != request.access.model_dump(mode="json")
+                or access_bases[0]["end_condition"] != "checkpoint_expiry_or_prune"
+                or access_bases[0]["valid_until"] is None
+                or access_bases[0]["hold_ref"] != request.access.checkpoint_id
+            ):
+                raise _Failure("execution_error", "database")
         cursor = str(uuid4())
         count = len(rows) if exact_rows is None else exact_rows
         while True:
@@ -1729,10 +2147,7 @@ class PostgresAgentSqlResults:
     def _admit(
         self, request: AccessRequest, kind: str, fingerprint: str
     ) -> dict[str, Any]:
-        if (
-            isinstance(request, InspectRequest | HydrateRequest)
-            and not _helper_module_available()
-        ):
+        if isinstance(request, HelperRequest) and not _helper_module_available():
             raise _Failure("unsupported_query", "feature", feature=request.kind)
         with self._control() as connection:
             with relation_projection_frame(
@@ -1741,8 +2156,48 @@ class PostgresAgentSqlResults:
                 workspace_id=self._workspace,
                 query_access=True,
             ) as frame:
-                if isinstance(request, InspectRequest | HydrateRequest):
+                checkpoint_access = (
+                    isinstance(request, CheckpointRequest | ReadCheckpointRequest)
+                    or (
+                        isinstance(request, ReuseRequest)
+                        and isinstance(request.access, CheckpointResultAccess)
+                    )
+                    or (
+                        isinstance(request, InspectRequest)
+                        and request.result is not None
+                        and isinstance(request.result.access, CheckpointResultAccess)
+                    )
+                    or (
+                        isinstance(request, HydrateRequest)
+                        and any(
+                            s.origin is not None
+                            and isinstance(s.origin.access, CheckpointResultAccess)
+                            for s in request.selections
+                        )
+                    )
+                    or (
+                        isinstance(request, ReadSourceTextRequest)
+                        and any(
+                            e.origin is not None
+                            and isinstance(e.origin.access, CheckpointResultAccess)
+                            for e in request.entries
+                        )
+                    )
+                )
+                if checkpoint_access:
+                    supported = frame.execute(
+                        _CHECKPOINT_BACKEND_CAPABILITY_SQL
+                    ).fetchone()
+                    if not supported or supported[0] is not True:
+                        raise _Failure(
+                            "unsupported_query", "feature", feature=request.kind
+                        )
+                if isinstance(request, HelperRequest):
                     supported = frame.execute(_HELPER_BACKEND_CAPABILITY_SQL).fetchone()
+                    if supported and isinstance(request, ReadSourceTextRequest):
+                        supported = frame.execute(
+                            _SOURCE_TEXT_BACKEND_CAPABILITY_SQL
+                        ).fetchone()
                     if not supported or supported[0] is not True:
                         raise _Failure(
                             "unsupported_query", "feature", feature=request.kind
@@ -1792,6 +2247,19 @@ class PostgresAgentSqlResults:
                     connection.execute(
                         "SELECT memoriesql.purge_workspace_query_state_v1(8)"
                     )
+                with connection.transaction():
+                    connection.execute("SET LOCAL lock_timeout='500ms'")
+                    connection.execute("SET LOCAL statement_timeout='10000ms'")
+                    connection.execute("SET LOCAL ROLE memoriesql_application")
+                    PostgresAuthorizationPort(connection).begin_context(
+                        credential_sha256=self._credential,
+                        requested_workspace_id=self._workspace,
+                    )
+                    if connection.execute(_AUDIT_RETENTION_SQL).fetchone() == (True,):
+                        connection.execute(
+                            "SELECT memoriesql.expire_workspace_query_audits_v1(%s)",
+                            (_AUDIT_EXPIRY_ROWS,),
+                        )
         except (PermissionError, Error):
             pass
 

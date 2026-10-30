@@ -137,6 +137,12 @@
       "path": "src/memoriesql/infrastructure/postgres/source_enrollment.py"
     },
     {
+      "path": "src/memoriesql/application/engine_intake.py"
+    },
+    {
+      "path": "src/memoriesql/infrastructure/postgres/engine_intake.py"
+    },
+    {
       "path": "src/memoriesql/application/source_stable_identity.py"
     },
     {
@@ -248,6 +254,12 @@
       "path": "src/memoriesql/infrastructure/postgres/query_reader_provisioning.py"
     },
     {
+      "path": "src/memoriesql/infrastructure/postgres/transient_retry.py"
+    },
+    {
+      "path": "src/memoriesql/infrastructure/postgres/work_deadlines.py"
+    },
+    {
       "path": "src/memoriesql/infrastructure/results_broker/__init__.py"
     },
     {
@@ -273,6 +285,9 @@
     },
     {
       "path": "src/memoriesql/query_client.py"
+    },
+    {
+      "path": "src/memoriesql/application/authored_output_checks.py"
     }
   ]
 }

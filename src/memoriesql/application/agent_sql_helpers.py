@@ -24,9 +24,12 @@ from memoriesql.application.investigation_contracts import (
     AccessContext,
     HydrateRequest,
     InspectRequest,
+    ReadSourceTextRequest,
     result_json_bytes,
 )
 from memoriesql.application.relation_inspection import InspectedPairDisposition
+
+HelperRequest = InspectRequest | HydrateRequest | ReadSourceTextRequest
 
 
 def _object(value: Any, keys: str) -> dict[str, Any]:
@@ -684,8 +687,104 @@ def _inspection(
     return refs
 
 
+# Labels of served unit text, exactly as the query exception's frame reports them.
+_SOURCE_TEXT_LABELS = (
+    "normalized_projection:",
+    "package_exclusion:",
+    "package_unresolved:",
+)
+
+
+def _source_text(
+    request: ReadSourceTextRequest,
+    payload: Any,
+    *,
+    require_complete: bool,
+    selection_offset: int,
+) -> list[dict[str, Any]]:
+    view = _object(
+        _object(payload, "source_text")["source_text"],
+        "slices source_text_labels selection_complete",
+    )
+    slices = _array(view["slices"])
+    labels = _array(view["source_text_labels"])
+    if type(view["selection_complete"]) is not bool or selection_offset < 0:
+        raise ValueError("invalid helper selection control")
+    if selection_offset + len(slices) > len(request.entries):
+        raise ValueError("helper selection exceeds its request")
+    if require_complete and len(slices) != len(request.entries):
+        raise ValueError("helper source text omitted an entry")
+    for label in labels:
+        _text(label)
+        if not label.startswith(_SOURCE_TEXT_LABELS):
+            raise ValueError("invalid helper source text label")
+    if labels != sorted(set(labels)):
+        raise ValueError("helper source text labels are not canonical")
+    refs = []
+    amount = 0
+    served = False
+    complete = True
+    for entry, item in zip(
+        request.entries[selection_offset : selection_offset + len(slices)],
+        slices,
+        strict=True,
+    ):
+        item = _object(
+            item,
+            "source frame text_state start end unit_characters text returned_sha256",
+        )
+        if (item["source"], item["start"], item["end"]) != (
+            entry.source.model_dump(mode="json"),
+            entry.start,
+            entry.end,
+        ):
+            raise ValueError("helper source text entry mismatch")
+        frame = _object(item["frame"], "known_at view")
+        _clock(frame["known_at"])
+        if frame["view"] not in ("resolved", "historical"):
+            raise ValueError("invalid helper source text frame")
+        if item["text_state"] == "available":
+            text = item["text"]
+            if not isinstance(text, str) or len(text) != entry.end - entry.start:
+                raise ValueError("helper source text interval mismatch")
+            _text(text)
+            if (
+                type(item["unit_characters"]) is not int
+                or item["unit_characters"] < entry.end
+            ):
+                raise ValueError("invalid helper source text length")
+            raw = text.encode("utf-8")
+            if len(raw) > HYDRATION_SPAN_BYTES:
+                raise ValueError("helper source text span allocation exceeded")
+            if hashlib.sha256(raw).hexdigest() != item["returned_sha256"]:
+                raise ValueError("helper span digest mismatch")
+            amount += len(raw)
+            served = True
+        elif item["text_state"] == "unsupported":
+            # Never measured: no size, text or digest exists for this slice.
+            if (item["unit_characters"], item["text"], item["returned_sha256"]) != (
+                None,
+                None,
+                None,
+            ):
+                raise ValueError("unsupported helper source text was measured")
+            complete = False
+        else:
+            raise ValueError("invalid helper source text state")
+        refs.append(item["source"])
+    if amount > request.max_bytes:
+        raise ValueError("helper source text byte allocation exceeded")
+    if labels and not served:
+        raise ValueError("helper source text labels without served text")
+    if view["selection_complete"] and not complete:
+        raise ValueError("helper source text claimed complete with unsupported text")
+    if require_complete and view["selection_complete"] is not complete:
+        raise ValueError("helper source text completeness mismatch")
+    return refs
+
+
 def validate_helper_content(
-    request: InspectRequest | HydrateRequest,
+    request: HelperRequest,
     content: Any,
     *,
     require_complete: bool = True,
@@ -700,6 +799,13 @@ def validate_helper_content(
             request,
             _object(body["payload"], "inspection")["inspection"],
             require_complete=require_complete,
+        )
+    elif isinstance(request, ReadSourceTextRequest):
+        refs = _source_text(
+            request,
+            body["payload"],
+            require_complete=require_complete,
+            selection_offset=selection_offset,
         )
     else:
         hydration = _object(
@@ -797,6 +903,18 @@ def validate_helper_content(
         )
     ):
         raise ValueError("helper omitted selected access basis")
+    if isinstance(request, ReadSourceTextRequest) and (
+        not bases
+        or any(
+            entry.origin is not None
+            and not any(
+                basis["context"] == entry.origin.access.model_dump(mode="json")
+                for basis in bases
+            )
+            for entry in request.entries
+        )
+    ):
+        raise ValueError("helper omitted selected access basis")
     unique = {result_json_bytes(ref): ref for ref in refs}
     return [unique[key] for key in sorted(unique)]
 
@@ -812,11 +930,11 @@ _INSPECTION_LISTS = (
 )
 
 
-def helper_item_count(
-    request: InspectRequest | HydrateRequest, content: dict[str, Any]
-) -> int:
+def helper_item_count(request: HelperRequest, content: dict[str, Any]) -> int:
     if isinstance(request, HydrateRequest):
         return len(content["payload"]["hydration"]["slices"])
+    if isinstance(request, ReadSourceTextRequest):
+        return len(content["payload"]["source_text"]["slices"])
     inspection = content["payload"]["inspection"]
     count = sum(len(inspection[key]) for key in _INSPECTION_LISTS)
     if inspection["provenance"] is not None:
@@ -827,14 +945,19 @@ def helper_item_count(
 
 
 def helper_content_page(
-    request: InspectRequest | HydrateRequest,
+    request: HelperRequest,
     content: dict[str, Any],
     *,
     first: int,
     count: int,
     cursor: str | None,
+    witnesses: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Page only complete typed objects; preserve their identities and order."""
+    """Page only complete typed objects; preserve their identities and order.
+
+    Source text labels describe only the page's served units; their per-slice
+    sets are private witnesses, never disclosed apart from that union.
+    """
     total = helper_item_count(request, content)
     if (
         type(first) is not int
@@ -850,6 +973,30 @@ def helper_content_page(
             "hydration": {
                 "slices": original["slices"][first - 1 : first - 1 + count],
                 "selection_complete": first - 1 + count == total,
+            }
+        }
+    elif isinstance(request, ReadSourceTextRequest):
+        original = content["payload"]["source_text"]
+        per_slice = _array((witnesses or {}).get("slice_labels"))
+        if len(per_slice) != total or any(
+            not isinstance(labels, list) for labels in per_slice
+        ):
+            raise ValueError("helper source text label witnesses mismatch")
+        everything = sorted({label for labels in per_slice for label in labels})
+        if everything != original["source_text_labels"]:
+            raise ValueError("helper source text label witnesses mismatch")
+        payload = {
+            "source_text": {
+                "slices": original["slices"][first - 1 : first - 1 + count],
+                "source_text_labels": sorted(
+                    {
+                        label
+                        for labels in per_slice[first - 1 : first - 1 + count]
+                        for label in labels
+                    }
+                ),
+                "selection_complete": first - 1 + count == total
+                and original["selection_complete"],
             }
         }
     else:
@@ -880,6 +1027,8 @@ def helper_content_page(
         request,
         page,
         require_complete=False,
-        selection_offset=first - 1 if isinstance(request, HydrateRequest) else 0,
+        selection_offset=first - 1
+        if isinstance(request, HydrateRequest | ReadSourceTextRequest)
+        else 0,
     )
     return page

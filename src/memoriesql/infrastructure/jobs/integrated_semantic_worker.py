@@ -1271,7 +1271,7 @@ class IntegratedSemanticWorker:
         reported_result_status = SemanticResultStatus(result.status)
         if (
             claimed.task_kind == "memory.semantic.author-complete-unit"
-            and claimed.contract_revision == 2
+            and claimed.contract_revision in (2, 8)
             and result.status == SemanticResultStatus.SUCCEEDED
             and outcome_status != "succeeded"
         ):
@@ -1916,7 +1916,7 @@ class IntegratedSemanticWorker:
             if (
                 settlement_result.status == SemanticResultStatus.SUCCEEDED
                 and claimed.task_kind == "memory.semantic.author-complete-unit"
-                and claimed.contract_revision in (2, 3, 4, 5, 6, 7)
+                and claimed.contract_revision in (2, 3, 4, 5, 6, 7, 8)
                 and not queue.complete_exposure_valid(claimed.fence)
             ):
                 settlement_result = SemanticTaskResult[BaseModel](
@@ -1935,7 +1935,7 @@ class IntegratedSemanticWorker:
             if (
                 settlement_result.status == SemanticResultStatus.SUCCEEDED
                 and claimed.task_kind == "memory.semantic.assess-relations"
-                and claimed.contract_revision == 1
+                and claimed.contract_revision in (1, 2)
                 and not queue.relation_exposure_valid(claimed.fence)
             ):
                 settlement_result = SemanticTaskResult[BaseModel](
@@ -2062,8 +2062,7 @@ class IntegratedSemanticWorker:
                     # once this transaction runs longer, whether it is running,
                     # waiting on a lock or idle because the client stalled.
                     connection.execute(
-                        "SELECT set_config('transaction_timeout', %s, true)",
-                        (str(timeout_ms),),
+                        f"SET LOCAL transaction_timeout='{int(timeout_ms)}ms'"
                     )
                 connection.execute("SET LOCAL ROLE memoriesql_worker")
                 try:

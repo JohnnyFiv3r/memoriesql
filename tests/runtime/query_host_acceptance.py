@@ -355,10 +355,18 @@ class QueryHostHarness(unittest.TestCase):
         return None if row is None else row[0]
 
     def signal_backend(self, pid: int, name: str) -> None:
-        """Signal one server backend as the database's own OS user (superuser)."""
+        """Signal one server backend as the database's own OS user (superuser).
+
+        The program reads COPY's row to end of input before it signals. A program
+        that exits unread can close the pipe before the server's write, failing the
+        COPY with EPIPE. The server waits for the program to exit, so the signal
+        still lands before this statement returns.
+        """
+        if name not in ("STOP", "CONT"):
+            raise ValueError(f"unexpected backend signal {name!r}")
         self.db.execute(
             sql.SQL("COPY (SELECT 1) TO PROGRAM {}").format(
-                sql.Literal(f"kill -{name} {int(pid)}")
+                sql.Literal(f"cat >/dev/null && kill -{name} {int(pid)}")
             )
         )
 

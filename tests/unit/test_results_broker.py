@@ -31,6 +31,7 @@ import psycopg
 from pydantic import SecretStr
 
 from memoriesql.application.agent_sql_catalog import SqlAdmissionError
+from memoriesql.infrastructure.postgres.agent_sql_results import ADMISSION_REFUSAL
 from memoriesql.infrastructure.results_broker import PROTOCOL_VERSION, registry
 from memoriesql.infrastructure.results_broker import admin as broker_admin
 from memoriesql.infrastructure.results_broker.client import BrokerTransport
@@ -378,6 +379,49 @@ class ServerBoundary(unittest.TestCase):
         self.assertNotIn("access_receipt_ref", events[1])
         self.assertNotIn("fictional row content", log.getvalue())
         self.assertNotIn("fictional non-identifier", log.getvalue())
+
+    def test_request_log_names_the_refusing_construct_for_the_owner_only(
+        self,
+    ) -> None:
+        root = short_directory(self)
+        host = StubHost(fictional_config(root))
+        path = self.serve(host)
+        refused = json.dumps(
+            {
+                "outcome": "budget_exhausted",
+                "error": {"code": "database"},
+                "access_receipt_ref": None,
+            }
+        ).encode()
+        reasons = ["busy", None]
+
+        def handle(_self: Any, _body: bytes) -> bytes:
+            reason = reasons.pop(0)
+            if reason is not None:
+                ADMISSION_REFUSAL.set(reason)
+            return refused if reason else json.dumps({"outcome": "available"}).encode()
+
+        log = io.StringIO()
+        with (
+            patch.object(StubExecutor, "handle", handle),
+            contextlib.redirect_stderr(log),
+        ):
+            # The agent's bytes never carry the construct; only the host log does.
+            self.assertEqual(self.transport(path).handle(b"{}"), refused)
+            self.transport(path).handle(b"{}")
+            for _ in range(200):
+                if log.getvalue().count('"event": "request"') == 2:
+                    break
+                time.sleep(0.01)
+        events = [
+            json.loads(line)
+            for line in log.getvalue().splitlines()
+            if '"event": "request"' in line
+        ]
+        self.assertEqual(len(events), 2, log.getvalue())
+        refusals = sorted(str(event.get("refusal")) for event in events)
+        self.assertEqual(refusals, ["None", "busy"])
+        self.assertNotIn(b"busy", refused)
 
     def test_reader_bytes_pass_through_unchanged(self) -> None:
         root = short_directory(self)

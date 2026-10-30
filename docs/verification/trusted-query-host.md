@@ -191,7 +191,8 @@ each rewrite it proves, through the dynamic segment, that no other dynamic, symb
 or version string shares those bytes; afterwards every search path must stay
 inside the copy. The source digest must equal the copy digest with each rewrite
 reset; both digests and each rewritten object's offsets and hashes are recorded in
-`qualification.json`. `LD_LIBRARY_PATH`, `LD_PRELOAD`, `PYTHONHOME` and
+each part's `qualification-part.json`, and the aggregation requires the
+relocation-independent digests to be equal across parts. `LD_LIBRARY_PATH`, `LD_PRELOAD`, `PYTHONHOME` and
 `PYTHONPATH` are cleared for every command on the copy, the installed test root
 sits under the same private directory, and both the precheck and the run-as worker
 refuse any mapped object outside the bound copy, venv and import roots that is not

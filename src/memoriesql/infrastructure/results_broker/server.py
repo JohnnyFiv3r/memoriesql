@@ -40,6 +40,7 @@ from memoriesql.infrastructure.postgres.agent_sql_authority import (
     verify_query_login,
 )
 from memoriesql.infrastructure.postgres.agent_sql_results import (
+    ADMISSION_REFUSAL,
     PostgresAgentSqlResults,
 )
 from memoriesql.infrastructure.postgres.authorization import (
@@ -413,6 +414,7 @@ class Server:
         started = time.monotonic()
         operation = None
         outcome = None
+        refusal = None
         refs: dict[str, str] = {}
         pid = peer_pid(connection)
         try:
@@ -437,6 +439,8 @@ class Server:
             operation = header.operation
             reply = self._dispatch(header, body)
             outcome, refs = _outcome(reply)
+            # Owner-only: which admission construct refused; replies conflate it.
+            refusal = ADMISSION_REFUSAL.get()
             self._reply(connection, reply)
         except Exception:
             outcome = "host_error"
@@ -457,6 +461,7 @@ class Server:
                     op=operation,
                     outcome=outcome,
                     **refs,
+                    **({"refusal": refusal} if refusal else {}),
                     peer_pid=pid,
                     ms=round((time.monotonic() - started) * 1000),
                 )

@@ -21,6 +21,7 @@ authority.
 from __future__ import annotations
 
 import hashlib
+from dataclasses import replace
 from typing import Final, Literal, Protocol, cast, runtime_checkable
 from uuid import UUID
 
@@ -783,6 +784,84 @@ class ApplyRelationAssessment(FrozenContractModel):
         if runs - set(self.model_run_refs):
             raise ValueError("contributions must bind this exact run tree")
         return self
+
+
+# Revision 2 (guard audit P1-f D2, owner decision 2026-10-23). Revision 1 spends
+# its two requests on the author and the batched specialist, so an author output
+# that misses a pair's disposition has no request left for the repair round.
+# Revision 2 is revision 1 with one more request, for one evidence-free author
+# repair frame; inputs, packets, output, apply and render semantics are revision
+# 1's. Revision-1 tasks keep their pins and their two requests.
+
+
+class RepairableRelationAssessmentInput(RelationAssessmentInput):
+    contract_revision: Literal[2] = 2  # type: ignore[assignment]
+
+
+class ActivateRepairableRelationAssessment(ActivateRelationAssessment):
+    contract_version: Literal[2] = 2  # type: ignore[assignment]
+    expected_schema_version: Literal[58] = 58  # type: ignore[assignment]
+
+
+class RepairableRelationActivationReceipt(RelationAssessmentActivationReceipt):
+    contract_version: Literal[2] = 2  # type: ignore[assignment]
+
+
+REPAIRABLE_RELATION_ASSESSMENT_TASK = replace(
+    RELATION_ASSESSMENT_TASK,
+    contract_revision=2,
+    input_contract=TypedModelContract(
+        contract_id="memory.semantic.relation-assessment.input",
+        revision=2,
+        model_type=RepairableRelationAssessmentInput,
+    ),
+    run_budget=RELATION_ASSESSMENT_TASK.run_budget.model_copy(
+        update={"request_limit": 3}
+    ),
+    leaf_agent_key="memory.semantic.relation-author.v2",
+)
+# The task revisions whose author gets the repair round.
+RELATION_REPAIR_REVISIONS: Final = frozenset({2})
+RELATION_REPAIR_INSTRUCTION = (
+    "Your previous result would be refused for the reasons listed. Return it "
+    "again with only these changes: give each listed pair a disposition and "
+    "drop each listed proposal. A new disposition is related only where one of "
+    "your unchanged proposals relates that pair; otherwise it is not_assessed, "
+    "with a reason. No evidence is sent again; change nothing else."
+)
+
+
+def load_repairable_relation_assessment_task_registry(
+    module_registry: BuiltInModuleRegistry,
+) -> SemanticTaskRegistry:
+    task = REPAIRABLE_RELATION_ASSESSMENT_TASK
+    return SemanticTaskRegistry._from_source_controlled(
+        module_registry,
+        (cast(SemanticTaskDefinition[BaseModel, BaseModel], task),),
+        (
+            AgentContract(
+                agent_key=cast(str, task.leaf_agent_key),
+                input_contract=task.input_contract.reference,
+                output_contract=task.output_contract.reference,
+                maximum_effort_key="standard",
+            ),
+            SPECIALIST_AGENT,
+        ),
+        (),
+        BUILTIN_EFFORT_PROFILES,
+        (*BUILTIN_MODEL_PROFILE_REFERENCES, SPECIALIST_PROFILE),
+        (EvidencePolicyContract(policy_key="relation-assessment-v1"),),
+        leaf_contracts=(
+            cast(TypedModelContract[BaseModel], SPECIALIST_INPUT),
+            cast(TypedModelContract[BaseModel], SPECIALIST_OUTPUT),
+        ),
+    )
+
+
+class ApplyRepairableRelationAssessment(ApplyRelationAssessment):
+    contract_version: Literal[2] = 2  # type: ignore[assignment]
+    expected_schema_version: Literal[58] = 58  # type: ignore[assignment]
+    contract_revision: Literal[2] = 2  # type: ignore[assignment]
 
 
 @runtime_checkable

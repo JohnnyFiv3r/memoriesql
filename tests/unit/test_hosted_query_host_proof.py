@@ -567,6 +567,9 @@ class HostedQueryHostProof(unittest.TestCase):
 
         argv = [
             "run_hosted_qualification.py",
+            "part",
+            "--part",
+            "1",
             "--artifacts",
             "/fictional/artifacts",
             "--evidence",

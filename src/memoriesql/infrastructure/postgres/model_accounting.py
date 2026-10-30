@@ -16,6 +16,7 @@ from memoriesql.application.model_accounting import (
     ModelUsageEvent,
     ProviderRequestIntent,
     RequiredModelAllowanceUnavailable,
+    accounting_configuration_refusal,
 )
 from memoriesql.infrastructure.postgres.authorization import (
     PostgresAuthorizationPort,
@@ -131,4 +132,12 @@ def _raise_accounting_error(error: Exception) -> None:
         raise CostSafetyCeilingExceeded(detail) from error
     if "accounting.required_model_allowance_unavailable" in detail:
         raise RequiredModelAllowanceUnavailable(detail) from error
+    # A deterministic misconfiguration fails every retry the same way: only the
+    # exact refusal message counts, never a quoted value inside another error.
+    primary = getattr(getattr(error, "diag", None), "message_primary", None)
+    configuration = accounting_configuration_refusal(
+        primary if isinstance(primary, str) else detail
+    )
+    if configuration is not None:
+        raise configuration from error
     raise AccountingPersistenceError("durable model accounting failed") from error

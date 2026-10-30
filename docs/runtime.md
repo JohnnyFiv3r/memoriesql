@@ -265,3 +265,155 @@ client threads outside PostgreSQL: those remain owned until they return.
 The disposable producer-clock tests and separate-process restart proof exercise
 refusal, recovery and stale-write rejection; they do not identify the cause of
 the original observed database clock regression or promise host clock stability.
+
+## Authored output checks and the repair round
+
+Before the root run's output leaves the executor, the executor checks authored
+annotations against their own task (`application/authored_output_checks.py`):
+
+- bead coverage;
+- statement evidence inside the manifest, by identity and hash;
+- statement evidence declared as used;
+- context sources with statement evidence;
+- for v2 and complete units, the event and source-unit pins.
+
+Canonical apply refuses each of these too, and it stays authoritative and
+unchanged. No check is stricter than apply, and checks that need database state
+stay with apply. Some of these outputs reached apply as an authority or Python
+error, which the worker re-raised and which then stopped its later cycles.
+Checked here, they settle as `invalid_output`.
+
+When the output has issues, the model gets one repair round inside the same run
+and attempt (owner decision 2026-10-23, P1-f D1):
+
+- **The frame.** One repair round sends one repair frame (published output
+  retries of the repaired output still apply), with exactly these keys:
+  - `repair_frame`;
+  - `instruction`, which is fixed;
+  - `task_input`, the task's typed input exactly as this attempt already sent
+    it: identifiers and evidence references, and for authored-relation units
+    the candidate beads' accepted statement, mention and claim text. No
+    evidence frame or source-unit content is sent again;
+  - `previous_output`, the model's own prior output;
+  - `refusal_codes`, fixed codes with the identifiers they name.
+
+  No evidence is sent again, and no database text is ever included.
+- **Dispatch.** The dispatch guard admits only that exact frame. A repair
+  request delivers no evidence, so it records no complete-input exposure,
+  dispatch receipt or source delivery. Its provider intent and usage are
+  accounted like any other request.
+- **Admission.** A repair is admitted once per run, only when:
+  - the task is a tool-free direct leaf, so no tool or delegate can fetch
+    evidence;
+  - it is not a supervised turn, whose allowance is one turn;
+  - it is not a classified proposal, whose classification binds the original;
+  - a request is left in the run's existing budget.
+
+  The per-attempt dollar ceiling and token limits apply unchanged. A
+  reservation refused before dispatch leaves the first output's issues in
+  place.
+
+  A complete unit that uses all eight inspection windows of
+  `author-complete-unit` revision 2 has no request left. Revision 8 is revision
+  2 with one more request for this round (owner decision P1-f D2); see
+  [complete-input execution](complete-input-execution.md#revision-8-one-request-for-the-repair-round).
+  Relation assessment has its own author repair round from revision 2; see
+  [relation assessment](relation-assessment.md#revision-2-one-repair-round-for-the-author).
+- **After the repair.** The repaired output goes through every check again. If
+  issues remain, it settles `invalid_output` with `output.<code>` naming the
+  first issue, and retry class `never`. There is no second repair. Observation
+  authoring may still be accepted in part, as below.
+
+## Partial acceptance of authored observations
+
+A multi-bead observation authoring task (`memory.semantic.author-observations`
+revisions 1 and 2) no longer loses every bead to one bead's flawed annotation
+(owner decision 2026-10-23, P1-f D3 and D4). When issues remain after the
+repair round, or no repair was admitted:
+
+- **What is withheld.** Each task bead with an issue is withheld whole: its
+  annotation is left out, never edited. It takes the fixed reason of its first
+  issue:
+
+  | Issue | Reason |
+  |---|---|
+  | `annotation.bead_missing` | `withheld.not_authored` |
+  | `annotation.bead_duplicated` | `withheld.duplicated` |
+  | `annotation.event_mismatch`, `annotation.source_unit_mismatch` | `withheld.pin_mismatch` |
+  | `evidence.outside_manifest` | `withheld.evidence_outside_manifest` |
+  | `evidence.not_declared_as_used` | `withheld.evidence_not_declared_as_used` |
+  | `statement.context_without_evidence` | `withheld.context_without_evidence` |
+
+  An annotation of a bead outside the task is dropped; it names no task bead.
+- **Used references outside the manifest.** The executor's scope guard checks
+  used references before these checks, and for every other run a used
+  reference outside the manifest refuses it (`runtime.evidence_scope_widened`).
+  For this task's root output, first or repaired, the guard instead drops each
+  such reference while at least one used reference inside the manifest
+  remains. It drops them before the repair round, so the repair frame never
+  names one, and nothing about a dropped reference is recorded or withheld.
+  If every used reference is outside the manifest, the run is still refused.
+  A delegated run keeps the guard unchanged.
+- **What is kept.** The other annotations, unchanged, with the remaining
+  checks passing. The result settles `succeeded` and carries the withheld
+  items in `SemanticTaskResult.withheld_items`. If nothing acceptable is left,
+  the output still settles `invalid_output`.
+- **Recording.** In the same transaction and before canonical apply, the
+  worker records each withheld bead with
+  `record_withheld_semantic_output_v1`. That function takes apply's lock order
+  and fence: the attempt's leased service worker, the outcome-authority fence,
+  the relation-lineage lock, then the running task and attempt rows. It
+  accepts only these task kinds, beads of the task, fixed reasons, and at least
+  one bead left to apply.
+- **Apply.** `apply_semantic_annotations_schema29` counts the attempt's
+  recorded beads as covered. Annotations and withheld beads must partition the
+  task's beads exactly, and no withheld bead may also be annotated. Every
+  accepted annotation is checked exactly as before; a refused apply rolls the
+  withheld rows back too. Without a recorded row, a missing bead is refused as
+  before.
+- **Who sees it.** `semantic_withheld_output_items` is immutable, forced
+  row-level security, and readable by no role. Only
+  `withheld_semantic_output_v1(task_id)` reads it. It returns rows only to a
+  human principal with `memory.maintain` read on the task's scope; that is the
+  owner's re-author signal. A paired agent, a service and the worker get none,
+  and no inspection, query population or agent reply reads the table. A
+  withheld bead stays thin, exactly as before it was authored.
+- **No re-run.** Nothing is retried or re-enqueued automatically; the owner
+  decides whether to author the withheld beads again.
+
+A complete unit has one bead, so it stays all or nothing, as does every other
+task kind.
+
+## Accounting misconfigurations wait for the owner
+
+Some accounting refusals come from configuration, not from the provider or the
+database's availability. Retrying the same configuration fails the same way, so
+these are not transient. The executor settles the attempt as `policy_paused`
+(retry class `policy`) with a code that names the setting. The task then waits,
+and no worker claims it, until an owner with `memory.maintain` corrects the
+setting and calls `resume_semantic_task`. The pause records only the code; no
+configuration value is stored or disclosed.
+
+| Code | Setting to correct |
+|---|---|
+| `accounting.pricing_revision_unavailable` | The target's `pricing_revision_id` must name a pricing revision of its provider and model that is effective now (it is missing or expired). |
+| `accounting.reservation_not_conservative` | The request reservation is below the catalog maximum for the target's token bounds at its pinned pricing revision. |
+| `accounting.ceiling_cash_basis_missing` | A dollar ceiling needs a metered target with a `pricing_revision_id` or a covered subscription. Pin a pricing revision or remove the ceiling. |
+| `accounting.prior_request_cash_basis_missing` | An earlier request of the attempt has no pricing revision, covered subscription or reported cost, so the dollar ceiling cannot be enforced. |
+| `accounting.quality_policy_unavailable` | The target's `quality_policy_revision_id` must name the default quality-first policy revision. |
+| `accounting.lower_tier_unqualified` | A `qualified_lower` target needs a frozen task-profile qualification for its task kind, contract revision, model profile and quality policy. |
+| `accounting.transport_retries_enabled` | The target must disable transport and host retries. |
+| `accounting.access_scope_ambiguous` | Provider requests need a worker authorization over exactly one access scope. |
+| `accounting.supervision_task_mismatch` | The model profile's supervised qualification must name the semantic task it runs. |
+
+The database refusals are matched by their exact message from
+`record_model_provider_request_intent`, never by a substring, so a value quoted
+inside another error is not mistaken for one. Every other accounting failure
+keeps its existing handling: a ceiling reached is `budget_exhausted`, an
+exhausted or unknown allowance is `policy_paused`, and a failure to persist is
+`unavailable` and retried. Spend already accounted to the attempt is kept.
+
+A repair round's request records its intent through the same path, so a
+misconfiguration it meets pauses the task for the owner exactly as on a first
+request. A refused repair never settles as `invalid_output` on the first
+output's issues.

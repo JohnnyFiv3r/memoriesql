@@ -91,6 +91,49 @@ The task binds only statements that already exist in the pinned versions. When
 they cannot represent an assertion truthfully, the author abstains; the remedy is
 reauthoring, never a new statement.
 
+## Revision 2: one repair round for the author
+
+Revision 1 spends its two requests on the author and the batched specialist.
+An author output that leaves a pinned pair without a disposition, or uses a
+label outside the pinned vocabulary, is refused as invalid output, because no
+request is left for a repair round. Revision 2 of
+`memory.semantic.assess-relations` is revision 1 with `request_limit` 3 (owner
+decision 2026-10-23, guard audit P1-f D2). Its author agent is
+`memory.semantic.relation-author.v2`. Packets, the specialist, the output
+contract, deliveries, apply and the run tree are revision 1's.
+
+The extra request is one evidence-free repair frame for the author (custody
+ruling `RULING-P1F-D2-RELATION-REPAIR-AUTHOR-FRAME`, R-1 to R-7):
+
+- **The frame.** Exactly `repair_frame`, a fixed `instruction`,
+  `relation_packet`, `previous_output` and `refusal_codes`:
+  - `relation_packet` is the author packet this attempt already delivered,
+    without its `evidence`. That is the pinned beads with their accepted text,
+    the vocabulary and the reconsideration;
+  - `previous_output` is the author's own prior step;
+  - `refusal_codes` are fixed codes naming bead and proposal ids:
+    `relation.pair_missing: <first>/<second>` and
+    `relation.label_unregistered: <proposal>`.
+- **Admission.** One per run, only for revision 2, never for a supervised
+  turn, and only when every issue is a missing pair or an unregistered label
+  and a request is left beside the pending specialist request.
+- **Dispatch.** The dispatch guard admits only that exact frame. It is not
+  verified, authorized or recorded as a relation delivery, because it delivers
+  no packet. Its intent and usage are accounted as usual.
+- **Edit rules, enforced by the executor.** Proposals stay unchanged, except
+  that a listed proposal may be dropped. Dispositions already given stay
+  unchanged. New dispositions are only for the listed pairs: `related` where an
+  unchanged proposal relates the pair, or `not_assessed` with a reason. Since a
+  `related` disposition requires its proposal, a listed proposal can only be
+  dropped where its pair keeps another. Anything else settles invalid output
+  (`relation_assessment.repair_out_of_bounds`), and there is no second repair.
+- **The specialist** then runs once, exactly as today, over the repaired
+  proposals. It sees no frame, code or prior step.
+
+Revision 2 is activated with `activate_relation_assessment_v2`
+(`PostgresRelationAssessments.activate_repairable`). Revision-1 tasks keep
+their pins and their two requests, and get no repair.
+
 ## Specialist and agreement
 
 A provider-neutral specialist, `memory.semantic.relation-specialist`, assesses each

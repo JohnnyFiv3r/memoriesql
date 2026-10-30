@@ -34,6 +34,7 @@ from memoriesql.infrastructure.postgres.authorization import PostgresAuthorizati
 from memoriesql.infrastructure.postgres.relation_projection import (
     read_relation_projection,
 )
+from memoriesql.infrastructure.postgres.transient_retry import run_owned
 
 
 class PostgresAssessedRelationLifecycle:
@@ -51,27 +52,33 @@ class PostgresAssessedRelationLifecycle:
         if self._connection.info.transaction_status != TransactionStatus.IDLE:
             raise RuntimeError("assessed lifecycle requires transaction ownership")
         try:
-            with self._connection.transaction():
-                self._connection.execute(
-                    "SET TRANSACTION ISOLATION LEVEL READ COMMITTED"
-                )
-                self._connection.execute("SET LOCAL statement_timeout='2500ms'")
-                self._connection.execute("SET LOCAL lock_timeout='500ms'")
-                self._connection.execute("SET LOCAL ROLE memoriesql_application")
-                PostgresAuthorizationPort(self._connection).begin_context(
-                    credential_sha256=self._credential,
-                    requested_workspace_id=self._workspace,
-                )
-                row = self._connection.execute(
-                    "SELECT memoriesql.record_assessed_relation_event_v1(%s)",
-                    (Jsonb(payload.model_dump(mode="json")),),
-                ).fetchone()
-                if row is None:
-                    return AssessedRelationEventRefusal(error="unavailable")
-                if len(canonical_json_bytes(row[0])) > 16384:
-                    raise ValueError("lifecycle response exceeds bound")
-                result: EventResult = TypeAdapter(EventResult).validate_python(row[0])
-            return result
+
+            def attempt() -> EventResult:
+                with self._connection.transaction():
+                    self._connection.execute(
+                        "SET TRANSACTION ISOLATION LEVEL READ COMMITTED"
+                    )
+                    self._connection.execute("SET LOCAL statement_timeout='2500ms'")
+                    self._connection.execute("SET LOCAL lock_timeout='500ms'")
+                    self._connection.execute("SET LOCAL ROLE memoriesql_application")
+                    PostgresAuthorizationPort(self._connection).begin_context(
+                        credential_sha256=self._credential,
+                        requested_workspace_id=self._workspace,
+                    )
+                    row = self._connection.execute(
+                        "SELECT memoriesql.record_assessed_relation_event_v1(%s)",
+                        (Jsonb(payload.model_dump(mode="json")),),
+                    ).fetchone()
+                    if row is None:
+                        return AssessedRelationEventRefusal(error="unavailable")
+                    if len(canonical_json_bytes(row[0])) > 16384:
+                        raise ValueError("lifecycle response exceeds bound")
+                    result: EventResult = TypeAdapter(EventResult).validate_python(
+                        row[0]
+                    )
+                return result
+
+            return run_owned(attempt)
         except (InsufficientPrivilege, InvalidAuthorizationSpecification, NoDataFound):
             return AssessedRelationEventRefusal(error="unavailable")
         except (InvalidTextRepresentation, UntranslatableCharacter):

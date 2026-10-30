@@ -18,8 +18,31 @@ must exist in that tenant. The approver field is the trusted administrator's
 record of external approval, as in the existing producer/dispatch policy tables,
 not an authenticated runtime caller or a new permission grant. The administrator
 is responsible for verifying that approval before provisioning. Worker/application roles cannot
-provision or change it. Only revocation is permitted; the task cannot receive a
-replacement approval. No policies are installed by migration.
+provision or change it. An approval itself never changes except by revocation.
+No policies are installed by migration.
+
+### Re-approval after a failed approval
+
+A turn that fails, crashes or completes ambiguously still consumes its approval,
+and the next attempt cannot dispatch: the task pauses (`policy_paused`) for its
+owner. The administrator may then revoke that approval and provision a
+replacement for the same task that names it in `supersedes_qualification_id`.
+The database accepts a replacement only when:
+
+- it supersedes the latest approval of the task, which is already revoked;
+- it keeps the task's workspace, access scope and origin principal;
+- no attempt of the task is claimed or running; and
+- the task is waiting (queued, `retry_wait` or `policy_paused`), never settled.
+
+The approvals of a task form one linear chain with at most one active link. Each
+committed intent stays charged to the approval it consumed: nothing is refunded
+and no earlier row changes. Dispatch, the open check and canonical acceptance
+read only the latest approval, so a turn under a superseded approval can never
+authorize meaning, and the replacement allows exactly what a first approval
+allows. The deployment pins the replacement's `SupervisedQualification` as
+before, and the owner resumes the task. A remote turn that never reported back
+cannot be proven terminated; its late usage is still accounted to its own
+approval.
 
 The profile permits one managed turn and optionally one subsequent hard-bounded
 inference on a distinct profile, or, for a relation task only, a second managed

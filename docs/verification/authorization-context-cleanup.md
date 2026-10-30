@@ -82,10 +82,12 @@ revocations take the tenant's authority fence exclusively (migration 0036, and
 the triggers migration 0008 puts on the authority tables). A relation read holds
 the same fence shared for its whole frame (migration 0030), and so does a query
 for up to its 30 s operation bound. An authority command issued during such a
-read still waits 500 ms and is then refused, now as `source_authority_busy`.
-This is the fence working as designed: a read and an authority change never
-overlap. Whether authority commands should wait longer for reads to finish is a
-separate decision.
+read still waits at most 500 ms per attempt. The adapter re-runs it, at most
+four attempts in all (`docs/verification/owned-transaction-retry.md`), and
+refuses it as `source_authority_busy` only after the last attempt, about 2.35 s
+in all. This is the fence working as designed: a read and an authority change
+never overlap. Whether authority commands should wait longer for reads to finish
+is a separate decision.
 
 A replay of an already recorded enrollment writes nothing. It could take the
 fence shared, as reads do, leaving only a first enrollment to take it
@@ -158,6 +160,10 @@ recorded it at 2026-10-06T01:43:07Z. It is stored byte-identical in
   Its previous linkage is ea-5-link-2 → `9f3aa77`.
 - **Its boundaries.** Authority commands keep the exclusive tenant fence while
   reads hold it shared, and the 500 ms source-authority wait is not increased.
+  Since P1-c (#105, John's decision of 2026-10-29), each source-authority
+  wait still lasts 500 ms, but `source_authority_busy` comes only after the
+  last of at most four attempts, about 2.35 s
+  (`docs/verification/owned-transaction-retry.md`).
   `source_authority_busy` is a failure reason, never a successful enrollment,
   grant or revocation. An identical retry is permitted only once the earlier
   transaction is conclusively settled; it adds no evaluation attempt and resets

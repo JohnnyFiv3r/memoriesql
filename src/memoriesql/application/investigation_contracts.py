@@ -420,6 +420,37 @@ class HydrateRequest(Request):
     cursor: Text | None = None
 
 
+class SourceTextEntry(FrozenContractModel):
+    """A delivered source ref and a half-open interval of Unicode scalar values.
+
+    The interval is over the unit text the approved query exception serves. Its
+    UTF-8 bytes are checked where that text is read, never for unsupported text.
+    """
+
+    source: SourceEvidence
+    start: Control
+    end: Control
+    origin: ResultAccess | None = None
+
+    @model_validator(mode="after")
+    def interval(self) -> SourceTextEntry:
+        if self.end < self.start:
+            raise ValueError("reversed half-open interval")
+        # More scalar values than this is always more UTF-8 bytes too.
+        if self.end - self.start > HYDRATION_SPAN_BYTES:
+            raise ValueError("selected span allocation exceeded")
+        return self
+
+
+class ReadSourceTextRequest(Request):
+    """Agent source text view v1: no part, lineage or raw representation exists."""
+
+    kind: Literal["read_source_text"]
+    entries: Annotated[tuple[SourceTextEntry, ...], Field(min_length=1, max_length=8)]
+    max_bytes: Annotated[int, Field(strict=True, ge=1, le=64 * 1024)]
+    cursor: Text | None = None
+
+
 class Progress(FrozenContractModel):
     status: Literal["investigating", "paused", "ready_for_pr06"]
     note: Text
@@ -575,6 +606,7 @@ InvestigationRequest = Annotated[
     | ReuseRequest
     | InspectRequest
     | HydrateRequest
+    | ReadSourceTextRequest
     | CheckpointRequest
     | ReadCheckpointRequest
     | SaveCheckpointRequest

@@ -190,6 +190,7 @@ def _registry_payload(
 _RUNTIME_SPECIALISTS: dict[tuple[str, int], str] = {
     ("memory.semantic.author-complete-unit", 5): "memory.semantic.bead-type-classifier",
     ("memory.semantic.assess-relations", 1): "memory.semantic.relation-specialist",
+    ("memory.semantic.assess-relations", 2): "memory.semantic.relation-specialist",
 }
 
 
