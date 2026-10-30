@@ -7,6 +7,8 @@ invalid_output. Revision 2 has one more request: the author gets one
 evidence-free repair frame, the packet it already received without its
 evidence, and may only complete the missing pair. The repair records no
 delivery; the specialist then judges the unchanged proposals exactly as today.
+An accounting misconfiguration the repair request meets pauses the task for the
+owner exactly as one the author's request meets.
 """
 
 from __future__ import annotations
@@ -26,12 +28,16 @@ from pydantic_ai.messages import (
     UserPromptPart,
 )
 
+from memoriesql.application.model_accounting import accounting_configuration_refusal
 from memoriesql.application.relation_assessment import (
     REPAIRABLE_RELATION_ASSESSMENT_TASK,
     ActivateRepairableRelationAssessment,
     load_repairable_relation_assessment_task_registry,
 )
 from memoriesql.infrastructure.postgres.migration_runner import discover_migrations
+from memoriesql.infrastructure.postgres.model_accounting import (
+    PostgresModelRequestAccounting,
+)
 
 if TYPE_CHECKING:
     from tests.runtime import test_relation_assessment as relation
@@ -190,6 +196,53 @@ class RelationRepairRound(unittest.TestCase):
             ),
             ("not_assessed", NOT_ASSESSED),
         )
+
+    def paused_at(self, refused: int) -> None:
+        """The run's `refused`-th provider intent meets an accounting
+        misconfiguration, exactly as the adapter raises it for an expired
+        pricing revision; the task pauses for the owner, whichever request."""
+        self.activate(2)
+        record = PostgresModelRequestAccounting.record_intent
+        calls: list[Any] = []
+
+        async def refuse(accounting: PostgresModelRequestAccounting, intent: Any) -> None:
+            calls.append(intent)
+            if len(calls) == refused:
+                refusal = accounting_configuration_refusal(
+                    "pinned pricing revision is unavailable"
+                )
+                assert refusal is not None
+                raise refusal
+            await record(accounting, intent)
+
+        with patch.object(PostgresModelRequestAccounting, "record_intent", refuse):
+            result = self.execute(2, self.complete)
+        self.assertEqual(result.result_status, "policy_paused", result)
+        self.assertEqual(
+            self.outcome(),
+            ("policy_paused", "policy_paused", "accounting.pricing_revision_unavailable", "policy"),
+        )
+        # Refused before dispatch: the refused request reaches no model, and
+        # nothing past it is delivered or accounted.
+        self.assertEqual(len(self.prompts), refused - 1)
+        self.assertEqual(self.counted(
+            "SELECT count(*) FROM memoriesql.model_provider_request_intents WHERE task_id=%s"),
+            refused - 1)
+        self.assertEqual(self.counted(
+            "SELECT count(*) FROM memoriesql.semantic_task_attempts WHERE task_id=%s"), 1)
+
+    def test_a_misconfiguration_at_the_author_request_pauses_for_the_owner(self) -> None:
+        self.paused_at(1)
+        self.assertEqual(self.deliveries(), {})
+
+    def test_a_misconfiguration_at_the_repair_request_pauses_alike(self) -> None:
+        # Guard P1-f (d): the repair frame records its intent through the same
+        # accounting path as the author's request, so it pauses exactly as a
+        # first dispatch does; the author's issues never settle it as
+        # invalid_output.
+        self.paused_at(2)
+        self.assertEqual([("repair_frame" in p) for p in self.prompts], [False])
+        self.assertEqual(self.deliveries(), {"author": 1})
 
     def test_a_repair_that_changes_more_settles_invalid_output(self) -> None:
         self.activate(2)

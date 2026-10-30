@@ -16,6 +16,7 @@ from pydantic_ai.usage import RequestUsage
 from memoriesql.application.builtin_semantic_tasks import (
     load_builtin_semantic_task_registry,
 )
+from memoriesql.application.model_accounting import ProviderRequestTarget
 from memoriesql.application.module_registry import (
     BuiltInModuleRegistry,
     ProfileDefinition,
@@ -104,6 +105,8 @@ def fixture(
     *, conductor: bool = False, model_callback: Any = None,
     request_target: Any = CHARACTERIZED_TEST_REQUEST_TARGET,
     binding_factory: Any = None,
+    budget_update: dict[str, Any] | None = None,
+    access_scope_ids: frozenset[str] = frozenset({"orchard.scope"}),
     task_kind: str = "orchard.author", request_limit: int = 2,
 ) -> tuple[Any, Any, SemanticRunDeps, Ports]:
     ports = Ports()
@@ -141,7 +144,7 @@ def fixture(
         hydrated_character_limit=1000,
         output_retries=0,
         tool_retries=0,
-    )
+    ).model_copy(update=budget_update or {})
     task = SemanticTaskDefinition(
         task_kind=task_kind,
         contract_revision=1,
@@ -214,7 +217,7 @@ def fixture(
             tenant_id="orchard.tenant",
             workspace_id="orchard.workspace",
             policy_revision=1,
-            allowed_access_scope_ids=frozenset({"orchard.scope"}),
+            allowed_access_scope_ids=access_scope_ids,
         ),
         authorized_evidence_manifest=manifest,
         evidence_accessor=ports,
@@ -365,6 +368,37 @@ class ExecutionParity(unittest.IsolatedAsyncioTestCase):
         ports.fail_intent = True
         result = await executor.execute(task, deps)
         self.assertNotEqual(result.status, "succeeded")
+        self.assertNotIn("model", ports.order)
+
+    async def test_unpriced_dollar_ceiling_pauses_for_owner_action(self) -> None:
+        # A dollar ceiling over a metered target without a pricing revision
+        # cannot be enforced. Only an owner can fix that, so nothing is recorded
+        # or dispatched, and the task waits for the owner instead of retrying.
+        target = ProviderRequestTarget.model_validate(
+            CHARACTERIZED_TEST_REQUEST_TARGET.model_dump()
+            | {"billing_basis": "metered", "allowance_state": "not_applicable"}
+        )
+        executor, task, deps, ports = fixture(
+            request_target=target, budget_update={"cost_safety_limit_microusd": 1000}
+        )
+        result = await executor.execute(task, deps)
+        self.assertEqual(
+            (result.status, result.error_code, result.retry_class),
+            ("policy_paused", "accounting.ceiling_cash_basis_missing", "policy"),
+        )
+        self.assertEqual(ports.intents, [])
+        self.assertNotIn("model", ports.order)
+
+    async def test_ambiguous_request_scope_pauses_for_owner_action(self) -> None:
+        executor, task, deps, ports = fixture(
+            access_scope_ids=frozenset({"orchard.scope", "orchard.other-scope"})
+        )
+        result = await executor.execute(task, deps)
+        self.assertEqual(
+            (result.status, result.error_code, result.retry_class),
+            ("policy_paused", "accounting.access_scope_ambiguous", "policy"),
+        )
+        self.assertEqual(ports.intents, [])
         self.assertNotIn("model", ports.order)
 
     async def test_registry_mismatch_rejects_inflight_work(self) -> None:

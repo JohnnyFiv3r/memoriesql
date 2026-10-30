@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from enum import StrEnum
+from types import MappingProxyType
 from uuid import UUID
 
 from pydantic import Field, model_validator
@@ -478,6 +480,77 @@ class CostSafetyCeilingExceeded(ModelAccountingError):
 
 class RequiredModelAllowanceUnavailable(ModelAccountingError):
     code = "accounting.required_model_allowance_unavailable"
+
+
+class ModelAccountingConfigurationError(ModelAccountingError):
+    """A deterministic accounting misconfiguration that only an owner can fix.
+
+    Retrying the same configuration fails the same way, so the task pauses for
+    owner action instead of retrying. The code names the setting to correct.
+    """
+
+    code = "accounting.configuration_required"
+
+    def __init__(self, code: str, setting: str) -> None:
+        super().__init__(f"{code}: {setting}")
+        self.code = code
+        self.setting = setting
+
+
+# Each deterministic refusal of `record_model_provider_request_intent`, by its
+# exact message, with the code and the setting an owner corrects.
+ACCOUNTING_CONFIGURATION_REFUSALS: Mapping[str, tuple[str, str]] = MappingProxyType(
+    {
+        "pinned pricing revision is unavailable": (
+            "accounting.pricing_revision_unavailable",
+            "the target's pricing_revision_id must name a pricing revision of its "
+            "provider and model that is effective now",
+        ),
+        "provider reservation is not conservative": (
+            "accounting.reservation_not_conservative",
+            "the request reservation is below the catalog maximum for the target's "
+            "token bounds at its pinned pricing revision",
+        ),
+        "dollar ceiling has no enforceable cash basis": (
+            "accounting.ceiling_cash_basis_missing",
+            "a dollar ceiling needs a metered target with a pricing_revision_id or a "
+            "covered subscription; pin a pricing revision or remove the ceiling",
+        ),
+        "prior request has no enforceable cash basis": (
+            "accounting.prior_request_cash_basis_missing",
+            "an earlier request of this attempt has no pricing revision, covered "
+            "subscription or reported cost, so the dollar ceiling cannot be enforced",
+        ),
+        "quality-first policy revision is unavailable": (
+            "accounting.quality_policy_unavailable",
+            "the target's quality_policy_revision_id must name the default "
+            "quality-first policy revision",
+        ),
+        "lower-tier profile lacks frozen qualification": (
+            "accounting.lower_tier_unqualified",
+            "a qualified_lower target needs a frozen task-profile qualification for "
+            "this task kind, contract revision, model profile and quality policy",
+        ),
+        "provider transport request boundary is not visible": (
+            "accounting.transport_retries_enabled",
+            "the target must disable transport and host retries "
+            "(transport_retries_disabled)",
+        ),
+    }
+)
+
+UNPRICED_CEILING_SETTING = ACCOUNTING_CONFIGURATION_REFUSALS[
+    "dollar ceiling has no enforceable cash basis"
+]
+
+
+def accounting_configuration_refusal(
+    message: str,
+) -> ModelAccountingConfigurationError | None:
+    """The owner-action error for one exact accounting refusal message, if any."""
+
+    known = ACCOUNTING_CONFIGURATION_REFUSALS.get(message)
+    return None if known is None else ModelAccountingConfigurationError(*known)
 
 
 class RejectingModelRequestAccounting:
