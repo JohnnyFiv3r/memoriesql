@@ -1,4 +1,5 @@
-"""The CLI's run store reuses, rotates and forgets runs without retrying."""
+"""The CLI's run store reuses, rotates and forgets runs without retrying; only an
+admission refusal for work in flight is resent, identically and boundedly."""
 
 from __future__ import annotations
 
@@ -18,11 +19,13 @@ from memoriesql.application.agent_sql_results import (
     wire_coverage,
 )
 from memoriesql.query_client import (
+    RETRY_DELAYS,
     RUN_ROTATION_MARGIN,
     UNAVAILABLE_REPLY,
     RunStore,
     TrustedHostTransport,
     coverage_gaps,
+    handle_with_retry,
     query_request,
     schema_description,
     wire_time,
@@ -53,6 +56,120 @@ def run(expires: datetime) -> dict[str, Any]:
             "default_known_at": NOW.isoformat(),
         },
     }
+
+
+REMAINING = {
+    "accesses": 120,
+    "db_ms": 250000,
+    "transport_bytes": 1048576,
+    "allocation_bytes": 1048576,
+    "run_expires_at": wire_time(NOW + timedelta(minutes=20)),
+}
+
+
+def refusal(
+    outcome: str = "budget_exhausted",
+    code: str = "database",
+    *,
+    receipt: str | None = None,
+    remaining: dict[str, Any] | None = REMAINING,
+) -> dict[str, Any]:
+    reply: dict[str, Any] = {
+        "contract_version": 1,
+        "outcome": outcome,
+        "receipt_ref": None,
+        "access_receipt_ref": receipt,
+        "error": {"code": code},
+    }
+    if remaining is not None:
+        reply["remaining"] = remaining
+    return reply
+
+
+class ReplyTransport:
+    def __init__(self, *replies: dict[str, Any]) -> None:
+        self.replies = list(replies)
+        self.sent: list[bytes] = []
+
+    def start_run(self) -> bytes:  # pragma: no cover - unused here
+        raise AssertionError("retries never start a run")
+
+    def handle(self, request: bytes) -> bytes:
+        self.sent.append(request)
+        return json.dumps(self.replies.pop(0)).encode()
+
+
+class AdmissionRetryTests(unittest.TestCase):
+    AVAILABLE = {"contract_version": 1, "outcome": "available"}
+
+    def deliver(
+        self, *replies: dict[str, Any], jitter: float = 1.0
+    ) -> tuple[dict[str, Any], list[bytes], list[float]]:
+        transport = ReplyTransport(*replies)
+        waits: list[float] = []
+        reply = handle_with_retry(
+            transport,
+            b"identical request bytes",
+            now=lambda: NOW,
+            sleep=waits.append,
+            jitter=lambda: jitter,
+        )
+        return json.loads(reply), transport.sent, waits
+
+    def test_work_in_flight_is_resent_identically_until_admitted(self) -> None:
+        reply, sent, waits = self.deliver(
+            refusal(),
+            refusal(code="settlement", remaining=None),
+            refusal("settlement_pending", "settlement"),
+            self.AVAILABLE,
+        )
+        self.assertEqual(reply, self.AVAILABLE)
+        # The same bytes, so the same step key: never a second, different step.
+        self.assertEqual(sent, [b"identical request bytes"] * 4)
+        self.assertEqual(waits, list(RETRY_DELAYS[:3]))
+
+    def test_resends_stop_after_the_bounded_schedule(self) -> None:
+        busy = refusal()
+        reply, sent, waits = self.deliver(*[busy] * (len(RETRY_DELAYS) + 3))
+        self.assertEqual(reply, busy)
+        self.assertEqual(len(sent), 1 + len(RETRY_DELAYS))
+        self.assertEqual(waits, list(RETRY_DELAYS))
+        self.assertLessEqual(sum(waits), 32.0)
+
+    def test_jitter_shortens_each_wait_to_at_least_half(self) -> None:
+        _, _, waits = self.deliver(refusal(), self.AVAILABLE, jitter=0.0)
+        self.assertEqual(waits, [RETRY_DELAYS[0] / 2])
+
+    def test_admitted_spent_or_other_refusals_are_final(self) -> None:
+        soon = dict(REMAINING, run_expires_at=wire_time(NOW + timedelta(seconds=0.1)))
+        for final in (
+            refusal(receipt=str(uuid4())),
+            refusal("settlement_pending", "settlement", receipt=str(uuid4())),
+            refusal(code="time"),
+            refusal(code="transport"),
+            refusal(remaining=dict(REMAINING, accesses=0)),
+            refusal(remaining=dict(REMAINING, db_ms=0)),
+            refusal(remaining=soon),
+            refusal(remaining={"accesses": "many"}),
+            refusal("unavailable", "unavailable"),
+            refusal("execution_error", "database"),
+            self.AVAILABLE,
+        ):
+            with self.subTest(final=final):
+                reply, sent, waits = self.deliver(final, self.AVAILABLE)
+                self.assertEqual(reply, final)
+                self.assertEqual(len(sent), 1)
+                self.assertEqual(waits, [])
+
+    def test_a_malformed_reply_is_returned_unchanged(self) -> None:
+        class Raw(ReplyTransport):
+            def handle(self, request: bytes) -> bytes:
+                self.sent.append(request)
+                return b"not json"
+
+        transport = Raw()
+        reply = handle_with_retry(transport, b"x", now=lambda: NOW, sleep=self.fail)
+        self.assertEqual((reply, transport.sent), (b"not json", [b"x"]))
 
 
 class RunStoreTests(unittest.TestCase):

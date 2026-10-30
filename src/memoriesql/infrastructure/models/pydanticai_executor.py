@@ -87,10 +87,12 @@ from memoriesql.application.managed_dispatch import (
     SupervisedRequestIntent,
 )
 from memoriesql.application.model_accounting import (
+    UNPRICED_CEILING_SETTING,
     AccountingPersistenceError,
     AllowanceState,
     BillingBasis,
     CostSafetyCeilingExceeded,
+    ModelAccountingConfigurationError,
     ModelUsageEvent,
     NormalizedUsage,
     ProviderRequestIntent,
@@ -978,8 +980,10 @@ class _DispatchGuardedModel(WrapperModel):
         authorization = state.deps.authorization
         access_scope_ids = tuple(sorted(authorization.allowed_access_scope_ids))
         if len(access_scope_ids) != 1:
-            raise AccountingPersistenceError(
-                "provider requests require exactly one authorized access scope"
+            raise ModelAccountingConfigurationError(
+                "accounting.access_scope_ambiguous",
+                "provider requests need a worker authorization over exactly one "
+                "access scope",
             )
         binding = self._run_deps.model_profile.binding
         if (
@@ -988,16 +992,18 @@ class _DispatchGuardedModel(WrapperModel):
             and binding.request_target.pricing_revision_id is None
             and state.task.effective_budget.cost_safety_limit_microusd is not None
         ):
-            raise CostSafetyCeilingExceeded(
-                "a dollar ceiling cannot be enforced for an unpriced target"
-            )
+            raise ModelAccountingConfigurationError(*UNPRICED_CEILING_SETTING)
         managed = isinstance(binding.real_model_admission, ManagedModelAdmission)
         if binding.supervision is not None:
             if (
                 str(binding.supervision.semantic_task_id)
                 != state.task.task_input.task_id
             ):
-                raise AccountingPersistenceError("supervision names another task")
+                raise ModelAccountingConfigurationError(
+                    "accounting.supervision_task_mismatch",
+                    "the model profile's supervised qualification must name this "
+                    "semantic task",
+                )
             if datetime.now(UTC) >= binding.supervision.deadline:
                 raise UsageLimitExceeded("supervised dispatch deadline elapsed")
         maximum_output_tokens = min(
@@ -3873,6 +3879,9 @@ def _normalize_failure(error: Exception) -> _Failure:
             SemanticResultStatus.POLICY_PAUSED,
             error.code,
         )
+    if isinstance(error, ModelAccountingConfigurationError):
+        # Owner action needed: a retry would fail the same way.
+        return _Failure(SemanticResultStatus.POLICY_PAUSED, error.code)
     if isinstance(error, AccountingPersistenceError):
         return _Failure(
             SemanticResultStatus.UNAVAILABLE,

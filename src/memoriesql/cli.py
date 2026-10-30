@@ -80,6 +80,7 @@ from memoriesql.query_client import (
     TrustedHostTransport,
     coverage_gaps,
     default_state_root,
+    handle_with_retry,
     query_request,
     read_bounded,
     reuse_request,
@@ -700,7 +701,7 @@ def _investigate(args: argparse.Namespace, environment: Mapping[str, str]) -> in
             cursor=args.cursor,
             page_size=args.page_size,
         )
-    reply = transport.handle(request)
+    reply = handle_with_retry(transport, request)
     store.forget_ended(reply, now=datetime.now(UTC))
     return _emit_reply(reply, machine=args.json)
 
