@@ -260,9 +260,16 @@ qualification; the executor currently refuses them as `unsupported_query`.
 Each admitted query or retained-result page uses one of the run's 128 accesses,
 including an admitted operation that returns a refusal. Pre-admission refusals
 write no delivery and consume no access. The run also bounds database work to
-300 seconds and transport to 16 MiB; read `remaining` in each reply. On
-`budget_exhausted`, stop: the CLI does not retry or increase an allowance. Starting
-a new run does not reset the workspace's cumulative 24-hour accounting.
+300 seconds and transport to 16 MiB; read `remaining` in each reply. The workspace
+runs one operation at a time: while another is executing or settling, admission
+refuses the request before writing anything (`budget_exhausted` with
+`database` or `settlement`, or `settlement_pending` for the same step, all with
+no `access_receipt_ref`). The CLI then resends the identical request, with the
+same step key, after waits of up to about 30 seconds in all. It stops as soon as a
+reply is anything else, `remaining` shows no access or database time left, or the
+run would expire first. On any other `budget_exhausted`, stop: the CLI does not
+increase an allowance. Starting a new run does not reset the workspace's
+cumulative 24-hour accounting.
 
 Keep the returned result ID and content digest together. `result` with that pin
 and `next_cursor` reads the next immutable page under current authority without
@@ -327,7 +334,8 @@ maintenance rather than a query error.
 The CLI keeps one run per authenticated principal and workspace in an owner-only
 state file under `MEMORIESQL_STATE_DIR` (default `$XDG_STATE_HOME/memoriesql`),
 reuses it across invocations and starts a new run shortly before the stored run
-expires; it never retries a refused or budgeted request. `--new-run` asks for a
+expires; apart from the bounded resend of an admission refusal for work in
+flight, described above, it never retries a refused or budgeted request. `--new-run` asks for a
 new run without ending the old one, which still counts against the workspace's
 active-run limit until it expires; a stored run the executor reports as ended is
 forgotten so the next command starts fresh. Runs are bounded
