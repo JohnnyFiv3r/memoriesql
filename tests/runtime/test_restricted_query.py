@@ -34,6 +34,12 @@ else:
     from test_postgres_runtime import migrate
 
 
+# Bound for waits on real progress of another thread or session. A contended
+# hosted runner can take many times a local run to reach a step, so the bound
+# only has to catch a wedge (test_attempt_refusals' receipt gate is 30 s too).
+PROGRESS_SECONDS = 30
+
+
 @unittest.skipUnless(
     os.environ.get("N1_TEST_DATABASE_URL"), "disposable PostgreSQL required"
 )
@@ -471,7 +477,7 @@ class RestrictedQuery(unittest.TestCase):
             def cursor(self, *args: Any, **kwargs: Any) -> Any:
                 if kwargs.get("name"):
                     ready.set()
-                    if not release.wait(5):
+                    if not release.wait(PROGRESS_SECONDS):
                         raise RuntimeError("fictional pause not released")
                 return super().cursor(*args, **kwargs)
 
@@ -515,7 +521,7 @@ class RestrictedQuery(unittest.TestCase):
             )
             thread.start()
             try:
-                self.assertTrue(ready.wait(5))
+                self.assertTrue(ready.wait(PROGRESS_SECONDS))
                 with self.reader_connection() as attacker:
                     attacker.execute("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY")
                     self.assertEqual(
@@ -567,7 +573,7 @@ class RestrictedQuery(unittest.TestCase):
             )
             thread.start()
             try:
-                self.assertTrue(ready.wait(5))
+                self.assertTrue(ready.wait(PROGRESS_SECONDS))
                 with self.fixture.connection() as monitor:
                     ref = monitor.execute(
                         "SELECT invocation_ref FROM memoriesql_query.invocations"
@@ -661,7 +667,7 @@ class RestrictedQuery(unittest.TestCase):
             )
             thread.start()
             try:
-                self.assertTrue(ready.wait(5))
+                self.assertTrue(ready.wait(PROGRESS_SECONDS))
                 # Wait for the actual credential deadline, not an assumed sleep
                 # or simulated authorization response. Canonical fences do not
                 # turn expired credentials into continuing authority.

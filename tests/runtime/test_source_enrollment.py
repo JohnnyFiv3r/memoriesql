@@ -38,6 +38,12 @@ if TYPE_CHECKING:
 else:
     from test_postgres_runtime import migrate
 
+# Bound for waits on real progress of another thread or session. A contended
+# hosted runner can take many times a local run to reach a step, so the bound
+# only has to catch a wedge (test_attempt_refusals' receipt gate is 30 s too).
+PROGRESS_SECONDS = 30
+
+
 OWNER_CREDENTIAL = "fictional orchard owner session credential"
 
 
@@ -408,7 +414,9 @@ class ExactSourceEnrollment(unittest.TestCase):
                 holder = threading.Thread(target=hold_fence)
                 holder.start()
                 try:
-                    self.assertTrue(ready.wait(5), "tenant fence was not acquired")
+                    self.assertTrue(
+                    ready.wait(PROGRESS_SECONDS), "tenant fence was not acquired"
+                )
                     self.assertFalse(holder_errors)
                     with self.assertRaises(psycopg.errors.InsufficientPrivilege):
                         with self.db.transaction():
@@ -488,7 +496,9 @@ class ExactSourceEnrollment(unittest.TestCase):
         holder.start()
         request_id = uuid.uuid4()
         try:
-            self.assertTrue(ready.wait(5), "tenant fence was not acquired")
+            self.assertTrue(
+                    ready.wait(PROGRESS_SECONDS), "tenant fence was not acquired"
+                )
             self.assertFalse(holder_errors)
             with self.assertRaises(psycopg.errors.InsufficientPrivilege):
                 with self.db.transaction():

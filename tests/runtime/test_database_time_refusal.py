@@ -32,6 +32,12 @@ else:
     from test_postgres_runtime import migrate
 
 
+# Bound for waits on real progress of another thread or session. A contended
+# hosted runner can take many times a local run to reach a step, so the bound
+# only has to catch a wedge (test_attempt_refusals' receipt gate is 30 s too).
+PROGRESS_SECONDS = 30
+
+
 class DatabaseTimeRefusal(fixtures.CompleteInputExecution):
     def setUp(self) -> None:
         super().setUp()
@@ -300,7 +306,7 @@ class DatabaseTimeRefusal(fixtures.CompleteInputExecution):
             if str(result.status) == "succeeded":
                 self.clock(self.attempt()[1] - timedelta(milliseconds=3))
                 entered.set()
-                if not release.wait(5):
+                if not release.wait(PROGRESS_SECONDS):
                     raise AssertionError("fixture did not release the output write")
             return original(claimed, result, *args, **kwargs)
 
@@ -395,7 +401,7 @@ class DatabaseTimeRefusal(fixtures.CompleteInputExecution):
                 )
                 context = original_begin(port, **kwargs) if boundary == "after" else None
                 loop.call_soon_threadsafe(entered.set)
-                if not release.wait(5):
+                if not release.wait(PROGRESS_SECONDS):
                     raise AssertionError("fixture did not release context boundary")
                 return context if boundary == "after" else original_begin(port, **kwargs)
 
@@ -570,7 +576,7 @@ class DatabaseTimeRefusal(fixtures.CompleteInputExecution):
                         "transaction_rolled_back": True,
                     })
                     loop.call_soon_threadsafe(observed.set)
-                    if not release.wait(3):
+                    if not release.wait(PROGRESS_SECONDS):
                         raise AssertionError("recovery blocker was not installed")
                     raise
 
