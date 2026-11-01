@@ -34,6 +34,11 @@ from memoriesql.infrastructure.jobs.integrated_semantic_worker import (
     _CancellationEvent,
 )
 
+# Bound for waits on real progress of another thread or session. A contended
+# hosted runner can take many times a local run to reach a step, so the bound
+# only has to catch a wedge (test_attempt_refusals' receipt gate is 30 s too).
+PROGRESS_SECONDS = 30
+
 
 class CleanupLeaseHandoff(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
@@ -86,7 +91,7 @@ class CleanupLeaseHandoff(unittest.IsolatedAsyncioTestCase):
 
         def gated_heartbeat(*args: Any) -> bool:
             self.entered.set()
-            if not self.release_heartbeat.wait(5):
+            if not self.release_heartbeat.wait(PROGRESS_SECONDS):
                 raise AssertionError("fixture must release heartbeat")
             try:
                 self.heartbeat_result = heartbeat(*args)

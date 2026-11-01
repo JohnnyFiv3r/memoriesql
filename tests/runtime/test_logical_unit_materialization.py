@@ -43,6 +43,12 @@ else:
     from test_postgres_runtime import migrate
 
 
+# Bound for waits on real progress of another thread or session. A contended
+# hosted runner can take many times a local run to reach a step, so the bound
+# only has to catch a wedge (test_attempt_refusals' receipt gate is 30 s too).
+PROGRESS_SECONDS = 30
+
+
 class LogicalUnitMaterialization(EvidencePackages):
     def setUp(self) -> None:
         super().setUp()
@@ -526,7 +532,7 @@ class LogicalUnitMaterialization(EvidencePackages):
                         (self.policy,),
                     )
                     future = pool.submit(run)
-                    self.assertTrue(ready.wait(1))
+                    self.assertTrue(ready.wait(PROGRESS_SECONDS))
                     deadline = monotonic() + 0.3
                     blocked = False
                     while monotonic() < deadline:

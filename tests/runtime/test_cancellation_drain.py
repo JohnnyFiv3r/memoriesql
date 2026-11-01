@@ -41,6 +41,11 @@ from memoriesql.infrastructure.models.pydanticai_executor import (
 )
 from memoriesql.infrastructure.postgres.model_accounting import _finish_database_write
 
+# Bound for waits on real progress of another thread or session. A contended
+# hosted runner can take many times a local run to reach a step, so the bound
+# only has to catch a wedge (test_attempt_refusals' receipt gate is 30 s too).
+PROGRESS_SECONDS = 30
+
 
 class CancellationDrain(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
@@ -156,7 +161,7 @@ class CancellationDrain(unittest.IsolatedAsyncioTestCase):
                 and not self.worker._cleanup_heartbeat.done()
             )
             self.settlement_started.set()
-            if not self.release_settlement.wait(3):
+            if not self.release_settlement.wait(PROGRESS_SECONDS):
                 raise AssertionError("test did not release settlement")
             if self.settlement_error:
                 raise RuntimeError("fictional settlement unavailable")
@@ -239,7 +244,7 @@ class CancellationDrain(unittest.IsolatedAsyncioTestCase):
 
         def heartbeat(*args: Any) -> bool:
             entered.set()
-            if not release.wait(3):
+            if not release.wait(PROGRESS_SECONDS):
                 raise AssertionError("test did not release heartbeat")
             finished.set()
             return True
@@ -322,7 +327,7 @@ class CancellationDrain(unittest.IsolatedAsyncioTestCase):
         def write(*args: Any, **kwargs: Any) -> bool:
             if args[1].event_kind == "run.failed":
                 entered.set()
-                if not release.wait(3):
+                if not release.wait(PROGRESS_SECONDS):
                     raise AssertionError("test did not release run-event write")
             return True
 
@@ -348,7 +353,7 @@ class CancellationDrain(unittest.IsolatedAsyncioTestCase):
         def write(*args: Any, **kwargs: Any) -> bool:
             if args[1].event_kind == "run.failed":
                 entered.set()
-                if not release.wait(3):
+                if not release.wait(PROGRESS_SECONDS):
                     raise AssertionError("test did not release rejected write")
                 return False  # The real worker sink rejects this durable fence.
             return True
@@ -406,7 +411,7 @@ class CancellationDrain(unittest.IsolatedAsyncioTestCase):
                 and not self.worker._cleanup_heartbeat.done()
             )
             self.settlement_started.set()
-            if not self.release_settlement.wait(3):
+            if not self.release_settlement.wait(PROGRESS_SECONDS):
                 raise AssertionError("test did not release settlement")
             return "succeeded", True
 
@@ -491,7 +496,7 @@ class CancellationDrain(unittest.IsolatedAsyncioTestCase):
         def stalled(operation: Any, *, timeout_ms: int | None = None) -> bool:
             self.record_timeouts.append(timeout_ms)
             entered.set()
-            if not release.wait(3):
+            if not release.wait(PROGRESS_SECONDS):
                 raise AssertionError("test did not release the refusal record")
             return True
 
@@ -585,7 +590,7 @@ class AccountingCancellation(unittest.IsolatedAsyncioTestCase):
 
         def write(value: str) -> None:
             entered.set()
-            if not release.wait(2):
+            if not release.wait(PROGRESS_SECONDS):
                 raise AssertionError("test did not release ledger write")
             committed.append(value)
 
@@ -640,7 +645,7 @@ class AccountingLoopShutdown(unittest.TestCase):
                 def write(value: str) -> None:
                     observed.append(context.get())
                     entered.set()
-                    if not release.wait(5):
+                    if not release.wait(PROGRESS_SECONDS):
                         raise AssertionError("test did not release ledger write")
                     try:
                         if fails:
@@ -691,8 +696,8 @@ class AccountingLoopShutdown(unittest.TestCase):
                 runner = threading.Thread(target=run, daemon=True)
                 runner.start()
                 try:
-                    self.assertTrue(entered.wait(2))
-                    self.assertTrue(shutdown.wait(2))
+                    self.assertTrue(entered.wait(PROGRESS_SECONDS))
+                    self.assertTrue(shutdown.wait(PROGRESS_SECONDS))
                     self.assertFalse(returned.is_set())
                     self.assertFalse(finished.is_set())
                 finally:
