@@ -211,6 +211,22 @@ the engine scope instead of a global sequence. Preserve migrations 0001–0055
 and earlier records. No new table, capability, role, record kind or release is
 part of this slice. See `docs/engine-intake.md`.
 
+The owner-authorized forward schema-60 slice (authorized 2026-11-19) merges
+the bead types `goal_declaration` and `goal_update` into one `goal`: a goal and
+the updates about it are one kind of statement, and how an update relates to
+its goal is a relationship between beads, not a type. `goal` is registered at
+revision 1; the two others get a revision 2 that is not authorable, so they are
+no longer current bead types or in the engine vocabulary, and engine intake
+refuses a type decision for them. Their revision-1 rows are unchanged: beads
+pinning them keep their meaning, and an author pinning revision 1 explicitly is
+accepted, as for any pinned revision. The same slice (authorized 2026-11-20)
+registers the bead type `social`, at revision 1: a greeting, thanks,
+compliment, sympathy or check-in that tends a relationship and states nothing
+else, while a message that also tells something takes the type of what it
+tells. Preserve migrations 0001–0059 and earlier records. No new table,
+function, capability, role, contract, record kind or release is part of this
+slice. See `docs/engine-intake.md`.
+
 The Q-owned forward schema-24 slice permits bounded, currently authorized stored
 bead/result and evidence inspection. Preserve migrations 0001–0023 and earlier
 records. No inference, canonical writes, provider binding or private consumption

@@ -237,6 +237,10 @@
     {
       "filename": "0059_work_deadlines_after_lock_waits.sql",
       "sha256": "dd3518eade6ab525e888faa31215c2df17e9edfabc9ed6ffbc8bcef8da65741e"
+    },
+    {
+      "filename": "0060_goal_and_social_bead_types.sql",
+      "sha256": "07a7309d0b01ba7666e9a91951f27d1b8b27f9a21a209738f633726e0ef82a8f"
     }
   ]
 }
