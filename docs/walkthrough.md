@@ -37,9 +37,10 @@ database.
    further, explicit correction.
 5. **Read under current authority.** Inspection and evidence reads establish
    authorization afresh on every call and never trigger authoring or model work.
-6. **Relate and investigate.** Relationships use a versioned vocabulary and are
-   accepted only after a separate assessment. In development source, agents
-   compose SQL over an admitted logical schema.
+6. **Relate and investigate.** Relationships use a versioned vocabulary. In the
+   post-acceptance assessment path, a separate specialist assesses each proposed
+   assertion. In development source, agents compose SQL over an admitted logical
+   schema.
 
 ## Two worked examples
 
