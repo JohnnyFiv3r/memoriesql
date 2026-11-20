@@ -1410,5 +1410,53 @@ class EngineIntakeUpgrade(EngineIntakeFixture):
         self.assertEqual(page.records, (newer,))
 
 
+class OneGoalBeadType(EngineIntakeFixture):
+    """Schema 60: one `goal` in place of `goal_declaration` and `goal_update`."""
+
+    schema_version = 60
+
+    def test_one_goal_type_takes_the_place_of_two(self) -> None:
+        # goal_declaration and goal_update are no longer current; goal is.
+        # Their revision-1 rows are unchanged.
+        keys = [t.key for t in self.intake().vocabulary().types]
+        self.assertIn("goal", keys)
+        self.assertNotIn("goal_declaration", keys)
+        self.assertNotIn("goal_update", keys)
+        self.assertEqual(len(keys), 11)
+        retired = self.db.execute(
+            "SELECT t.stable_key, r.revision, r.authorable "
+            "FROM memoriesql.bead_type_revisions r "
+            "JOIN memoriesql.bead_types t ON t.bead_type_id = r.bead_type_id "
+            "WHERE t.stable_key IN ('goal_declaration', 'goal_update') "
+            "ORDER BY 1, 2"
+        ).fetchall()
+        self.assertEqual(
+            retired,
+            [
+                ("goal_declaration", 1, True),
+                ("goal_declaration", 2, False),
+                ("goal_update", 1, True),
+                ("goal_update", 2, False),
+            ],
+        )
+
+        (goal,) = event_records(
+            "acme",
+            "orchard/60",
+            ["We aim to open in May."],
+            [(assigned("goal"), rule())],
+        )
+        self.assertEqual(self.deliver(goal), [EngineRecordAccepted(outcome="accepted")])
+        (old,) = event_records(
+            "acme",
+            "orchard/61",
+            ["Still on track for May."],
+            [(assigned("goal_update"), rule())],
+        )
+        (result,) = self.deliver(old)
+        self.assertIsInstance(result, EngineRecordRejected)
+        self.assertIn("not a current memoriesQL bead type", str(result.reason))
+
+
 if __name__ == "__main__":
     unittest.main()

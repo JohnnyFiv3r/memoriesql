@@ -106,6 +106,14 @@ returns the current governed bead types as the engine's vocabulary
 (`id = "memoriesql.bead_types"`, `types = [{key, rev, definition}]`); the engine
 loads it rather than registering types of its own.
 
+Since schema 60 the vocabulary has one `goal` in place of `goal_declaration`
+and `goal_update`. A goal and the updates about it are one kind of statement;
+how an update relates to its goal (it replaces, confirms or withdraws what was
+said, or follows from it) is what the engine's judge records between the two
+beads. The two old types have a revision 2 that is not authorable, so intake
+refuses a type decision for them; beads already pinned to their revision 1
+keep their meaning.
+
 The typed requests and PostgreSQL adapter live in
 `memoriesql.application.engine_intake` and
 `memoriesql.infrastructure.postgres.engine_intake`.
