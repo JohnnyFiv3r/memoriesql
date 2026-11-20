@@ -19,6 +19,10 @@ It is for developers composing their own applications, services and agent hosts.
 > fictional installed-package tests. Installing it does not deliver a configured
 > memory service, a qualified live-provider integration or production recall.
 
+**Technical walkthrough:** [docs/walkthrough.md](docs/walkthrough.md) traces each
+main design decision to the code and tests that implement it, states what that
+evidence establishes, and lists the next engineering questions.
+
 ## What the core does
 
 | Capability | What a builder can use |
@@ -116,7 +120,7 @@ rollback or final usage reconciliation.
   stored-result inspection and hard-bounded model-admission interface.
 - **Published in 0.0.9:** [declared evidence scopes](docs/declared-evidence-scopes.md)
   let a qualified producer bind complete retained records without claiming a
-  native turn or complete episode. This is not included in the installation above.
+  native turn or complete episode.
 - **0.0.9 opt-in:** [supervised managed dispatch](docs/supervised-dispatch.md)
   distinguishes an observable turn from unknown hidden inference requests, consumes
   approval before dispatch and retains reported or unavailable usage truthfully.
