@@ -114,6 +114,13 @@ beads. The two old types have a revision 2 that is not authorable, so intake
 refuses a type decision for them; beads already pinned to their revision 1
 keep their meaning.
 
+Schema 60 also adds `social`: a greeting, thanks, compliment, sympathy or
+check-in that tends a relationship and states nothing else. Tending a
+relationship is sometimes what a conversation is about, and without a type for
+it a reader leaves such messages untyped. A message that also tells something
+takes the type of what it tells, so a thank-you that comes with news is typed
+by the news.
+
 The typed requests and PostgreSQL adapter live in
 `memoriesql.application.engine_intake` and
 `memoriesql.infrastructure.postgres.engine_intake`.

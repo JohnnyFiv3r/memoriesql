@@ -1410,8 +1410,9 @@ class EngineIntakeUpgrade(EngineIntakeFixture):
         self.assertEqual(page.records, (newer,))
 
 
-class OneGoalBeadType(EngineIntakeFixture):
-    """Schema 60: one `goal` in place of `goal_declaration` and `goal_update`."""
+class GoalAndSocialBeadTypes(EngineIntakeFixture):
+    """Schema 60: one `goal` in place of `goal_declaration` and `goal_update`,
+    and `social`."""
 
     schema_version = 60
 
@@ -1422,7 +1423,7 @@ class OneGoalBeadType(EngineIntakeFixture):
         self.assertIn("goal", keys)
         self.assertNotIn("goal_declaration", keys)
         self.assertNotIn("goal_update", keys)
-        self.assertEqual(len(keys), 11)
+        self.assertEqual(len(keys), 12)
         retired = self.db.execute(
             "SELECT t.stable_key, r.revision, r.authorable "
             "FROM memoriesql.bead_type_revisions r "
@@ -1456,6 +1457,20 @@ class OneGoalBeadType(EngineIntakeFixture):
         (result,) = self.deliver(old)
         self.assertIsInstance(result, EngineRecordRejected)
         self.assertIn("not a current memoriesQL bead type", str(result.reason))
+
+    def test_social_is_a_current_type(self) -> None:
+        (social,) = [t for t in self.intake().vocabulary().types if t.key == "social"]
+        self.assertEqual(social.rev, 1)
+        self.assertIn("states nothing else", social.definition)
+        (thanks,) = event_records(
+            "acme",
+            "orchard/62",
+            ["Thanks so much, see you Friday!"],
+            [(assigned("social"), rule())],
+        )
+        self.assertEqual(
+            self.deliver(thanks), [EngineRecordAccepted(outcome="accepted")]
+        )
 
 
 if __name__ == "__main__":
