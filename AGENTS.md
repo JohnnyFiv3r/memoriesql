@@ -217,9 +217,9 @@ the updates about it are one kind of statement, and how an update relates to
 its goal is a relationship between beads, not a type. `goal` is registered at
 revision 1; the two others get a revision 2 that is not authorable, so they are
 no longer current bead types or in the engine vocabulary, and engine intake
-refuses a type decision for them. Their revision-1 rows are unchanged: beads
-pinning them keep their meaning, and an author pinning revision 1 explicitly is
-accepted, as for any pinned revision. The same slice (authorized 2026-11-20)
+refuses a type decision for them. Their revision-1 rows are unchanged. Existing
+accepted observations keep their pinned definitions and meaning. The old goal
+types are retired for new accepted meaning. The same slice (authorized 2026-11-20)
 registers the bead type `social`, at revision 1: a greeting, thanks,
 compliment, sympathy or check-in that tends a relationship and states nothing
 else, while a message that also tells something takes the type of what it
