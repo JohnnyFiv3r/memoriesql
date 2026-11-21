@@ -30,14 +30,15 @@ CREDENTIAL_IN_URL = "credential in repository URL"
 _OWNER_REPOSITORY = r"([\w-]+)/([\w.-]+)"
 _PATH_PAIR = re.compile("/" + _OWNER_REPOSITORY)
 _SCP_PAIR = re.compile(":" + _OWNER_REPOSITORY)
-# A recognised host, exactly: nothing host-like before it, and it does not run on
-# into a longer host name, and is not itself the user of other userinfo. An optional scheme with userinfo, or an SCP "git@",
+# A recognised host, exactly: nothing host-like before it, it does not run on into
+# a longer host name, and it is not the user of other userinfo (an "@" before the
+# next "/", "?" or "#"). An optional scheme with userinfo, or an SCP "git@",
 # comes before it. Only the host is consumed; the repository is read after it.
 _REPOSITORY_HOST = re.compile(
-    r"(?:(?P<scheme>(?i:https?|ssh))://(?:(?P<user>[^\s/@]+)@)?|(?P<scp>(?i:git)@))?"
+    r"(?:(?P<scheme>(?i:https?|ssh))://(?:(?P<user>[^\s/@?#]+)@)?|(?P<scp>(?i:git)@))?"
     r"(?<![\w.-])(?P<host>(?i:(?:www\.)?github\.com|raw\.githubusercontent\.com"
     r"|api\.github\.com|codeload\.github\.com|gist\.github\.com"
-    r"|(?:[\w-]+\.)+github\.io))(?![\w-]|\.[\w-]|[^\s/@]*@)"
+    r"|(?:[\w-]+\.)+github\.io))(?![\w-]|\.[\w-]|[^\s/@?#]*@)"
 )
 NO_GIT = (
     "the boundary check needs a git checkout: git was not found on PATH. "

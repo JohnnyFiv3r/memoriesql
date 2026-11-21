@@ -352,12 +352,16 @@ class RecognisedLinkForms(ScratchRepository):
         self.git("add", "a.md")
         self.passes()
 
-    def test_every_occurrence_of_the_gist_host_is_refused(self) -> None:
+    def test_every_occurrence_of_the_gist_and_pages_hosts_is_refused(self) -> None:
         for text in (
             f"https://gist.{GH}.com",
             f"https://gist.{GH}.com?probe=1",
             f"https://gist.{GH}.com/someone/0123456789abcdef",
             f"gist.{GH}.com/someone/0123456789abcdef",
+            f"https://gist.{GH}.com?contact=alice@example.invalid",
+            f"https://gist.{GH}.com#alice@example.invalid",
+            f"https://someone.{GH}.io#alice@example.invalid",
+            f"https://someone.{GH}.io?contact=alice@example.invalid",
         ):
             with self.subTest(text):
                 self.refused_as(text, URL_REFUSED)
