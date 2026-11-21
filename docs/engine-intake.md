@@ -308,5 +308,72 @@ both axes and hashes to
 `122993b122c03dfae38f8dab6e285b59b83f3538f3e57512ba7e8a632f25fc28`.
 The installed runtime case uses a fictional event with two multibyte chunks
 to exercise the same read path and verify that a source revocation closes
-the citation. Per-event engine erasure and correction application belong to
-the lifecycle integration. Schema 61 stores immutable bindings.
+the citation. Correction application is described in
+[Applying a correction to a claim](#applying-a-correction-to-a-claim).
+Per-event engine erasure is not in any slice yet. Schema 61 stores immutable
+bindings.
+
+## Applying a correction to a claim
+
+A committed correction edge between two chunks can become one governed event
+on an accepted claim. This runs after each chunk is bound to an accepted
+statement above. The engine decides nothing here. It supplies no acceptance
+authority and the edge never creates, accepts or changes a bead, statement or
+claim body.
+
+| Edge | Claim event on the target claim | Related claim |
+| --- | --- | --- |
+| `repl` | `supersede` | the origin chunk's claim |
+| `withdraws` | `retract` | none |
+| `!contradicts` | `dispute` | the origin chunk's claim |
+
+The target is the chunk that ended and the origin is the chunk that ended it.
+A withdrawal needs no claim at its origin. A person selects the edge and
+supplies the reason and the head of the target claim's events that they
+compared. The command goes through the existing human lifecycle command
+(`record_claim_event`) under the caller's own authority. A caller without
+lifecycle write authority on the target claim is refused. Nothing selects or
+applies an edge on its own.
+
+Each endpoint must pin the claim's accepted statement with its unit and content
+digest. Two chunks that resolve to the same statement must pin the same unit and
+digest, and the pin is recorded once. If the pins differ, the edge is refused
+with `correction evidence pins disagree about the shared statement`. The other
+refusals happen before any write: an arrow other than the three above, a record
+key other than `edge:<arrow>:<origin chunk>:<target chunk>`, endpoints from
+different enrollments or producer workspaces, an empty producer workspace, the
+same chunk at both ends, a missing target claim, a missing origin claim for
+`repl` or `!contradicts`, evidence that is not a statement of its claim, and a
+claim correcting itself.
+
+The replay identity is the enrollment, the producer workspace and the edge's
+record key, so a different reason or compared head does not make a new event.
+Applying the same edge again returns the receipt of the first application and
+adds no event. If the compared head no longer matches the claim's last event,
+the command is refused with the lifecycle's existing conflict (a serialization
+failure) and records nothing.
+
+Two rechecks keep a claim's state from revealing withdrawal evidence the reader
+can no longer open. Both use the existing refusals and do not say whether the
+evidence is absent or withheld.
+
+- Schema 62: inspecting a claim whose state depends on a retraction checks
+  current authority for the statements behind it. That covers its own retraction,
+  the retraction of a claim that supersedes it or disputes it, and the
+  retraction of a claim it disputes. Without authority the inspection returns
+  the `unavailable` outcome (`bead_relations_unavailable`, SQLSTATE `42501`)
+  and no partial state. A reader at an earlier `known` time is checked only for
+  retractions recorded by then. An event and its evidence count as committed
+  together.
+- Schema 63: before a worker receives cached relation candidates for a
+  revision-6 task, the same withdrawal evidence and the task's origin are
+  checked again. If either was revoked since the task was created, delivery
+  fails with `relation_candidate_unavailable` (SQLSTATE `42501`) and the worker
+  receives no candidate content.
+
+The installed runtime cases in `tests/runtime/test_authored_relations.py` use
+fictional data. They cover a committed replacement, history and replay, a
+worker credential refused as a writer, a dispute and a withdrawal, a stale
+compared head, a superseded claim whose superseder was withdrawn on revoked
+evidence (`test_superseded_claim_withholds_state_when_its_superseder_withdrawal_is_withheld`),
+and both rechecks.
