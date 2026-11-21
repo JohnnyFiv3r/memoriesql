@@ -26,9 +26,25 @@ from psycopg.conninfo import make_conninfo
 
 import memoriesql.infrastructure.postgres.agent_sql_results as results_module
 from memoriesql.application.agent_sql_results import remaining_after
+from memoriesql.application.engine_intake import (
+    BindEngineEventEvidence,
+    EngineChunkEvidence,
+    EngineChunkSpan,
+)
 from memoriesql.application.evidence_packages import SourceQualification
+from memoriesql.application.investigation_contracts import SourceTextEntry
+from memoriesql.application.logical_unit_materialization import LogicalEventDeclaration
+from memoriesql.application.source_enrollment import (
+    EnrollExactSource,
+    RevokeExactSource,
+)
 from memoriesql.infrastructure.postgres.agent_sql_results import PostgresAgentSqlResults
+from memoriesql.infrastructure.postgres.authorization import PostgresAuthorizationPort
+from memoriesql.infrastructure.postgres.engine_intake import PostgresEngineIntake
 from memoriesql.infrastructure.postgres.migration_runner import discover_migrations
+from memoriesql.infrastructure.postgres.source_enrollment import (
+    PostgresSourceEnrollment,
+)
 
 if TYPE_CHECKING:
     from tests.runtime import agent_relation_fixtures as relation_agents
@@ -2231,3 +2247,226 @@ class AgentSourceTextRuntime(unittest.TestCase):
             self.available(raw, reply)
             self.assert_checkpoint_basis(reply, context)
         self.assertEqual(replay[1]["source_text"], first[1]["source_text"])
+
+
+@unittest.skipUnless(
+    os.environ.get("N1_TEST_DATABASE_URL"), "assigned disposable PostgreSQL required"
+)
+class EngineEventCitationRuntime(unittest.TestCase):
+    def test_bound_event_opens_exact_normalized_chunks_under_current_permission(
+        self,
+    ) -> None:
+        r = fixtures.AgentSqlResults(methodName="runTest")
+        self.addCleanup(r.doCleanups)
+        r.setUp()
+        db, f = r.db, r.fixture
+        schema = next(
+            item.version
+            for item in discover_migrations()
+            if item.name == "engine_event_evidence"
+        )
+        migrate(db, expected_current_version=43, target_version=schema)
+        enrollment = PostgresSourceEnrollment(
+            db, credential_sha256=f.secret_hash, workspace_id=f.workspace
+        )
+        enrolled = enrollment.enroll(
+            EnrollExactSource(
+                request_id=uuid4(),
+                source_system="core-memory",
+                object_kind="engine_scope",
+                external_object_id="acme",
+                source_schema_version=1,
+                exact_source_confirmed=True,
+            )
+        )
+        scope, source = relation_agents.explicit_scope(
+            db, f, enrolled=(enrolled.access_scope_id, enrolled.source_object_id)
+        )
+        # First chunk ends with an astral code point. The second starts with
+        # a decomposed accent and includes CJK. None of these bytes are the
+        # fictional raw capture for this unit.
+        parts = ("Fictional orchard 🍐", "e\u0301 and 中\n")
+        normalized = "".join(parts)
+        engine_event = UUID("9d03e605-3e26-80f3-9c96-946ba2e66057")
+        declaration = f.materialization
+
+        def materialization(
+            package: Any, *, event: LogicalEventDeclaration, **updates: Any
+        ) -> Any:
+            native = event.native.model_copy(
+                update={"native_id": f"core-memory.v2:w1:{engine_event}"}
+            )
+            return declaration(
+                package, event=event.model_copy(update={"native": native}), **updates
+            )
+
+        with patch.object(f, "materialization", materialization):
+            bead = r.normalized_bead(
+                normalized,
+                "engine-v2-pear",
+                raw="Fictional raw capture [pear][e-acute][CJK]",
+                source=source,
+                scope=scope,
+            )
+        accepted = db.execute(
+            "SELECT st.statement_id, e.evidence_event_id, e.evidence_source_unit_id, "
+            "e.evidence_content_hash FROM memoriesql.bead_semantic_statements AS st "
+            "JOIN memoriesql.bead_semantic_statement_evidence AS e USING (tenant_id, statement_id) "
+            "WHERE st.bead_id = %s",
+            (bead,),
+        ).fetchone()
+        assert accepted is not None
+        statement_id, event_id, unit_id, unit_hash = accepted
+        chunks = []
+        byte_offset = char_offset = 0
+        for part in parts:
+            data = part.encode()
+            chunk = EngineChunkSpan(
+                chunk_id=uuid4(),
+                byte_start=byte_offset,
+                byte_end=byte_offset + len(data),
+                char_start=char_offset,
+                char_end=char_offset + len(part),
+                chunk_sha256=hashlib.sha256(data).hexdigest(),
+            )
+            chunks.append(chunk)
+            byte_offset, char_offset = chunk.byte_end, chunk.char_end
+        command = BindEngineEventEvidence(
+            source_object_id=source,
+            engine_workspace="w1",
+            engine_event_id=engine_event,
+            event_sha256=hashlib.sha256(normalized.encode()).hexdigest(),
+            source_unit_id=unit_id,
+            statement_id=statement_id,
+            chunks=tuple(chunks),
+        )
+        intake = PostgresEngineIntake(
+            db, credential_sha256=f.secret_hash, workspace_id=f.workspace
+        )
+        _, agent = r.pair_agent(scope, AGENT, label="engine-evidence")
+        agent_intake = PostgresEngineIntake(
+            db, credential_sha256=agent, workspace_id=f.workspace
+        )
+
+        def resolve(chunk_id: UUID, secret: str) -> EngineChunkEvidence:
+            # The lifecycle definer will use this private seam. Even authorized
+            # product roles have no direct EXECUTE privilege.
+            with db.transaction():
+                PostgresAuthorizationPort(db).begin_context(
+                    credential_sha256=secret, requested_workspace_id=f.workspace
+                )
+                row = db.execute(
+                    "SELECT memoriesql.resolve_engine_chunk_evidence_v1(%s,%s,%s,%s)",
+                    (source, "w1", engine_event, chunk_id),
+                ).fetchone()
+                assert row is not None
+                return EngineChunkEvidence.model_validate(row[0])
+
+        with self.assertRaises(PermissionError):
+            agent_intake.bind_event_evidence(command)
+        with self.assertRaises(PermissionError):
+            intake.bind_event_evidence(
+                command.model_copy(update={"engine_workspace": "w2"})
+            )
+        bad_span = chunks[0].model_copy(update={"char_end": chunks[0].char_end + 1})
+        with self.assertRaises(psycopg.errors.InvalidParameterValue):
+            intake.bind_event_evidence(
+                command.model_copy(update={"chunks": (bad_span, chunks[1])})
+            )
+        # Failed binding left neither the event nor a prefix of chunks held.
+        with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+            resolve(chunks[0].chunk_id, agent)
+        self.assertEqual(intake.bind_event_evidence(command), "bound")
+        with f.connection() as reopened:
+            replay = PostgresEngineIntake(
+                reopened, credential_sha256=f.secret_hash, workspace_id=f.workspace
+            )
+            self.assertEqual(replay.bind_event_evidence(command), "already_bound")
+        changed = chunks[1].model_copy(update={"chunk_id": uuid4()})
+        with self.assertRaises(psycopg.errors.UniqueViolation):
+            intake.bind_event_evidence(
+                command.model_copy(update={"chunks": (chunks[0], changed)})
+            )
+        with db.transaction(), self.assertRaises(psycopg.errors.InsufficientPrivilege):
+            f.begin()
+            db.execute(
+                "SELECT memoriesql.resolve_engine_chunk_evidence_v1(%s,%s,%s,%s)",
+                (source, "w1", engine_event, chunks[0].chunk_id),
+            )
+
+        run = r.start(agent)
+        _, result = r.query(run, SOURCES + " LIMIT 20", secret=agent, page_size=20)
+        self.assertEqual(result["outcome"], "available", result)
+        ((ref, unit_ref, digest, state, text),) = [
+            row["values"]
+            for row in result["page"]["rows"]
+            if row["values"][1] == str(unit_id)
+        ]
+        self.assertEqual(
+            (unit_ref, digest, state, text),
+            (str(unit_id), unit_hash, "available", normalized),
+        )
+        source_ref = {
+            "kind": "source",
+            "ref": ref,
+            "unit_ref": unit_ref,
+            "content_sha256": digest,
+        }
+        entries = []
+        for span in chunks:
+            binding = resolve(span.chunk_id, agent)
+            self.assertEqual(binding.event_id, event_id)
+            self.assertEqual(binding.source_unit_id, unit_id)
+            self.assertEqual(binding.content_sha256, unit_hash)
+            self.assertEqual(
+                binding.model_dump(include=set(EngineChunkSpan.model_fields)),
+                span.model_dump(),
+            )
+            request_entry = SourceTextEntry.model_validate(
+                {
+                    "source": source_ref,
+                    "start": binding.char_start,
+                    "end": binding.char_end,
+                }
+            )
+            entries.append(request_entry.model_dump(mode="json"))
+        request = {
+            "contract_version": 1,
+            "run_ref": run["run_ref"],
+            "step_key": str(uuid4()),
+            "kind": "read_source_text",
+            "entries": entries,
+            "max_bytes": 1024,
+            "cursor": None,
+        }
+        opened = r.send(request, secret=agent)
+        self.assertEqual(opened["outcome"], "available", opened)
+        slices = opened["source_text"]["slices"]
+        self.assertEqual(tuple(piece["text"] for piece in slices), parts)
+        for span, piece in zip(chunks, slices, strict=True):
+            data = piece["text"].encode()
+            self.assertEqual(len(data), span.byte_end - span.byte_start)
+            self.assertEqual(hashlib.sha256(data).hexdigest(), span.chunk_sha256)
+        other = r.start(agent)
+        self.assertEqual(
+            r.send(request | {"run_ref": other["run_ref"]}, secret=agent)["outcome"],
+            "unavailable",
+        )
+
+        enrollment.revoke(
+            RevokeExactSource(
+                request_id=uuid4(),
+                source_object_id=source,
+                reason="Fictional permission proof",
+            )
+        )
+        with self.assertRaises(psycopg.errors.InsufficientPrivilege) as denied:
+            resolve(chunks[0].chunk_id, agent)
+        with self.assertRaises(psycopg.errors.InsufficientPrivilege) as unknown:
+            resolve(uuid4(), agent)
+        self.assertEqual(str(denied.exception), str(unknown.exception))
+        with self.assertRaises(PermissionError):
+            intake.bind_event_evidence(command)
+        replayed = r.send(request, secret=agent)
+        self.assertEqual(replayed["outcome"], "unavailable")
+        self.assertNotIn("source_text", replayed)

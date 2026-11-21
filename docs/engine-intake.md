@@ -211,3 +211,55 @@ ordinal. Positions are local to the named engine workspace. Gaps are expected.
 They establish neither a kernel knowledge frame nor a complete change-feed
 cursor. These coordinates let a future receiver reconcile the exact fictional
 evidence against its own intake and permissions before issuing citations.
+
+## Binding a complete normalized event to accepted evidence
+
+Schema 61 supplies the Core binding for `core_memory.record.v2` coordinates
+through `PostgresEngineIntake.bind_event_evidence`. The trusted producer
+supplies the selected enrolled source's canonical ID and a complete text or
+JSON event's workspace, event ID and normalized UTF-8 SHA-256. It supplies
+the chunk IDs, hashes and byte and character spans in source order. In the
+canonical capture, the event's external ID is
+`core-memory.v2:<engine workspace>:<engine event UUID>` within that source.
+The binding request names the canonical source unit and an already accepted
+statement whose evidence includes that unit.
+
+The canonical unit must contain the complete normalized event under the
+existing source-text policy. Binding checks the authoritative stored event
+identity, the accepted evidence link and the exact normalized UTF-8 bytes.
+Both sets of spans are zero-based and half-open. They must partition the
+event from offset zero in the same order, and each chunk hash must match its
+byte slice. Character offsets count Unicode code points, including combining
+marks. The bounds are 256 chunks and 16 MiB of normalized event text.
+Binding requires the existing engine delivery and scoped write permission,
+plus current canonical query and source-read permission.
+
+An equivalent replay returns `already_bound`. A different pin, digest or
+ordered chunk map under the same enrolled source, engine workspace and
+engine event ID conflicts, preserving the first binding. A chunk ID can
+belong to only one event in the same enrolled source and engine workspace.
+Binding creates no source text copy and does not accept a statement or apply
+an engine judgment.
+
+The internal resolver
+`resolve_engine_chunk_evidence_v1(source_object_id, engine_workspace, engine_event_id, chunk_id)`
+returns the canonical event ID, unit ID and content pin with the verified
+chunk offsets and hash. Absent and unauthorized bindings both return
+`engine evidence is unavailable`. A citation must still use the source
+reference delivered by the agent's own query result, with its matching unit
+ID and canonical content pin. Use the chunk's character interval in the
+existing [same-run `read_source_text` request](verification/pr-05-agent-source-text-view.md).
+Page longer chunks within that request's existing UTF-8 and transport limits.
+The canonical pin can be a sealed inventory hash and is distinct from the
+chunk hash. The reader's current permission and result-closure checks apply
+each time the citation opens.
+
+For example, the fictional `w1` / `acme` export above identifies event
+`30fa9d28-8c4b-86c3-9c25-519bcd2f3df1` and chunk
+`9f360cd9-879d-834e-9617-78336d52f80c`. That chunk covers `[0, 64)` on
+both axes and hashes to
+`122993b122c03dfae38f8dab6e285b59b83f3538f3e57512ba7e8a632f25fc28`.
+The installed runtime case uses a fictional event with two multibyte chunks
+to exercise the same read path and verify that a source revocation closes
+the citation. Per-event engine erasure and correction application belong to
+the lifecycle integration.

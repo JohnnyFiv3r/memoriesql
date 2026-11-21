@@ -33,12 +33,14 @@ class RelationGrants:
     pairing_revision: int
 
 
-def explicit_scope(db: Any, fixture: Any) -> tuple[uuid.UUID, uuid.UUID]:
+def explicit_scope(
+    db: Any, fixture: Any, *, enrolled: tuple[uuid.UUID, uuid.UUID] | None = None
+) -> tuple[uuid.UUID, uuid.UUID]:
     """An explicit scope with its own fictional source, exactly as the fixture's
     remote_scope() builds one, except that every call gets a distinct source
     identity: remote_scope() may run only once per fixture (the harness may
     already have used it). Returns the scope and its source."""
-    scope, source = uuid.uuid4(), uuid.uuid4()
+    scope, source = enrolled or (uuid.uuid4(), uuid.uuid4())
     tag = source.hex[:12]
     pairings = db.execute(
         "SELECT r.pairing_grant_id, r.revision, r.allowed_capabilities, "
@@ -52,15 +54,14 @@ def explicit_scope(db: Any, fixture: Any) -> tuple[uuid.UUID, uuid.UUID]:
     assert len(pairings) == 2, "the worker and the attestor are each paired once"
     with db.transaction():
         fixture.begin()
-        db.execute(
-            "SELECT memoriesql.create_access_scope(%s,%s,'explicit',%s,%s)",
-            (scope, uuid.uuid4(), "Fictional agent orchard " + tag, fixture.now),
-        )
-        for principal in (
-            fixture.principal,
-            fixture.worker_principal,
-            fixture.attestor,
-        ):
+        principals = [fixture.worker_principal, fixture.attestor]
+        if enrolled is None:
+            db.execute(
+                "SELECT memoriesql.create_access_scope(%s,%s,'explicit',%s,%s)",
+                (scope, uuid.uuid4(), "Fictional agent orchard " + tag, fixture.now),
+            )
+            principals.insert(0, fixture.principal)
+        for principal in principals:
             db.execute(
                 "SELECT memoriesql.create_access_grant(%s,%s,%s,%s,%s,%s)",
                 (
@@ -86,21 +87,22 @@ def explicit_scope(db: Any, fixture: Any) -> tuple[uuid.UUID, uuid.UUID]:
                     fixture.now,
                 ),
             )
-    db.execute(
-        "INSERT INTO memoriesql.protected_resources SELECT tenant_id,workspace_id,%s,%s,"
-        "resource_kind,owner_user_id,status,created_by_principal_id,created_at "
-        "FROM memoriesql.protected_resources WHERE resource_id=%s",
-        (scope, source, fixture.source),
-    )
-    db.execute(
-        "INSERT INTO memoriesql.source_objects(tenant_id,workspace_id,access_scope_id,"
-        "source_object_id,source_system,object_kind,external_object_id,schema_version,"
-        "metadata,created_at,last_observed_at,owner_user_id) SELECT tenant_id,"
-        "workspace_id,%s,%s,source_system,object_kind,%s,schema_version,metadata,"
-        "created_at,last_observed_at,owner_user_id FROM memoriesql.source_objects "
-        "WHERE source_object_id=%s",
-        (scope, source, "orchard.agent." + tag, fixture.source),
-    )
+    if enrolled is None:
+        db.execute(
+            "INSERT INTO memoriesql.protected_resources SELECT tenant_id,workspace_id,%s,%s,"
+            "resource_kind,owner_user_id,status,created_by_principal_id,created_at "
+            "FROM memoriesql.protected_resources WHERE resource_id=%s",
+            (scope, source, fixture.source),
+        )
+        db.execute(
+            "INSERT INTO memoriesql.source_objects(tenant_id,workspace_id,access_scope_id,"
+            "source_object_id,source_system,object_kind,external_object_id,schema_version,"
+            "metadata,created_at,last_observed_at,owner_user_id) SELECT tenant_id,"
+            "workspace_id,%s,%s,source_system,object_kind,%s,schema_version,metadata,"
+            "created_at,last_observed_at,owner_user_id FROM memoriesql.source_objects "
+            "WHERE source_object_id=%s",
+            (scope, source, "orchard.agent." + tag, fixture.source),
+        )
     producer, policy = uuid.uuid4(), uuid.uuid4()
     db.execute(
         "INSERT INTO memoriesql.evidence_producer_policies SELECT tenant_id,workspace_id,"

@@ -241,6 +241,10 @@
     {
       "filename": "0060_goal_and_social_bead_types.sql",
       "sha256": "07a7309d0b01ba7666e9a91951f27d1b8b27f9a21a209738f633726e0ef82a8f"
+    },
+    {
+      "filename": "0061_engine_event_evidence.sql",
+      "sha256": "4879ae839efe61e32b9cb1d02109db99027677c32691b86b22a6953be6ed4a48"
     }
   ]
 }
