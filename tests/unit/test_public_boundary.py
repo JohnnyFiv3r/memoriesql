@@ -121,6 +121,12 @@ class ExaminedFiles(ScratchRepository):
             },
         )
 
+    def test_a_checkout_whose_directory_name_ends_in_a_space_passes(self) -> None:
+        spaced = self.outside / "checkout "
+        self.repo.rename(spaced)
+        with patch.object(boundary, "ROOT", spaced):
+            self.passes()
+
     def test_environments_the_repository_ignores_are_never_read(self) -> None:
         leak = FOREIGN + "\n" + HOME + "\n"
         for relative in (

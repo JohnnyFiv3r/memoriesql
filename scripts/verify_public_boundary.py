@@ -61,7 +61,8 @@ def repository_files() -> tuple[Path, ...]:
         raise ValueError(CANNOT_LIST.format(reason=_reason(top)))
     # A copy with no repository of its own, inside some other repository: that
     # one's file list and ignore rules must not stand in for this one's.
-    if Path(os.fsdecode(top.stdout.strip())).resolve() != ROOT:
+    # Only git's own line ending is removed: a directory name may end in a space.
+    if Path(os.fsdecode(top.stdout.removesuffix(b"\n"))).resolve() != ROOT:
         raise ValueError(NOT_A_CHECKOUT)
     listed = _git("ls-files", "-z", "--cached", "--others", "--exclude-standard")
     if listed.returncode != 0:
