@@ -1668,20 +1668,20 @@ class AuthoredRelations(fixtures.LocalMentions):
             self.assertIn("relation_candidate_unavailable", message)
         self.assertEqual(calls, [])
 
-    def test_redispatched_attempt_rechecks_withdrawal_evidence_before_delivery(
-        self,
-    ) -> None:
-        notice_source = self.add_source("candidate-redispatch-notice")
+    def withdrawn_friday_task(self, label: str) -> tuple[uuid.UUID, uuid.UUID, Any]:
+        """A revision-6 task whose candidate's claim state rests on withdrawal
+        evidence from a separate source. Returns that source and the task."""
+        notice_source = self.add_source(f"{label}-notice")
         friday = self.author(
             "The fictional launch is Friday.",
-            "candidate-redispatch-friday",
+            f"{label}-friday",
             plan=lambda extras, bead, _: self.add_claim(
                 extras, bead, "launch", "day", "Friday"
             ),
         )
         notice = self.author(
             "The fictional team withdrew Friday.",
-            "candidate-redispatch-notice",
+            f"{label}-notice",
             source=notice_source,
         )
         migrate(self.db, expected_current_version=27, target_version=63)
@@ -1699,20 +1699,13 @@ class AuthoredRelations(fixtures.LocalMentions):
             )
         )
         text = "A fictional check refers to the launch."
-        affected = self.activate(
-            self.unit(text, "redispatch-after-withdrawal"),
-            "redispatch-after-withdrawal",
-            (friday,),
-        )
+        affected = self.activate(self.unit(text, f"{label}-check"), f"{label}-check", (friday,))
         self.statement_text, self.plan, self.steps, self.mentions = text, None, [], []
-        calls: list[bool] = []
+        return notice_source, notice, affected
 
-        def transport(messages: Any, info: Any) -> Any:
-            calls.append(True)
-            return self.response(messages, info)
-
-        # The first attempt is delivered while the evidence is readable, then
-        # the worker dies before it records a result.
+    def crash_after_first_delivery(self, affected: Any, transport: Any) -> Any:
+        """Deliver the task's first attempt, kill the worker before it records a
+        result, and make the reaped task available for a new attempt."""
         worker = self.worker(transport)
         saved: dict[str, Any] = {}
 
@@ -1725,11 +1718,7 @@ class AuthoredRelations(fixtures.LocalMentions):
             asyncio.run(worker.run_once())
         first = saved["claimed"]
         self.assertEqual(first.fence.task_id, affected.execution_task_id)
-        self.assertTrue(calls)
-        delivered = len(calls)
-
-        # Test-only clock fixture: the lease lapses, the task is reaped and
-        # becomes available again for a new attempt.
+        # Test-only clock fixture: the lease lapses and the task is reaped.
         with self.db.transaction():
             self.db.execute(
                 "ALTER TABLE memoriesql.semantic_task_attempts DISABLE TRIGGER semantic_task_attempts_protect_state"
@@ -1756,14 +1745,21 @@ class AuthoredRelations(fixtures.LocalMentions):
             "UPDATE memoriesql.semantic_tasks SET available_at=clock_timestamp() WHERE task_id=%s",
             (first.fence.task_id,),
         )
-        self.revoke_engine_fixture_source(notice_source)
+        return first
 
+    def second_attempt_at_delivery(
+        self, transport: Any, revoke: Any
+    ) -> tuple[Any, list[str]]:
+        """Run the new attempt. `revoke` runs once the attempt has passed
+        hydration, immediately before the real delivery check, whose refusal
+        is returned with the worker's outcome."""
         authorize_delivery = SourceRevisitingEvidenceAccess.authorize_delivery
         messages: list[str] = []
 
-        async def recorded(
+        async def revoke_then_deliver(
             access: SourceRevisitingEvidenceAccess, delivery: SourceDelivery
         ) -> None:
+            revoke()
             try:
                 await authorize_delivery(access, delivery)
             except psycopg.errors.InsufficientPrivilege as refused:
@@ -1771,9 +1767,100 @@ class AuthoredRelations(fixtures.LocalMentions):
                 raise
 
         with patch.object(
-            SourceRevisitingEvidenceAccess, "authorize_delivery", recorded
+            SourceRevisitingEvidenceAccess, "authorize_delivery", revoke_then_deliver
         ):
-            result = asyncio.run(self.worker(transport).run_once())
+            return asyncio.run(self.worker(transport).run_once()), messages
+
+    def test_redispatched_attempt_is_paused_before_delivery_after_revocation(
+        self,
+    ) -> None:
+        notice_source, _, affected = self.withdrawn_friday_task("redispatch-early")
+        calls: list[bool] = []
+
+        def transport(messages: Any, info: Any) -> Any:
+            calls.append(True)
+            return self.response(messages, info)
+
+        first = self.crash_after_first_delivery(affected, transport)
+        delivered = len(calls)
+        self.assertTrue(delivered)
+        self.revoke_engine_fixture_source(notice_source)
+        result = asyncio.run(self.worker(transport).run_once())
+        self.assertEqual(result.task_id, affected.execution_task_id)
+        self.assertNotEqual(result.attempt_id, first.fence.attempt_id)
+        self.assertEqual(result.task_status, "policy_paused")
+        self.assertEqual(len(calls), delivered)
+
+    def test_redispatched_attempt_rechecks_withdrawal_evidence_at_delivery(
+        self,
+    ) -> None:
+        notice_source, _, affected = self.withdrawn_friday_task("redispatch-late")
+        calls: list[bool] = []
+
+        def transport(messages: Any, info: Any) -> Any:
+            calls.append(True)
+            return self.response(messages, info)
+
+        first = self.crash_after_first_delivery(affected, transport)
+        delivered = len(calls)
+        result, messages = self.second_attempt_at_delivery(
+            transport, lambda: self.revoke_engine_fixture_source(notice_source)
+        )
+        self.assertEqual(result.task_id, affected.execution_task_id)
+        self.assertNotEqual(result.attempt_id, first.fence.attempt_id)
+        self.assertEqual(result.task_status, "policy_paused")
+        self.assertEqual(len(messages), 1)
+        self.assertIn("relation_candidate_unavailable", messages[0])
+        self.assertEqual(len(calls), delivered)
+
+    def test_redispatched_attempt_rechecks_candidate_origin_at_delivery(self) -> None:
+        candidate_scope, candidate_source = relation_agents.explicit_scope(
+            self.db, self
+        )
+        with patch.object(self, "scope", candidate_scope):
+            candidate = self.author(
+                "The fictional launch is Friday.",
+                "redispatch-origin-candidate",
+                source=candidate_source,
+                plan=lambda extras, bead, _: self.add_claim(
+                    extras, bead, "launch", "day", "Friday"
+                ),
+            )
+        (origin_grant,) = self.row(
+            "SELECT grant_id FROM memoriesql.access_grants "
+            "WHERE access_scope_id=%s AND target_principal_id=%s",
+            (candidate_scope, self.principal),
+        )
+        migrate(self.db, expected_current_version=27, target_version=63)
+        text = "A fictional note refers to the launch."
+        self.statement_text, self.plan, self.steps, self.mentions = text, None, [], []
+        affected = self.activate(
+            self.unit(text, "redispatch-origin"), "redispatch-origin", (candidate,)
+        )
+        calls: list[bool] = []
+
+        def transport(messages: Any, info: Any) -> Any:
+            calls.append(True)
+            return self.response(messages, info)
+
+        first = self.crash_after_first_delivery(affected, transport)
+        delivered = len(calls)
+
+        def revoke_origin() -> None:
+            with self.db.transaction():
+                self.begin()
+                self.db.execute(
+                    "SELECT memoriesql.revise_access_grant(%s,1,%s,'revoked',%s,%s,%s)",
+                    (
+                        origin_grant,
+                        ["read", "write"],
+                        self.now,
+                        self.now + timedelta(hours=1),
+                        self.now,
+                    ),
+                )
+
+        result, messages = self.second_attempt_at_delivery(transport, revoke_origin)
         self.assertEqual(result.task_id, affected.execution_task_id)
         self.assertNotEqual(result.attempt_id, first.fence.attempt_id)
         self.assertEqual(result.task_status, "policy_paused")
