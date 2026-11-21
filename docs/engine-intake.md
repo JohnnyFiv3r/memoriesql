@@ -249,28 +249,28 @@ an engine judgment.
 
 ### What a binding request answers
 
-A request is bound whole or not at all: a refusal holds neither the event nor
-any of its chunks.
+Binding is atomic. A refusal adds no event or chunk mappings and leaves any
+existing binding intact.
 
 | Answer | When | What to do |
 |---|---|---|
 | `bound` | The event and every chunk were verified and stored. | Nothing. |
 | `already_bound` | The same event was already bound with the same unit, digest and ordered chunks. | Nothing. Resending is always safe. |
 | `PermissionError`: `engine evidence is unavailable` | The credential lacks a required permission; or the source is not an enrolled engine scope, or is revoked; or the statement is not accepted, does not cite the unit, or the unit is not this engine workspace's event, whether or not that event is already bound. These are one answer, so it never shows which, or whether anything exists. | Check the unit, statement and engine workspace, and the credential's grants. |
-| `EngineIntakeBusy` | The scope stayed locked through four attempts. Nothing was written. | Resend the same request. |
+| `EngineIntakeBusy` | Lock timeout or deadlock retries ran out, or PostgreSQL canceled a statement, including on statement timeout. The transaction rolled back. | Resend the same request. |
 | `23505` `engine event evidence conflict` | The event is already bound, and the request names a different unit of the same canonical event, a different digest or a different chunk list; or one of its chunk IDs belongs to another event or appears twice in the request. The first binding is kept. | Stop. A binding is never replaced. |
 | `22023` `engine event evidence does not match normalized source` | The unit serves no normalized text, the text is over 16 MiB, or its SHA-256 is not `event_sha256`. | Recompute the event digest from the normalized text. |
 | `22023` `invalid engine chunk span` | A chunk is malformed, empty, out of order, overlaps, leaves a gap, does not start where the last one ended, or runs past the text. | Send every chunk in source order from offset zero. |
 | `22023` `engine chunk span does not match normalized source` | A chunk's SHA-256 or character count does not match its bytes. | Recompute that chunk's digest and character offsets. |
 | `22023` `invalid UTF-8 engine chunk span` | A byte span ends inside a code point. | Move the boundary. |
 | `22023` `incomplete engine event evidence` | The chunks stop before the end of the text. | Send the whole event. |
-| `22023` `invalid engine event evidence` | The request names an enrolled engine source the credential may bind to, and is otherwise malformed. The Python model refuses the same request first. | Fix the request. |
+| `22023` `invalid engine event evidence` | The SQL request fails validation after the enrolled-source authority check. | Fix the request. |
 | `25001` `engine evidence requires read committed` | The transaction is not Read Committed. Nothing was stored. | Use Read Committed. |
 
-Permission is answered first, before the request or any stored record is
-examined. A request that is not an object, or whose `source_object_id` is
-missing, is not a UUID or does not name an enrolled engine source, therefore
-answers `engine evidence is unavailable`, however malformed the rest is.
+Under Read Committed, SQL checks enrolled-source authority before validating
+the request body or looking up a stored binding. A SQL request without an
+authorized enrolled engine source returns `engine evidence is unavailable`.
+The Python adapter validates its request model before calling SQL.
 
 The internal resolver
 `resolve_engine_chunk_evidence_v1(source_object_id, engine_workspace, engine_event_id, chunk_id)`
@@ -280,12 +280,14 @@ chunk offsets and hash. Absent and unauthorized bindings both return
 reference delivered by the agent's own query result, with its matching unit
 ID and canonical content pin. Use the chunk's character interval in the
 existing [same-run `read_source_text` request](verification/pr-05-agent-source-text-view.md).
-A request takes at most eight entries, and one entry at most 16384 UTF-8
-bytes. Open a chunk longer than 4096 characters as consecutive entries of at
-most 4096 characters each, which always fit, and join the slices in order
-before checking the chunk's byte length and SHA-256. A different run, a
-revoked source or an expired result answers `unavailable` with no text,
-including for a request that succeeded before.
+Split long chunks into consecutive intervals of up to 4096 characters to
+stay within the 16384 UTF-8 byte limit for each entry. Group the intervals
+into requests of up to eight entries within each reply's `max_bytes`
+budget. Join the returned slices in order before checking the chunk's byte
+length and SHA-256. A different run or a revoked source returns `unavailable`
+with no text. Standalone reads check the delivering result's expiry.
+Checkpoint reads check the checkpoint's retention and exact roots and can
+keep a result available past its standalone expiry.
 The canonical pin can be a sealed inventory hash and is distinct from the
 chunk hash. The reader's current permission and result-closure checks apply
 each time the citation opens.
@@ -298,5 +300,4 @@ both axes and hashes to
 The installed runtime case uses a fictional event with two multibyte chunks
 to exercise the same read path and verify that a source revocation closes
 the citation. Per-event engine erasure and correction application belong to
-the lifecycle integration. A bound event that the engine later erases stays
-bound, and a binding cannot be changed or removed.
+the lifecycle integration. Schema 61 stores immutable bindings.
