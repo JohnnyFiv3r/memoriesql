@@ -238,9 +238,11 @@ internal resolver require Read Committed transaction isolation.
 A span must start and end on a UTF-8 code-point boundary, every chunk must
 hold at least one byte, and an event with no text cannot be bound.
 
-An equivalent replay returns `already_bound`. A different pin, digest or
-ordered chunk map under the same enrolled source, engine workspace and
-engine event ID conflicts, preserving the first binding. A chunk ID can
+An equivalent replay returns `already_bound`. A different unit of the same
+canonical event, a different digest or a different ordered chunk map under the
+same enrolled source, engine workspace and engine event ID conflicts,
+preserving the first binding. A unit that belongs to another event is
+unavailable, not a conflict, whether or not the event is bound. A chunk ID can
 belong to only one event in the same enrolled source and engine workspace.
 Binding creates no source text copy and does not accept a statement or apply
 an engine judgment.
@@ -254,20 +256,21 @@ any of its chunks.
 |---|---|---|
 | `bound` | The event and every chunk were verified and stored. | Nothing. |
 | `already_bound` | The same event was already bound with the same unit, digest and ordered chunks. | Nothing. Resending is always safe. |
-| `PermissionError`: `engine evidence is unavailable` | The credential lacks a required permission; or the source is not an enrolled engine scope, or is revoked; or the statement is not accepted, does not cite the unit, or the unit is not this engine workspace's event. These are one answer, so it never shows which, or whether anything exists. | Check the unit, statement and engine workspace, and the credential's grants. |
+| `PermissionError`: `engine evidence is unavailable` | The credential lacks a required permission; or the source is not an enrolled engine scope, or is revoked; or the statement is not accepted, does not cite the unit, or the unit is not this engine workspace's event, whether or not that event is already bound. These are one answer, so it never shows which, or whether anything exists. | Check the unit, statement and engine workspace, and the credential's grants. |
 | `EngineIntakeBusy` | The scope stayed locked through four attempts. Nothing was written. | Resend the same request. |
-| `23505` `engine event evidence conflict` | The event is already bound to a different unit, digest or chunk list, or one of its chunk IDs belongs to another event. The first binding is kept. | Stop. A binding is never replaced. |
+| `23505` `engine event evidence conflict` | The event is already bound, and the request names a different unit of the same canonical event, a different digest or a different chunk list; or one of its chunk IDs belongs to another event or appears twice in the request. The first binding is kept. | Stop. A binding is never replaced. |
 | `22023` `engine event evidence does not match normalized source` | The unit serves no normalized text, the text is over 16 MiB, or its SHA-256 is not `event_sha256`. | Recompute the event digest from the normalized text. |
 | `22023` `invalid engine chunk span` | A chunk is malformed, empty, out of order, overlaps, leaves a gap, does not start where the last one ended, or runs past the text. | Send every chunk in source order from offset zero. |
 | `22023` `engine chunk span does not match normalized source` | A chunk's SHA-256 or character count does not match its bytes. | Recompute that chunk's digest and character offsets. |
 | `22023` `invalid UTF-8 engine chunk span` | A byte span ends inside a code point. | Move the boundary. |
 | `22023` `incomplete engine event evidence` | The chunks stop before the end of the text. | Send the whole event. |
-| `22023` `invalid engine event evidence` | The request itself is malformed. The Python model refuses the same request first. | Fix the request. |
+| `22023` `invalid engine event evidence` | The request names an enrolled engine source the credential may bind to, and is otherwise malformed. The Python model refuses the same request first. | Fix the request. |
 | `25001` `engine evidence requires read committed` | The transaction is not Read Committed. Nothing was stored. | Use Read Committed. |
 
 Permission is answered first, before the request or any stored record is
-examined. A request that does not name an enrolled engine source therefore
-answers `engine evidence is unavailable`, however malformed it is.
+examined. A request that is not an object, or whose `source_object_id` is
+missing, is not a UUID or does not name an enrolled engine source, therefore
+answers `engine evidence is unavailable`, however malformed the rest is.
 
 The internal resolver
 `resolve_engine_chunk_evidence_v1(source_object_id, engine_workspace, engine_event_id, chunk_id)`
