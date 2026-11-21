@@ -1,25 +1,75 @@
-"""Fail closed when staged public files cross the approved preview boundary."""
+"""Fail closed when files git tracks, or would track, cross the approved preview
+boundary."""
 
 from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-IGNORED_PARTS = {".git", ".mypy_cache", ".ruff_cache", "__pycache__", "build", "dist"}
 DENIED_ROOTS = {"apps", "artifacts"}
 # The only repositories tracked text may link: this one, and the public CPython
-# builds whose hash-pinned releases the hosted qualification installs.
+# builds whose hash-pinned releases the hosted qualification installs. Either may
+# be written with one trailing ".git", the clone form.
 LINKED_REPOSITORIES = {("JohnnyFiv3r", "memoriesql"), ("actions", "python-versions")}
+NO_GIT = (
+    "the boundary check needs a git checkout: git was not found on PATH. "
+    "Install git and run the check from a clone of the repository."
+)
+NOT_A_CHECKOUT = (
+    "the boundary check needs a git checkout: this copy of the repository is not "
+    "one. Run the check from a clone, not from a source archive."
+)
+CANNOT_LIST = (
+    "the boundary check needs a git checkout: git could not list the files here "
+    "({reason}). Fix that and run the check again."
+)
+
+
+def _git(*arguments: str) -> subprocess.CompletedProcess[bytes]:
+    try:
+        return subprocess.run(
+            ["git", "-C", str(ROOT), *arguments], capture_output=True, check=False
+        )
+    except FileNotFoundError:
+        raise ValueError(NO_GIT) from None
+
+
+def _reason(result: subprocess.CompletedProcess[bytes]) -> str:
+    lines = result.stderr.decode(errors="replace").splitlines()
+    return next(
+        (line.strip() for line in lines if line.strip()),
+        f"git exited {result.returncode}",
+    )
 
 
 def repository_files() -> tuple[Path, ...]:
+    """Files in git's index plus untracked files git does not ignore.
+
+    Nothing is published except through git, so its list is the boundary. When
+    git cannot give it, the check refuses and never walks the disk instead.
+    """
+    top = _git("rev-parse", "--show-toplevel")
+    if top.returncode != 0:
+        if not (ROOT / ".git").exists():
+            raise ValueError(NOT_A_CHECKOUT)
+        raise ValueError(CANNOT_LIST.format(reason=_reason(top)))
+    # A copy with no repository of its own, inside some other repository: that
+    # one's file list and ignore rules must not stand in for this one's.
+    if Path(os.fsdecode(top.stdout.strip())).resolve() != ROOT:
+        raise ValueError(NOT_A_CHECKOUT)
+    listed = _git("ls-files", "-z", "--cached", "--others", "--exclude-standard")
+    if listed.returncode != 0:
+        raise ValueError(CANNOT_LIST.format(reason=_reason(listed)))
+    names = {os.fsdecode(name) for name in listed.stdout.split(b"\0") if name}
+    # A tracked file deleted from the working tree is listed but cannot be read.
     return tuple(
-        path
-        for path in ROOT.rglob("*")
-        if path.is_file() and not (set(path.relative_to(ROOT).parts) & IGNORED_PARTS)
+        path for path in (ROOT / name for name in sorted(names)) if path.is_file()
     )
 
 
@@ -70,7 +120,7 @@ def verify() -> dict[str, object]:
         for owner, repository in re.findall(
             r"https://github\.com/([\w-]+)/([\w.-]+)", text
         ):
-            if (owner, repository) not in LINKED_REPOSITORIES:
+            if (owner, repository.removesuffix(".git")) not in LINKED_REPOSITORIES:
                 text_failures.append(
                     f"{path.relative_to(ROOT)}:non-public repository URL"
                 )
@@ -89,4 +139,9 @@ def verify() -> dict[str, object]:
 
 
 if __name__ == "__main__":
-    print(json.dumps(verify(), indent=2, sort_keys=True))
+    try:
+        result = verify()
+    except ValueError as error:
+        print(error, file=sys.stderr)
+        raise SystemExit(1) from None
+    print(json.dumps(result, indent=2, sort_keys=True))
