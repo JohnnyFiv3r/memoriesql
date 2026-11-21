@@ -170,6 +170,9 @@
       "path": "src/memoriesql/application/relation_lifecycle.py"
     },
     {
+      "path": "src/memoriesql/application/engine_claim_lifecycle.py"
+    },
+    {
       "path": "src/memoriesql/infrastructure/postgres/relation_lifecycle.py"
     },
     {
