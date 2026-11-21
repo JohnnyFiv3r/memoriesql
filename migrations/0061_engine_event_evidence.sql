@@ -48,7 +48,7 @@ BEFORE UPDATE OR DELETE ON memoriesql.engine_chunk_evidence
 FOR EACH ROW EXECUTE FUNCTION memoriesql.reject_immutable_change();
 
 CREATE FUNCTION memoriesql.engine_evidence_source_v1(
-    authority memoriesql.authorization_contexts, source_id uuid
+    authority memoriesql.authorization_contexts, source_id uuid, require_delivery boolean
 ) RETURNS memoriesql.source_objects
 LANGUAGE plpgsql VOLATILE SECURITY DEFINER
 SET search_path = pg_catalog, memoriesql SET row_security = off AS $$
@@ -67,13 +67,15 @@ BEGIN
        OR NOT memoriesql.current_context_source_authorized(
            enrolled.access_scope_id, source_id, 'memory.query', 'read')
        OR NOT memoriesql.current_context_scope_time_authorized(
-           enrolled.access_scope_id, 'read', clock_timestamp()) THEN
+           enrolled.access_scope_id, 'read', clock_timestamp())
+       OR (require_delivery AND (memoriesql.engine_deliverable_source_v1(
+           authority, enrolled.external_object_id)).source_object_id IS DISTINCT FROM source_id) THEN
         RAISE EXCEPTION 'engine evidence is unavailable' USING ERRCODE = '42501';
     END IF;
     RETURN enrolled;
 END $$;
 REVOKE ALL ON FUNCTION memoriesql.engine_evidence_source_v1(
-    memoriesql.authorization_contexts, uuid
+    memoriesql.authorization_contexts, uuid, boolean
 ) FROM PUBLIC;
 
 CREATE FUNCTION memoriesql.bind_engine_event_evidence_v1(request jsonb) RETURNS text
@@ -109,20 +111,14 @@ BEGIN
         RAISE EXCEPTION 'engine evidence requires read committed' USING ERRCODE = '25001';
     END IF;
     SELECT * INTO authority FROM memoriesql.current_authorization_context();
-    enrolled := memoriesql.engine_evidence_source_v1(authority, source_id);
-    IF (memoriesql.engine_deliverable_source_v1(
-            authority, enrolled.external_object_id)).source_object_id IS DISTINCT FROM source_id THEN
-        RAISE EXCEPTION 'engine evidence is unavailable' USING ERRCODE = '42501';
-    END IF;
+    PERFORM memoriesql.engine_evidence_source_v1(authority, source_id, true);
     PERFORM pg_advisory_xact_lock_shared(hashtextextended(
         authority.tenant_id::text || ':semantic_outcome_authority:', 0));
+    -- A revocation that won the authority fence cannot delay the scope's
+    -- current writers. Check again after the scope wait for time-based expiry.
+    PERFORM memoriesql.engine_evidence_source_v1(authority, source_id, true);
     PERFORM memoriesql.engine_lock_scope_v1(authority, source_id);
-    SELECT * INTO authority FROM memoriesql.current_authorization_context();
-    enrolled := memoriesql.engine_evidence_source_v1(authority, source_id);
-    IF (memoriesql.engine_deliverable_source_v1(
-            authority, enrolled.external_object_id)).source_object_id IS DISTINCT FROM source_id THEN
-        RAISE EXCEPTION 'engine evidence is unavailable' USING ERRCODE = '42501';
-    END IF;
+    enrolled := memoriesql.engine_evidence_source_v1(authority, source_id, true);
     IF jsonb_typeof(request) IS DISTINCT FROM 'object'
        OR NOT (request - ARRAY['source_object_id','engine_workspace','engine_event_id',
             'source_unit_id','statement_id','event_sha256','chunks'] = '{}'::jsonb)
@@ -173,6 +169,7 @@ BEGIN
            OR held_spans IS DISTINCT FROM chunk_spans THEN
             RAISE EXCEPTION 'engine event evidence conflict' USING ERRCODE = '23505';
         END IF;
+        PERFORM memoriesql.engine_evidence_source_v1(authority, source_id, true);
         RETURN 'already_bound';
     END IF;
 
@@ -222,11 +219,7 @@ BEGIN
     IF start_byte <> octet_length(normalized) THEN
         RAISE EXCEPTION 'incomplete engine event evidence' USING ERRCODE = '22023';
     END IF;
-    PERFORM memoriesql.engine_evidence_source_v1(authority, source_id);
-    IF (memoriesql.engine_deliverable_source_v1(
-            authority, enrolled.external_object_id)).source_object_id IS DISTINCT FROM source_id THEN
-        RAISE EXCEPTION 'engine evidence is unavailable' USING ERRCODE = '42501';
-    END IF;
+    PERFORM memoriesql.engine_evidence_source_v1(authority, source_id, true);
     RETURN 'bound';
 EXCEPTION
     WHEN character_not_in_repertoire THEN
@@ -248,7 +241,7 @@ DECLARE
     binding jsonb;
 BEGIN
     SELECT * INTO authority FROM memoriesql.current_authorization_context();
-    enrolled := memoriesql.engine_evidence_source_v1(authority, $1);
+    enrolled := memoriesql.engine_evidence_source_v1(authority, $1, false);
     SELECT chunk.span || jsonb_build_object(
         'event_id', event.event_id, 'source_unit_id', event.source_unit_id,
         'content_sha256', unit.content_hash)
