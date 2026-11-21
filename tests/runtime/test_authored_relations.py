@@ -46,6 +46,10 @@ from memoriesql.application.relation_lifecycle import (
     RelationAction,
 )
 from memoriesql.application.source_enrollment import RevokeExactSource
+from memoriesql.application.source_revisiting import SourceDelivery
+from memoriesql.infrastructure.jobs.source_revisiting_access import (
+    SourceRevisitingEvidenceAccess,
+)
 from memoriesql.infrastructure.postgres.authorization import PostgresAuthorizationPort
 from memoriesql.infrastructure.postgres.engine_intake import PostgresEngineIntake
 from memoriesql.infrastructure.postgres.relation_assessment import (
@@ -59,10 +63,12 @@ from memoriesql.infrastructure.postgres.source_enrollment import (
 )
 
 if TYPE_CHECKING:
+    from tests.runtime import agent_relation_fixtures as relation_agents
     from tests.runtime import test_local_entity_mentions as fixtures
     from tests.runtime import test_source_revisiting as source_fixtures
     from tests.runtime.test_postgres_runtime import migrate
 else:
+    import agent_relation_fixtures as relation_agents
     import test_local_entity_mentions as fixtures
     import test_source_revisiting as source_fixtures
     from test_postgres_runtime import migrate
@@ -1394,6 +1400,174 @@ class AuthoredRelations(fixtures.LocalMentions):
         self.assertEqual(
             self.row("SELECT count(*) FROM memoriesql.model_provider_request_intents"), intents
         )
+
+    def test_worker_withholds_cached_claim_state_after_withdrawal_evidence_revocation(
+        self,
+    ) -> None:
+        notice_source = self.add_source("candidate-withdrawal-notice")
+        friday = self.author(
+            "The fictional launch is Friday.",
+            "candidate-withdrawal-friday",
+            plan=lambda extras, bead, _: self.add_claim(
+                extras, bead, "launch", "day", "Friday"
+            ),
+        )
+        notice = self.author(
+            "The fictional team withdrew Friday.",
+            "candidate-withdrawal-notice",
+            source=notice_source,
+        )
+        migrate(self.db, expected_current_version=27, target_version=62)
+        text = "A fictional check refers to the launch."
+        before = self.activate(
+            self.unit(text, "before-withdrawal"), "before-withdrawal", (friday,)
+        )
+        enrollment = uuid.uuid4()
+        earlier = self.engine_claim_endpoint(friday, enrollment)
+        withdrawal = self.engine_claim_endpoint(notice, enrollment)
+        self.lifecycle.record_claim_event(
+            _prepare_claim_event(
+                record_key=f"edge:withdraws:{withdrawal.chunk_id}:{earlier.chunk_id}",
+                arrow="withdraws",
+                origin=withdrawal,
+                target=earlier,
+                reviewed_reason="The fictional launch owner withdrew Friday.",
+                expected_last_event_id=None,
+            )
+        )
+        after = self.activate(
+            self.unit(text, "after-withdrawal"), "after-withdrawal", (friday,)
+        )
+        for receipt, state in ((before, "current"), (after, "retracted")):
+            self.assertEqual(
+                self.row(
+                    "SELECT relation_candidates #>> '{0,claims,0,state_at_activation}' "
+                    "FROM memoriesql.complete_input_executions WHERE execution_task_id=%s",
+                    (receipt.execution_task_id,),
+                ),
+                (state,),
+            )
+
+        migrate(self.db, expected_current_version=62, target_version=63)
+        self.revoke_engine_fixture_source(notice_source)
+        self.statement_text = text
+        self.plan = None
+        self.steps = []
+        self.mentions = []
+        results = {}
+        for _ in (before, after):
+            result = asyncio.run(self.worker().run_once())
+            results[result.task_id] = result.task_status
+        self.assertEqual(
+            results,
+            {
+                before.execution_task_id: "succeeded",
+                after.execution_task_id: "policy_paused",
+            },
+        )
+        self.assertEqual(
+            self.row(
+                "SELECT count(*) FROM memoriesql.model_provider_request_intents WHERE task_id=%s",
+                (after.execution_task_id,),
+            ),
+            (0,),
+        )
+
+    def test_candidate_origin_access_is_rechecked_at_delivery(self) -> None:
+        candidate_scope, candidate_source = relation_agents.explicit_scope(
+            self.db, self
+        )
+        with patch.object(self, "scope", candidate_scope):
+            candidate = self.author(
+                "The fictional launch is Friday.",
+                "origin-candidate",
+                source=candidate_source,
+                plan=lambda extras, bead, _: self.add_claim(
+                    extras, bead, "launch", "day", "Friday"
+                ),
+            )
+        (claim,) = self.inspect(candidate).claims
+        (origin_grant,) = self.row(
+            "SELECT grant_id FROM memoriesql.access_grants "
+            "WHERE access_scope_id=%s AND target_principal_id=%s",
+            (candidate_scope, self.principal),
+        )
+        migrate(self.db, expected_current_version=27, target_version=63)
+
+        text = "A fictional note refers to the launch."
+        self.statement_text, self.plan, self.steps, self.mentions = text, None, [], []
+        control = self.activate(
+            self.unit(text, "origin-control"), "origin-control", (candidate,)
+        )
+        calls: list[bool] = []
+
+        def transport(messages: Any, info: Any) -> Any:
+            calls.append(True)
+            return self.response(messages, info)
+
+        result = asyncio.run(self.worker(transport).run_once())
+        self.assertEqual(
+            (result.task_id, result.task_status),
+            (control.execution_task_id, "succeeded"),
+        )
+        self.assertTrue(calls)
+        calls.clear()
+
+        affected = self.activate(
+            self.unit(text, "origin-denial"), "origin-denial", (candidate,)
+        )
+        worker = self.worker(transport)
+        authorize_delivery = SourceRevisitingEvidenceAccess.authorize_delivery
+        refused: list[uuid.UUID] = []
+
+        async def revoke_at_delivery(
+            access: SourceRevisitingEvidenceAccess, delivery: SourceDelivery
+        ) -> None:
+            self.assertEqual(delivery.task_id, affected.execution_task_id)
+            with self.db.transaction():
+                self.begin()
+                self.db.execute(
+                    "SELECT memoriesql.revise_access_grant(%s,1,%s,'revoked',%s,%s,%s)",
+                    (
+                        origin_grant,
+                        ["read", "write"],
+                        self.now,
+                        self.now + timedelta(hours=1),
+                        self.now,
+                    ),
+                )
+            self.assertEqual(self.inspect(candidate).outcome, "unavailable")
+            with self.db.transaction():
+                PostgresAuthorizationPort(self.db).begin_context(
+                    credential_sha256=self.worker_secret,
+                    requested_workspace_id=self.workspace,
+                )
+                self.assertEqual(
+                    self.row(
+                        "SELECT memoriesql.current_context_accepted_bead_maintain_authorized(%s,%s,%s,%s)",
+                        (
+                            self.tenant,
+                            self.workspace,
+                            candidate_scope,
+                            claim.bead_version_id,
+                        ),
+                    ),
+                    (True,),
+                )
+            try:
+                await authorize_delivery(access, delivery)
+            except psycopg.errors.InsufficientPrivilege:
+                refused.append(delivery.task_id)
+                raise
+
+        with patch.object(SourceRevisitingEvidenceAccess, "authorize_delivery", revoke_at_delivery):
+            result = asyncio.run(worker.run_once())
+        self.assertEqual(
+            (result.task_id, result.task_status),
+            (affected.execution_task_id, "policy_paused"),
+        )
+        self.assertEqual(refused, [affected.execution_task_id])
+        self.assertEqual(calls, [])
 
     def test_reads_and_governed_judgments_require_their_authority(self) -> None:
         ids: dict[str, str] = {}
