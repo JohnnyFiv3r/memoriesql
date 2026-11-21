@@ -1683,7 +1683,7 @@ class AuthoredRelations(fixtures.LocalMentions):
             (0,),
         )
 
-    def test_cached_withdrawal_evidence_is_rechecked_at_every_delivery(self) -> None:
+    def test_cached_withdrawal_evidence_is_rechecked_at_first_delivery(self) -> None:
         notice_source = self.add_source("candidate-redelivery-notice")
         friday = self.author(
             "The fictional launch is Friday.",
@@ -1724,31 +1724,18 @@ class AuthoredRelations(fixtures.LocalMentions):
             calls.append(True)
             return self.response(messages, info)
 
-        authorize_delivery = SourceRevisitingEvidenceAccess.authorize_delivery
-        messages: list[str] = []
-
-        async def revoke_then_deliver_twice(
-            access: SourceRevisitingEvidenceAccess, delivery: SourceDelivery
-        ) -> None:
-            self.assertEqual(delivery.task_id, affected.execution_task_id)
-            self.revoke_engine_fixture_source(notice_source)
-            for _ in range(2):
-                with self.assertRaises(psycopg.errors.InsufficientPrivilege) as refused:
-                    await authorize_delivery(access, delivery)
-                messages.append(str(refused.exception))
-            raise psycopg.errors.InsufficientPrivilege(messages[-1])
-
-        with patch.object(
-            SourceRevisitingEvidenceAccess, "authorize_delivery", revoke_then_deliver_twice
-        ):
-            result = asyncio.run(self.worker(transport).run_once())
+        # The refusal aborts the worker's owned transaction, so a second call on
+        # the same attempt could only fail on that; later deliveries are covered
+        # by the redispatch cases, which take a new attempt.
+        result, messages = self.run_with_revocation_at_delivery(
+            transport, lambda: self.revoke_engine_fixture_source(notice_source)
+        )
         self.assertEqual(
             (result.task_id, result.task_status),
             (affected.execution_task_id, "policy_paused"),
         )
-        self.assertEqual(len(messages), 2)
-        for message in messages:
-            self.assertIn("relation_candidate_unavailable", message)
+        self.assertEqual(len(messages), 1)
+        self.assertIn("relation_candidate_unavailable", messages[0])
         self.assertEqual(calls, [])
 
     def withdrawn_friday_task(self, label: str) -> tuple[uuid.UUID, uuid.UUID, Any]:
@@ -1830,10 +1817,10 @@ class AuthoredRelations(fixtures.LocalMentions):
         )
         return first
 
-    def second_attempt_at_delivery(
+    def run_with_revocation_at_delivery(
         self, transport: Any, revoke: Any
     ) -> tuple[Any, list[str]]:
-        """Run the new attempt. `revoke` runs once the attempt has passed
+        """Run the worker once. `revoke` runs once the attempt has passed
         hydration, immediately before the real delivery check, whose refusal
         is returned with the worker's outcome."""
         authorize_delivery = SourceRevisitingEvidenceAccess.authorize_delivery
@@ -1886,7 +1873,7 @@ class AuthoredRelations(fixtures.LocalMentions):
 
         first = self.crash_after_first_delivery(affected, transport)
         delivered = len(calls)
-        result, messages = self.second_attempt_at_delivery(
+        result, messages = self.run_with_revocation_at_delivery(
             transport, lambda: self.revoke_engine_fixture_source(notice_source)
         )
         self.assertEqual(result.task_id, affected.execution_task_id)
@@ -1943,7 +1930,7 @@ class AuthoredRelations(fixtures.LocalMentions):
                     ),
                 )
 
-        result, messages = self.second_attempt_at_delivery(transport, revoke_origin)
+        result, messages = self.run_with_revocation_at_delivery(transport, revoke_origin)
         self.assertEqual(result.task_id, affected.execution_task_id)
         self.assertNotEqual(result.attempt_id, first.fence.attempt_id)
         self.assertEqual(result.task_status, "policy_paused")
