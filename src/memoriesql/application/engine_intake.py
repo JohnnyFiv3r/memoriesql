@@ -6,7 +6,8 @@ memoriesQL keeps them exactly as delivered, answers one outcome per record and
 authors nothing. Each engine scope is one enrolled exact source with
 ``source_system`` ``core-memory`` and ``object_kind`` ``engine_scope``.
 Delivering to a scope needs reading it too (schema 56), so no outcome tells a
-deliverer anything about records it may not read.
+deliverer anything about records it may not read. Schema 61 adds binding a
+complete normalized event to accepted evidence; see ``docs/engine-intake.md``.
 """
 
 from __future__ import annotations
