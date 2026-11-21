@@ -22,7 +22,7 @@ class MigrationStreamTests(unittest.TestCase):
             stream_root = root / "_migrations"
             stream_root.mkdir()
             rows = []
-            versions = range(1, 63)
+            versions = range(1, 64)
             for version in versions:
                 name = f"{version:04d}_fictional.sql"
                 data = f"SELECT {version};\n".encode()
