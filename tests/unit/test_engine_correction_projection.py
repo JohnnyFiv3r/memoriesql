@@ -17,6 +17,7 @@ from memoriesql.application.relation_lifecycle import (
     InspectedClaim,
     InspectedStatement,
     LifecycleEvidence,
+    RecordClaimEvent,
 )
 from scripts.project_engine_correction import project
 
@@ -125,6 +126,48 @@ class EngineCorrectionProjectionTests(unittest.TestCase):
                 prepare(earlier, changed)
         with self.assertRaises(ValueError):
             prepare(earlier, later, record_key="verdict:w1:100")
+
+    def test_distinct_chunks_can_share_one_exact_accepted_evidence_pin(self) -> None:
+        original_chunk = fixture()[1]
+        target = bind_fictional_claim(original_chunk, uuid4())
+        assert target.claim is not None
+        origin = replace(
+            target,
+            chunk_id=uuid4(),
+            claim=target.claim.model_copy(update={"claim_id": uuid4(), "value": "Monday"}),
+            evidence=target.evidence.model_copy(),
+        )
+        expected_head = uuid4()
+
+        def prepare(replacement: _BoundClaimEndpoint) -> RecordClaimEvent:
+            return _prepare_claim_event(
+                record_key=f"edge:repl:{replacement.chunk_id}:{target.chunk_id}",
+                arrow="repl",
+                target=target,
+                origin=replacement,
+                reviewed_reason="The owner accepted the correction.",
+                expected_last_event_id=expected_head,
+            )
+
+        request = prepare(origin)
+        assert origin.claim is not None
+        self.assertEqual(request.claim_id, target.claim.claim_id)
+        self.assertEqual(request.related_claim_id, origin.claim.claim_id)
+        self.assertEqual(request.evidence, (target.evidence,))
+        self.assertEqual(request.expected_last_event_id, expected_head)
+        self.assertEqual(request, prepare(origin))
+        self.assertNotEqual(
+            request.idempotency_key,
+            prepare(replace(origin, chunk_id=uuid4())).idempotency_key,
+        )
+
+        for update in ({"source_unit_id": uuid4()}, {"content_hash": "0" * 64}):
+            with self.subTest(update=update):
+                different = origin.evidence.model_copy(update=update)
+                with self.assertRaisesRegex(
+                    ValueError, "one evidence item per statement"
+                ):
+                    prepare(replace(origin, evidence=different))
 
     def test_tagged_export_and_duplicate_delivery(self) -> None:
         data = FIXTURE.read_bytes()

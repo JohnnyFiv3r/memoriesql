@@ -78,12 +78,18 @@ def _prepare_claim_event(
     related = None if action == "retract" else origin.claim
     identity = (str(target.enrollment_id), target.producer_workspace, record_key)
     key = hashlib.sha256(canonical_json_bytes(identity)).hexdigest()
+    # Two chunks may resolve to the same accepted statement and unit.
+    evidence = (
+        (target.evidence,)
+        if target.evidence == origin.evidence
+        else (target.evidence, origin.evidence)
+    )
     return RecordClaimEvent(
         claim_id=target.claim.claim_id,
         related_claim_id=related.claim_id if related else None,
         action=action,
         idempotency_key=f"core-memory-v2:{key}",
         reason=reviewed_reason,
-        evidence=(target.evidence, origin.evidence),
+        evidence=evidence,
         expected_last_event_id=expected_last_event_id,
     )
