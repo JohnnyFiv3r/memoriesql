@@ -191,3 +191,23 @@ Memory `v2.0.1` release's fictional PostgreSQL golden export,
 `crates/core-memory-store-postgres/tests/golden/export.jsonl`, at commit
 `2d415bd28416d28273411b8cbffd988fc6dd09f7`. The same command accepts that
 entire golden export with the workspace and scope above.
+
+Add `--handoff` to include a `handoff` object alongside the projection. It
+identifies the producer contract, workspace and scope. `events` retains the
+eligible event IDs, record keys, source keys (including optional revision),
+engine-assigned revision flag when supplied, capture time, ordering time
+and its basis. Parsed occurrence fields preserve source precision, start,
+end and time zone when supplied. Unparsed source time text, actor metadata
+and arbitrary source attributes stay out. `chunks` binds each eligible
+chunk ID to its event, ordinal, byte and character ranges and content hash;
+its text appears only in the ordinary projection. `corrections` retains
+the committed edge identity, endpoints, arrow and creation time. `erasures`
+contains only the event ID, erasure record key, erasure time and position.
+An erased event contributes no source key, chunk reference or correction.
+
+Event, correction and erasure rows retain their producer's `seq`, in ascending
+order within each list. Chunk references follow event sequence, then chunk
+ordinal. Positions are local to the named engine workspace. Gaps are expected.
+They establish neither a kernel knowledge frame nor a complete change-feed
+cursor. These coordinates let a future receiver reconcile the exact fictional
+evidence against its own intake and permissions before issuing citations.

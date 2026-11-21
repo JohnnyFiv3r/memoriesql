@@ -75,13 +75,49 @@ def source_chunks(event: Record, chunks: list[Record]) -> list[dict[str, str]]:
     return result
 
 
-def project(data: bytes, *, workspace: str, scope: str) -> Record:
+def named_strings(row: Record, *fields: str) -> dict[str, str]:
+    values = {}
+    for field in fields:
+        value = row.get(field)
+        if not isinstance(value, str):
+            raise ValueError("missing or invalid source provenance")
+        values[field] = value
+    return values
+
+
+def event_provenance(event: Record) -> Record:
+    fields: Record = named_strings(
+        event, "record_key", "event_id", "captured_at", "time_at", "time_basis"
+    )
+    require(fields["time_basis"] in {"source", "source_bucket", "captured"})
+    key = event["key"]
+    fields["key"] = named_strings(key, "scope", "source_ns", "external_id")
+    if "revision" in key:
+        fields["key"].update(named_strings(key, "revision"))
+    if "engine_assigned_revision" in event:
+        require(type(event["engine_assigned_revision"]) is bool)
+        fields["engine_assigned_revision"] = event["engine_assigned_revision"]
+    if "occurred_at" in event:
+        source_time = event["occurred_at"]
+        require(isinstance(source_time, dict))
+        fields["occurred_at"] = named_strings(
+            source_time,
+            "precision",
+            *(name for name in ("at", "end", "timezone") if name in source_time),
+        )
+    fields["seq"] = natural(event, "seq")
+    return fields
+
+
+def project(
+    data: bytes, *, workspace: str, scope: str, handoff: bool = False
+) -> Record:
     """Check a trusted producer's scoped fixture. Never decides who may read it."""
     require(bool(workspace and scope) and len(data) <= MAX_BYTES)
     events: dict[str, Record] = {}
     chunks: dict[str, list[Record]] = defaultdict(list)
     edges: list[Record] = []
-    erased: set[str] = set()
+    erased: dict[str, Record] = {}
     seen: dict[str, bytes] = {}
     for line in data.split(b"\n"):
         if not line.strip():
@@ -129,7 +165,7 @@ def project(data: bytes, *, workspace: str, scope: str) -> Record:
         elif kind == "erasure":
             event_id = identity(row, "event_id")
             require(key == f"erasure:{event_id}")
-            erased.add(event_id)
+            erased[event_id] = row
         elif kind == "edge":
             arrow = row.get("arrow")
             start = identity(row, "from_bead")
@@ -143,32 +179,98 @@ def project(data: bytes, *, workspace: str, scope: str) -> Record:
 
     require(chunks.keys() <= events.keys())
     material = []
+    eligible_events = []
     for event_id, event in sorted(events.items()):
         verified = source_chunks(event, chunks.get(event_id, []))
         if event_id not in erased and event["content_kind"] in {"text", "json"}:
             material.extend(verified)
+            eligible_events.append(event)
     eligible_ids = {chunk["chunk_id"] for chunk in material}
-    corrections = [
-        {
-            field: edge[field]
-            for field in ("record_key", "arrow", "from_bead", "to_bead")
-        }
-        for edge in sorted(edges, key=lambda edge: edge["record_key"])
+    eligible_edges = [
+        edge
+        for edge in edges
         if edge["from_bead"] in eligible_ids and edge["to_bead"] in eligible_ids
     ]
-    return {"currentness": "unassessed", "chunks": material, "corrections": corrections}
+    edge_fields = ("record_key", "arrow", "from_bead", "to_bead")
+    corrections = [
+        named_strings(edge, *edge_fields)
+        for edge in sorted(eligible_edges, key=lambda row: row["record_key"])
+    ]
+    result: Record = {
+        "currentness": "unassessed",
+        "chunks": material,
+        "corrections": corrections,
+    }
+    if handoff:
+        ordered_events = sorted(eligible_events, key=lambda row: natural(row, "seq"))
+        chunk_refs = [
+            {
+                k: row[k]
+                for k in (
+                    "record_key",
+                    "event_id",
+                    "chunk_id",
+                    "ordinal",
+                    "byte_start",
+                    "byte_end",
+                    "char_start",
+                    "char_end",
+                    "content_hash",
+                )
+            }
+            for event in ordered_events
+            for row in sorted(
+                chunks.get(event["event_id"], []), key=lambda item: item["ordinal"]
+            )
+        ]
+        positions = [
+            natural(row, "seq")
+            for row in (*eligible_events, *eligible_edges, *erased.values())
+        ]
+        require(
+            len(set(positions)) == len(positions)
+            and all(0 < seq < 2**64 for seq in positions)
+        )
+        result["handoff"] = {
+            "producer_contract": "core_memory.record.v2",
+            "workspace": workspace,
+            "scope": scope,
+            "events": [event_provenance(event) for event in ordered_events],
+            "chunks": chunk_refs,
+            "corrections": [
+                {
+                    **named_strings(edge, *edge_fields, "created_at"),
+                    "seq": natural(edge, "seq"),
+                }
+                for edge in sorted(eligible_edges, key=lambda row: natural(row, "seq"))
+            ],
+            "erasures": [
+                {
+                    **named_strings(row, "record_key", "event_id", "erased_at"),
+                    "seq": natural(row, "seq"),
+                }
+                for row in sorted(erased.values(), key=lambda row: natural(row, "seq"))
+            ],
+        }
+    return result
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--workspace", required=True)
     parser.add_argument("--scope", required=True)
+    parser.add_argument(
+        "--handoff",
+        action="store_true",
+        help="include scoped source and erasure provenance",
+    )
     args = parser.parse_args()
     try:
         result = project(
             sys.stdin.buffer.read(MAX_BYTES + 1),
             workspace=args.workspace,
             scope=args.scope,
+            handoff=args.handoff,
         )
     except (TypeError, ValueError, RecursionError):
         print("Invalid or incompatible fictional export.", file=sys.stderr)

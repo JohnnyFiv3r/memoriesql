@@ -16,9 +16,9 @@ def fixture() -> list[dict[str, Any]]:
     return [json.loads(line) for line in FIXTURE.read_bytes().splitlines()]
 
 
-def run(rows: list[dict[str, Any]]) -> dict[str, Any]:
+def run(rows: list[dict[str, Any]], *, handoff: bool = False) -> dict[str, Any]:
     data = b"\n".join(json.dumps(row).encode() for row in rows)
-    return project(data, workspace="w1", scope="acme")
+    return project(data, workspace="w1", scope="acme", handoff=handoff)
 
 
 class EngineCorrectionProjectionTests(unittest.TestCase):
@@ -158,3 +158,83 @@ class EngineCorrectionProjectionTests(unittest.TestCase):
             rows[1]["text"], [chunk["text"] for chunk in projection["chunks"]]
         )
         self.assertEqual([], projection["corrections"])
+
+    def test_handoff_keeps_producer_time_source_identity_and_receipt_coordinates(
+        self,
+    ) -> None:
+        old, old_chunk, new, new_chunk, edge = fixture()
+        old["occurred_at"] = {
+            "at": old["time_at"],
+            "precision": "instant",
+            "raw": "unparsed source text",
+        }
+        rows = [new_chunk, edge, old_chunk, old, new]
+        self.assertNotIn("handoff", run(rows))
+        handoff = run(rows, handoff=True)["handoff"]
+        self.assertEqual(handoff["producer_contract"], "core_memory.record.v2")
+        self.assertEqual(
+            [r["seq"] for r in handoff["events"]], [old["seq"], new["seq"]]
+        )
+        first, second = handoff["events"]
+        self.assertEqual(first["key"], old["key"])
+        self.assertEqual(second["key"], new["key"])
+        self.assertTrue(second["engine_assigned_revision"])
+        for field in ("record_key", "captured_at", "time_at", "time_basis"):
+            self.assertEqual(old[field], first[field])
+        self.assertEqual(
+            first["occurred_at"], {"at": old["time_at"], "precision": "instant"}
+        )
+        self.assertNotIn("actor", first)
+        self.assertEqual(
+            [r["record_key"] for r in handoff["chunks"]],
+            [old_chunk["record_key"], new_chunk["record_key"]],
+        )
+        for field in ("content_hash", "ordinal", "byte_end", "char_end"):
+            self.assertEqual(old_chunk[field], handoff["chunks"][0][field])
+        self.assertNotIn("text", handoff["chunks"][0])
+        self.assertEqual(handoff["corrections"][0]["seq"], edge["seq"])
+        self.assertEqual(handoff["corrections"][0]["created_at"], edge["created_at"])
+        self.assertEqual(handoff["erasures"], [])
+
+    def test_handoff_withholds_erased_provenance_and_retains_only_tombstone(
+        self,
+    ) -> None:
+        old, old_chunk, new, new_chunk, edge = fixture()
+        tombstone = {
+            "contract": old["contract"],
+            "scope": "acme",
+            "workspace": "w1",
+            "record_kind": "erasure",
+            "record_key": "erasure:" + new["event_id"],
+            "event_id": new["event_id"],
+            "seq": edge["seq"] + 1,
+            "erased_at": "2026-11-20T01:02:03.456Z",
+        }
+        rows = [tombstone, edge, old, new, new_chunk, old_chunk]
+        handoff = run(rows, handoff=True)["handoff"]
+        self.assertEqual([old["event_id"]], [r["event_id"] for r in handoff["events"]])
+        self.assertEqual(
+            [old_chunk["chunk_id"]], [r["chunk_id"] for r in handoff["chunks"]]
+        )
+        self.assertEqual([], handoff["corrections"])
+        self.assertEqual(
+            [{k: tombstone[k] for k in ("record_key", "event_id", "seq", "erased_at")}],
+            handoff["erasures"],
+        )
+        self.assertNotIn(new_chunk["content_hash"], json.dumps(handoff))
+        self.assertNotIn(new["key"]["revision"], json.dumps(handoff))
+
+    def test_handoff_refuses_ambiguous_positions_and_malformed_source_provenance(
+        self,
+    ) -> None:
+        old, old_chunk, new, new_chunk, edge = fixture()
+        for invalid in (
+            {"seq": False},
+            {"seq": old["seq"]},
+            {"seq": 2**64},
+            {"time_basis": "unknown"},
+            {"captured_at": None},
+            {"key": {"scope": "acme", "source_ns": "missing-id"}},
+        ):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                run([old, old_chunk, {**new, **invalid}, new_chunk, edge], handoff=True)
