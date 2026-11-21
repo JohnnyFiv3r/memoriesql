@@ -347,11 +347,14 @@ same chunk at both ends, a missing target claim, a missing origin claim for
 claim correcting itself.
 
 The replay identity is the enrollment, the producer workspace and the edge's
-record key, so a different reason or compared head does not make a new event.
-Applying the same edge again returns the receipt of the first application and
-adds no event. If the compared head no longer matches the claim's last event,
-the command is refused with the lifecycle's existing conflict (a serialization
-failure) and records nothing.
+record key. Applying the same edge again with the same payload (target and
+related claim, action, reason, evidence and compared head) returns the receipt
+of the first application and adds no event. A changed reason, evidence or
+compared head under the same identity is refused with the lifecycle's
+`idempotency_conflict` and records nothing. If the compared head no longer
+matches the claim's last event, the command is refused with the lifecycle's
+existing conflict (a serialization failure) and records nothing, so read the
+claim again before a new attempt.
 
 Two rechecks keep a claim's state from revealing withdrawal evidence the reader
 can no longer open. Both use the existing refusals and do not say whether the
