@@ -1292,6 +1292,7 @@ def qualify(
         inputs += sorted((checkout / "tests/runtime").glob("*.py"))
         inputs += [checkout / "tests/unit/test_contract_catalog_preview.py"]
         inputs += sorted((checkout / "tests/fixtures").glob("*.json"))
+        inputs += [checkout / "tests/fixtures/engine_201_correction.jsonl"]
         # Copy only committed public files; never a local evidence directory.
         tracked = set(
             runner.capture("tracked-inputs", ["git", "ls-files"], checkout).splitlines()

@@ -9,6 +9,7 @@ import json
 import unittest
 import uuid
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import patch
 
@@ -27,6 +28,11 @@ from memoriesql.application.engine_claim_lifecycle import (
     _BoundClaimEndpoint,
     _prepare_claim_event,
 )
+from memoriesql.application.engine_intake import (
+    BindEngineEventEvidence,
+    EngineChunkEvidence,
+    EngineChunkSpan,
+)
 from memoriesql.application.evidence_packages import NativeFacts
 from memoriesql.application.logical_unit_materialization import LogicalEventDeclaration
 from memoriesql.application.relation_inspection import InspectBeadRelationsV2
@@ -40,6 +46,8 @@ from memoriesql.application.relation_lifecycle import (
     RelationAction,
 )
 from memoriesql.application.source_enrollment import RevokeExactSource
+from memoriesql.infrastructure.postgres.authorization import PostgresAuthorizationPort
+from memoriesql.infrastructure.postgres.engine_intake import PostgresEngineIntake
 from memoriesql.infrastructure.postgres.relation_assessment import (
     PostgresRelationAssessments,
 )
@@ -101,7 +109,7 @@ class AuthoredRelations(fixtures.LocalMentions):
         )
         return policy
 
-    def add_source(self, name: str) -> uuid.UUID:
+    def add_source(self, name: str, *, engine_scope: str | None = None) -> uuid.UUID:
         """A second fictional source object with its own producer and dispatch policy."""
         other = uuid.uuid4()
         self.db.execute(
@@ -109,8 +117,14 @@ class AuthoredRelations(fixtures.LocalMentions):
             (other, self.source),
         )
         self.db.execute(
-            "INSERT INTO memoriesql.source_objects(tenant_id,workspace_id,access_scope_id,source_object_id,source_system,object_kind,external_object_id,schema_version,metadata,created_at,last_observed_at,owner_user_id) SELECT tenant_id,workspace_id,access_scope_id,%s,source_system,object_kind,%s,schema_version,metadata,created_at,last_observed_at,owner_user_id FROM memoriesql.source_objects WHERE source_object_id=%s",
-            (other, "orchard." + name, self.source),
+            "INSERT INTO memoriesql.source_objects(tenant_id,workspace_id,access_scope_id,source_object_id,source_system,object_kind,external_object_id,schema_version,metadata,created_at,last_observed_at,owner_user_id) SELECT tenant_id,workspace_id,access_scope_id,%s,COALESCE(%s,source_system),COALESCE(%s,object_kind),%s,schema_version,metadata,created_at,last_observed_at,owner_user_id FROM memoriesql.source_objects WHERE source_object_id=%s",
+            (
+                other,
+                "core-memory" if engine_scope else None,
+                "engine_scope" if engine_scope else None,
+                engine_scope or "orchard." + name,
+                self.source,
+            ),
         )
         producer = uuid.uuid4()
         self.db.execute(
@@ -571,6 +585,131 @@ class AuthoredRelations(fixtures.LocalMentions):
                 reason="Withdraw access to the fictional source.",
             )
         )
+
+    def test_committed_engine_replacement_uses_canonical_chunk_resolver(self) -> None:
+        fixture = Path(__file__).with_name("engine_201_correction.jsonl")
+        if not fixture.is_file():
+            fixture = fixture.parent.parent / "fixtures" / fixture.name
+        first, first_chunk, second, second_chunk, edge = map(
+            json.loads, fixture.read_bytes().splitlines()
+        )
+        producer_workspace = first["workspace"]
+        source = self.add_source("bound-engine", engine_scope=first["scope"])
+        materialization = self.materialization
+        capture_part = self.part
+
+        def normalized_part(content: str) -> Any:
+            return capture_part("Fictional capture: " + content).model_copy(
+                update={
+                    "derivation": "producer_normalized",
+                    "content": content,
+                    "content_sha256": hashlib.sha256(content.encode()).hexdigest(),
+                }
+            )
+
+        normalized_part.__module__ = capture_part.__module__
+
+        def native_materialization(
+            package: Any, *, event: LogicalEventDeclaration, **updates: Any
+        ) -> Any:
+            native = event.native.model_copy(update={"native_id": native_id})
+            return materialization(
+                package, event=event.model_copy(update={"native": native}), **updates
+            )
+
+        def prepare_claim(stage: str) -> Plan:
+            return lambda extras, bead, _: self.add_claim(
+                extras, bead, "fictional opportunity", "stage", stage
+            )
+
+        accepted = []
+        for event, chunk, stage in (
+            (first, first_chunk, "negotiation"),
+            (second, second_chunk, "closed won"),
+        ):
+            native_id = f"core-memory.v2:{producer_workspace}:{event['event_id']}"
+            with (
+                patch.object(self, "materialization", native_materialization),
+                patch.object(self, "part", normalized_part),
+            ):
+                bead = self.author(
+                    chunk["text"],
+                    stage.replace(" ", "-"),
+                    source=source,
+                    plan=prepare_claim(stage),
+                )
+            accepted.append((event, chunk, bead))
+
+        migrate(self.db, expected_current_version=27, target_version=62)
+        intake = PostgresEngineIntake(
+            self.db, credential_sha256=self.secret_hash, workspace_id=self.workspace
+        )
+        endpoints = {}
+        for event, chunk, bead in accepted:
+            (claim,) = self.inspect(bead).claims
+            (statement,) = claim.statements
+            span = EngineChunkSpan(
+                chunk_id=uuid.UUID(chunk["chunk_id"]),
+                byte_start=chunk["byte_start"],
+                byte_end=chunk["byte_end"],
+                char_start=chunk["char_start"],
+                char_end=chunk["char_end"],
+                chunk_sha256=chunk["content_hash"],
+            )
+            binding = BindEngineEventEvidence(
+                source_object_id=source,
+                engine_workspace=producer_workspace,
+                engine_event_id=uuid.UUID(event["event_id"]),
+                event_sha256=event["content_hash"],
+                source_unit_id=claim.source_time.source_unit_id,
+                statement_id=statement.statement_id,
+                chunks=(span,),
+            )
+            self.assertEqual(intake.bind_event_evidence(binding), "bound")
+            with self.db.transaction():
+                PostgresAuthorizationPort(self.db).begin_context(
+                    credential_sha256=self.secret_hash,
+                    requested_workspace_id=self.workspace,
+                )
+                (resolved,) = self.row(
+                    "SELECT memoriesql.resolve_engine_chunk_evidence_v1(%s,%s,%s,%s)",
+                    (
+                        source,
+                        producer_workspace,
+                        binding.engine_event_id,
+                        span.chunk_id,
+                    ),
+                )
+            evidence = EngineChunkEvidence.model_validate(resolved)
+            self.assertEqual(evidence.event_id, claim.source_time.event_id)
+            endpoints[chunk["chunk_id"]] = _BoundClaimEndpoint(
+                enrollment_id=source,
+                producer_workspace=producer_workspace,
+                chunk_id=evidence.chunk_id,
+                claim=claim,
+                evidence=LifecycleEvidence(
+                    statement_id=statement.statement_id,
+                    source_unit_id=evidence.source_unit_id,
+                    content_hash=evidence.content_sha256,
+                ),
+            )
+
+        request = _prepare_claim_event(
+            record_key=edge["record_key"],
+            arrow=edge["arrow"],
+            origin=endpoints[edge["from_bead"]],
+            target=endpoints[edge["to_bead"]],
+            reviewed_reason="The fictional opportunity owner confirmed the new stage.",
+            expected_last_event_id=None,
+        )
+        applied = self.lifecycle.record_claim_event(request)
+        replay = self.lifecycle.record_claim_event(request)
+        self.assertTrue(replay.replayed)
+        self.assertEqual(applied.claim_event_id, replay.claim_event_id)
+        target, origin = (self.inspect(row[2]).claims[0] for row in accepted)
+        self.assertEqual((target.value, target.state), ("negotiation", "superseded"))
+        self.assertEqual((origin.value, origin.state), ("closed won", "current"))
+        self.assertEqual(target.superseded_by, (origin.claim_id,))
 
     def test_bound_engine_replacement_history_and_replay_use_current_authority(
         self,
