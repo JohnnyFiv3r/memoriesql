@@ -165,9 +165,144 @@ class EngineCorrectionProjectionTests(unittest.TestCase):
             with self.subTest(update=update):
                 different = origin.evidence.model_copy(update=update)
                 with self.assertRaisesRegex(
-                    ValueError, "one evidence item per statement"
+                    ValueError,
+                    "correction evidence pins disagree about the shared statement",
                 ):
                     prepare(replace(origin, evidence=different))
+
+    def test_malformed_corrections_refuse_with_the_designed_message(self) -> None:
+        handoff = run(fixture(), handoff=True)["handoff"]
+        enrollment = uuid4()
+        target, origin = (
+            bind_fictional_claim(chunk, enrollment) for chunk in handoff["chunks"]
+        )
+
+        def key(arrow: str, source: _BoundClaimEndpoint = origin) -> str:
+            return f"edge:{arrow}:{source.chunk_id}:{target.chunk_id}"
+
+        wrong_edge = "expected a committed correction edge matching both endpoints"
+        wrong_pair = "correction endpoints must be distinct chunks of one enrollment"
+        no_claim = "missing accepted claim for the correction"
+        stranger = LifecycleEvidence(
+            statement_id=uuid4(),
+            source_unit_id=origin.evidence.source_unit_id,
+            content_hash=origin.evidence.content_hash,
+        )
+        assert target.claim is not None
+        cases: list[tuple[str, str, _BoundClaimEndpoint, _BoundClaimEndpoint, str]] = [
+            ("supersedes", key("supersedes"), target, origin, wrong_edge),
+            ("repl", key("withdraws"), target, origin, wrong_edge),
+            (
+                "repl",
+                key("repl"),
+                target,
+                replace(origin, enrollment_id=uuid4()),
+                wrong_pair,
+            ),
+            (
+                "repl",
+                key("repl"),
+                replace(target, producer_workspace="  "),
+                replace(origin, producer_workspace="  "),
+                wrong_pair,
+            ),
+            (
+                "repl",
+                f"edge:repl:{target.chunk_id}:{target.chunk_id}",
+                target,
+                replace(origin, chunk_id=target.chunk_id),
+                wrong_pair,
+            ),
+            ("repl", key("repl"), replace(target, claim=None), origin, no_claim),
+            ("repl", key("repl"), target, replace(origin, claim=None), no_claim),
+            (
+                "!contradicts",
+                key("!contradicts"),
+                target,
+                replace(origin, claim=None),
+                no_claim,
+            ),
+            (
+                "repl",
+                key("repl"),
+                target,
+                replace(origin, evidence=stranger),
+                "correction evidence must belong to the pinned claim",
+            ),
+            (
+                "repl",
+                key("repl"),
+                target,
+                replace(origin, claim=target.claim, evidence=target.evidence),
+                "a claim cannot correct itself",
+            ),
+        ]
+        for arrow, record_key, edge_target, edge_origin, message in cases:
+            with self.subTest(arrow=arrow, message=message, key=record_key):
+                with self.assertRaisesRegex(ValueError, message):
+                    _prepare_claim_event(
+                        record_key=record_key,
+                        arrow=arrow,
+                        target=edge_target,
+                        origin=edge_origin,
+                        reviewed_reason="The owner accepted the correction.",
+                        expected_last_event_id=None,
+                    )
+
+    def test_withdrawal_needs_no_origin_claim(self) -> None:
+        handoff = run(fixture(), handoff=True)["handoff"]
+        enrollment = uuid4()
+        target, origin = (
+            bind_fictional_claim(chunk, enrollment) for chunk in handoff["chunks"]
+        )
+        request = _prepare_claim_event(
+            record_key=f"edge:withdraws:{origin.chunk_id}:{target.chunk_id}",
+            arrow="withdraws",
+            target=target,
+            origin=replace(origin, claim=None),
+            reviewed_reason="The owner accepted the withdrawal.",
+            expected_last_event_id=None,
+        )
+        self.assertEqual(request.action, "retract")
+        self.assertIsNone(request.related_claim_id)
+        self.assertEqual(request.evidence, (target.evidence, origin.evidence))
+
+    def test_replay_identity_depends_only_on_enrollment_workspace_and_key(
+        self,
+    ) -> None:
+        handoff = run(fixture(), handoff=True)["handoff"]
+        enrollment = uuid4()
+        target, origin = (
+            bind_fictional_claim(chunk, enrollment) for chunk in handoff["chunks"]
+        )
+
+        def prepare(
+            first: _BoundClaimEndpoint,
+            second: _BoundClaimEndpoint,
+            reason: str,
+            head: UUID | None,
+        ) -> RecordClaimEvent:
+            return _prepare_claim_event(
+                record_key=f"edge:repl:{second.chunk_id}:{first.chunk_id}",
+                arrow="repl",
+                target=first,
+                origin=second,
+                reviewed_reason=reason,
+                expected_last_event_id=head,
+            )
+
+        first = prepare(target, origin, "One reason.", None)
+        again = prepare(target, origin, "Another reason.", uuid4())
+        self.assertEqual(first.idempotency_key, again.idempotency_key)
+        self.assertRegex(first.idempotency_key, r"^core-memory-v2:[0-9a-f]{64}$")
+        other_enrollment = uuid4()
+        moved = prepare(
+            replace(target, enrollment_id=other_enrollment),
+            replace(origin, enrollment_id=other_enrollment),
+            "One reason.",
+            None,
+        )
+        self.assertNotEqual(first.idempotency_key, moved.idempotency_key)
 
     def test_tagged_export_and_duplicate_delivery(self) -> None:
         data = FIXTURE.read_bytes()

@@ -74,6 +74,11 @@ def _prepare_claim_event(
             raise ValueError("correction evidence must belong to the pinned claim")
     if origin.claim is not None and origin.claim.claim_id == target.claim.claim_id:
         raise ValueError("a claim cannot correct itself")
+    if (
+        target.evidence.statement_id == origin.evidence.statement_id
+        and target.evidence != origin.evidence
+    ):
+        raise ValueError("correction evidence pins disagree about the shared statement")
 
     related = None if action == "retract" else origin.claim
     identity = (str(target.enrollment_id), target.producer_workspace, record_key)
