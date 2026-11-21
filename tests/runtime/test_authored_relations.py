@@ -749,6 +749,12 @@ class AuthoredRelations(fixtures.LocalMentions):
             reviewed_reason="The launch owner confirmed Monday.",
             expected_last_event_id=None,
         )
+        worker = PostgresRelationLifecycle(
+            self.db, credential_sha256=self.worker_secret, workspace_id=self.workspace
+        )
+        with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+            worker.record_claim_event(command)
+        self.assertIsNone(self.latest_claim_event(command.claim_id))
         receipt = self.lifecycle.record_claim_event(command)
         replay = self.lifecycle.record_claim_event(command)
         self.assertEqual(
@@ -836,15 +842,24 @@ class AuthoredRelations(fixtures.LocalMentions):
 
         before_withdrawal = self.inspect(friday_bead).known_at
         reason = "The launch owner withdrew Friday."
-        withdrawal = self.lifecycle.record_claim_event(
-            _prepare_claim_event(
+
+        def withdraw(head: uuid.UUID | None) -> RecordClaimEvent:
+            return _prepare_claim_event(
                 record_key=f"edge:withdraws:{notice.chunk_id}:{friday.chunk_id}",
                 arrow="withdraws",
                 origin=notice,
                 target=friday,
                 reviewed_reason=reason,
-                expected_last_event_id=dispute.claim_event_id,
+                expected_last_event_id=head,
             )
+
+        with self.assertRaises(psycopg.errors.SerializationFailure):
+            self.lifecycle.record_claim_event(withdraw(None))
+        self.assertEqual(
+            self.latest_claim_event(withdraw(None).claim_id), dispute.claim_event_id
+        )
+        withdrawal = self.lifecycle.record_claim_event(
+            withdraw(dispute.claim_event_id)
         )
         (withdrawn,) = self.inspect(friday_bead).claims
         self.assertEqual(withdrawn.state, "retracted")
@@ -865,6 +880,68 @@ class AuthoredRelations(fixtures.LocalMentions):
                 self.assertEqual(
                     self.inspect(bead, before_withdrawal).claims[0].state, "disputed"
                 )
+
+    def test_superseded_claim_withholds_state_when_its_superseder_withdrawal_is_withheld(
+        self,
+    ) -> None:
+        notice_source = self.add_source("engine-superseder-notice")
+        friday_bead = self.author(
+            "The fictional launch is Friday.",
+            "engine-superseded-friday",
+            plan=lambda extras, bead, _: self.add_claim(
+                extras, bead, "launch", "day", "Friday"
+            ),
+        )
+        monday_bead = self.author(
+            "The fictional launch moved to Monday.",
+            "engine-superseder-monday",
+            plan=lambda extras, bead, _: self.add_claim(
+                extras, bead, "launch", "day", "Monday"
+            ),
+        )
+        notice_bead = self.author(
+            "The fictional team withdrew Monday.",
+            "engine-superseder-notice",
+            source=notice_source,
+        )
+        migrate(self.db, expected_current_version=27, target_version=62)
+        enrollment = uuid.uuid4()
+        friday = self.engine_claim_endpoint(friday_bead, enrollment)
+        monday = self.engine_claim_endpoint(monday_bead, enrollment)
+        notice = self.engine_claim_endpoint(notice_bead, enrollment)
+        replacement = self.lifecycle.record_claim_event(
+            _prepare_claim_event(
+                record_key=f"edge:repl:{monday.chunk_id}:{friday.chunk_id}",
+                arrow="repl",
+                origin=monday,
+                target=friday,
+                reviewed_reason="The launch owner confirmed Monday.",
+                expected_last_event_id=None,
+            )
+        )
+        before_withdrawal = self.inspect(friday_bead).known_at
+        self.lifecycle.record_claim_event(
+            _prepare_claim_event(
+                record_key=f"edge:withdraws:{notice.chunk_id}:{monday.chunk_id}",
+                arrow="withdraws",
+                origin=notice,
+                target=monday,
+                reviewed_reason="The launch owner withdrew Monday.",
+                expected_last_event_id=None,
+            )
+        )
+        (restored,) = self.inspect(friday_bead).claims
+        self.assertEqual(restored.superseded_by, ())
+
+        self.revoke_engine_fixture_source(notice_source)
+        missing = self.inspect(uuid.uuid4())
+        self.assertEqual(missing.outcome, "unavailable")
+        self.assertEqual(self.inspect(friday_bead), missing)
+        (earlier,) = self.inspect(friday_bead, before_withdrawal).claims
+        self.assertEqual(
+            (earlier.state, earlier.events[-1].event_id),
+            ("superseded", replacement.claim_event_id),
+        )
 
     def test_invalid_coverage_or_unpinned_candidate_refuses_the_whole_bundle(self) -> None:
         a = self.author("Fictional note A.", "a")
@@ -1519,6 +1596,7 @@ class AuthoredRelations(fixtures.LocalMentions):
         worker = self.worker(transport)
         authorize_delivery = SourceRevisitingEvidenceAccess.authorize_delivery
         refused: list[uuid.UUID] = []
+        messages: list[str] = []
 
         async def revoke_at_delivery(
             access: SourceRevisitingEvidenceAccess, delivery: SourceDelivery
@@ -1556,8 +1634,9 @@ class AuthoredRelations(fixtures.LocalMentions):
                 )
             try:
                 await authorize_delivery(access, delivery)
-            except psycopg.errors.InsufficientPrivilege:
+            except psycopg.errors.InsufficientPrivilege as error:
                 refused.append(delivery.task_id)
+                messages.append(str(error))
                 raise
 
         with patch.object(SourceRevisitingEvidenceAccess, "authorize_delivery", revoke_at_delivery):
@@ -1567,6 +1646,7 @@ class AuthoredRelations(fixtures.LocalMentions):
             (affected.execution_task_id, "policy_paused"),
         )
         self.assertEqual(refused, [affected.execution_task_id])
+        self.assertIn("relation_candidate_unavailable", messages[0])
         self.assertEqual(calls, [])
 
     def test_reads_and_governed_judgments_require_their_authority(self) -> None:
