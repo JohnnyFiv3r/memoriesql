@@ -342,6 +342,8 @@ class RecognisedLinkForms(ScratchRepository):
                     f"https://gist.{GH}.com{invalid}/x",
                     f"https://gist.{GH}.com@example.invalid/x",
                     f"https://someone.{GH}.io@example.invalid/x",
+                    f"https://gist.{GH}.com:secret@example.invalid/x",
+                    f"https://someone.{GH}.io:secret@example.invalid/x",
                     f"A sentence that ends with {GH}.com.",
                 )
             )

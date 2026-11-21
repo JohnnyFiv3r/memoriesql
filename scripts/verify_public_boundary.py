@@ -37,7 +37,7 @@ _REPOSITORY_HOST = re.compile(
     r"(?:(?P<scheme>(?i:https?|ssh))://(?:(?P<user>[^\s/@]+)@)?|(?P<scp>(?i:git)@))?"
     r"(?<![\w.-])(?P<host>(?i:(?:www\.)?github\.com|raw\.githubusercontent\.com"
     r"|api\.github\.com|codeload\.github\.com|gist\.github\.com"
-    r"|(?:[\w-]+\.)+github\.io))(?![\w@-]|\.[\w-])"
+    r"|(?:[\w-]+\.)+github\.io))(?![\w-]|\.[\w-]|[^\s/@]*@)"
 )
 NO_GIT = (
     "the boundary check needs a git checkout: git was not found on PATH. "
