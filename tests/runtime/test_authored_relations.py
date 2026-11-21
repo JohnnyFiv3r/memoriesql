@@ -558,7 +558,7 @@ class AuthoredRelations(fixtures.LocalMentions):
         self.assertEqual(events, [("dispute", "authored"), ("resolve_dispute", "governed")])
 
     def engine_claim_endpoint(
-        self, bead: uuid.UUID, enrollment_id: uuid.UUID
+        self, bead: uuid.UUID, enrollment_id: uuid.UUID, value: str | None = None
     ) -> _BoundClaimEndpoint:
         statement_id, source_unit_id, content_hash = self.row(
             "SELECT e.statement_id,e.evidence_source_unit_id,e.evidence_content_hash "
@@ -567,7 +567,9 @@ class AuthoredRelations(fixtures.LocalMentions):
             "WHERE s.bead_id=%s",
             (bead,),
         )
-        claims = self.inspect(bead).claims
+        claims = [
+            c for c in self.inspect(bead).claims if value is None or c.value == value
+        ]
         return _BoundClaimEndpoint(
             enrollment_id=enrollment_id,
             producer_workspace="fictional-orchard",
@@ -793,6 +795,54 @@ class AuthoredRelations(fixtures.LocalMentions):
         self.assertEqual(
             self.latest_claim_event(receipt.claim_id), receipt.claim_event_id
         )
+
+    def test_two_claims_sharing_one_accepted_statement_record_one_evidence_link(
+        self,
+    ) -> None:
+        def two_claims(extras: dict[str, Any], bead: dict[str, Any], _: Any) -> None:
+            self.add_claim(extras, bead, "fictional launch", "day", "Friday")
+            self.add_claim(extras, bead, "fictional launch", "day", "Monday")
+
+        bead = self.author(
+            "The fictional launch was Friday and is now Monday.",
+            "engine-shared-statement",
+            plan=two_claims,
+        )
+        migrate(self.db, expected_current_version=27, target_version=62)
+        enrollment = uuid.uuid4()
+        friday = self.engine_claim_endpoint(bead, enrollment, "Friday")
+        monday = self.engine_claim_endpoint(bead, enrollment, "Monday")
+        assert friday.claim is not None and monday.claim is not None
+        self.assertNotEqual(friday.claim.claim_id, monday.claim.claim_id)
+        self.assertEqual(friday.evidence, monday.evidence)
+        command = _prepare_claim_event(
+            record_key=f"edge:repl:{monday.chunk_id}:{friday.chunk_id}",
+            arrow="repl",
+            origin=monday,
+            target=friday,
+            reviewed_reason="The launch owner confirmed Monday.",
+            expected_last_event_id=None,
+        )
+        self.assertEqual(command.evidence, (friday.evidence,))
+        receipt = self.lifecycle.record_claim_event(command)
+        self.assertEqual(
+            self.row(
+                "SELECT count(*) FROM memoriesql.semantic_evidence_links "
+                "WHERE owner_kind='claim_event' AND owner_id=%s",
+                (receipt.claim_event_id,),
+            ),
+            (1,),
+        )
+        replay = self.lifecycle.record_claim_event(command)
+        self.assertEqual(
+            (replay.claim_event_id, replay.replayed), (receipt.claim_event_id, True)
+        )
+        by_value = {c.value: c for c in self.inspect(bead).claims}
+        self.assertEqual(by_value["Friday"].state, "superseded")
+        self.assertEqual(
+            by_value["Friday"].superseded_by, (monday.claim.claim_id,)
+        )
+        self.assertEqual(by_value["Monday"].state, "current")
 
     def test_bound_engine_dispute_requires_resolution_and_withdrawal_ends_claim(
         self,
@@ -1550,6 +1600,74 @@ class AuthoredRelations(fixtures.LocalMentions):
             (0,),
         )
 
+    def test_cached_withdrawal_evidence_is_rechecked_at_every_delivery(self) -> None:
+        notice_source = self.add_source("candidate-redelivery-notice")
+        friday = self.author(
+            "The fictional launch is Friday.",
+            "candidate-redelivery-friday",
+            plan=lambda extras, bead, _: self.add_claim(
+                extras, bead, "launch", "day", "Friday"
+            ),
+        )
+        notice = self.author(
+            "The fictional team withdrew Friday.",
+            "candidate-redelivery-notice",
+            source=notice_source,
+        )
+        migrate(self.db, expected_current_version=27, target_version=63)
+        enrollment = uuid.uuid4()
+        earlier = self.engine_claim_endpoint(friday, enrollment)
+        withdrawal = self.engine_claim_endpoint(notice, enrollment)
+        self.lifecycle.record_claim_event(
+            _prepare_claim_event(
+                record_key=f"edge:withdraws:{withdrawal.chunk_id}:{earlier.chunk_id}",
+                arrow="withdraws",
+                origin=withdrawal,
+                target=earlier,
+                reviewed_reason="The fictional launch owner withdrew Friday.",
+                expected_last_event_id=None,
+            )
+        )
+        text = "A fictional check refers to the launch."
+        affected = self.activate(
+            self.unit(text, "redelivery-after-withdrawal"),
+            "redelivery-after-withdrawal",
+            (friday,),
+        )
+        self.statement_text, self.plan, self.steps, self.mentions = text, None, [], []
+        calls: list[bool] = []
+
+        def transport(messages: Any, info: Any) -> Any:
+            calls.append(True)
+            return self.response(messages, info)
+
+        authorize_delivery = SourceRevisitingEvidenceAccess.authorize_delivery
+        messages: list[str] = []
+
+        async def revoke_then_deliver_twice(
+            access: SourceRevisitingEvidenceAccess, delivery: SourceDelivery
+        ) -> None:
+            self.assertEqual(delivery.task_id, affected.execution_task_id)
+            self.revoke_engine_fixture_source(notice_source)
+            for _ in range(2):
+                with self.assertRaises(psycopg.errors.InsufficientPrivilege) as refused:
+                    await authorize_delivery(access, delivery)
+                messages.append(str(refused.exception))
+            raise psycopg.errors.InsufficientPrivilege(messages[-1])
+
+        with patch.object(
+            SourceRevisitingEvidenceAccess, "authorize_delivery", revoke_then_deliver_twice
+        ):
+            result = asyncio.run(self.worker(transport).run_once())
+        self.assertEqual(
+            (result.task_id, result.task_status),
+            (affected.execution_task_id, "policy_paused"),
+        )
+        self.assertEqual(len(messages), 2)
+        for message in messages:
+            self.assertIn("relation_candidate_unavailable", message)
+        self.assertEqual(calls, [])
+
     def test_candidate_origin_access_is_rechecked_at_delivery(self) -> None:
         candidate_scope, candidate_source = relation_agents.explicit_scope(
             self.db, self
@@ -1637,6 +1755,10 @@ class AuthoredRelations(fixtures.LocalMentions):
             except psycopg.errors.InsufficientPrivilege as error:
                 refused.append(delivery.task_id)
                 messages.append(str(error))
+                # The same cached task delivered again is refused the same way.
+                with self.assertRaises(psycopg.errors.InsufficientPrivilege) as again:
+                    await authorize_delivery(access, delivery)
+                messages.append(str(again.exception))
                 raise
 
         with patch.object(SourceRevisitingEvidenceAccess, "authorize_delivery", revoke_at_delivery):
@@ -1646,7 +1768,9 @@ class AuthoredRelations(fixtures.LocalMentions):
             (affected.execution_task_id, "policy_paused"),
         )
         self.assertEqual(refused, [affected.execution_task_id])
-        self.assertIn("relation_candidate_unavailable", messages[0])
+        self.assertEqual(len(messages), 2)
+        for message in messages:
+            self.assertIn("relation_candidate_unavailable", message)
         self.assertEqual(calls, [])
 
     def test_reads_and_governed_judgments_require_their_authority(self) -> None:
