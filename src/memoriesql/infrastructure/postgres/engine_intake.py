@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal, cast
 from uuid import UUID
 
 from psycopg import Connection
@@ -17,6 +17,7 @@ from psycopg.types.json import Jsonb
 
 from memoriesql.application.engine_intake import (
     AcceptEngineRecords,
+    BindEngineEventEvidence,
     EngineRecordPage,
     EngineRecordResults,
     EngineVocabulary,
@@ -105,3 +106,18 @@ class PostgresEngineIntake:
                 "the engine vocabulary is unavailable",
             )
         )
+
+    def bind_event_evidence(
+        self, request: BindEngineEventEvidence
+    ) -> Literal["bound", "already_bound"]:
+        command = BindEngineEventEvidence.model_validate(
+            request.model_dump(mode="json")
+        )
+        outcome = self._call(
+            "SELECT memoriesql.bind_engine_event_evidence_v1(%s)",
+            (Jsonb(command.model_dump(mode="json")),),
+            "engine evidence is unavailable",
+        )
+        if outcome not in ("bound", "already_bound"):
+            raise RuntimeError("unexpected engine evidence binding outcome")
+        return cast(Literal["bound", "already_bound"], outcome)
