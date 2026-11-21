@@ -232,7 +232,8 @@ event from offset zero in the same order, and each chunk hash must match its
 byte slice. Character offsets count Unicode code points, including combining
 marks. The bounds are 256 chunks and 16 MiB of normalized event text.
 Binding requires the existing engine delivery and scoped write permission,
-plus current canonical query and source-read permission.
+plus current canonical query and source-read permission. The binding and
+internal resolver require Read Committed transaction isolation.
 
 An equivalent replay returns `already_bound`. A different pin, digest or
 ordered chunk map under the same enrolled source, engine workspace and

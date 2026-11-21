@@ -240,6 +240,9 @@ DECLARE
     enrolled memoriesql.source_objects%ROWTYPE;
     binding jsonb;
 BEGIN
+    IF current_setting('transaction_isolation') <> 'read committed' THEN
+        RAISE EXCEPTION 'engine evidence requires read committed' USING ERRCODE = '25001';
+    END IF;
     SELECT * INTO authority FROM memoriesql.current_authorization_context();
     enrolled := memoriesql.engine_evidence_source_v1(authority, $1, false);
     SELECT chunk.span || jsonb_build_object(

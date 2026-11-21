@@ -2348,10 +2348,14 @@ class EngineEventCitationRuntime(unittest.TestCase):
             db, credential_sha256=agent, workspace_id=f.workspace
         )
 
-        def resolve(chunk_id: UUID, secret: str) -> EngineChunkEvidence:
+        def resolve(
+            chunk_id: UUID, secret: str, *, repeatable_read: bool = False
+        ) -> EngineChunkEvidence:
             # The lifecycle definer will use this private seam. Even authorized
             # product roles have no direct EXECUTE privilege.
             with db.transaction():
+                if repeatable_read:
+                    db.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
                 PostgresAuthorizationPort(db).begin_context(
                     credential_sha256=secret, requested_workspace_id=f.workspace
                 )
@@ -2387,6 +2391,8 @@ class EngineEventCitationRuntime(unittest.TestCase):
             intake.bind_event_evidence(
                 command.model_copy(update={"chunks": (chunks[0], changed)})
             )
+        with self.assertRaises(psycopg.errors.ActiveSqlTransaction):
+            resolve(chunks[0].chunk_id, agent, repeatable_read=True)
         with db.transaction(), self.assertRaises(psycopg.errors.InsufficientPrivilege):
             f.begin()
             db.execute(
