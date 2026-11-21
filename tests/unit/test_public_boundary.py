@@ -319,6 +319,9 @@ class RecognisedLinkForms(ScratchRepository):
             f"ssh://git@raw.{GH}usercontent.com/{ours}",
             f"https://git@{GH}.com/{ours}",
             f"ssh://deploy@{GH}.com/{ours}",
+            f"ssh://git@{GH}.com",
+            f"ssh://git@{GH}.com/",
+            f"ssh://git@{GH}.com?probe=1",
         ):
             with self.subTest(text):
                 self.refused_as(text, CREDENTIAL_REFUSED)
@@ -337,6 +340,8 @@ class RecognisedLinkForms(ScratchRepository):
                     f"https://not{GH}.com/someone/private-repo",
                     f"https://raw.{GH}usercontent.com{invalid}/someone/private-repo",
                     f"https://gist.{GH}.com{invalid}/x",
+                    f"https://gist.{GH}.com@example.invalid/x",
+                    f"https://someone.{GH}.io@example.invalid/x",
                     f"A sentence that ends with {GH}.com.",
                 )
             )

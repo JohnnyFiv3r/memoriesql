@@ -17,7 +17,7 @@ DENIED_ROOTS = {"apps", "artifacts"}
 # builds whose hash-pinned releases the hosted qualification installs. Either may
 # be written with one trailing ".git". The check refuses any other repository
 # named by an http or https URL on github.com or www.github.com, by SSH
-# (git@github.com:<owner>/<repo> or ssh://git@github.com/<owner>/<repo>), by a
+# (git@github.com:<owner>/<repo>, or the same after an ssh scheme and a slash), by a
 # bare github.com/<owner>/<repo>, or by raw.githubusercontent.com/<owner>/<repo>,
 # api.github.com/repos/<owner>/<repo> or codeload.github.com/<owner>/<repo>. Any
 # occurrence of GitHub's gist host, or of a <name>.github.io host, is refused. A
@@ -31,13 +31,13 @@ _OWNER_REPOSITORY = r"([\w-]+)/([\w.-]+)"
 _PATH_PAIR = re.compile("/" + _OWNER_REPOSITORY)
 _SCP_PAIR = re.compile(":" + _OWNER_REPOSITORY)
 # A recognised host, exactly: nothing host-like before it, and it does not run on
-# into a longer host name. An optional scheme with userinfo, or an SCP "git@",
+# into a longer host name, and is not itself the user of other userinfo. An optional scheme with userinfo, or an SCP "git@",
 # comes before it. Only the host is consumed; the repository is read after it.
 _REPOSITORY_HOST = re.compile(
     r"(?:(?P<scheme>(?i:https?|ssh))://(?:(?P<user>[^\s/@]+)@)?|(?P<scp>(?i:git)@))?"
     r"(?<![\w.-])(?P<host>(?i:(?:www\.)?github\.com|raw\.githubusercontent\.com"
     r"|api\.github\.com|codeload\.github\.com|gist\.github\.com"
-    r"|(?:[\w-]+\.)+github\.io))(?![\w-]|\.[\w-])"
+    r"|(?:[\w-]+\.)+github\.io))(?![\w@-]|\.[\w-])"
 )
 NO_GIT = (
     "the boundary check needs a git checkout: git was not found on PATH. "
@@ -107,9 +107,10 @@ def _repository_link_failures(text: str) -> list[str]:
         position = match.end()
         host = match["host"].lower()
         user = match["user"]
-        if user is not None and not (
+        git_ssh = (
             user == "git" and match["scheme"].lower() == "ssh" and host == "github.com"
-        ):
+        )
+        if user is not None and not (git_ssh and _PATH_PAIR.match(text, position)):
             failures.append(CREDENTIAL_IN_URL)
             continue
         if host.startswith("gist.") or host.endswith(".github.io"):
