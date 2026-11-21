@@ -23,17 +23,16 @@ do not need a database.
 
 ```console
 git clone https://github.com/JohnnyFiv3r/memoriesql
-python3.13 -m venv memoriesql-venv
-source memoriesql-venv/bin/activate
 cd memoriesql
+python3.13 -m venv .venv
+source .venv/bin/activate
 python -m pip install -r requirements-dev.txt
 export PYTHONPATH=src
 ```
 
-Use `python3.14` in the second line for Python 3.14. In each new shell, run the
-`source` and `export` lines again. Keep the virtual environment outside the
-checkout, as above: the boundary check scans every file under it. The checks run
-from the source tree, so do not install the project itself.
+Use `python3.14` in the third line for Python 3.14. In each new shell, from the
+checkout, run the `source` and `export` lines again. The checks run from the
+source tree, so do not install the project itself.
 
 ## Checks
 
