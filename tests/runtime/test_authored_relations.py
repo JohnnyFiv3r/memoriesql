@@ -931,6 +931,89 @@ class AuthoredRelations(fixtures.LocalMentions):
                     self.inspect(bead, before_withdrawal).claims[0].state, "disputed"
                 )
 
+    def resolved_dispute_then_withdrawal(self, label: str, withdraw_origin: bool) -> None:
+        """Withdrawing one side of a dispute resolved earlier leaves the other
+        side's history readable when the withdrawal's evidence is withheld."""
+        notice_source = self.add_source(f"{label}-notice")
+        friday_bead = self.author(
+            "The fictional launch is Friday.",
+            f"{label}-friday",
+            plan=lambda extras, bead, _: self.add_claim(
+                extras, bead, "launch", "day", "Friday"
+            ),
+        )
+        monday_bead = self.author(
+            "The fictional launch is Monday.",
+            f"{label}-monday",
+            plan=lambda extras, bead, _: self.add_claim(
+                extras, bead, "launch", "day", "Monday"
+            ),
+        )
+        notice_bead = self.author(
+            "The fictional team withdrew a launch day.",
+            f"{label}-withdrawal",
+            source=notice_source,
+        )
+        migrate(self.db, expected_current_version=27, target_version=63)
+        enrollment = uuid.uuid4()
+        friday = self.engine_claim_endpoint(friday_bead, enrollment)
+        monday = self.engine_claim_endpoint(monday_bead, enrollment)
+        notice = self.engine_claim_endpoint(notice_bead, enrollment)
+        assert friday.claim is not None and monday.claim is not None
+        # The dispute is on the target (Friday) and names the origin (Monday).
+        dispute = self.lifecycle.record_claim_event(
+            _prepare_claim_event(
+                record_key=f"edge:!contradicts:{monday.chunk_id}:{friday.chunk_id}",
+                arrow="!contradicts",
+                origin=monday,
+                target=friday,
+                reviewed_reason="Both dates have conflicting evidence.",
+                expected_last_event_id=None,
+            )
+        )
+        resolution = self.lifecycle.record_claim_event(
+            RecordClaimEvent(
+                idempotency_key=f"orchard.{label}.resolve",
+                claim_id=friday.claim.claim_id,
+                action="resolve_dispute",
+                related_claim_id=monday.claim.claim_id,
+                reason="The owner reviewed both fictional checks.",
+                expected_last_event_id=dispute.claim_event_id,
+            )
+        )
+        target, kept_bead = (monday, friday_bead) if withdraw_origin else (friday, monday_bead)
+        assert target.claim is not None
+        self.lifecycle.record_claim_event(
+            _prepare_claim_event(
+                record_key=f"edge:withdraws:{notice.chunk_id}:{target.chunk_id}",
+                arrow="withdraws",
+                origin=notice,
+                target=target,
+                reviewed_reason="The launch owner withdrew a day.",
+                expected_last_event_id=(
+                    None if withdraw_origin else resolution.claim_event_id
+                ),
+            )
+        )
+        (kept,) = self.inspect(kept_bead).claims
+        self.assertEqual((kept.state, kept.disputed_with), ("current", ()))
+        expected = self.inspect(kept_bead)
+
+        # The withdrawal closed nothing: the dispute was resolved first.
+        self.revoke_engine_fixture_source(notice_source)
+        self.assertEqual(self.inspect(kept_bead, expected.known_at), expected)
+        self.assertEqual(self.inspect(kept_bead).outcome, "available")
+
+    def test_withdrawing_the_target_of_a_resolved_dispute_keeps_the_other_readable(
+        self,
+    ) -> None:
+        self.resolved_dispute_then_withdrawal("resolved-target", False)
+
+    def test_withdrawing_the_origin_of_a_resolved_dispute_keeps_the_other_readable(
+        self,
+    ) -> None:
+        self.resolved_dispute_then_withdrawal("resolved-origin", True)
+
     def test_superseded_claim_withholds_state_when_its_superseder_withdrawal_is_withheld(
         self,
     ) -> None:

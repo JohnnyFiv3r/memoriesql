@@ -1,5 +1,6 @@
 -- Claim history and derived state depend on the evidence for a withdrawal.
--- A related claim's retraction can also remove a superseder or open dispute.
+-- A related claim's retraction can also remove a superseder or open dispute. A
+-- dispute resolved before the known time no longer depends on either side.
 CREATE FUNCTION memoriesql.require_claim_withdrawal_evidence_v1(
     t uuid, w uuid, inspected_bead uuid, known timestamptz
 ) RETURNS void
@@ -21,13 +22,23 @@ BEGIN
             FROM inspected_claims AS c
             JOIN memoriesql.bead_claim_events AS e ON e.claim_id = c.claim_id
             WHERE e.tenant_id = t AND e.workspace_id = w AND e.recorded_at <= known
-              AND e.action IN ('supersede', 'dispute')
+              AND (e.action = 'supersede' OR (e.action = 'dispute' AND NOT EXISTS (
+                    SELECT 1 FROM memoriesql.bead_claim_events AS r
+                    WHERE r.tenant_id = t AND r.workspace_id = w AND r.action = 'resolve_dispute'
+                      AND r.recorded_at BETWEEN e.recorded_at AND known
+                      AND ((r.claim_id = e.claim_id AND r.related_claim_id = e.related_claim_id)
+                        OR (r.claim_id = e.related_claim_id AND r.related_claim_id = e.claim_id)))))
             UNION
             SELECT e.claim_id
             FROM inspected_claims AS c
             JOIN memoriesql.bead_claim_events AS e ON e.related_claim_id = c.claim_id
             WHERE e.tenant_id = t AND e.workspace_id = w AND e.recorded_at <= known
-              AND e.action = 'dispute'
+              AND e.action = 'dispute' AND NOT EXISTS (
+                    SELECT 1 FROM memoriesql.bead_claim_events AS r
+                    WHERE r.tenant_id = t AND r.workspace_id = w AND r.action = 'resolve_dispute'
+                      AND r.recorded_at BETWEEN e.recorded_at AND known
+                      AND ((r.claim_id = e.claim_id AND r.related_claim_id = e.related_claim_id)
+                        OR (r.claim_id = e.related_claim_id AND r.related_claim_id = e.claim_id)))
         )
         SELECT DISTINCT s.statement_id, s.access_scope_id,
             statement_event.source_object_id AS statement_source_id,
