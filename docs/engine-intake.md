@@ -145,3 +145,69 @@ change, records accepted before 0056 paged after it, and an impossible zone
 offset rejected alone. `tests/unit/test_engine_intake_migration.py` pins the
 grants, row-level security, immutability and 0056's single deliverability
 predicate. Historical SQL 0001–0055 and records are unchanged.
+
+## Reading a fictional 2.0.1 export for the correction pilot
+
+Core Memory 2.0.1 emits `core_memory.record.v2`. A source-tree development
+tool reads a complete fictional export for one workspace and scope. It produces
+exact source chunks and the direct correction edges between them. The existing
+database intake above still accepts its original producer format.
+
+```sh
+python3.13 scripts/project_engine_correction.py --workspace w1 --scope acme \
+  < tests/fixtures/engine_201_correction.jsonl
+```
+
+Use an export from the beginning of one scoped fictional history. The tool
+checks the projected fields, including matching workspace and scope, parent
+event, contiguous byte and character ranges, and SHA-256 of each chunk and of
+the reassembled event. Identical replayed lines collapse. A reused key with
+different bytes, a partial event or an unknown record kind fails the entire
+projection. The diagnostic input ceiling is 16 MiB.
+
+`chunks` contains the event ID, chunk ID and exact text of each remaining
+text or JSON chunk. A tool call's arguments and output stay out.
+`corrections` contains the original record key, arrow and endpoints for
+committed, direct chunk-to-chunk `repl`, `withdraws` and `!contradicts`
+edges. Replacement and withdrawal point from the newer chunk to the one
+that ended. Contradiction is symmetric. Both endpoints must be in the same
+projected scope. An erasure in the input suppresses its event's text and all
+edges to its chunks, including when older records are replayed in the same
+input after the erasure. Reader and tool outcomes, judge verdicts, groups,
+name links and other edges produce no projected evidence. A standalone
+verdict cannot end a statement.
+
+Every output says `currentness: unassessed`. Absence of an edge can mean an
+endpoint was withheld, erased, outside this projection or absent from the
+input. A consumer cannot use this projection to choose a current answer.
+The command assumes a trusted fictional export. It cannot authenticate its
+producer, prove a snapshot complete, authorize a reader or remember erasures
+across separate invocations. A durable bridge needs a governed delivery and
+read interface, erasure propagation, and replay/restart verification before
+it carries real data or supplies an answer in Desktop.
+
+The fixture contains unmodified lines 5–8 and 65 of the Apache-2.0 Core
+Memory `v2.0.1` release's fictional PostgreSQL golden export,
+`crates/core-memory-store-postgres/tests/golden/export.jsonl`, at commit
+`2d415bd28416d28273411b8cbffd988fc6dd09f7`. The same command accepts that
+entire golden export with the workspace and scope above.
+
+Add `--handoff` to include a `handoff` object alongside the projection. It
+identifies the producer contract, workspace and scope. `events` retains the
+eligible event IDs, record keys, source keys (including optional revision),
+engine-assigned revision flag when supplied, capture time, ordering time
+and its basis. Parsed occurrence fields preserve source precision, start,
+end and time zone when supplied. Unparsed source time text, actor metadata
+and arbitrary source attributes stay out. `chunks` binds each eligible
+chunk ID to its event, ordinal, byte and character ranges and content hash;
+its text appears only in the ordinary projection. `corrections` retains
+the committed edge identity, endpoints, arrow and creation time. `erasures`
+contains only the event ID, erasure record key, erasure time and position.
+An erased event contributes no source key, chunk reference or correction.
+
+Event, correction and erasure rows retain their producer's `seq`, in ascending
+order within each list. Chunk references follow event sequence, then chunk
+ordinal. Positions are local to the named engine workspace. Gaps are expected.
+They establish neither a kernel knowledge frame nor a complete change-feed
+cursor. These coordinates let a future receiver reconcile the exact fictional
+evidence against its own intake and permissions before issuing citations.
