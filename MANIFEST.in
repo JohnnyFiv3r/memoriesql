@@ -71,3 +71,4 @@ include src/memoriesql/infrastructure/postgres/agent_sql_results.py
 include src/memoriesql/infrastructure/postgres/query_reader_provisioning.py
 
 include src/memoriesql/application/source_stable_identity.py
+include src/memoriesql/application/engine_claim_lifecycle.py

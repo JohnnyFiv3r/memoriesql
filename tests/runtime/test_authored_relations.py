@@ -23,6 +23,10 @@ from memoriesql.application.authored_relations import (
     load_related_authorship_task_registry,
 )
 from memoriesql.application.canonical_transactions import SourceType
+from memoriesql.application.engine_claim_lifecycle import (
+    _BoundClaimEndpoint,
+    _prepare_claim_event,
+)
 from memoriesql.application.evidence_packages import NativeFacts
 from memoriesql.application.logical_unit_materialization import LogicalEventDeclaration
 from memoriesql.application.relation_inspection import InspectBeadRelationsV2
@@ -35,11 +39,15 @@ from memoriesql.application.relation_lifecycle import (
     RecordRelationEvent,
     RelationAction,
 )
+from memoriesql.application.source_enrollment import RevokeExactSource
 from memoriesql.infrastructure.postgres.relation_assessment import (
     PostgresRelationAssessments,
 )
 from memoriesql.infrastructure.postgres.relation_lifecycle import (
     PostgresRelationLifecycle,
+)
+from memoriesql.infrastructure.postgres.source_enrollment import (
+    PostgresSourceEnrollment,
 )
 
 if TYPE_CHECKING:
@@ -528,6 +536,190 @@ class AuthoredRelations(fixtures.LocalMentions):
             ))
         events = [(e.action, e.origin) for e in self.inspect(b).claims[0].events]
         self.assertEqual(events, [("dispute", "authored"), ("resolve_dispute", "governed")])
+
+    def engine_claim_endpoint(
+        self, bead: uuid.UUID, enrollment_id: uuid.UUID
+    ) -> _BoundClaimEndpoint:
+        statement_id, source_unit_id, content_hash = self.row(
+            "SELECT e.statement_id,e.evidence_source_unit_id,e.evidence_content_hash "
+            "FROM memoriesql.bead_semantic_statement_evidence e "
+            "JOIN memoriesql.bead_semantic_statements s USING(tenant_id,statement_id) "
+            "WHERE s.bead_id=%s",
+            (bead,),
+        )
+        claims = self.inspect(bead).claims
+        return _BoundClaimEndpoint(
+            enrollment_id=enrollment_id,
+            producer_workspace="fictional-orchard",
+            chunk_id=uuid.uuid4(),
+            evidence=LifecycleEvidence(
+                statement_id=statement_id,
+                source_unit_id=source_unit_id,
+                content_hash=content_hash,
+            ),
+            claim=claims[0] if claims else None,
+        )
+
+    def revoke_engine_fixture_source(self, source: uuid.UUID) -> None:
+        port = PostgresSourceEnrollment(
+            self.db, credential_sha256=self.secret_hash, workspace_id=self.workspace
+        )
+        port.revoke(
+            RevokeExactSource(
+                request_id=uuid.uuid4(),
+                source_object_id=source,
+                reason="Withdraw access to the fictional source.",
+            )
+        )
+
+    def test_bound_engine_replacement_history_and_replay_use_current_authority(
+        self,
+    ) -> None:
+        monday_source = self.add_source("engine-monday")
+        friday_bead = self.author(
+            "The fictional launch is Friday.",
+            "engine-friday",
+            plan=lambda extras, bead, _: self.add_claim(
+                extras, bead, "fictional launch", "day", "Friday"
+            ),
+        )
+        monday_bead = self.author(
+            "The fictional launch moved to Monday.",
+            "engine-monday",
+            source=monday_source,
+            plan=lambda extras, bead, _: self.add_claim(
+                extras, bead, "fictional launch", "day", "Monday"
+            ),
+        )
+        migrate(self.db, expected_current_version=27, target_version=62)
+        enrollment = uuid.uuid4()
+        friday = self.engine_claim_endpoint(friday_bead, enrollment)
+        monday = self.engine_claim_endpoint(monday_bead, enrollment)
+        before_replacement = self.inspect(friday_bead).known_at
+        command = _prepare_claim_event(
+            record_key=f"edge:repl:{monday.chunk_id}:{friday.chunk_id}",
+            arrow="repl",
+            origin=monday,
+            target=friday,
+            reviewed_reason="The launch owner confirmed Monday.",
+            expected_last_event_id=None,
+        )
+        receipt = self.lifecycle.record_claim_event(command)
+        replay = self.lifecycle.record_claim_event(command)
+        self.assertEqual(
+            (replay.claim_event_id, replay.replayed), (receipt.claim_event_id, True)
+        )
+        (current,) = self.inspect(monday_bead).claims
+        self.assertEqual((current.value, current.state), ("Monday", "current"))
+        (ended,) = self.inspect(friday_bead).claims
+        self.assertEqual(
+            (ended.state, ended.superseded_by), ("superseded", (current.claim_id,))
+        )
+        self.assertEqual(
+            [(event.action, event.origin) for event in ended.events],
+            [
+                ("supersede", "governed"),
+            ],
+        )
+        (historical,) = self.inspect(friday_bead, before_replacement).claims
+        self.assertEqual(
+            (historical.value, historical.state, historical.events),
+            ("Friday", "current", ()),
+        )
+
+        # A revoked source exercises the authorization fence, not physical erasure.
+        self.revoke_engine_fixture_source(monday_source)
+        self.assertEqual(
+            self.inspect(monday_bead, before_replacement).outcome, "unavailable"
+        )
+        self.assertEqual(self.inspect(friday_bead).outcome, "unavailable")
+        self.assertEqual(
+            self.inspect(friday_bead, before_replacement).claims, (historical,)
+        )
+        with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+            self.lifecycle.record_claim_event(command)
+        self.assertEqual(self.inspect(friday_bead).outcome, "unavailable")
+        self.assertEqual(
+            self.latest_claim_event(receipt.claim_id), receipt.claim_event_id
+        )
+
+    def test_bound_engine_dispute_requires_resolution_and_withdrawal_ends_claim(
+        self,
+    ) -> None:
+        notice_source = self.add_source("engine-withdraw-notice")
+        friday_bead = self.author(
+            "The fictional launch is Friday.",
+            "engine-dispute-friday",
+            plan=lambda extras, bead, _: self.add_claim(
+                extras, bead, "launch", "day", "Friday"
+            ),
+        )
+        monday_bead = self.author(
+            "The fictional launch is Monday.",
+            "engine-dispute-monday",
+            plan=lambda extras, bead, _: self.add_claim(
+                extras, bead, "launch", "day", "Monday"
+            ),
+        )
+        notice_bead = self.author(
+            "The fictional team withdrew Friday.",
+            "engine-withdraw-friday",
+            source=notice_source,
+        )
+        migrate(self.db, expected_current_version=27, target_version=62)
+        enrollment = uuid.uuid4()
+        friday = self.engine_claim_endpoint(friday_bead, enrollment)
+        monday = self.engine_claim_endpoint(monday_bead, enrollment)
+        dispute = self.lifecycle.record_claim_event(
+            _prepare_claim_event(
+                record_key=f"edge:!contradicts:{monday.chunk_id}:{friday.chunk_id}",
+                arrow="!contradicts",
+                origin=monday,
+                target=friday,
+                reviewed_reason="Both dates have conflicting evidence.",
+                expected_last_event_id=None,
+            )
+        )
+        notice = self.engine_claim_endpoint(notice_bead, enrollment)
+        self.assertIsNone(notice.claim)
+        for bead in (friday_bead, monday_bead):
+            (claim,) = self.inspect(bead).claims
+            self.assertEqual(
+                (claim.state, claim.events[0].event_id),
+                ("disputed", dispute.claim_event_id),
+            )
+
+        before_withdrawal = self.inspect(friday_bead).known_at
+        reason = "The launch owner withdrew Friday."
+        withdrawal = self.lifecycle.record_claim_event(
+            _prepare_claim_event(
+                record_key=f"edge:withdraws:{notice.chunk_id}:{friday.chunk_id}",
+                arrow="withdraws",
+                origin=notice,
+                target=friday,
+                reviewed_reason=reason,
+                expected_last_event_id=dispute.claim_event_id,
+            )
+        )
+        (withdrawn,) = self.inspect(friday_bead).claims
+        self.assertEqual(withdrawn.state, "retracted")
+        event = withdrawn.events[-1]
+        self.assertEqual(
+            (event.event_id, event.reason), (withdrawal.claim_event_id, reason)
+        )
+        self.assertEqual(self.inspect(monday_bead).claims[0].state, "current")
+        self.assertEqual(self.inspect(notice_bead).claims, ())
+
+        self.revoke_engine_fixture_source(notice_source)
+        missing = self.inspect(uuid.uuid4())
+        self.assertEqual(missing.outcome, "unavailable")
+        for bead in (friday_bead, monday_bead):
+            with self.subTest(bead=bead):
+                self.assertEqual(self.inspect(bead), missing)
+                self.assertEqual(self.inspect(bead, event.recorded_at), missing)
+                self.assertEqual(
+                    self.inspect(bead, before_withdrawal).claims[0].state, "disputed"
+                )
 
     def test_invalid_coverage_or_unpinned_candidate_refuses_the_whole_bundle(self) -> None:
         a = self.author("Fictional note A.", "a")

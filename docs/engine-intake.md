@@ -186,6 +186,15 @@ across separate invocations. A durable bridge needs a governed delivery and
 read interface, erasure propagation, and replay/restart verification before
 it carries real data or supplies an answer in Desktop.
 
+Core Memory 2.0.1's authorized recall can provide a narrower answer when
+`include_ended` returns the exact predecessor bead. Its `current: false`
+survives erasure of the successor, while the successor and its edge can be
+withheld. This confirms that the matching producer bead has ended. A missing
+or truncated match leaves currentness unresolved, and a producer match does
+not establish a memoriesQL assertion. The v2 export has no such field.
+See “What is current” in Core Memory 2.0.1's `docs/architecture.md` at
+`2d415bd28416d28273411b8cbffd988fc6dd09f7`.
+
 The fixture contains unmodified lines 5–8 and 65 of the Apache-2.0 Core
 Memory `v2.0.1` release's fictional PostgreSQL golden export,
 `crates/core-memory-store-postgres/tests/golden/export.jsonl`, at commit
