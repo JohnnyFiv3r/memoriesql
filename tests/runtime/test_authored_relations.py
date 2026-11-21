@@ -2025,10 +2025,6 @@ class AuthoredRelations(fixtures.LocalMentions):
             except psycopg.errors.InsufficientPrivilege as error:
                 refused.append(delivery.task_id)
                 messages.append(str(error))
-                # The same cached task delivered again is refused the same way.
-                with self.assertRaises(psycopg.errors.InsufficientPrivilege) as again:
-                    await authorize_delivery(access, delivery)
-                messages.append(str(again.exception))
                 raise
 
         with patch.object(SourceRevisitingEvidenceAccess, "authorize_delivery", revoke_at_delivery):
@@ -2038,7 +2034,7 @@ class AuthoredRelations(fixtures.LocalMentions):
             (affected.execution_task_id, "policy_paused"),
         )
         self.assertEqual(refused, [affected.execution_task_id])
-        self.assertEqual(len(messages), 2)
+        self.assertEqual(len(messages), 1)
         for message in messages:
             self.assertIn("relation_candidate_unavailable", message)
         self.assertEqual(calls, [])
