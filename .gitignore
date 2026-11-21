@@ -1,4 +1,6 @@
 /.venv/
+/venv/
+/.tox/
 /build/
 /dist/
 /src/*.egg-info/
