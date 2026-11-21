@@ -56,6 +56,9 @@ else:
     from test_postgres_runtime import migrate
 
 AGENT = ["memory.inspect", "memory.query", "source.read"]
+UNAVAILABLE = "engine evidence is unavailable"
+UNAVAILABLE_ONLY = "^" + UNAVAILABLE + "$"
+CONFLICT = "engine event evidence conflict"
 SOURCES = (
     "SELECT ss.evidence_ref,u.source_unit_id,u.content_sha256,u.text_state,"
     "u.search_text FROM memory_v1.statement_sources ss "
@@ -2382,6 +2385,44 @@ class EngineEventCitationRuntime(unittest.TestCase):
             assert row is not None
             return EngineChunkEvidence.model_validate(row[0])
 
+    @contextmanager
+    def refused(self, error: type[psycopg.Error], message: str) -> Iterator[None]:
+        """The database refuses with exactly this class and primary message."""
+        with self.assertRaises(error) as caught:
+            yield
+        self.assertEqual(caught.exception.diag.message_primary, message)
+
+    def unresolved(self, command: BindEngineEventEvidence) -> None:
+        """A refused first binding holds nothing: no chunk of the event resolves."""
+        for span in command.chunks:
+            with self.refused(psycopg.errors.InsufficientPrivilege, UNAVAILABLE):
+                self.resolve(command.engine_event_id, span.chunk_id, self.agent)
+
+    def resolves(self, command: BindEngineEventEvidence) -> None:
+        """Every chunk resolves to its span as bound and its unit's identity."""
+        event_id, unit_hash = self.pins[command.source_unit_id]
+        for span in command.chunks:
+            binding = self.resolve(command.engine_event_id, span.chunk_id, self.agent)
+            self.assertEqual(
+                binding,
+                EngineChunkEvidence(
+                    **span.model_dump(),
+                    event_id=event_id,
+                    source_unit_id=command.source_unit_id,
+                    content_sha256=unit_hash,
+                ),
+            )
+
+    def canonical_counts(self) -> tuple[Any, ...]:
+        row = self.db.execute(
+            "SELECT (SELECT count(*) FROM memoriesql.bead_semantic_statements), "
+            "(SELECT count(*) FROM memoriesql.beads), "
+            "(SELECT count(*) FROM memoriesql.source_units), "
+            "(SELECT count(*) FROM memoriesql.source_events)"
+        ).fetchone()
+        assert row is not None
+        return tuple(row)
+
     def test_bound_event_opens_exact_normalized_chunks_under_current_permission(
         self,
     ) -> None:
@@ -2394,34 +2435,52 @@ class EngineEventCitationRuntime(unittest.TestCase):
         unit_id = command.source_unit_id
         event_id, unit_hash = self.pins[unit_id]
 
-        with self.assertRaises(PermissionError):
+        with self.assertRaisesRegex(PermissionError, UNAVAILABLE_ONLY):
             self.agent_intake.bind_event_evidence(command)
-        with self.assertRaises(PermissionError):
+        with self.assertRaisesRegex(PermissionError, UNAVAILABLE_ONLY):
             intake.bind_event_evidence(
                 command.model_copy(update={"engine_workspace": "w2"})
             )
         bad_span = chunks[0].model_copy(update={"char_end": chunks[0].char_end + 1})
-        with self.assertRaises(psycopg.errors.InvalidParameterValue):
+        with self.refused(
+            psycopg.errors.InvalidParameterValue,
+            "engine chunk span does not match normalized source",
+        ):
             intake.bind_event_evidence(
                 command.model_copy(update={"chunks": (bad_span, chunks[1])})
             )
         # Failed binding left neither the event nor a prefix of chunks held.
-        with self.assertRaises(psycopg.errors.InsufficientPrivilege):
-            self.resolve(engine_event, chunks[0].chunk_id, agent)
+        self.unresolved(command)
+        # Binding copies no text, accepts no statement and authors nothing.
+        before = self.canonical_counts()
         self.assertEqual(intake.bind_event_evidence(command), "bound")
         with f.connection() as reopened:
             replay = PostgresEngineIntake(
                 reopened, credential_sha256=f.secret_hash, workspace_id=f.workspace
             )
             self.assertEqual(replay.bind_event_evidence(command), "already_bound")
+        self.assertEqual(self.canonical_counts(), before)
         changed = chunks[1].model_copy(update={"chunk_id": uuid4()})
-        with self.assertRaises(psycopg.errors.UniqueViolation):
+        with self.refused(psycopg.errors.UniqueViolation, CONFLICT):
             intake.bind_event_evidence(
                 command.model_copy(update={"chunks": (chunks[0], changed)})
             )
-        with self.assertRaises(psycopg.errors.ActiveSqlTransaction):
+        # The refused replacement left the first binding as it was.
+        self.resolves(command)
+        with self.refused(
+            psycopg.errors.ActiveSqlTransaction,
+            "engine evidence requires read committed",
+        ):
             self.resolve(engine_event, chunks[0].chunk_id, agent, repeatable_read=True)
-        with db.transaction(), self.assertRaises(psycopg.errors.InsufficientPrivilege):
+        # PostgreSQL's own refusal: the role has no grant, so the function
+        # never runs and cannot answer for the binding.
+        with (
+            db.transaction(),
+            self.refused(
+                psycopg.errors.InsufficientPrivilege,
+                "permission denied for function resolve_engine_chunk_evidence_v1",
+            ),
+        ):
             f.begin()
             db.execute(
                 "SELECT memoriesql.resolve_engine_chunk_evidence_v1(%s,%s,%s,%s)",
@@ -2499,7 +2558,8 @@ class EngineEventCitationRuntime(unittest.TestCase):
         with self.assertRaises(psycopg.errors.InsufficientPrivilege) as unknown:
             self.resolve(engine_event, uuid4(), agent)
         self.assertEqual(str(denied.exception), str(unknown.exception))
-        with self.assertRaises(PermissionError):
+        self.assertEqual(denied.exception.diag.message_primary, UNAVAILABLE)
+        with self.assertRaisesRegex(PermissionError, UNAVAILABLE_ONLY):
             intake.bind_event_evidence(command)
         replayed = r.send(request, secret=agent)
         self.assertEqual(replayed["outcome"], "unavailable")
