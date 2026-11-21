@@ -31,7 +31,7 @@ HOME_REFUSED = "absolute home path"
 LOOKALIKES = (
     "JohnnyFiv3r/memoriesql-private",
     "JohnnyFiv3r/memoriesql-private.git",
-    "JohnnyFiv3r/memoriesql.github.io",
+    "JohnnyFiv3r/memoriesql." + "github.io",
     "JohnnyFiv3r/memoriesql.wiki.git",
     "JohnnyFiv3r/memoriesql.git.git",
     "JohnnyFiv3r/memoriesql.gitx",
@@ -279,10 +279,12 @@ class RecognisedLinkForms(ScratchRepository):
             result.stderr, f"private-boundary text leaked: a.md:{CREDENTIAL_REFUSED}\n"
         )
 
-    def test_owner_and_repository_stay_case_sensitive_in_ssh_form(self) -> None:
+    def test_owner_and_repository_stay_case_sensitive_in_every_form(self) -> None:
         for text in (
             f"git@{GH}.com:johnnyfiv3r/memoriesql.git",
-            f"git@{GH}.com:Actions/python-versions",
+            f"https://{GH}.com/JohnnyFiv3r/MemoriesQL",
+            f"git@{GH}.com:Actions/python-versions.git",
+            f"https://{GH}.com/actions/Python-Versions",
         ):
             with self.subTest(text):
                 self.refused_as(text, URL_REFUSED)
@@ -304,12 +306,60 @@ class RecognisedLinkForms(ScratchRepository):
         self.passes()
 
     def test_every_pages_site_is_refused(self) -> None:
-        self.refused_as(f"https://johnnyfiv3r.{GH}.io/memoriesql", URL_REFUSED)
+        for text in (
+            f"https://johnnyfiv3r.{GH}.io/memoriesql",
+            f"https://someone.{GH}.io",
+        ):
+            with self.subTest(text):
+                self.refused_as(text, URL_REFUSED)
+
+    def test_the_git_user_is_exempt_only_on_github_ssh_forms(self) -> None:
+        ours = "JohnnyFiv3r/memoriesql"
+        for text in (
+            f"ssh://git@raw.{GH}usercontent.com/{ours}",
+            f"https://git@{GH}.com/{ours}",
+            f"ssh://deploy@{GH}.com/{ours}",
+        ):
+            with self.subTest(text):
+                self.refused_as(text, CREDENTIAL_REFUSED)
+        self.write("a.md", f"git@{GH}.com:{ours}.git\nssh://git@{GH}.com/{ours}\n")
+        self.git("add", "a.md")
+        self.passes()
+
+    def test_hosts_that_only_begin_like_github_hosts_are_accepted(self) -> None:
+        invalid = ".example.invalid"
+        self.write(
+            "a.md",
+            "\n".join(
+                (
+                    f"https://fake-user@{GH}.com{invalid}/x/y",
+                    f"https://{GH}.com{invalid}/someone/private-repo",
+                    f"https://not{GH}.com/someone/private-repo",
+                    f"https://raw.{GH}usercontent.com{invalid}/someone/private-repo",
+                    f"https://gist.{GH}.com{invalid}/x",
+                    f"A sentence that ends with {GH}.com.",
+                )
+            )
+            + "\n",
+        )
+        self.git("add", "a.md")
+        self.passes()
+
+    def test_every_occurrence_of_the_gist_host_is_refused(self) -> None:
+        for text in (
+            f"https://gist.{GH}.com",
+            f"https://gist.{GH}.com?probe=1",
+            f"https://gist.{GH}.com/someone/0123456789abcdef",
+            f"gist.{GH}.com/someone/0123456789abcdef",
+        ):
+            with self.subTest(text):
+                self.refused_as(text, URL_REFUSED)
 
     def test_a_url_glued_after_another_is_still_read(self) -> None:
         for text in (
             f"https://api.{GH}.com/x,https://{GH}.com/evil/r",
             f"https://{GH}.com/JohnnyFiv3r/memoriesql/https://{GH}.com/evil/r",
+            f"https://{GH}.com/JohnnyFiv3r/memoriesql/https://someone.{GH}.io",
         ):
             with self.subTest(text):
                 self.refused_as(text, URL_REFUSED)

@@ -14,30 +14,30 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DENIED_ROOTS = {"apps", "artifacts"}
 # The only repositories tracked text may link: this one, and the public CPython
-# builds whose hash-pinned releases the hosted qualification installs. The check
-# refuses any other repository named in these forms: https, http or HTTP-in-any-
-# case URLs on github.com or www.github.com; SSH (git@github.com:<owner>/<repo>
-# and ssh://git@github.com/<owner>/<repo>); bare github.com/<owner>/<repo>;
-# raw.githubusercontent.com/<owner>/<repo>; api.github.com/repos/<owner>/<repo>;
-# codeload.github.com/<owner>/<repo>; any gist.github.com or <name>.github.io
-# URL. Either allowed repository may be written in any of them, with one trailing
-# ".git". A URL with userinfo is refused even then. Other forges and obfuscated
-# links are not recognised.
+# builds whose hash-pinned releases the hosted qualification installs. Either may
+# be written with one trailing ".git". The check refuses any other repository
+# named by an http or https URL on github.com or www.github.com, by SSH
+# (git@github.com:<owner>/<repo> or ssh://git@github.com/<owner>/<repo>), by a
+# bare github.com/<owner>/<repo>, or by raw.githubusercontent.com/<owner>/<repo>,
+# api.github.com/repos/<owner>/<repo> or codeload.github.com/<owner>/<repo>. Any
+# occurrence of GitHub's gist host, or of a <name>.github.io host, is refused. A
+# URL with userinfo on any of these hosts is refused even for an allowed
+# repository; the one exception is the user "git" in the two SSH forms above.
+# Hosts match exactly. Other forges and obfuscated links are not recognised.
 LINKED_REPOSITORIES = {("JohnnyFiv3r", "memoriesql"), ("actions", "python-versions")}
 FOREIGN_REPOSITORY = "non-public repository URL"
 CREDENTIAL_IN_URL = "credential in repository URL"
 _OWNER_REPOSITORY = r"([\w-]+)/([\w.-]+)"
 _PATH_PAIR = re.compile("/" + _OWNER_REPOSITORY)
-_SCP_PAIR = re.compile(_OWNER_REPOSITORY)
-_PATH = re.compile(r"\S*")
-# Only the head of each form is consumed: owner and repository are read after it,
-# so a second URL glued onto the first is still found by the next match.
-_REPOSITORY_LINK = re.compile(
-    r"(?i:(?P<scheme>https?|ssh)://(?:(?P<user>[^\s/@]+)@)?"
-    r"(?P<host>(?:www\.)?github\.com|raw\.githubusercontent\.com|api\.github\.com"
-    r"|codeload\.github\.com|gist\.github\.com|[\w-]+\.github\.io)\b)"
-    r"|(?P<scp>(?i:git@github\.com):)"
-    r"|(?<![\w.-])(?P<bare>(?i:github\.com))"
+_SCP_PAIR = re.compile(":" + _OWNER_REPOSITORY)
+# A recognised host, exactly: nothing host-like before it, and it does not run on
+# into a longer host name. An optional scheme with userinfo, or an SCP "git@",
+# comes before it. Only the host is consumed; the repository is read after it.
+_REPOSITORY_HOST = re.compile(
+    r"(?:(?P<scheme>(?i:https?|ssh))://(?:(?P<user>[^\s/@]+)@)?|(?P<scp>(?i:git)@))?"
+    r"(?<![\w.-])(?P<host>(?i:(?:www\.)?github\.com|raw\.githubusercontent\.com"
+    r"|api\.github\.com|codeload\.github\.com|gist\.github\.com"
+    r"|(?:[\w-]+\.)+github\.io))(?![\w-]|\.[\w-])"
 )
 NO_GIT = (
     "the boundary check needs a git checkout: git was not found on PATH. "
@@ -102,34 +102,34 @@ def _repository_link_failures(text: str) -> list[str]:
     Entries never quote the link, so a token in a URL stays out of the output.
     """
     failures: list[str] = []
-    for match in _REPOSITORY_LINK.finditer(text):
-        if match["scp"]:
-            pair = _SCP_PAIR.match(text, match.end())
-        elif match["bare"]:
-            pair = _PATH_PAIR.match(text, match.end())
+    position = 0
+    while (match := _REPOSITORY_HOST.search(text, position)) is not None:
+        position = match.end()
+        host = match["host"].lower()
+        user = match["user"]
+        if user is not None and not (
+            user == "git" and match["scheme"].lower() == "ssh" and host == "github.com"
+        ):
+            failures.append(CREDENTIAL_IN_URL)
+            continue
+        if host.startswith("gist.") or host.endswith(".github.io"):
+            failures.append(FOREIGN_REPOSITORY)
+            continue
+        if match["scp"] is not None and host == "github.com":
+            pair = _SCP_PAIR.match(text, position)
+        elif host == "api.github.com":
+            pair = (
+                _PATH_PAIR.match(text, position + len("/repos"))
+                if text.startswith("/repos/", position)
+                else None
+            )
         else:
-            user = match["user"]
-            if user is not None and not (
-                user == "git" and match["scheme"].lower() == "ssh"
-            ):
-                failures.append(CREDENTIAL_IN_URL)
-                continue
-            host = match["host"].lower()
-            tail = _PATH.match(text, match.end())
-            path = tail[0] if tail else ""
-            if host == "gist.github.com":
-                if path:
-                    failures.append(FOREIGN_REPOSITORY)
-                continue
-            if host.endswith(".github.io"):
-                failures.append(FOREIGN_REPOSITORY)
-                continue
-            if host == "api.github.com":
-                if not path.startswith("/repos/"):
-                    continue
-                path = path.removeprefix("/repos")
-            pair = _PATH_PAIR.match(path)
-        if pair and (pair[1], pair[2].removesuffix(".git")) not in LINKED_REPOSITORIES:
+            pair = _PATH_PAIR.match(text, position)
+        if pair is None:
+            continue
+        # Resume after the pair, so a URL glued onto this one is still read.
+        position = pair.end()
+        if (pair[1], pair[2].removesuffix(".git")) not in LINKED_REPOSITORIES:
             failures.append(FOREIGN_REPOSITORY)
     return failures
 
