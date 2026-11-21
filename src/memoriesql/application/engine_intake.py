@@ -6,12 +6,14 @@ memoriesQL keeps them exactly as delivered, answers one outcome per record and
 authors nothing. Each engine scope is one enrolled exact source with
 ``source_system`` ``core-memory`` and ``object_kind`` ``engine_scope``.
 Delivering to a scope needs reading it too (schema 56), so no outcome tells a
-deliverer anything about records it may not read.
+deliverer anything about records it may not read. Schema 61 adds binding a
+complete normalized event to accepted evidence; see ``docs/engine-intake.md``.
 """
 
 from __future__ import annotations
 
 from typing import Annotated, Literal
+from uuid import UUID
 
 from pydantic import Field, JsonValue
 
@@ -114,3 +116,39 @@ class EngineVocabulary(FrozenContractModel):
 
     id: Literal["memoriesql.bead_types"]
     types: tuple[EngineVocabularyType, ...] = Field(min_length=1)
+
+
+EngineOffset = Annotated[int, Field(strict=True, ge=0, le=16 * 1024 * 1024)]
+EngineDigest = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+EngineWorkspace = Annotated[str, Field(min_length=1, max_length=128, pattern=r"\S")]
+
+
+class EngineChunkSpan(FrozenContractModel):
+    """An engine chunk's half-open UTF-8 byte and Unicode character intervals."""
+
+    chunk_id: UUID
+    byte_start: EngineOffset
+    byte_end: EngineOffset
+    char_start: EngineOffset
+    char_end: EngineOffset
+    chunk_sha256: EngineDigest
+
+
+class BindEngineEventEvidence(FrozenContractModel):
+    """Bind a complete normalized engine event to already accepted evidence."""
+
+    source_object_id: UUID
+    engine_workspace: EngineWorkspace
+    engine_event_id: UUID
+    event_sha256: EngineDigest
+    source_unit_id: UUID
+    statement_id: UUID
+    chunks: tuple[EngineChunkSpan, ...] = Field(min_length=1, max_length=256)
+
+
+class EngineChunkEvidence(EngineChunkSpan):
+    """Canonical evidence identity and offsets, with no source text."""
+
+    event_id: UUID
+    source_unit_id: UUID
+    content_sha256: EngineDigest
