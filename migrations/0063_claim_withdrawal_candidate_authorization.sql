@@ -126,3 +126,23 @@ BEGIN
     END LOOP;
 END;
 $$;
+
+-- Delivery maps every non-authorized recheck to a stale attempt, which hides why a
+-- revision-6 task was paused. When the pause is the worker's candidate authority,
+-- surface that refusal instead; any other cause keeps the stale-attempt outcome.
+CREATE OR REPLACE FUNCTION memoriesql.authorize_source_delivery_v1(t uuid, task uuid, attempt uuid, generation bigint, worker text, instance text, package uuid) RETURNS boolean
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,memoriesql SET lock_timeout='500ms' AS $$
+DECLARE
+ outcome text;
+BEGIN
+ outcome := memoriesql.reauthorize_semantic_task(t,task,attempt,generation,worker,instance,'hydrate',clock_timestamp());
+ IF outcome <> 'authorized' THEN
+  IF outcome = 'policy_paused' THEN PERFORM memoriesql.relation_candidates_authorize(t,task); END IF;
+  RAISE EXCEPTION 'source_revisiting_stale_attempt' USING ERRCODE='42501'; END IF;
+ PERFORM memoriesql.source_revisiting_authorize(t,task,package);
+ outcome := memoriesql.reauthorize_semantic_task(t,task,attempt,generation,worker,instance,'hydrate',clock_timestamp());
+ IF outcome <> 'authorized' THEN
+  IF outcome = 'policy_paused' THEN PERFORM memoriesql.relation_candidates_authorize(t,task); END IF;
+  RAISE EXCEPTION 'source_revisiting_stale_attempt' USING ERRCODE='42501'; END IF;
+ RETURN true;
+END; $$;
