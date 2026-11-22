@@ -34,7 +34,7 @@ class InstalledMigrationResources(unittest.TestCase):
         self,
     ) -> None:
         stream = runner.discover_migrations()
-        self.assertEqual([m.version for m in stream], list(range(1, 62)))
+        self.assertEqual([m.version for m in stream], list(range(1, 64)))
         for migration in stream:
             self.assertEqual(
                 hashlib.sha256(migration.path.read_bytes()).hexdigest(),
@@ -82,7 +82,7 @@ class InstalledMigrations(unittest.TestCase):
         }
         self.assertIn(Path(runner.__file__).resolve(), owned)
         stream = runner.discover_migrations()
-        self.assertEqual(len(stream), 61)
+        self.assertEqual(len(stream), 63)
         for migration in stream:
             self.assertIn(Path(str(migration.path)).resolve(), owned)
             self.assertEqual(
@@ -154,6 +154,50 @@ class InstalledMigrations(unittest.TestCase):
         self.assertEqual(noop.applied_migrations, ())
         self.assertEqual(noop.schema_snapshot_sha256, receipt.schema_snapshot_sha256)
         self.assertEqual(self.history(), before)
+
+    def test_upgrade_from_61_and_fresh_install_reach_63_with_one_history(self) -> None:
+        self.migrate(0, 61)
+        before = self.history()
+        receipt = self.migrate(61, 63)
+        self.assertEqual(
+            (receipt.from_version, receipt.to_version, receipt.target_version),
+            (61, 63, 63),
+        )
+        self.assertEqual([r.version for r in receipt.applied_migrations], [62, 63])
+        upgraded = self.history()
+        # Applying 0062 and 0063 changes no earlier record.
+        self.assertEqual(upgraded[:61], before)
+        self.assertEqual([r[0] for r in upgraded], list(range(1, 64)))
+
+        fresh_name = "n1_fictional_" + uuid.uuid4().hex
+        with psycopg.connect(self.admin_url, autocommit=True) as admin:
+            admin.execute(
+                sql.SQL("CREATE DATABASE {}").format(sql.Identifier(fresh_name))
+            )
+
+        def drop_fresh() -> None:
+            with psycopg.connect(self.admin_url, autocommit=True) as admin:
+                admin.execute(
+                    sql.SQL("DROP DATABASE {} WITH (FORCE)").format(
+                        sql.Identifier(fresh_name)
+                    )
+                )
+
+        self.addCleanup(drop_fresh)
+        with psycopg.connect(
+            make_conninfo(self.admin_url, dbname=fresh_name), autocommit=True
+        ) as fresh:
+            fresh_receipt = locked_migrate(
+                fresh, expected_current_version=0, target_version=63
+            )
+            self.assertEqual(
+                (fresh_receipt.from_version, fresh_receipt.to_version), (0, 63)
+            )
+            installed = fresh.execute(
+                "SELECT version, name, sha256, runner_contract_version FROM memoriesql.schema_migrations ORDER BY version"
+            ).fetchall()
+            self.assertEqual(installed, [row[:4] for row in upgraded])
+            self.assertEqual(inspect_schema(fresh), inspect_schema(self.connection))
 
     def test_wrong_bound_downgrade_and_out_of_range_are_atomic(self) -> None:
         self.migrate(0, 14)

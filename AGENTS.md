@@ -227,6 +227,15 @@ tells. Preserve migrations 0001–0059 and earlier records. No new table,
 function, capability, role, contract, record kind or release is part of this
 slice. See `docs/engine-intake.md`.
 
+The owner-authorized forward schema-62/63 slice (authorized by the owner's
+approval of item 67's spec) applies a reviewed Core Memory correction edge
+(`repl`, `withdraws`, `!contradicts`) as one supersede, retract or dispute event
+through the existing human lifecycle command, and rechecks withdrawal evidence
+when a claim is inspected (0062) and withdrawal evidence and task origin before
+a worker receives cached relation candidates (0063). Preserve migrations
+0001–0061 and earlier records. No new table, capability, role, contract, record
+kind or release is part of this slice. See `docs/engine-intake.md`.
+
 The Q-owned forward schema-24 slice permits bounded, currently authorized stored
 bead/result and evidence inspection. Preserve migrations 0001–0023 and earlier
 records. No inference, canonical writes, provider binding or private consumption

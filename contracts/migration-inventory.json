@@ -245,6 +245,14 @@
     {
       "filename": "0061_engine_event_evidence.sql",
       "sha256": "26e5429c2249c16ea878323f810e4d9267b5dc8d28e97dd2a20d4d59e9ade86a"
+    },
+    {
+      "filename": "0062_claim_withdrawal_evidence_authorization.sql",
+      "sha256": "a8baddebb8c5d2daa38f48caadb4efda77425a7a4642b6dac8a730a6f98ed6ba"
+    },
+    {
+      "filename": "0063_claim_withdrawal_candidate_authorization.sql",
+      "sha256": "c1ac1136b0b0f2a454831023556682cc5da517084f1137844b1778d34164c533"
     }
   ]
 }

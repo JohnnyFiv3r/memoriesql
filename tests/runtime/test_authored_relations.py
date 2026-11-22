@@ -9,6 +9,7 @@ import json
 import unittest
 import uuid
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import patch
 
@@ -23,6 +24,15 @@ from memoriesql.application.authored_relations import (
     load_related_authorship_task_registry,
 )
 from memoriesql.application.canonical_transactions import SourceType
+from memoriesql.application.engine_claim_lifecycle import (
+    _BoundClaimEndpoint,
+    _prepare_claim_event,
+)
+from memoriesql.application.engine_intake import (
+    BindEngineEventEvidence,
+    EngineChunkEvidence,
+    EngineChunkSpan,
+)
 from memoriesql.application.evidence_packages import NativeFacts
 from memoriesql.application.logical_unit_materialization import LogicalEventDeclaration
 from memoriesql.application.relation_inspection import InspectBeadRelationsV2
@@ -35,18 +45,30 @@ from memoriesql.application.relation_lifecycle import (
     RecordRelationEvent,
     RelationAction,
 )
+from memoriesql.application.source_enrollment import RevokeExactSource
+from memoriesql.application.source_revisiting import SourceDelivery
+from memoriesql.infrastructure.jobs.source_revisiting_access import (
+    SourceRevisitingEvidenceAccess,
+)
+from memoriesql.infrastructure.postgres.authorization import PostgresAuthorizationPort
+from memoriesql.infrastructure.postgres.engine_intake import PostgresEngineIntake
 from memoriesql.infrastructure.postgres.relation_assessment import (
     PostgresRelationAssessments,
 )
 from memoriesql.infrastructure.postgres.relation_lifecycle import (
     PostgresRelationLifecycle,
 )
+from memoriesql.infrastructure.postgres.source_enrollment import (
+    PostgresSourceEnrollment,
+)
 
 if TYPE_CHECKING:
+    from tests.runtime import agent_relation_fixtures as relation_agents
     from tests.runtime import test_local_entity_mentions as fixtures
     from tests.runtime import test_source_revisiting as source_fixtures
     from tests.runtime.test_postgres_runtime import migrate
 else:
+    import agent_relation_fixtures as relation_agents
     import test_local_entity_mentions as fixtures
     import test_source_revisiting as source_fixtures
     from test_postgres_runtime import migrate
@@ -93,7 +115,7 @@ class AuthoredRelations(fixtures.LocalMentions):
         )
         return policy
 
-    def add_source(self, name: str) -> uuid.UUID:
+    def add_source(self, name: str, *, engine_scope: str | None = None) -> uuid.UUID:
         """A second fictional source object with its own producer and dispatch policy."""
         other = uuid.uuid4()
         self.db.execute(
@@ -101,8 +123,14 @@ class AuthoredRelations(fixtures.LocalMentions):
             (other, self.source),
         )
         self.db.execute(
-            "INSERT INTO memoriesql.source_objects(tenant_id,workspace_id,access_scope_id,source_object_id,source_system,object_kind,external_object_id,schema_version,metadata,created_at,last_observed_at,owner_user_id) SELECT tenant_id,workspace_id,access_scope_id,%s,source_system,object_kind,%s,schema_version,metadata,created_at,last_observed_at,owner_user_id FROM memoriesql.source_objects WHERE source_object_id=%s",
-            (other, "orchard." + name, self.source),
+            "INSERT INTO memoriesql.source_objects(tenant_id,workspace_id,access_scope_id,source_object_id,source_system,object_kind,external_object_id,schema_version,metadata,created_at,last_observed_at,owner_user_id) SELECT tenant_id,workspace_id,access_scope_id,%s,COALESCE(%s,source_system),COALESCE(%s,object_kind),%s,schema_version,metadata,created_at,last_observed_at,owner_user_id FROM memoriesql.source_objects WHERE source_object_id=%s",
+            (
+                other,
+                "core-memory" if engine_scope else None,
+                "engine_scope" if engine_scope else None,
+                engine_scope or "orchard." + name,
+                self.source,
+            ),
         )
         producer = uuid.uuid4()
         self.db.execute(
@@ -528,6 +556,525 @@ class AuthoredRelations(fixtures.LocalMentions):
             ))
         events = [(e.action, e.origin) for e in self.inspect(b).claims[0].events]
         self.assertEqual(events, [("dispute", "authored"), ("resolve_dispute", "governed")])
+
+    def engine_claim_endpoint(
+        self, bead: uuid.UUID, enrollment_id: uuid.UUID, value: str | None = None
+    ) -> _BoundClaimEndpoint:
+        statement_id, source_unit_id, content_hash = self.row(
+            "SELECT e.statement_id,e.evidence_source_unit_id,e.evidence_content_hash "
+            "FROM memoriesql.bead_semantic_statement_evidence e "
+            "JOIN memoriesql.bead_semantic_statements s USING(tenant_id,statement_id) "
+            "WHERE s.bead_id=%s",
+            (bead,),
+        )
+        claims = [
+            c for c in self.inspect(bead).claims if value is None or c.value == value
+        ]
+        return _BoundClaimEndpoint(
+            enrollment_id=enrollment_id,
+            producer_workspace="fictional-orchard",
+            chunk_id=uuid.uuid4(),
+            evidence=LifecycleEvidence(
+                statement_id=statement_id,
+                source_unit_id=source_unit_id,
+                content_hash=content_hash,
+            ),
+            claim=claims[0] if claims else None,
+        )
+
+    def revoke_engine_fixture_source(self, source: uuid.UUID) -> None:
+        port = PostgresSourceEnrollment(
+            self.db, credential_sha256=self.secret_hash, workspace_id=self.workspace
+        )
+        port.revoke(
+            RevokeExactSource(
+                request_id=uuid.uuid4(),
+                source_object_id=source,
+                reason="Withdraw access to the fictional source.",
+            )
+        )
+
+    def test_committed_engine_replacement_uses_canonical_chunk_resolver(self) -> None:
+        fixture = Path(__file__).with_name("engine_201_correction.jsonl")
+        if not fixture.is_file():
+            fixture = fixture.parent.parent / "fixtures" / fixture.name
+        first, first_chunk, second, second_chunk, edge = map(
+            json.loads, fixture.read_bytes().splitlines()
+        )
+        producer_workspace = first["workspace"]
+        source = self.add_source("bound-engine", engine_scope=first["scope"])
+        materialization = self.materialization
+        capture_part = self.part
+
+        def normalized_part(content: str) -> Any:
+            return capture_part("Fictional capture: " + content).model_copy(
+                update={
+                    "derivation": "producer_normalized",
+                    "content": content,
+                    "content_sha256": hashlib.sha256(content.encode()).hexdigest(),
+                }
+            )
+
+        normalized_part.__module__ = capture_part.__module__
+
+        def native_materialization(
+            package: Any, *, event: LogicalEventDeclaration, **updates: Any
+        ) -> Any:
+            native = event.native.model_copy(update={"native_id": native_id})
+            return materialization(
+                package, event=event.model_copy(update={"native": native}), **updates
+            )
+
+        def prepare_claim(stage: str) -> Plan:
+            return lambda extras, bead, _: self.add_claim(
+                extras, bead, "fictional opportunity", "stage", stage
+            )
+
+        accepted = []
+        for event, chunk, stage in (
+            (first, first_chunk, "negotiation"),
+            (second, second_chunk, "closed won"),
+        ):
+            native_id = f"core-memory.v2:{producer_workspace}:{event['event_id']}"
+            with (
+                patch.object(self, "materialization", native_materialization),
+                patch.object(self, "part", normalized_part),
+            ):
+                bead = self.author(
+                    chunk["text"],
+                    stage.replace(" ", "-"),
+                    source=source,
+                    plan=prepare_claim(stage),
+                )
+            accepted.append((event, chunk, bead))
+
+        migrate(self.db, expected_current_version=27, target_version=62)
+        intake = PostgresEngineIntake(
+            self.db, credential_sha256=self.secret_hash, workspace_id=self.workspace
+        )
+        endpoints = {}
+        for event, chunk, bead in accepted:
+            (claim,) = self.inspect(bead).claims
+            (statement,) = claim.statements
+            span = EngineChunkSpan(
+                chunk_id=uuid.UUID(chunk["chunk_id"]),
+                byte_start=chunk["byte_start"],
+                byte_end=chunk["byte_end"],
+                char_start=chunk["char_start"],
+                char_end=chunk["char_end"],
+                chunk_sha256=chunk["content_hash"],
+            )
+            binding = BindEngineEventEvidence(
+                source_object_id=source,
+                engine_workspace=producer_workspace,
+                engine_event_id=uuid.UUID(event["event_id"]),
+                event_sha256=event["content_hash"],
+                source_unit_id=claim.source_time.source_unit_id,
+                statement_id=statement.statement_id,
+                chunks=(span,),
+            )
+            self.assertEqual(intake.bind_event_evidence(binding), "bound")
+            with self.db.transaction():
+                PostgresAuthorizationPort(self.db).begin_context(
+                    credential_sha256=self.secret_hash,
+                    requested_workspace_id=self.workspace,
+                )
+                (resolved,) = self.row(
+                    "SELECT memoriesql.resolve_engine_chunk_evidence_v1(%s,%s,%s,%s)",
+                    (
+                        source,
+                        producer_workspace,
+                        binding.engine_event_id,
+                        span.chunk_id,
+                    ),
+                )
+            evidence = EngineChunkEvidence.model_validate(resolved)
+            self.assertEqual(evidence.event_id, claim.source_time.event_id)
+            endpoints[chunk["chunk_id"]] = _BoundClaimEndpoint(
+                enrollment_id=source,
+                producer_workspace=producer_workspace,
+                chunk_id=evidence.chunk_id,
+                claim=claim,
+                evidence=LifecycleEvidence(
+                    statement_id=statement.statement_id,
+                    source_unit_id=evidence.source_unit_id,
+                    content_hash=evidence.content_sha256,
+                ),
+            )
+
+        request = _prepare_claim_event(
+            record_key=edge["record_key"],
+            arrow=edge["arrow"],
+            origin=endpoints[edge["from_bead"]],
+            target=endpoints[edge["to_bead"]],
+            reviewed_reason="The fictional opportunity owner confirmed the new stage.",
+            expected_last_event_id=None,
+        )
+        applied = self.lifecycle.record_claim_event(request)
+        replay = self.lifecycle.record_claim_event(request)
+        self.assertTrue(replay.replayed)
+        self.assertEqual(applied.claim_event_id, replay.claim_event_id)
+        target, origin = (self.inspect(row[2]).claims[0] for row in accepted)
+        self.assertEqual((target.value, target.state), ("negotiation", "superseded"))
+        self.assertEqual((origin.value, origin.state), ("closed won", "current"))
+        self.assertEqual(target.superseded_by, (origin.claim_id,))
+
+    def test_bound_engine_replacement_history_and_replay_use_current_authority(
+        self,
+    ) -> None:
+        monday_source = self.add_source("engine-monday")
+        friday_bead = self.author(
+            "The fictional launch is Friday.",
+            "engine-friday",
+            plan=lambda extras, bead, _: self.add_claim(
+                extras, bead, "fictional launch", "day", "Friday"
+            ),
+        )
+        monday_bead = self.author(
+            "The fictional launch moved to Monday.",
+            "engine-monday",
+            source=monday_source,
+            plan=lambda extras, bead, _: self.add_claim(
+                extras, bead, "fictional launch", "day", "Monday"
+            ),
+        )
+        migrate(self.db, expected_current_version=27, target_version=62)
+        enrollment = uuid.uuid4()
+        friday = self.engine_claim_endpoint(friday_bead, enrollment)
+        monday = self.engine_claim_endpoint(monday_bead, enrollment)
+        before_replacement = self.inspect(friday_bead).known_at
+        command = _prepare_claim_event(
+            record_key=f"edge:repl:{monday.chunk_id}:{friday.chunk_id}",
+            arrow="repl",
+            origin=monday,
+            target=friday,
+            reviewed_reason="The launch owner confirmed Monday.",
+            expected_last_event_id=None,
+        )
+        worker = PostgresRelationLifecycle(
+            self.db, credential_sha256=self.worker_secret, workspace_id=self.workspace
+        )
+        with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+            worker.record_claim_event(command)
+        self.assertIsNone(self.latest_claim_event(command.claim_id))
+        receipt = self.lifecycle.record_claim_event(command)
+        replay = self.lifecycle.record_claim_event(command)
+        self.assertEqual(
+            (replay.claim_event_id, replay.replayed), (receipt.claim_event_id, True)
+        )
+        (current,) = self.inspect(monday_bead).claims
+        self.assertEqual((current.value, current.state), ("Monday", "current"))
+        (ended,) = self.inspect(friday_bead).claims
+        self.assertEqual(
+            (ended.state, ended.superseded_by), ("superseded", (current.claim_id,))
+        )
+        self.assertEqual(
+            [(event.action, event.origin) for event in ended.events],
+            [
+                ("supersede", "governed"),
+            ],
+        )
+        (historical,) = self.inspect(friday_bead, before_replacement).claims
+        self.assertEqual(
+            (historical.value, historical.state, historical.events),
+            ("Friday", "current", ()),
+        )
+
+        # A revoked source exercises the authorization fence, not physical erasure.
+        self.revoke_engine_fixture_source(monday_source)
+        self.assertEqual(
+            self.inspect(monday_bead, before_replacement).outcome, "unavailable"
+        )
+        self.assertEqual(self.inspect(friday_bead).outcome, "unavailable")
+        self.assertEqual(
+            self.inspect(friday_bead, before_replacement).claims, (historical,)
+        )
+        with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+            self.lifecycle.record_claim_event(command)
+        self.assertEqual(self.inspect(friday_bead).outcome, "unavailable")
+        self.assertEqual(
+            self.latest_claim_event(receipt.claim_id), receipt.claim_event_id
+        )
+
+    def test_two_claims_sharing_one_accepted_statement_record_one_evidence_link(
+        self,
+    ) -> None:
+        def two_claims(extras: dict[str, Any], bead: dict[str, Any], _: Any) -> None:
+            self.add_claim(extras, bead, "fictional launch", "day", "Friday")
+            self.add_claim(extras, bead, "fictional launch", "day", "Monday")
+
+        bead = self.author(
+            "The fictional launch was Friday and is now Monday.",
+            "engine-shared-statement",
+            plan=two_claims,
+        )
+        migrate(self.db, expected_current_version=27, target_version=62)
+        enrollment = uuid.uuid4()
+        friday = self.engine_claim_endpoint(bead, enrollment, "Friday")
+        monday = self.engine_claim_endpoint(bead, enrollment, "Monday")
+        assert friday.claim is not None and monday.claim is not None
+        self.assertNotEqual(friday.claim.claim_id, monday.claim.claim_id)
+        self.assertEqual(friday.evidence, monday.evidence)
+        command = _prepare_claim_event(
+            record_key=f"edge:repl:{monday.chunk_id}:{friday.chunk_id}",
+            arrow="repl",
+            origin=monday,
+            target=friday,
+            reviewed_reason="The launch owner confirmed Monday.",
+            expected_last_event_id=None,
+        )
+        self.assertEqual(command.evidence, (friday.evidence,))
+        receipt = self.lifecycle.record_claim_event(command)
+        self.assertEqual(
+            self.row(
+                "SELECT count(*) FROM memoriesql.semantic_evidence_links "
+                "WHERE owner_kind='claim_event' AND owner_id=%s",
+                (receipt.claim_event_id,),
+            ),
+            (1,),
+        )
+        replay = self.lifecycle.record_claim_event(command)
+        self.assertEqual(
+            (replay.claim_event_id, replay.replayed), (receipt.claim_event_id, True)
+        )
+        by_value = {c.value: c for c in self.inspect(bead).claims}
+        self.assertEqual(by_value["Friday"].state, "superseded")
+        self.assertEqual(
+            by_value["Friday"].superseded_by, (monday.claim.claim_id,)
+        )
+        self.assertEqual(by_value["Monday"].state, "current")
+
+    def test_bound_engine_dispute_requires_resolution_and_withdrawal_ends_claim(
+        self,
+    ) -> None:
+        notice_source = self.add_source("engine-withdraw-notice")
+        friday_bead = self.author(
+            "The fictional launch is Friday.",
+            "engine-dispute-friday",
+            plan=lambda extras, bead, _: self.add_claim(
+                extras, bead, "launch", "day", "Friday"
+            ),
+        )
+        monday_bead = self.author(
+            "The fictional launch is Monday.",
+            "engine-dispute-monday",
+            plan=lambda extras, bead, _: self.add_claim(
+                extras, bead, "launch", "day", "Monday"
+            ),
+        )
+        notice_bead = self.author(
+            "The fictional team withdrew Friday.",
+            "engine-withdraw-friday",
+            source=notice_source,
+        )
+        migrate(self.db, expected_current_version=27, target_version=62)
+        enrollment = uuid.uuid4()
+        friday = self.engine_claim_endpoint(friday_bead, enrollment)
+        monday = self.engine_claim_endpoint(monday_bead, enrollment)
+        dispute = self.lifecycle.record_claim_event(
+            _prepare_claim_event(
+                record_key=f"edge:!contradicts:{monday.chunk_id}:{friday.chunk_id}",
+                arrow="!contradicts",
+                origin=monday,
+                target=friday,
+                reviewed_reason="Both dates have conflicting evidence.",
+                expected_last_event_id=None,
+            )
+        )
+        notice = self.engine_claim_endpoint(notice_bead, enrollment)
+        self.assertIsNone(notice.claim)
+        for bead in (friday_bead, monday_bead):
+            (claim,) = self.inspect(bead).claims
+            self.assertEqual(
+                (claim.state, claim.events[0].event_id),
+                ("disputed", dispute.claim_event_id),
+            )
+
+        before_withdrawal = self.inspect(friday_bead).known_at
+        reason = "The launch owner withdrew Friday."
+
+        def withdraw(head: uuid.UUID | None) -> RecordClaimEvent:
+            return _prepare_claim_event(
+                record_key=f"edge:withdraws:{notice.chunk_id}:{friday.chunk_id}",
+                arrow="withdraws",
+                origin=notice,
+                target=friday,
+                reviewed_reason=reason,
+                expected_last_event_id=head,
+            )
+
+        with self.assertRaises(psycopg.errors.SerializationFailure):
+            self.lifecycle.record_claim_event(withdraw(None))
+        self.assertEqual(
+            self.latest_claim_event(withdraw(None).claim_id), dispute.claim_event_id
+        )
+        withdrawal = self.lifecycle.record_claim_event(
+            withdraw(dispute.claim_event_id)
+        )
+        (withdrawn,) = self.inspect(friday_bead).claims
+        self.assertEqual(withdrawn.state, "retracted")
+        event = withdrawn.events[-1]
+        self.assertEqual(
+            (event.event_id, event.reason), (withdrawal.claim_event_id, reason)
+        )
+        self.assertEqual(self.inspect(monday_bead).claims[0].state, "current")
+        self.assertEqual(self.inspect(notice_bead).claims, ())
+
+        self.revoke_engine_fixture_source(notice_source)
+        missing = self.inspect(uuid.uuid4())
+        self.assertEqual(missing.outcome, "unavailable")
+        for bead in (friday_bead, monday_bead):
+            with self.subTest(bead=bead):
+                self.assertEqual(self.inspect(bead), missing)
+                self.assertEqual(self.inspect(bead, event.recorded_at), missing)
+                self.assertEqual(
+                    self.inspect(bead, before_withdrawal).claims[0].state, "disputed"
+                )
+
+    def resolved_dispute_then_withdrawal(self, label: str, withdraw_origin: bool) -> None:
+        """Withdrawing one side of a dispute resolved earlier leaves the other
+        side's history readable when the withdrawal's evidence is withheld."""
+        notice_source = self.add_source(f"{label}-notice")
+        friday_bead = self.author(
+            "The fictional launch is Friday.",
+            f"{label}-friday",
+            plan=lambda extras, bead, _: self.add_claim(
+                extras, bead, "launch", "day", "Friday"
+            ),
+        )
+        monday_bead = self.author(
+            "The fictional launch is Monday.",
+            f"{label}-monday",
+            plan=lambda extras, bead, _: self.add_claim(
+                extras, bead, "launch", "day", "Monday"
+            ),
+        )
+        notice_bead = self.author(
+            "The fictional team withdrew a launch day.",
+            f"{label}-withdrawal",
+            source=notice_source,
+        )
+        migrate(self.db, expected_current_version=27, target_version=63)
+        enrollment = uuid.uuid4()
+        friday = self.engine_claim_endpoint(friday_bead, enrollment)
+        monday = self.engine_claim_endpoint(monday_bead, enrollment)
+        notice = self.engine_claim_endpoint(notice_bead, enrollment)
+        assert friday.claim is not None and monday.claim is not None
+        # The dispute is on the target (Friday) and names the origin (Monday).
+        dispute = self.lifecycle.record_claim_event(
+            _prepare_claim_event(
+                record_key=f"edge:!contradicts:{monday.chunk_id}:{friday.chunk_id}",
+                arrow="!contradicts",
+                origin=monday,
+                target=friday,
+                reviewed_reason="Both dates have conflicting evidence.",
+                expected_last_event_id=None,
+            )
+        )
+        resolution = self.lifecycle.record_claim_event(
+            RecordClaimEvent(
+                idempotency_key=f"orchard.{label}.resolve",
+                claim_id=friday.claim.claim_id,
+                action="resolve_dispute",
+                related_claim_id=monday.claim.claim_id,
+                reason="The owner reviewed both fictional checks.",
+                expected_last_event_id=dispute.claim_event_id,
+            )
+        )
+        target, kept_bead = (monday, friday_bead) if withdraw_origin else (friday, monday_bead)
+        assert target.claim is not None
+        self.lifecycle.record_claim_event(
+            _prepare_claim_event(
+                record_key=f"edge:withdraws:{notice.chunk_id}:{target.chunk_id}",
+                arrow="withdraws",
+                origin=notice,
+                target=target,
+                reviewed_reason="The launch owner withdrew a day.",
+                expected_last_event_id=(
+                    None if withdraw_origin else resolution.claim_event_id
+                ),
+            )
+        )
+        (kept,) = self.inspect(kept_bead).claims
+        self.assertEqual((kept.state, kept.disputed_with), ("current", ()))
+        expected = self.inspect(kept_bead)
+
+        # The withdrawal closed nothing: the dispute was resolved first.
+        self.revoke_engine_fixture_source(notice_source)
+        self.assertEqual(self.inspect(kept_bead, expected.known_at), expected)
+        self.assertEqual(self.inspect(kept_bead).outcome, "available")
+
+    def test_withdrawing_the_target_of_a_resolved_dispute_keeps_the_other_readable(
+        self,
+    ) -> None:
+        self.resolved_dispute_then_withdrawal("resolved-target", False)
+
+    def test_withdrawing_the_origin_of_a_resolved_dispute_keeps_the_other_readable(
+        self,
+    ) -> None:
+        self.resolved_dispute_then_withdrawal("resolved-origin", True)
+
+    def test_superseded_claim_withholds_state_when_its_superseder_withdrawal_is_withheld(
+        self,
+    ) -> None:
+        notice_source = self.add_source("engine-superseder-notice")
+        friday_bead = self.author(
+            "The fictional launch is Friday.",
+            "engine-superseded-friday",
+            plan=lambda extras, bead, _: self.add_claim(
+                extras, bead, "launch", "day", "Friday"
+            ),
+        )
+        monday_bead = self.author(
+            "The fictional launch moved to Monday.",
+            "engine-superseder-monday",
+            plan=lambda extras, bead, _: self.add_claim(
+                extras, bead, "launch", "day", "Monday"
+            ),
+        )
+        notice_bead = self.author(
+            "The fictional team withdrew Monday.",
+            "engine-superseder-notice",
+            source=notice_source,
+        )
+        migrate(self.db, expected_current_version=27, target_version=62)
+        enrollment = uuid.uuid4()
+        friday = self.engine_claim_endpoint(friday_bead, enrollment)
+        monday = self.engine_claim_endpoint(monday_bead, enrollment)
+        notice = self.engine_claim_endpoint(notice_bead, enrollment)
+        replacement = self.lifecycle.record_claim_event(
+            _prepare_claim_event(
+                record_key=f"edge:repl:{monday.chunk_id}:{friday.chunk_id}",
+                arrow="repl",
+                origin=monday,
+                target=friday,
+                reviewed_reason="The launch owner confirmed Monday.",
+                expected_last_event_id=None,
+            )
+        )
+        before_withdrawal = self.inspect(friday_bead).known_at
+        self.lifecycle.record_claim_event(
+            _prepare_claim_event(
+                record_key=f"edge:withdraws:{notice.chunk_id}:{monday.chunk_id}",
+                arrow="withdraws",
+                origin=notice,
+                target=monday,
+                reviewed_reason="The launch owner withdrew Monday.",
+                expected_last_event_id=None,
+            )
+        )
+        (restored,) = self.inspect(friday_bead).claims
+        self.assertEqual(restored.superseded_by, ())
+
+        self.revoke_engine_fixture_source(notice_source)
+        missing = self.inspect(uuid.uuid4())
+        self.assertEqual(missing.outcome, "unavailable")
+        self.assertEqual(self.inspect(friday_bead), missing)
+        (earlier,) = self.inspect(friday_bead, before_withdrawal).claims
+        self.assertEqual(
+            (earlier.state, earlier.events[-1].event_id),
+            ("superseded", replacement.claim_event_id),
+        )
 
     def test_invalid_coverage_or_unpinned_candidate_refuses_the_whole_bundle(self) -> None:
         a = self.author("Fictional note A.", "a")
@@ -1063,6 +1610,434 @@ class AuthoredRelations(fixtures.LocalMentions):
         self.assertEqual(
             self.row("SELECT count(*) FROM memoriesql.model_provider_request_intents"), intents
         )
+
+    def test_worker_withholds_cached_claim_state_after_withdrawal_evidence_revocation(
+        self,
+    ) -> None:
+        notice_source = self.add_source("candidate-withdrawal-notice")
+        friday = self.author(
+            "The fictional launch is Friday.",
+            "candidate-withdrawal-friday",
+            plan=lambda extras, bead, _: self.add_claim(
+                extras, bead, "launch", "day", "Friday"
+            ),
+        )
+        notice = self.author(
+            "The fictional team withdrew Friday.",
+            "candidate-withdrawal-notice",
+            source=notice_source,
+        )
+        migrate(self.db, expected_current_version=27, target_version=62)
+        text = "A fictional check refers to the launch."
+        before = self.activate(
+            self.unit(text, "before-withdrawal"), "before-withdrawal", (friday,)
+        )
+        enrollment = uuid.uuid4()
+        earlier = self.engine_claim_endpoint(friday, enrollment)
+        withdrawal = self.engine_claim_endpoint(notice, enrollment)
+        self.lifecycle.record_claim_event(
+            _prepare_claim_event(
+                record_key=f"edge:withdraws:{withdrawal.chunk_id}:{earlier.chunk_id}",
+                arrow="withdraws",
+                origin=withdrawal,
+                target=earlier,
+                reviewed_reason="The fictional launch owner withdrew Friday.",
+                expected_last_event_id=None,
+            )
+        )
+        after = self.activate(
+            self.unit(text, "after-withdrawal"), "after-withdrawal", (friday,)
+        )
+        for receipt, state in ((before, "current"), (after, "retracted")):
+            self.assertEqual(
+                self.row(
+                    "SELECT relation_candidates #>> '{0,claims,0,state_at_activation}' "
+                    "FROM memoriesql.complete_input_executions WHERE execution_task_id=%s",
+                    (receipt.execution_task_id,),
+                ),
+                (state,),
+            )
+
+        migrate(self.db, expected_current_version=62, target_version=63)
+        self.revoke_engine_fixture_source(notice_source)
+        self.statement_text = text
+        self.plan = None
+        self.steps = []
+        self.mentions = []
+        results = {}
+        for _ in (before, after):
+            result = asyncio.run(self.worker().run_once())
+            results[result.task_id] = result.task_status
+        self.assertEqual(
+            results,
+            {
+                before.execution_task_id: "succeeded",
+                after.execution_task_id: "policy_paused",
+            },
+        )
+        self.assertEqual(
+            self.row(
+                "SELECT count(*) FROM memoriesql.model_provider_request_intents WHERE task_id=%s",
+                (after.execution_task_id,),
+            ),
+            (0,),
+        )
+
+    def test_cached_withdrawal_evidence_is_rechecked_at_first_delivery(self) -> None:
+        notice_source = self.add_source("candidate-redelivery-notice")
+        friday = self.author(
+            "The fictional launch is Friday.",
+            "candidate-redelivery-friday",
+            plan=lambda extras, bead, _: self.add_claim(
+                extras, bead, "launch", "day", "Friday"
+            ),
+        )
+        notice = self.author(
+            "The fictional team withdrew Friday.",
+            "candidate-redelivery-notice",
+            source=notice_source,
+        )
+        migrate(self.db, expected_current_version=27, target_version=63)
+        enrollment = uuid.uuid4()
+        earlier = self.engine_claim_endpoint(friday, enrollment)
+        withdrawal = self.engine_claim_endpoint(notice, enrollment)
+        self.lifecycle.record_claim_event(
+            _prepare_claim_event(
+                record_key=f"edge:withdraws:{withdrawal.chunk_id}:{earlier.chunk_id}",
+                arrow="withdraws",
+                origin=withdrawal,
+                target=earlier,
+                reviewed_reason="The fictional launch owner withdrew Friday.",
+                expected_last_event_id=None,
+            )
+        )
+        text = "A fictional check refers to the launch."
+        affected = self.activate(
+            self.unit(text, "redelivery-after-withdrawal"),
+            "redelivery-after-withdrawal",
+            (friday,),
+        )
+        self.statement_text, self.plan, self.steps, self.mentions = text, None, [], []
+        calls: list[bool] = []
+
+        def transport(messages: Any, info: Any) -> Any:
+            calls.append(True)
+            return self.response(messages, info)
+
+        # The refusal aborts the worker's owned transaction, so a second call on
+        # the same attempt could only fail on that; later deliveries are covered
+        # by the redispatch cases, which take a new attempt.
+        result, messages = self.run_with_revocation_at_delivery(
+            transport, lambda: self.revoke_engine_fixture_source(notice_source)
+        )
+        self.assertEqual(
+            (result.task_id, result.task_status),
+            (affected.execution_task_id, "policy_paused"),
+        )
+        self.assertEqual(len(messages), 1)
+        self.assertIn("relation_candidate_unavailable", messages[0])
+        self.assertEqual(calls, [])
+
+    def withdrawn_friday_task(self, label: str) -> tuple[uuid.UUID, uuid.UUID, Any]:
+        """A revision-6 task whose candidate's claim state rests on withdrawal
+        evidence from a separate source. Returns that source and the task."""
+        notice_source = self.add_source(f"{label}-notice")
+        friday = self.author(
+            "The fictional launch is Friday.",
+            f"{label}-friday",
+            plan=lambda extras, bead, _: self.add_claim(
+                extras, bead, "launch", "day", "Friday"
+            ),
+        )
+        notice = self.author(
+            "The fictional team withdrew Friday.",
+            f"{label}-notice",
+            source=notice_source,
+        )
+        migrate(self.db, expected_current_version=27, target_version=63)
+        enrollment = uuid.uuid4()
+        earlier = self.engine_claim_endpoint(friday, enrollment)
+        withdrawal = self.engine_claim_endpoint(notice, enrollment)
+        self.lifecycle.record_claim_event(
+            _prepare_claim_event(
+                record_key=f"edge:withdraws:{withdrawal.chunk_id}:{earlier.chunk_id}",
+                arrow="withdraws",
+                origin=withdrawal,
+                target=earlier,
+                reviewed_reason="The fictional launch owner withdrew Friday.",
+                expected_last_event_id=None,
+            )
+        )
+        text = "A fictional check refers to the launch."
+        affected = self.activate(self.unit(text, f"{label}-check"), f"{label}-check", (friday,))
+        self.statement_text, self.plan, self.steps, self.mentions = text, None, [], []
+        return notice_source, notice, affected
+
+    def crash_after_first_delivery(self, affected: Any, transport: Any) -> Any:
+        """Deliver the task's first attempt, kill the worker before it records a
+        result, and make the reaped task available for a new attempt."""
+        worker = self.worker(transport)
+        saved: dict[str, Any] = {}
+
+        def crash(claimed: Any, result: Any, sink: Any, **kwargs: Any) -> Any:
+            saved["claimed"] = claimed
+            raise RuntimeError("fictional crash before canonical apply")
+
+        worker._persist_result = crash
+        with self.assertRaisesRegex(RuntimeError, "fictional crash"):
+            asyncio.run(worker.run_once())
+        first = saved["claimed"]
+        self.assertEqual(first.fence.task_id, affected.execution_task_id)
+        # Test-only clock fixture: the lease lapses and the task is reaped.
+        with self.db.transaction():
+            self.db.execute(
+                "ALTER TABLE memoriesql.semantic_task_attempts DISABLE TRIGGER semantic_task_attempts_protect_state"
+            )
+            self.db.execute(
+                "UPDATE memoriesql.semantic_tasks SET heartbeat_at=clock_timestamp()-interval '2 seconds',lease_expires_at=clock_timestamp()-interval '1 second' WHERE task_id=%s",
+                (first.fence.task_id,),
+            )
+            self.db.execute(
+                "UPDATE memoriesql.semantic_task_attempts SET claimed_at=clock_timestamp()-interval '10 seconds',started_at=clock_timestamp()-interval '5 seconds',heartbeat_at=clock_timestamp()-interval '2 seconds',lease_expires_at=clock_timestamp()-interval '1 second' WHERE attempt_id=%s",
+                (first.fence.attempt_id,),
+            )
+            self.db.execute(
+                "ALTER TABLE memoriesql.semantic_task_attempts ENABLE TRIGGER semantic_task_attempts_protect_state"
+            )
+        with self.db.transaction():
+            self.assertEqual(
+                self.worker_queue().reap_expired(
+                    worker_id="orchard.reaper", limit=1, reaped_at=datetime.now(UTC)
+                ),
+                1,
+            )
+        self.db.execute(
+            "UPDATE memoriesql.semantic_tasks SET available_at=clock_timestamp() WHERE task_id=%s",
+            (first.fence.task_id,),
+        )
+        return first
+
+    def run_with_revocation_at_delivery(
+        self, transport: Any, revoke: Any
+    ) -> tuple[Any, list[str]]:
+        """Run the worker once. `revoke` runs once the attempt has passed
+        hydration, immediately before the real delivery check, whose refusal
+        is returned with the worker's outcome."""
+        authorize_delivery = SourceRevisitingEvidenceAccess.authorize_delivery
+        messages: list[str] = []
+
+        async def revoke_then_deliver(
+            access: SourceRevisitingEvidenceAccess, delivery: SourceDelivery
+        ) -> None:
+            revoke()
+            try:
+                await authorize_delivery(access, delivery)
+            except psycopg.errors.InsufficientPrivilege as refused:
+                messages.append(str(refused))
+                raise
+
+        with patch.object(
+            SourceRevisitingEvidenceAccess, "authorize_delivery", revoke_then_deliver
+        ):
+            return asyncio.run(self.worker(transport).run_once()), messages
+
+    def test_redispatched_attempt_is_paused_before_delivery_after_revocation(
+        self,
+    ) -> None:
+        notice_source, _, affected = self.withdrawn_friday_task("redispatch-early")
+        calls: list[bool] = []
+
+        def transport(messages: Any, info: Any) -> Any:
+            calls.append(True)
+            return self.response(messages, info)
+
+        first = self.crash_after_first_delivery(affected, transport)
+        delivered = len(calls)
+        self.assertTrue(delivered)
+        self.revoke_engine_fixture_source(notice_source)
+        result = asyncio.run(self.worker(transport).run_once())
+        self.assertEqual(result.task_id, affected.execution_task_id)
+        self.assertNotEqual(result.attempt_id, first.fence.attempt_id)
+        self.assertEqual(result.task_status, "policy_paused")
+        self.assertEqual(len(calls), delivered)
+
+    def test_redispatched_attempt_rechecks_withdrawal_evidence_at_delivery(
+        self,
+    ) -> None:
+        notice_source, _, affected = self.withdrawn_friday_task("redispatch-late")
+        calls: list[bool] = []
+
+        def transport(messages: Any, info: Any) -> Any:
+            calls.append(True)
+            return self.response(messages, info)
+
+        first = self.crash_after_first_delivery(affected, transport)
+        delivered = len(calls)
+        result, messages = self.run_with_revocation_at_delivery(
+            transport, lambda: self.revoke_engine_fixture_source(notice_source)
+        )
+        self.assertEqual(result.task_id, affected.execution_task_id)
+        self.assertNotEqual(result.attempt_id, first.fence.attempt_id)
+        self.assertEqual(result.task_status, "policy_paused")
+        self.assertEqual(len(messages), 1)
+        self.assertIn("relation_candidate_unavailable", messages[0])
+        self.assertEqual(len(calls), delivered)
+
+    def test_redispatched_attempt_rechecks_candidate_origin_at_delivery(self) -> None:
+        candidate_scope, candidate_source = relation_agents.explicit_scope(
+            self.db, self
+        )
+        with patch.object(self, "scope", candidate_scope):
+            candidate = self.author(
+                "The fictional launch is Friday.",
+                "redispatch-origin-candidate",
+                source=candidate_source,
+                plan=lambda extras, bead, _: self.add_claim(
+                    extras, bead, "launch", "day", "Friday"
+                ),
+            )
+        (origin_grant,) = self.row(
+            "SELECT grant_id FROM memoriesql.access_grants "
+            "WHERE access_scope_id=%s AND target_principal_id=%s",
+            (candidate_scope, self.principal),
+        )
+        migrate(self.db, expected_current_version=27, target_version=63)
+        text = "A fictional note refers to the launch."
+        self.statement_text, self.plan, self.steps, self.mentions = text, None, [], []
+        affected = self.activate(
+            self.unit(text, "redispatch-origin"), "redispatch-origin", (candidate,)
+        )
+        calls: list[bool] = []
+
+        def transport(messages: Any, info: Any) -> Any:
+            calls.append(True)
+            return self.response(messages, info)
+
+        first = self.crash_after_first_delivery(affected, transport)
+        delivered = len(calls)
+
+        def revoke_origin() -> None:
+            with self.db.transaction():
+                self.begin()
+                self.db.execute(
+                    "SELECT memoriesql.revise_access_grant(%s,1,%s,'revoked',%s,%s,%s)",
+                    (
+                        origin_grant,
+                        ["read", "write"],
+                        self.now,
+                        self.now + timedelta(hours=1),
+                        self.now,
+                    ),
+                )
+
+        result, messages = self.run_with_revocation_at_delivery(transport, revoke_origin)
+        self.assertEqual(result.task_id, affected.execution_task_id)
+        self.assertNotEqual(result.attempt_id, first.fence.attempt_id)
+        self.assertEqual(result.task_status, "policy_paused")
+        self.assertEqual(len(messages), 1)
+        self.assertIn("relation_candidate_unavailable", messages[0])
+        self.assertEqual(len(calls), delivered)
+
+    def test_candidate_origin_access_is_rechecked_at_delivery(self) -> None:
+        candidate_scope, candidate_source = relation_agents.explicit_scope(
+            self.db, self
+        )
+        with patch.object(self, "scope", candidate_scope):
+            candidate = self.author(
+                "The fictional launch is Friday.",
+                "origin-candidate",
+                source=candidate_source,
+                plan=lambda extras, bead, _: self.add_claim(
+                    extras, bead, "launch", "day", "Friday"
+                ),
+            )
+        (claim,) = self.inspect(candidate).claims
+        (origin_grant,) = self.row(
+            "SELECT grant_id FROM memoriesql.access_grants "
+            "WHERE access_scope_id=%s AND target_principal_id=%s",
+            (candidate_scope, self.principal),
+        )
+        migrate(self.db, expected_current_version=27, target_version=63)
+
+        text = "A fictional note refers to the launch."
+        self.statement_text, self.plan, self.steps, self.mentions = text, None, [], []
+        control = self.activate(
+            self.unit(text, "origin-control"), "origin-control", (candidate,)
+        )
+        calls: list[bool] = []
+
+        def transport(messages: Any, info: Any) -> Any:
+            calls.append(True)
+            return self.response(messages, info)
+
+        result = asyncio.run(self.worker(transport).run_once())
+        self.assertEqual(
+            (result.task_id, result.task_status),
+            (control.execution_task_id, "succeeded"),
+        )
+        self.assertTrue(calls)
+        calls.clear()
+
+        affected = self.activate(
+            self.unit(text, "origin-denial"), "origin-denial", (candidate,)
+        )
+        worker = self.worker(transport)
+        authorize_delivery = SourceRevisitingEvidenceAccess.authorize_delivery
+        refused: list[uuid.UUID] = []
+        messages: list[str] = []
+
+        async def revoke_at_delivery(
+            access: SourceRevisitingEvidenceAccess, delivery: SourceDelivery
+        ) -> None:
+            self.assertEqual(delivery.task_id, affected.execution_task_id)
+            with self.db.transaction():
+                self.begin()
+                self.db.execute(
+                    "SELECT memoriesql.revise_access_grant(%s,1,%s,'revoked',%s,%s,%s)",
+                    (
+                        origin_grant,
+                        ["read", "write"],
+                        self.now,
+                        self.now + timedelta(hours=1),
+                        self.now,
+                    ),
+                )
+            self.assertEqual(self.inspect(candidate).outcome, "unavailable")
+            with self.db.transaction():
+                PostgresAuthorizationPort(self.db).begin_context(
+                    credential_sha256=self.worker_secret,
+                    requested_workspace_id=self.workspace,
+                )
+                self.assertEqual(
+                    self.row(
+                        "SELECT memoriesql.current_context_accepted_bead_maintain_authorized(%s,%s,%s,%s)",
+                        (
+                            self.tenant,
+                            self.workspace,
+                            candidate_scope,
+                            claim.bead_version_id,
+                        ),
+                    ),
+                    (True,),
+                )
+            try:
+                await authorize_delivery(access, delivery)
+            except psycopg.errors.InsufficientPrivilege as error:
+                refused.append(delivery.task_id)
+                messages.append(str(error))
+                raise
+
+        with patch.object(SourceRevisitingEvidenceAccess, "authorize_delivery", revoke_at_delivery):
+            result = asyncio.run(worker.run_once())
+        self.assertEqual(
+            (result.task_id, result.task_status),
+            (affected.execution_task_id, "policy_paused"),
+        )
+        self.assertEqual(refused, [affected.execution_task_id])
+        self.assertEqual(len(messages), 1)
+        for message in messages:
+            self.assertIn("relation_candidate_unavailable", message)
+        self.assertEqual(calls, [])
 
     def test_reads_and_governed_judgments_require_their_authority(self) -> None:
         ids: dict[str, str] = {}

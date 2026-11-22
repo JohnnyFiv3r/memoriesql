@@ -2,9 +2,23 @@ from __future__ import annotations
 
 import json
 import unittest
+from dataclasses import replace
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from uuid import UUID, uuid4
 
+from memoriesql.application.authored_relations import SourceClock
+from memoriesql.application.engine_claim_lifecycle import (
+    _BoundClaimEndpoint,
+    _prepare_claim_event,
+)
+from memoriesql.application.relation_lifecycle import (
+    InspectedClaim,
+    InspectedStatement,
+    LifecycleEvidence,
+    RecordClaimEvent,
+)
 from scripts.project_engine_correction import project
 
 FIXTURE = (
@@ -21,7 +35,275 @@ def run(rows: list[dict[str, Any]], *, handoff: bool = False) -> dict[str, Any]:
     return project(data, workspace="w1", scope="acme", handoff=handoff)
 
 
+def bind_fictional_claim(
+    chunk: dict[str, Any], enrollment: UUID
+) -> _BoundClaimEndpoint:
+    statement = InspectedStatement(statement_id=uuid4(), text="A fictional claim.")
+    unit_id = uuid4()
+    recorded_at = datetime(2026, 11, 20, tzinfo=UTC)
+    claim = InspectedClaim(
+        claim_id=uuid4(),
+        bead_id=uuid4(),
+        bead_version_id=uuid4(),
+        subject="fictional launch",
+        subject_mention_id=None,
+        slot="day",
+        value="Friday",
+        applicability=None,
+        statements=(statement,),
+        recorded_at=recorded_at,
+        state="current",
+        superseded_by=(),
+        disputed_with=(),
+        origin_corrected_by=(),
+        events=(),
+        source_time=SourceClock(
+            event_id=uuid4(),
+            source_unit_id=unit_id,
+            source_object_id=enrollment,
+            occurred_at=None,
+            occurred_end_at=None,
+            time_basis="capture_time",
+            recorded_at=recorded_at,
+        ),
+    )
+    return _BoundClaimEndpoint(
+        enrollment_id=enrollment,
+        producer_workspace="w1",
+        chunk_id=UUID(chunk["chunk_id"]),
+        claim=claim,
+        evidence=LifecycleEvidence(
+            statement_id=statement.statement_id,
+            source_unit_id=unit_id,
+            content_hash=chunk["content_hash"],
+        ),
+    )
+
+
 class EngineCorrectionProjectionTests(unittest.TestCase):
+    def test_committed_edge_prepares_a_command_only_with_accepted_pins(self) -> None:
+        handoff = run(fixture(), handoff=True)["handoff"]
+        (edge,) = handoff["corrections"]
+        enrollment = uuid4()
+        earlier, later = (
+            bind_fictional_claim(chunk, enrollment) for chunk in handoff["chunks"]
+        )
+
+        def prepare(
+            target: _BoundClaimEndpoint,
+            replacement: _BoundClaimEndpoint,
+            *,
+            record_key: str = edge["record_key"],
+        ) -> Any:
+            return _prepare_claim_event(
+                record_key=record_key,
+                arrow=edge["arrow"],
+                target=target,
+                origin=replacement,
+                reviewed_reason="The owner accepted the correction.",
+                expected_last_event_id=None,
+            )
+
+        request = prepare(earlier, later)
+        self.assertEqual(request, prepare(earlier, later))
+        self.assertEqual(request.action, "supersede")
+        self.assertEqual(request.evidence, (earlier.evidence, later.evidence))
+        self.assertNotEqual(
+            request.idempotency_key,
+            prepare(
+                replace(earlier, producer_workspace="another-workspace"),
+                replace(later, producer_workspace="another-workspace"),
+            ).idempotency_key,
+        )
+
+        for changed in (
+            replace(later, claim=None),
+            replace(later, evidence=earlier.evidence),
+            replace(later, enrollment_id=uuid4()),
+            replace(later, producer_workspace="another-workspace"),
+        ):
+            with self.subTest(changed=changed), self.assertRaises(ValueError):
+                prepare(earlier, changed)
+        with self.assertRaises(ValueError):
+            prepare(earlier, later, record_key="verdict:w1:100")
+
+    def test_distinct_chunks_can_share_one_exact_accepted_evidence_pin(self) -> None:
+        original_chunk = fixture()[1]
+        target = bind_fictional_claim(original_chunk, uuid4())
+        assert target.claim is not None
+        origin = replace(
+            target,
+            chunk_id=uuid4(),
+            claim=target.claim.model_copy(update={"claim_id": uuid4(), "value": "Monday"}),
+            evidence=target.evidence.model_copy(),
+        )
+        expected_head = uuid4()
+
+        def prepare(replacement: _BoundClaimEndpoint) -> RecordClaimEvent:
+            return _prepare_claim_event(
+                record_key=f"edge:repl:{replacement.chunk_id}:{target.chunk_id}",
+                arrow="repl",
+                target=target,
+                origin=replacement,
+                reviewed_reason="The owner accepted the correction.",
+                expected_last_event_id=expected_head,
+            )
+
+        request = prepare(origin)
+        assert origin.claim is not None
+        self.assertEqual(request.claim_id, target.claim.claim_id)
+        self.assertEqual(request.related_claim_id, origin.claim.claim_id)
+        self.assertEqual(request.evidence, (target.evidence,))
+        self.assertEqual(request.expected_last_event_id, expected_head)
+        self.assertEqual(request, prepare(origin))
+        self.assertNotEqual(
+            request.idempotency_key,
+            prepare(replace(origin, chunk_id=uuid4())).idempotency_key,
+        )
+
+        for update in ({"source_unit_id": uuid4()}, {"content_hash": "0" * 64}):
+            with self.subTest(update=update):
+                different = origin.evidence.model_copy(update=update)
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "correction evidence pins disagree about the shared statement",
+                ):
+                    prepare(replace(origin, evidence=different))
+
+    def test_malformed_corrections_refuse_with_the_designed_message(self) -> None:
+        handoff = run(fixture(), handoff=True)["handoff"]
+        enrollment = uuid4()
+        target, origin = (
+            bind_fictional_claim(chunk, enrollment) for chunk in handoff["chunks"]
+        )
+
+        def key(arrow: str, source: _BoundClaimEndpoint = origin) -> str:
+            return f"edge:{arrow}:{source.chunk_id}:{target.chunk_id}"
+
+        wrong_edge = "expected a committed correction edge matching both endpoints"
+        wrong_pair = "correction endpoints must be distinct chunks of one enrollment"
+        no_claim = "missing accepted claim for the correction"
+        stranger = LifecycleEvidence(
+            statement_id=uuid4(),
+            source_unit_id=origin.evidence.source_unit_id,
+            content_hash=origin.evidence.content_hash,
+        )
+        assert target.claim is not None
+        cases: list[tuple[str, str, _BoundClaimEndpoint, _BoundClaimEndpoint, str]] = [
+            ("supersedes", key("supersedes"), target, origin, wrong_edge),
+            ("repl", key("withdraws"), target, origin, wrong_edge),
+            (
+                "repl",
+                key("repl"),
+                target,
+                replace(origin, enrollment_id=uuid4()),
+                wrong_pair,
+            ),
+            (
+                "repl",
+                key("repl"),
+                replace(target, producer_workspace="  "),
+                replace(origin, producer_workspace="  "),
+                wrong_pair,
+            ),
+            (
+                "repl",
+                f"edge:repl:{target.chunk_id}:{target.chunk_id}",
+                target,
+                replace(origin, chunk_id=target.chunk_id),
+                wrong_pair,
+            ),
+            ("repl", key("repl"), replace(target, claim=None), origin, no_claim),
+            ("repl", key("repl"), target, replace(origin, claim=None), no_claim),
+            (
+                "!contradicts",
+                key("!contradicts"),
+                target,
+                replace(origin, claim=None),
+                no_claim,
+            ),
+            (
+                "repl",
+                key("repl"),
+                target,
+                replace(origin, evidence=stranger),
+                "correction evidence must belong to the pinned claim",
+            ),
+            (
+                "repl",
+                key("repl"),
+                target,
+                replace(origin, claim=target.claim, evidence=target.evidence),
+                "a claim cannot correct itself",
+            ),
+        ]
+        for arrow, record_key, edge_target, edge_origin, message in cases:
+            with self.subTest(arrow=arrow, message=message, key=record_key):
+                with self.assertRaisesRegex(ValueError, message):
+                    _prepare_claim_event(
+                        record_key=record_key,
+                        arrow=arrow,
+                        target=edge_target,
+                        origin=edge_origin,
+                        reviewed_reason="The owner accepted the correction.",
+                        expected_last_event_id=None,
+                    )
+
+    def test_withdrawal_needs_no_origin_claim(self) -> None:
+        handoff = run(fixture(), handoff=True)["handoff"]
+        enrollment = uuid4()
+        target, origin = (
+            bind_fictional_claim(chunk, enrollment) for chunk in handoff["chunks"]
+        )
+        request = _prepare_claim_event(
+            record_key=f"edge:withdraws:{origin.chunk_id}:{target.chunk_id}",
+            arrow="withdraws",
+            target=target,
+            origin=replace(origin, claim=None),
+            reviewed_reason="The owner accepted the withdrawal.",
+            expected_last_event_id=None,
+        )
+        self.assertEqual(request.action, "retract")
+        self.assertIsNone(request.related_claim_id)
+        self.assertEqual(request.evidence, (target.evidence, origin.evidence))
+
+    def test_replay_identity_depends_only_on_enrollment_workspace_and_key(
+        self,
+    ) -> None:
+        handoff = run(fixture(), handoff=True)["handoff"]
+        enrollment = uuid4()
+        target, origin = (
+            bind_fictional_claim(chunk, enrollment) for chunk in handoff["chunks"]
+        )
+
+        def prepare(
+            first: _BoundClaimEndpoint,
+            second: _BoundClaimEndpoint,
+            reason: str,
+            head: UUID | None,
+        ) -> RecordClaimEvent:
+            return _prepare_claim_event(
+                record_key=f"edge:repl:{second.chunk_id}:{first.chunk_id}",
+                arrow="repl",
+                target=first,
+                origin=second,
+                reviewed_reason=reason,
+                expected_last_event_id=head,
+            )
+
+        first = prepare(target, origin, "One reason.", None)
+        again = prepare(target, origin, "Another reason.", uuid4())
+        self.assertEqual(first.idempotency_key, again.idempotency_key)
+        self.assertRegex(first.idempotency_key, r"^core-memory-v2:[0-9a-f]{64}$")
+        other_enrollment = uuid4()
+        moved = prepare(
+            replace(target, enrollment_id=other_enrollment),
+            replace(origin, enrollment_id=other_enrollment),
+            "One reason.",
+            None,
+        )
+        self.assertNotEqual(first.idempotency_key, moved.idempotency_key)
+
     def test_tagged_export_and_duplicate_delivery(self) -> None:
         data = FIXTURE.read_bytes()
         first = project(data, workspace="w1", scope="acme")
