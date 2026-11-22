@@ -15,8 +15,31 @@ ROOT = Path(__file__).resolve().parents[1]
 DENIED_ROOTS = {"apps", "artifacts"}
 # The only repositories tracked text may link: this one, and the public CPython
 # builds whose hash-pinned releases the hosted qualification installs. Either may
-# be written with one trailing ".git", the clone form.
+# be written with one trailing ".git". The check refuses any other repository
+# named by an http or https URL on github.com or www.github.com, by SSH
+# (git@github.com:<owner>/<repo>, or the same after an ssh scheme and a slash), by a
+# bare github.com/<owner>/<repo>, or by raw.githubusercontent.com/<owner>/<repo>,
+# api.github.com/repos/<owner>/<repo> or codeload.github.com/<owner>/<repo>. Any
+# occurrence of GitHub's gist host, or of a <name>.github.io host, is refused. A
+# URL with userinfo on any of these hosts is refused even for an allowed
+# repository; the one exception is the user "git" in the two SSH forms above.
+# Hosts match exactly. Other forges and obfuscated links are not recognised.
 LINKED_REPOSITORIES = {("JohnnyFiv3r", "memoriesql"), ("actions", "python-versions")}
+FOREIGN_REPOSITORY = "non-public repository URL"
+CREDENTIAL_IN_URL = "credential in repository URL"
+_OWNER_REPOSITORY = r"([\w-]+)/([\w.-]+)"
+_PATH_PAIR = re.compile("/" + _OWNER_REPOSITORY)
+_SCP_PAIR = re.compile(":" + _OWNER_REPOSITORY)
+# A recognised host, exactly: nothing host-like before it, it does not run on into
+# a longer host name, and it is not the user of other userinfo (an "@" before the
+# next "/", "?" or "#"). An optional scheme with userinfo, or an SCP "git@",
+# comes before it. Only the host is consumed; the repository is read after it.
+_REPOSITORY_HOST = re.compile(
+    r"(?:(?P<scheme>(?i:https?|ssh))://(?:(?P<user>[^\s/@?#]+)@)?|(?P<scp>(?i:git)@))?"
+    r"(?<![\w.-])(?P<host>(?i:(?:www\.)?github\.com|raw\.githubusercontent\.com"
+    r"|api\.github\.com|codeload\.github\.com|gist\.github\.com"
+    r"|(?:[\w-]+\.)+github\.io))(?![\w-]|\.[\w-]|[^\s/@?#]*@)"
+)
 NO_GIT = (
     "the boundary check needs a git checkout: git was not found on PATH. "
     "Install git and run the check from a clone of the repository."
@@ -74,6 +97,45 @@ def repository_files() -> tuple[Path, ...]:
     )
 
 
+def _repository_link_failures(text: str) -> list[str]:
+    """One entry per recognised GitHub link that is foreign or carries userinfo.
+
+    Entries never quote the link, so a token in a URL stays out of the output.
+    """
+    failures: list[str] = []
+    position = 0
+    while (match := _REPOSITORY_HOST.search(text, position)) is not None:
+        position = match.end()
+        host = match["host"].lower()
+        user = match["user"]
+        git_ssh = (
+            user == "git" and match["scheme"].lower() == "ssh" and host == "github.com"
+        )
+        if user is not None and not (git_ssh and _PATH_PAIR.match(text, position)):
+            failures.append(CREDENTIAL_IN_URL)
+            continue
+        if host.startswith("gist.") or host.endswith(".github.io"):
+            failures.append(FOREIGN_REPOSITORY)
+            continue
+        if match["scp"] is not None and host == "github.com":
+            pair = _SCP_PAIR.match(text, position)
+        elif host == "api.github.com":
+            pair = (
+                _PATH_PAIR.match(text, position + len("/repos"))
+                if text.startswith("/repos/", position)
+                else None
+            )
+        else:
+            pair = _PATH_PAIR.match(text, position)
+        if pair is None:
+            continue
+        # Resume after the pair, so a URL glued onto this one is still read.
+        position = pair.end()
+        if (pair[1], pair[2].removesuffix(".git")) not in LINKED_REPOSITORIES:
+            failures.append(FOREIGN_REPOSITORY)
+    return failures
+
+
 def verify() -> dict[str, object]:
     files = repository_files()
     roots = {path.relative_to(ROOT).parts[0] for path in files}
@@ -118,13 +180,8 @@ def verify() -> dict[str, object]:
             )
         if re.search(r"/(?:Users|home)/[^/\s]+/", text):
             text_failures.append(f"{path.relative_to(ROOT)}:absolute home path")
-        for owner, repository in re.findall(
-            r"https://github\.com/([\w-]+)/([\w.-]+)", text
-        ):
-            if (owner, repository.removesuffix(".git")) not in LINKED_REPOSITORIES:
-                text_failures.append(
-                    f"{path.relative_to(ROOT)}:non-public repository URL"
-                )
+        for failure in _repository_link_failures(text):
+            text_failures.append(f"{path.relative_to(ROOT)}:{failure}")
     if text_failures:
         raise ValueError("private-boundary text leaked: " + ", ".join(text_failures))
 
