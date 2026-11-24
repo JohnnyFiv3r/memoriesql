@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import unittest
+from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID
 
 from memoriesql.application.agent_sql_admission import RecursionBound, admit_query
@@ -15,7 +18,20 @@ from memoriesql.application.agent_sql_catalog import (
     SqlRelation,
     SqlType,
 )
-from memoriesql.application.agent_sql_witness import compile_bag_witness
+from memoriesql.application.agent_sql_results import SavedQueryRows
+from memoriesql.application.agent_sql_witness import (
+    SavedInputExecution,
+    compile_bag_witness,
+)
+from memoriesql.application.investigation_contracts import (
+    InputBinding,
+    QueryRequest,
+    result_json_bytes,
+)
+from memoriesql.infrastructure.postgres.query_witness import NativeWitnessBuilder
+from memoriesql.infrastructure.postgres.relation_sql_population import (
+    PreparedRelationPopulation,
+)
 
 ANCHOR = "11111111-1111-4111-8111-111111111111"
 ANCHORS = frozenset({("bead_ref", ANCHOR)})
@@ -176,6 +192,144 @@ class AgentSqlAdmissionTests(unittest.TestCase):
         self.assertEqual(result.columns[1].type.pg_type, "numeric")
         with self.assertRaises(SqlAdmissionError):
             admit_query("SELECT q.id FROM input.guessed q", inputs={"prior": saved})
+
+    def test_saved_refinement_admits_only_the_exact_typed_parent_rows(self) -> None:
+        catalog = SqlCatalog.installed()
+        pin = {"result_id": ANCHOR, "content_digest": "a" * 64}
+        parent = {"result": pin, "access": {"kind": "standalone"}}
+        scope = {
+            "view": "historical",
+            "known_at": "2026-11-21T00:00:00Z",
+            "source_refs": [],
+        }
+        request = QueryRequest.model_validate({
+            "contract_version": 1,
+            "kind": "query",
+            "catalog_hash": catalog.hash,
+            "run_ref": ANCHOR,
+            "step_key": ANCHOR,
+            "intent": "refine",
+            "scope": scope,
+            "inputs": [parent | {"alias": "prior"}],
+            "parents": [parent],
+            "sql": "SELECT prior.number FROM input.prior WHERE prior.number > $1",
+            "parameters": [{"position": 1, "type": "int8", "value": "17"}],
+            "max_result_bytes": 16384,
+            "page_size": 20,
+        })
+        metadata: dict[str, Any] = {
+            "result_id": ANCHOR,
+            "catalog_hash": catalog.hash,
+            "serializer": "result-json-v1",
+            "provenance_revision": "native-bag-v1",
+            "frame": {"view": "historical", "known_at": "2026-11-21T00:00:00.000000Z"},
+            "query": {"scope": scope},
+            "result_schema": [
+                {"name": "number", "pg_type": "int8", "ref_type": None, "nullable": False},
+            ],
+            "total_rows": "2",
+        }
+        rows = [{"row_ref": str(i), "values": ["18"]} for i in range(1, 3)]
+        saved = SavedQueryRows.from_result(request, metadata, rows, catalog=catalog)
+        self.assertEqual(saved.rows, ((18,), (18,)))
+        result = saved.admit(
+            request.sql,
+            tuple(p.sql_parameter(catalog) for p in request.parameters),
+            catalog=catalog,
+        )
+        self.assertEqual(result.relations, ("input.prior",))
+        self.assertEqual(result.columns, (SqlColumn("number", SqlType("int8")),))
+        bound = SavedInputExecution.bind(result, saved, lambda: None)
+        self.assertEqual(bound.rows, ((18, 1), (18, 2)))
+        self.assertEqual(bound.parameters, {"p1": 17, "saved_1_0": 18, "saved_2_0": 18})
+        plan = compile_bag_witness(
+            result, {bound.logical_name: bound.schema}, saved_input=bound
+        )
+        for physical_sql in (bound.sql(result), plan.sql):
+            self.assertIn('WITH "__memoriesql_saved_0"', physical_sql)
+            self.assertIn("%(saved_1_0)s", physical_sql)
+            self.assertIn("%(p1)s", physical_sql)
+            self.assertNotIn('"input"."prior"', physical_sql)
+
+        with self.assertRaisesRegex(SqlAdmissionError, "saved_input_only"):
+            saved.admit(
+                "SELECT q.number FROM input.prior q UNION ALL "
+                "SELECT s.sequence AS number FROM memory_v1.statements s",
+                (),
+                catalog=catalog,
+            )
+        with self.assertRaisesRegex(SqlAdmissionError, "saved_input_only"):
+            saved.admit(
+                "SELECT $1 AS number", (SqlParameter(1, "int8", "1"),), catalog=catalog
+            )
+        with self.assertRaisesRegex(SqlAdmissionError, "saved_input_frame"):
+            SavedQueryRows.from_result(
+                request, metadata | {"frame": metadata["frame"] | {"view": "resolved"}},
+                rows, catalog=catalog,
+            )
+        with self.assertRaisesRegex(SqlAdmissionError, "saved_result"):
+            SavedQueryRows.from_result(
+                request, metadata, rows[::-1], catalog=catalog,
+            )
+
+    def test_saved_witness_ids_bind_the_exact_parent_in_a_shared_frame(self) -> None:
+        catalog = SqlCatalog.installed()
+        frame = UUID(int=23)
+        known = datetime(2026, 11, 21, tzinfo=UTC)
+        relation = SqlRelation((SqlColumn("number", SqlType("int8")),))
+
+        def witness_refs(
+            result_id: str, digest: str, *, filtered: bool = False
+        ) -> tuple[str, str, str]:
+            binding = InputBinding.model_validate({
+                "alias": "prior",
+                "result": {"result_id": result_id, "content_digest": digest},
+                "access": {"kind": "standalone"},
+            })
+            saved = SavedQueryRows(binding, relation, ((18,),))
+            statement = "SELECT q.number FROM input.prior q"
+            parameters: tuple[SqlParameter, ...] = ()
+            if filtered:
+                statement += " WHERE q.number >= $1"
+                parameters = (SqlParameter(1, "int8", "0"),)
+            query = saved.admit(statement, parameters, catalog=catalog)
+            bound = SavedInputExecution.bind(query, saved, lambda: None)
+            plan = compile_bag_witness(
+                query, {bound.logical_name: bound.schema}, saved_input=bound
+            )
+            population = PreparedRelationPopulation(
+                known, known, catalog.hash, {}, {}, {}, b"", b"", "a" * 64, 0,
+                saved_input=saved,
+            )
+            program_sha256 = hashlib.sha256(
+                result_json_bytes({
+                    "sql": statement,
+                    "parameters": [vars(value) for value in parameters],
+                    "recursion": None,
+                    "derivation_program": query.derivation_program,
+                })
+            ).hexdigest()
+            builder = NativeWitnessBuilder(
+                plan, population, frame, saved_input=bound,
+                saved_program_sha256=program_sha256,
+            )
+            member, = builder.base["members"]
+            self.assertEqual(member["frame_ref"], str(frame))
+            self.assertEqual(member["parent_fact_ref"], {"result_id": result_id, "row_ref": "1"})
+            self.assertEqual(plan.stages[2]["operation"], "filter" if filtered else "project")
+            shared_trace = [2, [1, [0, [1]]]]
+            node_ref = builder.add(shared_trace)
+            return str(builder.population_ref), str(member["member_ref"]), str(node_ref)
+
+        first = witness_refs(ANCHOR, "a" * 64)
+        self.assertEqual(first, witness_refs(ANCHOR, "a" * 64))
+        for changed in (witness_refs(str(UUID(int=24)), "a" * 64),
+                        witness_refs(ANCHOR, "b" * 64)):
+            self.assertTrue(set(first).isdisjoint(changed))
+        sibling = witness_refs(ANCHOR, "a" * 64, filtered=True)
+        self.assertEqual(first[:2], sibling[:2])
+        self.assertNotEqual(first[2], sibling[2])
+        self.assertEqual(sibling, witness_refs(ANCHOR, "a" * 64, filtered=True))
 
     def test_ctes_subqueries_filters_and_case_compose(self) -> None:
         query = """WITH counts AS (

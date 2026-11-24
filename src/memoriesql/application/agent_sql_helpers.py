@@ -10,6 +10,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import re
 from collections.abc import Callable
 from typing import Any
 
@@ -346,23 +347,31 @@ def _provenance(value: Any, *, require_complete: bool) -> None:
         )
         _ref(member["member_ref"])
         _ref(member["frame_ref"])
-        relation = catalog.relations.get(member["relation"])
-        if relation is None or not relation.unique_keys:
-            raise ValueError("unknown helper provenance relation")
-        keys = relation.unique_keys[0]
         values = _array(member["key_values"])
-        if len(keys) != len(values):
-            raise ValueError("helper provenance key arity")
-        for key, cell in zip(keys, values, strict=True):
-            if cell is None:
-                raise ValueError("null helper provenance key")
-            _value(relation.column(key).type.pg_type, cell)
         for evidence in _array(member["evidence_refs"]):
             _ref(evidence)
         if member["parent_fact_ref"] is not None:
             parent = _object(member["parent_fact_ref"], "result_id row_ref")
             _ref(parent["result_id"])
-            _value("int8", parent["row_ref"])
+            if (
+                not re.fullmatch(r"input\.[a-z][a-z0-9_]{0,31}", member["relation"])
+                or values != [parent["row_ref"]]
+                or parent["row_ref"] is None
+                or _value("int8", parent["row_ref"]) < 1
+                or member["evidence_refs"]
+            ):
+                raise ValueError("invalid saved provenance member")
+        else:
+            relation = catalog.relations.get(member["relation"])
+            if relation is None or not relation.unique_keys:
+                raise ValueError("unknown helper provenance relation")
+            keys = relation.unique_keys[0]
+            if len(keys) != len(values):
+                raise ValueError("helper provenance key arity")
+            for key, cell in zip(keys, values, strict=True):
+                if cell is None:
+                    raise ValueError("null helper provenance key")
+                _value(relation.column(key).type.pg_type, cell)
         if member["member_ref"] in members:
             raise ValueError("duplicate helper provenance member")
         members[member["member_ref"]] = member
@@ -498,7 +507,7 @@ def project_helper_provenance(
         "population_ref": native["population_ref"],
         "nodes": output_nodes,
         "members": [
-            {**members[ref], "parent_fact_ref": None} for ref in sorted(needed_members)
+            {"parent_fact_ref": None, **members[ref]} for ref in sorted(needed_members)
         ],
         "next_cursor": None,
         "has_more": False,

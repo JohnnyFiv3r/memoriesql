@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from typing import Any
 from uuid import UUID, uuid5
 
-from memoriesql.application.agent_sql_witness import WitnessPlan
+from memoriesql.application.agent_sql_witness import SavedInputExecution, WitnessPlan
 from memoriesql.application.investigation_contracts import (
     encode_result_scalar,
     result_json_bytes,
@@ -40,10 +40,28 @@ class NativeWitnessBuilder:
         frame_ref: UUID,
         *,
         check_work: Callable[[], None] | None = None,
+        saved_input: SavedInputExecution | None = None,
+        saved_program_sha256: str | None = None,
     ) -> None:
         self.plan = plan
         self.frame_ref = frame_ref
         self.check_work = check_work
+        parent = population.saved_input.binding.result if population.saved_input else None
+        self.namespace = (
+            uuid5(
+                frame_ref,
+                f"saved-input:{parent.result_id}:{parent.content_digest}:{saved_input.logical_name}",
+            )
+            if saved_input is not None and parent is not None
+            else frame_ref
+        )
+        if saved_input is not None and saved_program_sha256 is None:
+            raise ValueError("saved witness requires an exact child program")
+        self.node_namespace = (
+            uuid5(self.namespace, "saved-query:" + saved_program_sha256)
+            if saved_program_sha256 is not None
+            else self.namespace
+        )
         self.members: dict[tuple[str, bytes], UUID] = {}
         members: list[dict[str, Any]] = []
         used = sorted(
@@ -54,18 +72,19 @@ class NativeWitnessBuilder:
             }
         )
         for name in used:
-            schema = population.schemas[name]
+            schema = saved_input.schema if saved_input else population.schemas[name]
+            rows = saved_input.rows if saved_input else population.rows[name]
             keys = schema.unique_keys[0]
             indices = [
                 next(i for i, c in enumerate(schema.columns) if c.name == k)
                 for k in keys
             ]
-            for row in population.rows[name]:
+            for row in rows:
                 if check_work:
                     check_work()
                 values = [encode_result_scalar(row[i]) for i in indices]
                 encoded = result_json_bytes(values)
-                ref = uuid5(frame_ref, name + ":" + encoded.decode("ascii"))
+                ref = uuid5(self.namespace, name + ":" + encoded.decode("ascii"))
                 if (name, encoded) in self.members:
                     raise ValueError("duplicate frozen logical key")
                 self.members[name, encoded] = ref
@@ -74,17 +93,23 @@ class NativeWitnessBuilder:
                     for c, v in zip(schema.columns, row, strict=True)
                     if c.name == "evidence_ref" and v is not None
                 ]
-                members.append(
-                    {
-                        "member_ref": str(ref),
-                        "relation": name,
-                        "key_values": values,
-                        "frame_ref": str(frame_ref),
-                        "evidence_refs": evidence,
+                member = {
+                    "member_ref": str(ref),
+                    "relation": name,
+                    "key_values": values,
+                    "frame_ref": str(frame_ref),
+                    "evidence_refs": evidence,
+                }
+                if saved_input:
+                    assert parent is not None
+                    member["evidence_refs"] = []
+                    member["parent_fact_ref"] = {
+                        "result_id": parent.result_id,
+                        "row_ref": values[0],
                     }
-                )
+                members.append(member)
         self.population_ref = uuid5(
-            frame_ref, "searched-population:" + population.dependency_manifest_sha256
+            self.namespace, "searched-population:" + population.dependency_manifest_sha256
         )
         self.program_sha256 = hashlib.sha256(result_json_bytes(plan.stages)).hexdigest()
         self.base: dict[str, Any] = {
@@ -585,7 +610,7 @@ class NativeWitnessBuilder:
             identity = result_json_bytes(
                 [value[0], inputs, member_refs, absent, details]
             )
-            ref = uuid5(self.frame_ref, identity.decode("ascii"))
+            ref = uuid5(self.node_namespace, identity.decode("ascii"))
             node = {
                 "node_ref": str(ref),
                 "stage": value[0],

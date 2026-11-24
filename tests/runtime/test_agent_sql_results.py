@@ -55,6 +55,7 @@ from memoriesql.infrastructure.postgres.relation_projection import (
 from memoriesql.infrastructure.postgres.relation_sql_population import (
     prepare_query_population,
 )
+from memoriesql.infrastructure.postgres.result_preparation import PreparationReceipt
 from memoriesql.infrastructure.postgres.stored_bead_inspection import (
     PostgresStoredBeadInspection,
 )
@@ -4844,6 +4845,336 @@ class AgentSqlResults(unittest.TestCase):
             "max_result_bytes": 64 * 1024 * 1024,
             "page_size": 2,
         }, None
+
+    def assert_refinement_rollback(self, step: str, result: UUID) -> None:
+        self.assertEqual(
+            self.db.execute(
+                "SELECT state,outcome,observed_ms IS NOT NULL "
+                "FROM memoriesql_query.invocations WHERE step_key=%s", (step,),
+            ).fetchone(),
+            ("settled", "complete", True),
+        )
+        self.assertEqual(
+            self.db.execute(
+                "SELECT (SELECT count(*) FROM memoriesql.query_result_creations WHERE result_id=%s),"
+                " (SELECT count(*) FROM memoriesql.result_preparation_artifacts WHERE artifact_ref=%s),"
+                " (SELECT count(*) FROM memoriesql.result_preparation_parent_holds WHERE child_ref=%s)",
+                (result,) * 3,
+            ).fetchone(),
+            (0, 0, 0),
+        )
+        self.assertEqual(
+            self.db.execute(
+                "SELECT state,encoded_bytes,allocation_bytes,new_allocation_bytes "
+                "FROM memoriesql.result_preparation_operations WHERE step_key=%s",
+                (step,),
+            ).fetchone(),
+            # Both ledgers still charge the private noncontent journal record.
+            ("discarded", 0, 8192, 8192),
+        )
+
+    def set_refinement_scope_lease(
+        self, scope: UUID, revision: int, duration: timedelta
+    ) -> datetime:
+        with self.db.transaction():
+            row = self.db.execute(
+                "SELECT grant_id,clock_timestamp() FROM memoriesql.access_grants "
+                "WHERE tenant_id=%s AND access_scope_id=%s AND target_principal_id=%s",
+                (self.fixture.tenant, scope, self.fixture.principal),
+            ).fetchone()
+            assert row is not None
+            grant, now = row
+            expires: datetime = now + duration
+            self.fixture.begin()
+            self.db.execute(
+                "SELECT memoriesql.revise_access_grant(%s,%s,%s,'active',%s,%s,%s)",
+                (grant, revision, ["read", "write"], now, expires, now),
+            )
+        return expires
+
+    def refine_across_source_lease_at_seal(
+        self, request: dict[str, Any], scope: UUID,
+    ) -> tuple[dict[str, Any], UUID]:
+        # Wait for the actual grant to expire inside the child's INSERT. A
+        # notice survives rollback and distinguishes this from an earlier
+        # access refusal or a statement timeout. Only the fixture adds this
+        # trigger, and it can fire only for the selected operation.
+        expires = self.set_refinement_scope_lease(scope, 1, timedelta(seconds=10))
+        step = UUID(request["step_key"])
+        marker = "fictional source lease crossed inside saved seal"
+        self.db.execute(sql.SQL("""
+            CREATE FUNCTION memoriesql.fixture_saved_seal_lease() RETURNS trigger
+            LANGUAGE plpgsql SET search_path=pg_catalog,memoriesql AS $body$
+            BEGIN
+              IF NOT EXISTS (
+                SELECT 1 FROM memoriesql.result_preparation_operations o
+                WHERE o.operation_ref=NEW.operation_ref AND o.step_key={step}::uuid
+              ) THEN RETURN NEW; END IF;
+              IF memoriesql.current_context_scope_time_authorized(
+                  {scope}::uuid,'read',clock_timestamp()) IS DISTINCT FROM true THEN
+                RAISE EXCEPTION 'fictional lease ended before the child seal';
+              END IF;
+              PERFORM pg_sleep_until({expires}::timestamptz + interval '10 milliseconds');
+              IF memoriesql.current_context_scope_time_authorized(
+                  {scope}::uuid,'read',statement_timestamp()) IS DISTINCT FROM true
+                OR memoriesql.current_context_scope_time_authorized(
+                  {scope}::uuid,'read',clock_timestamp()) IS DISTINCT FROM false THEN
+                RAISE EXCEPTION 'fictional lease did not cross during seal';
+              END IF;
+              RAISE NOTICE USING MESSAGE={marker};
+              RETURN NEW;
+            END
+            $body$;
+        """).format(
+            step=sql.Literal(step), scope=sql.Literal(scope), expires=sql.Literal(expires),
+            marker=sql.Literal(marker),
+        ))
+        self.addCleanup(self.db.execute, "DROP FUNCTION IF EXISTS memoriesql.fixture_saved_seal_lease()")
+        self.db.execute(
+            "CREATE TRIGGER fixture_saved_seal_lease AFTER INSERT ON "
+            "memoriesql.result_preparation_artifacts FOR EACH ROW "
+            "EXECUTE FUNCTION memoriesql.fixture_saved_seal_lease()"
+        )
+        commit = PostgresQueryResultCommit.commit
+        notices: list[str] = []
+        attempts: list[UUID] = []
+
+        def capture(notice: Any) -> None:
+            if notice.message_primary == marker:
+                notices.append(marker)
+
+        def commit_before_lease_ends(
+            issuer: PostgresQueryResultCommit, ownership: PreparationReceipt,
+            candidate: InternalResultCandidate,
+        ) -> dict[str, Any]:
+            attempts.append(candidate.result_id)
+            clock = self.h.scalar("SELECT clock_timestamp()")
+            delay = (expires - clock).total_seconds() - 1.8
+            if delay > 0:
+                time.sleep(delay)
+            issuer.connection.add_notice_handler(capture)
+            try:
+                return commit(issuer, ownership, candidate)
+            finally:
+                issuer.connection.remove_notice_handler(capture)
+
+        try:
+            with patch.object(PostgresQueryResultCommit, "commit", commit_before_lease_ends):
+                refused = self.send(request)
+        finally:
+            self.db.execute(
+                "DROP TRIGGER fixture_saved_seal_lease ON memoriesql.result_preparation_artifacts"
+            )
+        self.assertEqual(notices, [marker], refused)
+        candidate_id, = attempts
+        return refused, candidate_id
+
+    def test_saved_query_refinement_pins_parent_and_rechecks_current_access(self) -> None:
+        migrate(self.db, expected_current_version=43, target_version=64)
+        text = "Fictional pear orchard revision."
+        scope, source = relation_agents.explicit_scope(self.db, self.fixture)
+        self.normalized_bead(
+            text, "saved-pear", raw="Fictional orchard capture.", source=source, scope=scope
+        )
+        root_run = self.start()
+        request, root = self.query(
+            root_run,
+            "SELECT s.text AS note, s.sequence AS position "
+            "FROM memory_v1.statements s WHERE s.text = $1",
+            parameters=[{"position": 1, "type": "text", "value": text}],
+        )
+        self.assertEqual(root["outcome"], "available", root)
+        self.assertEqual(root["result"]["total_rows"], "1")
+        parent = {
+            "result_id": root["result"]["result_id"],
+            "content_digest": root["result"]["content_digest"],
+        }
+        parent_access = {"result": parent, "access": {"kind": "standalone"}}
+        original_hash = self.h.scalar(
+            "SELECT artifact_sha256 FROM memoriesql.result_preparation_artifacts "
+            "WHERE artifact_ref=%s",
+            (parent["result_id"],),
+        )
+
+        child_run = self.start()
+        refine = request | {
+            "run_ref": child_run["run_ref"],
+            "step_key": str(uuid4()),
+            "sql": "SELECT q.note FROM input.prior q WHERE q.position >= $1",
+            "parameters": [{"position": 1, "type": "int8", "value": "0"}],
+            "inputs": [parent_access | {"alias": "prior"}],
+            "parents": [parent_access],
+            "intent": "refine",
+        }
+        with patch.object(
+            results_module, "prepare_query_population",
+            side_effect=AssertionError("saved input must not prepare a live population"),
+        ):
+            child = self.send(refine)
+        self.assertEqual(child["outcome"], "available", child)
+        child_result = child["result"]
+        self.assertNotEqual(child_result["result_id"], parent["result_id"])
+        self.assertEqual(child_result["frame"], root["result"]["frame"])
+        self.assertEqual(child_result["parents"], [parent | {"edge": "refine"}])
+        self.assertEqual(child_result["coverage"]["population_basis"], "retained_subset")
+        self.assertEqual(
+            [row["values"] for row in child["page"]["rows"]], [[text]]
+        )
+        self.assertEqual(
+            self.db.execute(
+                "SELECT parent_ref,parent_sha256 FROM "
+                "memoriesql.result_preparation_parent_holds WHERE child_ref=%s",
+                (child_result["result_id"],),
+            ).fetchone(),
+            (UUID(parent["result_id"]), original_hash),
+        )
+        self.assertEqual(
+            self.h.scalar(
+                "SELECT artifact_sha256 FROM memoriesql.result_preparation_artifacts "
+                "WHERE artifact_ref=%s",
+                (parent["result_id"],),
+            ),
+            original_hash,
+        )
+        invocations = self.invocations()
+        replayed = self.send(refine)
+        self.assertEqual(replayed["result"], child_result)
+        self.assertEqual(self.invocations(), invocations)
+
+        inspected = self.send({
+            "contract_version": 1,
+            "run_ref": child_run["run_ref"],
+            "step_key": str(uuid4()),
+            "kind": "inspect",
+            "observation_refs": [],
+            "relation_refs": [],
+            "result": {
+                "pin": {
+                    "result_id": child_result["result_id"],
+                    "content_digest": child_result["content_digest"],
+                },
+                "access": {"kind": "standalone"},
+            },
+            "provenance_ref": child["page"]["rows"][0]["provenance_ref"],
+            "facets": ["provenance"],
+            "view": refine["scope"]["view"],
+            "known_at": refine["scope"]["known_at"],
+        })
+        self.assertEqual(inspected["outcome"], "available", inspected)
+        inspection = inspected["inspection"]
+        self.assertEqual(inspection["result"]["parents"], child_result["parents"])
+        self.assertEqual(
+            [item["parent_fact_ref"] for item in inspection["provenance"]["members"]],
+            [{"result_id": parent["result_id"], "row_ref": "1"}],
+        )
+
+        checkpoint = self.send({
+            "contract_version": 1,
+            "kind": "checkpoint",
+            "run_ref": root_run["run_ref"],
+            "step_key": str(uuid4()),
+            "question": "Fictional pear orchard refinement",
+            "progress": {"status": "paused", "note": "Retain the exact parent."},
+            "findings": [],
+            "roots": [parent_access],
+        })
+        self.assertEqual(checkpoint["outcome"], "available", checkpoint)
+
+        # Let the native work complete, then expire only its standalone
+        # parent just before the real trusted commit. Fixture clock control
+        # leaves the parent bytes, pin and the earlier child's hold alone.
+        commit = PostgresQueryResultCommit.commit
+        pending_results: list[UUID] = []
+
+        def expire_parent_at_commit(
+            issuer: PostgresQueryResultCommit,
+            ownership: PreparationReceipt,
+            candidate: InternalResultCandidate,
+        ) -> dict[str, Any]:
+            pending_results.append(candidate.result_id)
+            with self.db.transaction():
+                self.db.execute("SET LOCAL lock_timeout='500ms'")
+                self.db.execute(
+                    "ALTER TABLE memoriesql.query_result_creations "
+                    "DISABLE TRIGGER query_result_creations_no_update"
+                )
+                self.db.execute(
+                    "UPDATE memoriesql.query_result_creations "
+                    "SET created_at=created_at-interval '31 days', "
+                    "expires_at=expires_at-interval '31 days' WHERE result_id=%s",
+                    (parent["result_id"],),
+                )
+                self.db.execute(
+                    "ALTER TABLE memoriesql.query_result_creations "
+                    "ENABLE TRIGGER query_result_creations_no_update"
+                )
+            return commit(issuer, ownership, candidate)
+
+        expiry_step = str(uuid4())
+        with patch.object(PostgresQueryResultCommit, "commit", expire_parent_at_commit):
+            expired_at_commit = self.send(refine | {"step_key": expiry_step})
+        self.assertEqual(expired_at_commit["outcome"], "unavailable", expired_at_commit)
+        self.assertNotIn("result", expired_at_commit)
+        candidate_id, = pending_results
+        self.assert_refinement_rollback(expiry_step, candidate_id)
+        invocations = self.invocations()
+        self.assertEqual(
+            self.reuse(child_run, parent)["outcome"], "unavailable"
+        )
+        self.assertEqual(
+            self.reuse(child_run, child_result)["outcome"], "available"
+        )
+        expired_input = self.send(refine | {"step_key": str(uuid4())})
+        self.assertEqual(expired_input["outcome"], "unavailable")
+        self.assertNotIn("result", expired_input)
+        self.assertEqual(self.invocations(), invocations)
+
+        restored = self.send({
+            "contract_version": 1,
+            "kind": "read_checkpoint",
+            "run_ref": child_run["run_ref"],
+            "step_key": str(uuid4()),
+            "access": {"checkpoint": checkpoint["branch"]["head"],
+                       "basis": {"kind": "automatic"}},
+        })
+        self.assertEqual(restored["outcome"], "available", restored)
+        retained = {"result": parent, "access": restored["root_contexts"][0]}
+        retained_refinement = refine | {
+            "step_key": str(uuid4()),
+            "inputs": [retained | {"alias": "prior"}],
+            "parents": [retained],
+        }
+        checkpoint_child = self.send(retained_refinement)
+        self.assertEqual(checkpoint_child["outcome"], "available", checkpoint_child)
+        self.assertEqual(checkpoint_child["result"]["frame"], child_result["frame"])
+        self.assertEqual(checkpoint_child["result"]["parents"], child_result["parents"])
+        self.assertEqual(
+            [row["values"] for row in checkpoint_child["page"]["rows"]], [[text]]
+        )
+        self.assertEqual(self.reuse(child_run, parent)["outcome"], "unavailable")
+        self.assertEqual(self.invocations(), invocations + 1)
+
+        lease_step = str(uuid4())
+        lease_refusal, lease_result = self.refine_across_source_lease_at_seal(
+            retained_refinement | {"step_key": lease_step}, scope
+        )
+        self.assertEqual(lease_refusal["outcome"], "unavailable", lease_refusal)
+        self.assertNotIn("result", lease_refusal)
+        self.assert_refinement_rollback(lease_step, lease_result)
+        self.assertEqual(self.invocations(), invocations + 2)
+        self.set_refinement_scope_lease(scope, 2, timedelta(hours=1))
+        self.assertEqual(self.reuse(child_run, child_result)["outcome"], "available")
+
+        self.db.execute(
+            "UPDATE memoriesql.protected_resources SET status='revoked',"
+            "revoked_at=clock_timestamp() WHERE resource_id=%s",
+            (source,),
+        )
+        withheld = self.reuse(child_run, child_result)
+        self.assertEqual(withheld["outcome"], "unavailable")
+        self.assertNotIn("result", withheld)
+        self.assertNotIn("page", withheld)
+        self.assertEqual(self.invocations(), invocations + 2)
 
 
 if __name__ == "__main__":

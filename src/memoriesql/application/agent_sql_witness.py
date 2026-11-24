@@ -10,7 +10,9 @@ one statement over the same frozen population, under the original work bound.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
+from itertools import count
 from typing import Any, TypeGuard
 
 from sqlglot import ErrorLevel, exp
@@ -20,7 +22,13 @@ from memoriesql.application.agent_sql_admission import (
     RecursionBound,
     _ClosedPostgres,
 )
-from memoriesql.application.agent_sql_catalog import SqlAdmissionError, SqlRelation
+from memoriesql.application.agent_sql_catalog import (
+    SqlAdmissionError,
+    SqlColumn,
+    SqlRelation,
+    SqlType,
+)
+from memoriesql.application.agent_sql_results import SavedQueryRows
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,6 +38,108 @@ class WitnessPlan:
     hidden_column: str
     ledger_rows: bool = False
     semantic_check: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class SavedInputExecution:
+    """One admitted input lowered to a trusted typed VALUES relation.
+
+    The reader needs no additional view, temporary table or function grant.
+    The extra ordinal is private to the witness compiler.
+    """
+
+    logical_name: str
+    name: str
+    cte: exp.CTE
+    parameters: dict[str, Any]
+    schema: SqlRelation
+    rows: tuple[tuple[Any, ...], ...]
+
+    @classmethod
+    def bind(
+        cls,
+        query: AdmittedQuery,
+        saved: SavedQueryRows,
+        check_work: Callable[[], None],
+    ) -> SavedInputExecution:
+        logical_name = "input." + saved.binding.alias
+        if query.relations != (logical_name,):
+            raise SqlAdmissionError("unsupported", "saved_input_only")
+        columns = saved.relation.columns
+        # PostgreSQL's extended-query Bind message has a 16-bit parameter count.
+        if len(saved.rows) * len(columns) + len(query.parameters) > 65535:
+            raise SqlAdmissionError("budget_exhausted", "storage")
+        tree = exp.Expr.load(query.execution_tree)
+        used = {identifier.name for identifier in tree.find_all(exp.Identifier)}
+        name = next(
+            label for i in count() if (label := f"__memoriesql_saved_{i}") not in used
+        )
+        used.update(column.name for column in columns)
+        ordinal = next(
+            label for i in count() if (label := f"__memoriesql_ordinal_{i}") not in used
+        )
+        schema = SqlRelation(
+            (*columns, SqlColumn(ordinal, SqlType("int8"))), ((ordinal,),)
+        )
+        parameters = dict(query.parameters)
+
+        def cast(value: exp.Expr, column: SqlColumn) -> exp.Expr:
+            typed: exp.Expr = exp.Cast(
+                this=value, to=exp.DataType.build(column.type.pg_type, dialect="postgres")
+            )
+            if column.type.pg_type == "text":
+                typed = exp.Collate(
+                    this=typed, expression=exp.column("C", table="pg_catalog", quoted=True)
+                )
+            return typed
+
+        rows, values = [], []
+        for index, row in enumerate(saved.rows, 1):
+            check_work()
+            expressions = []
+            for col_index, (column, cell) in enumerate(zip(columns, row, strict=True)):
+                key = f"saved_{index}_{col_index}"
+                parameters[key] = cell
+                expressions.append(cast(exp.Placeholder(this=key), column))
+            expressions.append(cast(exp.Literal.number(index), schema.columns[-1]))
+            rows.append((*row, index))
+            values.append(exp.Tuple(expressions=expressions))
+        data = (
+            exp.Values(expressions=values)
+            if values
+            else exp.select(*(cast(exp.Null(), col) for col in schema.columns)).where(
+                exp.Boolean(this=False)
+            )
+        )
+        cte = exp.CTE(
+            this=data,
+            alias=exp.TableAlias(
+                this=exp.to_identifier(name, quoted=True),
+                columns=[exp.to_identifier(col.name, quoted=True) for col in schema.columns],
+            ),
+        )
+        return cls(logical_name, name, cte, parameters, schema, tuple(rows))
+
+    def attach(self, tree: exp.Expr) -> exp.Expr:
+        """Rewrite only AST table references in the already-checked statement."""
+        for table in tree.find_all(exp.Table):
+            if f"{table.db}.{table.name}" != self.logical_name:
+                continue
+            if not table.alias:
+                table.set("alias", exp.TableAlias(this=table.this.copy()))
+            table.set("db", None)
+            table.set("this", exp.to_identifier(self.name, quoted=True))
+        existing = tree.args.get("with_")
+        if existing:
+            existing.set("expressions", [self.cte.copy(), *existing.expressions])
+        else:
+            tree.set("with_", exp.With(expressions=[self.cte.copy()]))
+        return tree
+
+    def sql(self, query: AdmittedQuery) -> str:
+        return self.attach(exp.Expr.load(query.execution_tree)).sql(
+            dialect=_ClosedPostgres(), comments=False, unsupported_level=ErrorLevel.RAISE
+        )
 
 
 def _array(*items: exp.Expr) -> exp.Expr:
@@ -2299,7 +2409,10 @@ class _Compiler:
 
 
 def compile_bag_witness(
-    query: AdmittedQuery, relations: dict[str, SqlRelation]
+    query: AdmittedQuery,
+    relations: dict[str, SqlRelation],
+    *,
+    saved_input: SavedInputExecution | None = None,
 ) -> WitnessPlan:
     """Compile only an already admitted, lowered tree; refuse pending shapes."""
     tree = exp.Expr.load(query.execution_tree)
@@ -2349,7 +2462,7 @@ def compile_bag_witness(
     ):
         raise SqlAdmissionError("unsupported", "witness_qualification_pending")
     return WitnessPlan(
-        rewritten.sql(
+        (saved_input.attach(rewritten) if saved_input is not None else rewritten).sql(
             dialect=_ClosedPostgres(),
             comments=False,
             unsupported_level=ErrorLevel.RAISE,

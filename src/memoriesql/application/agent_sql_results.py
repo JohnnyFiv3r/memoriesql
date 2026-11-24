@@ -10,12 +10,28 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
 from sqlglot import exp
 
-from memoriesql.application.investigation_contracts import result_json_bytes
+from memoriesql.application.agent_sql_admission import AdmittedQuery, admit_query
+from memoriesql.application.agent_sql_catalog import (
+    SqlAdmissionError,
+    SqlCatalog,
+    SqlColumn,
+    SqlParameter,
+    SqlRelation,
+    SqlType,
+    _value,
+)
+from memoriesql.application.investigation_contracts import (
+    InputBinding,
+    QueryRequest,
+    encode_result_scalar,
+    result_json_bytes,
+)
 
 CONTRACT_ID = "memoriesql.agent-sql-results.v1"
 CONTRACT_VERSION = 1
@@ -120,6 +136,128 @@ SEARCH_TEXT_FACET = "source_units.search_text"
 
 MAX_RESPONSE_BYTES = 262144
 MAX_PAGE_ROWS = 50
+
+
+def refinement_input(request: QueryRequest) -> InputBinding:
+    """Select the exact declared access context for the single-input cut."""
+    if len(request.inputs) != 1 or len(request.parents) != 1 or request.recursion:
+        raise SqlAdmissionError("unsupported", "saved_input_refinement")
+    binding = request.inputs[0]
+    parent = request.parents[0]
+    if binding.result != parent.result or binding.access != parent.access:
+        raise SqlAdmissionError("invalid_request", "saved_input_binding")
+    return binding
+
+
+@dataclass(frozen=True, slots=True)
+class SavedQueryRows:
+    """Native values decoded from an already authorized, immutable result."""
+
+    binding: InputBinding
+    relation: SqlRelation
+    rows: tuple[tuple[Any, ...], ...]
+
+    @classmethod
+    def from_result(
+        cls,
+        request: QueryRequest,
+        metadata: Mapping[str, Any],
+        rows: Sequence[Mapping[str, Any]],
+        *,
+        catalog: SqlCatalog,
+    ) -> SavedQueryRows:
+        binding = refinement_input(request)
+        try:
+            if metadata["result_id"] != binding.result.result_id:
+                raise ValueError("wrong result")
+            if (
+                metadata["catalog_hash"] != request.catalog_hash
+                or metadata["catalog_hash"] != catalog.hash
+                or metadata["serializer"] != "result-json-v1"
+                or metadata["provenance_revision"] != "native-bag-v1"
+            ):
+                raise SqlAdmissionError("unsupported", "saved_input_revision")
+            frame = metadata["frame"]
+            if (
+                _value("timestamptz", frame["known_at"])
+                != _value("timestamptz", request.scope.known_at)
+                or frame["view"] != request.scope.view
+                or metadata["query"]["scope"]["source_refs"]
+                != list(request.scope.source_refs)
+            ):
+                raise SqlAdmissionError("unsupported", "saved_input_frame")
+
+            columns = tuple(
+                SqlColumn(
+                    raw["name"],
+                    SqlType(raw["pg_type"], raw["ref_type"], raw["nullable"]),
+                )
+                for raw in metadata["result_schema"]
+            )
+            if (
+                not columns
+                or len({col.name for col in columns}) != len(columns)
+                or any(
+                    not isinstance(col.name, str)
+                    or not col.name
+                    or "\x00" in col.name
+                    or len(col.name.encode("utf-8")) > 63
+                    or col.type.pg_type
+                    not in {"uuid", "text", "bool", "int8", "numeric", "float8", "timestamptz"}
+                    or type(col.type.nullable) is not bool
+                    or (
+                        col.type.reference_kind is not None
+                        and catalog.reference_types.get(col.type.reference_kind)
+                        != col.type.pg_type
+                    )
+                    for col in columns
+                )
+                or metadata["total_rows"] != str(len(rows))
+            ):
+                raise ValueError("invalid result schema or size")
+
+            native_rows = []
+            for ordinal, row in enumerate(rows, 1):
+                if row["row_ref"] != str(ordinal) or not isinstance(row["values"], list):
+                    raise ValueError("invalid saved row")
+                native = tuple(
+                    _value(col.type.pg_type, cell)
+                    for col, cell in zip(columns, row["values"], strict=True)
+                )
+                if any(
+                    value is None and not col.type.nullable
+                    or encode_result_scalar(value) != cell
+                    for col, cell, value in zip(columns, row["values"], native, strict=True)
+                ):
+                    raise ValueError("invalid saved cell")
+                native_rows.append(native)
+        except SqlAdmissionError as error:
+            if error.code == "unsupported":
+                raise
+            raise SqlAdmissionError("unavailable", "saved_result") from None
+        except (KeyError, TypeError, ValueError):
+            raise SqlAdmissionError("unavailable", "saved_result") from None
+        return cls(binding, SqlRelation(columns), tuple(native_rows))
+
+    def admit(
+        self, sql: str, parameters: tuple[SqlParameter, ...], *, catalog: SqlCatalog
+    ) -> AdmittedQuery:
+        anchors = frozenset(
+            (kind, str(value))
+            for row in self.rows
+            for column, value in zip(self.relation.columns, row, strict=True)
+            if (kind := column.type.reference_kind) is not None and value is not None
+        )
+        query = admit_query(
+            sql,
+            parameters,
+            inputs={self.binding.alias: self.relation},
+            admitted_anchors=anchors,
+            catalog=catalog,
+        )
+        if query.relations != ("input." + self.binding.alias,):
+            raise SqlAdmissionError("unsupported", "saved_input_only")
+        return query
 
 
 def wire_frame(

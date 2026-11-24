@@ -8,6 +8,7 @@ this module neither accepts agent credentials nor certifies that host boundary.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import threading
@@ -28,10 +29,15 @@ from memoriesql.application.agent_sql_admission import (
 )
 from memoriesql.application.agent_sql_catalog import (
     SqlAdmissionError,
+    SqlCatalog,
     SqlColumn,
     SqlParameter,
 )
-from memoriesql.application.agent_sql_witness import compile_bag_witness
+from memoriesql.application.agent_sql_results import PREPARED_RELATIONS
+from memoriesql.application.agent_sql_witness import (
+    SavedInputExecution,
+    compile_bag_witness,
+)
 from memoriesql.application.investigation_contracts import (
     encode_result_scalar,
     result_json_bytes,
@@ -285,40 +291,47 @@ class PostgresRestrictedQuery:
         witnesses: NativeWitnesses | None = None
         frame_ref = uuid4()
         query_metadata: bytes | None = None
+
+        def check_witness_work() -> None:
+            if time.monotonic() >= deadline:
+                raise _StopQuery("budget_exhausted", "time")
+            if cancellation is not None and cancellation.is_set():
+                raise _StopQuery("cancelled")
+
         try:
-            anchors = frozenset(
-                (column.type.reference_kind, str(value))
-                for name, schema in population.schemas.items()
-                for row in population.rows[name]
-                for column, value in zip(schema.columns, row, strict=True)
-                if column.type.reference_kind and value is not None
-            )
-            query = admit_query(
-                sql, parameters, admitted_anchors=anchors, recursion=recursion
-            )
+            saved = population.saved_input
+            bound = None
+            schemas = dict(population.schemas)
+            if saved is None:
+                anchors = frozenset(
+                    (column.type.reference_kind, str(value))
+                    for name, schema in population.schemas.items()
+                    for row in population.rows[name]
+                    for column, value in zip(schema.columns, row, strict=True)
+                    if column.type.reference_kind and value is not None
+                )
+                query = admit_query(
+                    sql, parameters, admitted_anchors=anchors, recursion=recursion
+                )
+            else:
+                query = saved.admit(sql, parameters, catalog=SqlCatalog.installed())
+                if any(c.type.reference_kind == "evidence_ref" for c in query.columns):
+                    raise SqlAdmissionError("unsupported", "saved_evidence_reference")
+                bound = SavedInputExecution.bind(query, saved, check_witness_work)
+                schemas = {bound.logical_name: bound.schema}
+                assert population.saved_wire_frame is not None
+                frame_ref = UUID(population.saved_wire_frame["frame_ref"])
             if query.catalog_hash != population.catalog_hash:
                 raise SqlAdmissionError("unavailable", "catalog")
-            if not set(query.relations) <= set(population.rows):
+            if not set(query.relations) <= set(schemas if saved else population.rows):
                 raise SqlAdmissionError("unsupported", "unprepared_relation")
             if self._reviewed is not None:
                 require_reviewed(query, self._reviewed)
             plan = (
-                compile_bag_witness(query, dict(population.schemas))
+                compile_bag_witness(query, schemas, saved_input=bound)
                 if collect_bag_witnesses
                 else None
             )
-            if plan:
-
-                def check_witness_work() -> None:
-                    if time.monotonic() >= deadline:
-                        raise _StopQuery("budget_exhausted", "time")
-                    if cancellation is not None and cancellation.is_set():
-                        raise _StopQuery("cancelled")
-
-                witness_builder = NativeWitnessBuilder(
-                    plan, population, frame_ref, check_work=check_witness_work
-                )
-                encoded += witness_builder.encoded_bytes
             query_metadata = result_json_bytes(
                 {
                     "sql": sql,
@@ -338,6 +351,15 @@ class PostgresRestrictedQuery:
                     "derivation_program": query.derivation_program,
                 }
             )
+            if plan:
+                witness_builder = NativeWitnessBuilder(
+                    plan, population, frame_ref, check_work=check_witness_work,
+                    saved_input=bound,
+                    saved_program_sha256=(
+                        hashlib.sha256(query_metadata).hexdigest() if bound else None
+                    ),
+                )
+                encoded += witness_builder.encoded_bytes
             encoded += len(result_json_bytes(query.derivation_program))
             if encoded > max_output_bytes:
                 raise _StopQuery("budget_exhausted", "storage")
@@ -371,7 +393,7 @@ class PostgresRestrictedQuery:
                     ([v.oid for v in self._profile.views],),
                 ).fetchall()
             }
-            if view_names != set(population.schemas):
+            if view_names != (PREPARED_RELATIONS if saved else set(population.schemas)):
                 raise SqlAdmissionError("unavailable", "projection_manifest")
             remaining = math.floor((deadline - time.monotonic()) * 1000)
             if remaining <= 0 or (cancellation is not None and cancellation.is_set()):
@@ -418,6 +440,9 @@ class PostgresRestrictedQuery:
                 "rows": payload,
                 "issuer_context": json.loads(population.source_context),
             }
+            if saved:
+                request["saved_input"] = saved.binding.model_dump(mode="json")
+                request["saved_input_bytes"] = population.preparation_bytes
             if time.monotonic() >= deadline:
                 raise _StopQuery("budget_exhausted", "time")
             stage_started = True
@@ -474,13 +499,20 @@ class PostgresRestrictedQuery:
             )
             worker.start()
             worker_started = True
+            reader_parameters = bound.parameters if bound else query.parameters
             if plan and plan.semantic_check:
                 # Planning only: preserve original PostgreSQL group/order errors.
                 # Estimates are neither read nor used as an authority/work fence.
                 # This uses the same restricted login, snapshot and deadline.
-                reader.execute("EXPLAIN (COSTS FALSE) " + query.sql, query.parameters)
+                reader.execute(
+                    "EXPLAIN (COSTS FALSE) " + (bound.sql(query) if bound else query.sql),
+                    reader_parameters,
+                )
             with reader.cursor(name="memoriesql_" + uuid4().hex) as cursor:
-                cursor.execute(plan.sql if plan else query.sql, query.parameters)
+                cursor.execute(
+                    plan.sql if plan else bound.sql(query) if bound else query.sql,
+                    reader_parameters,
+                )
                 while batch := cursor.fetchmany(128):
                     for row in batch:
                         if (
