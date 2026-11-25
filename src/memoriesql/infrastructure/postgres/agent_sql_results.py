@@ -65,6 +65,7 @@ from memoriesql.application.investigation_contracts import (
     ReleasedSave,
     ReleaseSaveRequest,
     ResolveSaveRequest,
+    RestoreCheckpointRequest,
     ReuseRequest,
     SaveBinding,
     SaveCheckpointRequest,
@@ -99,7 +100,9 @@ from memoriesql.infrastructure.postgres.result_preparation import (
 ConnectionFactory = Callable[[], Connection[Any]]
 HelperRequest = InspectRequest | HydrateRequest | ReadSourceTextRequest
 NamedCheckpointRequest = SaveCheckpointRequest | ResolveSaveRequest | ReleaseSaveRequest
-CheckpointAction = CheckpointRequest | ReadCheckpointRequest | NamedCheckpointRequest
+CheckpointAction = (
+    CheckpointRequest | ReadCheckpointRequest | NamedCheckpointRequest | RestoreCheckpointRequest
+)
 AccessRequest = (
     QueryRequest
     | ReuseRequest
@@ -120,14 +123,21 @@ _AUDIT_EXPIRY_ROWS = 4096
 _AUDIT_RETENTION_SQL = (
     "SELECT to_regprocedure('memoriesql.query_audit_retention_v1()') IS NOT NULL"
 )
+_CHECKPOINT_ALLOCATION_PROFILE = {
+    "kind": "automatic-checkpoint-v1",
+    "manifest_encoding": "result-json-v1",
+    "control_and_lineage_bytes": 40960,
+    "bytes_per_unique_hold": 1024,
+    "physical_measurement": "separate-unavailable-until-qualified",
+}
 CHECKPOINT_ALLOCATION_PROFILE_HASH = hashlib.sha256(
+    result_json_bytes(_CHECKPOINT_ALLOCATION_PROFILE)
+).hexdigest()
+_RESTORE_ALLOCATION_PROFILE_HASH = hashlib.sha256(
     result_json_bytes(
-        {
-            "kind": "automatic-checkpoint-v1",
-            "manifest_encoding": "result-json-v1",
-            "control_and_lineage_bytes": 40960,
-            "bytes_per_unique_hold": 1024,
-            "physical_measurement": "separate-unavailable-until-qualified",
+        _CHECKPOINT_ALLOCATION_PROFILE | {
+            "kind": "restored-checkpoint-v1",
+            "working_state_source_hold_bytes": 512,
         }
     )
 ).hexdigest()
@@ -869,17 +879,21 @@ class PostgresAgentSqlResults:
 
                 body = Jsonb(request.model_dump(mode="json"))
                 named_action = isinstance(request, NamedCheckpointRequest)
-                row = execute(
-                    "SELECT memoriesql.prepare_named_checkpoint_v1(%s,%s)" if named_action
-                    else "SELECT memoriesql.prepare_automatic_checkpoint_v1(%s,%s)",
-                    (delivery, body),
-                ).fetchone()
+                allocation_profile = CHECKPOINT_ALLOCATION_PROFILE_HASH
+                if named_action:
+                    prepare = "SELECT memoriesql.prepare_named_checkpoint_v1(%s,%s)"
+                elif isinstance(request, RestoreCheckpointRequest):
+                    prepare = "SELECT memoriesql.prepare_restore_checkpoint_v1(%s,%s)"
+                    allocation_profile = _RESTORE_ALLOCATION_PROFILE_HASH
+                else:
+                    prepare = "SELECT memoriesql.prepare_automatic_checkpoint_v1(%s,%s)"
+                row = execute(prepare, (delivery, body)).fetchone()
                 if not row or not isinstance(row[0], dict):
                     raise _Failure("unavailable", "unavailable")
                 packet = row[0]
                 manifest: CheckpointManifest | None = None
                 if "pending" in packet:
-                    if not isinstance(request, CheckpointRequest):
+                    if not isinstance(request, CheckpointRequest | RestoreCheckpointRequest):
                         raise ValueError("pending checkpoint read")
                     # The request validator bounds a minimum manifest. Trusted
                     # assigned sequences can make the actual encoding larger;
@@ -887,7 +901,10 @@ class PostgresAgentSqlResults:
                     if len(result_json_bytes(packet["pending"])) > 32768:
                         raise _Failure("budget_exhausted", "storage")
                     manifest = CheckpointManifest.model_validate(packet["pending"])
-                    self._check_checkpoint_request(request, manifest)
+                    if isinstance(request, CheckpointRequest):
+                        self._check_checkpoint_request(request, manifest)
+                    else:
+                        self._check_restore_request(request, manifest)
                     encoded = result_json_bytes(manifest.model_dump(mode="json"))
                     row = execute(
                         "SELECT memoriesql.publish_automatic_checkpoint_v1(%s,%s,%s,%s)",
@@ -930,7 +947,7 @@ class PostgresAgentSqlResults:
                                 "retained_bytes": int(
                                     packet["retention"]["unique_bytes"] if "retention" in packet else 0
                                 ),
-                                "allocation_profile_hash": CHECKPOINT_ALLOCATION_PROFILE_HASH,
+                                "allocation_profile_hash": allocation_profile,
                                 "measured_physical_bytes": None,
                                 "measurement_state": "unavailable",
                                 "cancellation_state": "none",
@@ -1005,8 +1022,23 @@ class PostgresAgentSqlResults:
             raise ValueError("checkpoint request/manifest substitution")
 
     @staticmethod
+    def _check_restore_request(
+        request: RestoreCheckpointRequest, manifest: CheckpointManifest
+    ) -> None:
+        if (
+            manifest.sequence != "1"
+            or manifest.predecessor is not None
+            or manifest.fork_origin != request.access.checkpoint
+            or manifest.working_state_source != request.access.checkpoint
+            or manifest.checkpoint_id == request.access.checkpoint.checkpoint_id
+            or tuple(root.result for root in manifest.roots) != request.selected_roots
+            or (not request.selected_roots and manifest.findings)
+        ):
+            raise ValueError("restore request/manifest substitution")
+
+    @staticmethod
     def _checkpoint_payload(
-        request: CheckpointRequest | ReadCheckpointRequest,
+        request: CheckpointRequest | ReadCheckpointRequest | RestoreCheckpointRequest,
         packet: dict[str, Any],
     ) -> tuple[CheckpointManifest, dict[str, Any]]:
         if set(packet) != {"checkpoint", "retention", "root_contexts"}:
@@ -1017,6 +1049,8 @@ class PostgresAgentSqlResults:
         basis: AutomaticBasis | NamedSaveBasis = AutomaticBasis(kind="automatic")
         if isinstance(request, CheckpointRequest):
             PostgresAgentSqlResults._check_checkpoint_request(request, manifest)
+        elif isinstance(request, RestoreCheckpointRequest):
+            PostgresAgentSqlResults._check_restore_request(request, manifest)
         else:
             if request.access.checkpoint.model_dump(mode="json") != pin:
                 raise ValueError("checkpoint read pin substitution")
@@ -1044,14 +1078,22 @@ class PostgresAgentSqlResults:
         )
         if retention.automatic_until != manifest.automatic_expires_at:
             raise ValueError("checkpoint automatic expiry substitution")
-        extra: dict[str, Any] = {
-            "checkpoint": manifest.model_dump(mode="json"),
-            "retention": retention.model_dump(mode="json"),
-        }
-        if isinstance(request, CheckpointRequest):
-            extra["branch"] = {"branch_id": manifest.branch_id, "head": pin}
-        else:
+        extra: dict[str, Any] = {"checkpoint": manifest.model_dump(mode="json")}
+        if isinstance(request, RestoreCheckpointRequest):
             extra["root_contexts"] = contexts
+            extra["branch"] = {
+                "branch_id": manifest.branch_id,
+                "investigation_id": manifest.investigation_id,
+                "fork_origin": request.access.checkpoint.model_dump(mode="json"),
+                "head": pin,
+                "created_at": manifest.created_at,
+            }
+        else:
+            extra["retention"] = retention.model_dump(mode="json")
+            if isinstance(request, CheckpointRequest):
+                extra["branch"] = {"branch_id": manifest.branch_id, "head": pin}
+            else:
+                extra["root_contexts"] = contexts
         return manifest, extra
 
     @staticmethod
@@ -2441,6 +2483,12 @@ class PostgresAgentSqlResults:
                         "SELECT to_regprocedure('memoriesql.prepare_named_checkpoint_v1(uuid,jsonb)') IS NOT NULL"
                         " AND to_regprocedure('memoriesql.record_named_checkpoint_disclosure_v1"
                         "(uuid,jsonb,text,bigint,bigint)') IS NOT NULL"
+                    ).fetchone()
+                    if not supported or supported[0] is not True:
+                        raise _Failure("unsupported_query", "feature", feature=request.kind)
+                if isinstance(request, RestoreCheckpointRequest):
+                    supported = frame.execute(
+                        "SELECT to_regprocedure('memoriesql.prepare_restore_checkpoint_v1(uuid,jsonb)') IS NOT NULL"
                     ).fetchone()
                     if not supported or supported[0] is not True:
                         raise _Failure("unsupported_query", "feature", feature=request.kind)
