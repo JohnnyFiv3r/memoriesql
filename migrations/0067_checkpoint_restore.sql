@@ -47,7 +47,7 @@ BEGIN
   FROM memoriesql.query_checkpoint_roots r WHERE r.tenant_id=cp.tenant_id AND r.checkpoint_id=cp.checkpoint_id;
  IF jsonb_typeof(manifest->'roots') IS DISTINCT FROM 'array'
   OR jsonb_array_length(manifest->'roots')<>jsonb_array_length(roots)
-  OR NOT (roots @> manifest->'roots') THEN
+  OR NOT (roots @> (manifest->'roots')) THEN
   RAISE EXCEPTION 'checkpoint_unavailable' USING ERRCODE='42501'; END IF;
  RETURN manifest;
 END $$;
