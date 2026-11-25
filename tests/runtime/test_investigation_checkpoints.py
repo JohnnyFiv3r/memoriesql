@@ -974,6 +974,131 @@ class AutomaticCheckpointRuntime(unittest.TestCase):
         finally:
             reserve_or_discard(discard=True)
 
+    def test_named_checkpoint_resolves_fresh_revisions_and_releases_after_revocation(self) -> None:
+        migrate(self.db, expected_current_version=51, target_version=66)
+        run, result = self.query_root()
+        first = self.r.send(self.append(run, result))
+        self.assert_checkpoint(first)
+        first_pin = first["branch"]["head"]
+        save = self.read(run, first_pin) | {"kind": "save_checkpoint", "name": "fictional-orchard"}
+        saved = self.r.send(save)
+        self.assertEqual(saved["outcome"], "available", saved)
+        binding = saved["save"]
+        self.assertEqual((binding["revision"], binding["checkpoint"]), ("1", first_pin))
+        self.assertEqual(saved["retention"]["named_holds"], [{"save_id": binding["save_id"], "revision": "1"}])
+        replayed = self.r.send(save)
+        self.assertEqual(replayed["save"], binding)
+        self.assertEqual(replayed["receipt_ref"], saved["receipt_ref"])
+        self.assertNotEqual(replayed["access_receipt_ref"], saved["access_receipt_ref"])
+        self.assertEqual(
+            self.db.execute(
+                "SELECT allocation_bytes,new_allocation_bytes FROM memoriesql.result_preparation_operations "
+                "WHERE run_ref=%s AND step_key=%s", (run["run_ref"], save["step_key"]),
+            ).fetchall(), [(8192, 8192)],
+        )
+        conflict = self.r.send(save | {"step_key": str(uuid4())})
+        self.assertEqual((conflict["outcome"], conflict["error"]["code"]), ("invalid_request", "save_conflict"))
+
+        fresh = self.r.start()
+        self.assertNotEqual(fresh["run_ref"], run["run_ref"])
+        resolve = {
+            "contract_version": 1, "kind": "resolve_save",
+            "run_ref": fresh["run_ref"], "step_key": str(uuid4()),
+            "investigation_id": first["checkpoint"]["investigation_id"], "name": "fictional-orchard",
+        }
+        resolved = self.r.send(resolve)
+        self.assertEqual(resolved["outcome"], "available", resolved)
+        self.assertEqual(resolved["save"], binding)
+        self.assertEqual(resolved["access"], {
+            "checkpoint": first_pin,
+            "basis": {"kind": "named_save", "save_id": binding["save_id"], "revision": "1"},
+        })
+        for field in ("page", "result", "root_contexts", "checkpoint"):
+            self.assertNotIn(field, resolved)
+
+        second = self.r.send(self.append(run, result, previous=first))
+        self.assert_checkpoint(second)
+        second_pin = second["branch"]["head"]
+        retarget = self.r.send(self.read(fresh, second_pin) | {
+            "kind": "save_checkpoint", "name": binding["name"], "expected_save_revision": "1",
+        })
+        self.assertEqual(retarget["outcome"], "available", retarget)
+        self.assertEqual(
+            (retarget["save"]["save_id"], retarget["save"]["revision"], retarget["save"]["checkpoint"]),
+            (binding["save_id"], "2", second_pin),
+        )
+        stale = self.r.send(self.read(fresh, first_pin) | {"access": resolved["access"]})
+        self.assertEqual((stale["outcome"], stale["error"]), ("unavailable", {"code": "unavailable"}))
+        self.assertEqual(self.r.send(resolve)["outcome"], "unavailable")
+        self.assertEqual(self.r.send(self.read(fresh, first_pin))["outcome"], "available")
+
+        # Exercise the actual cleanup path after the target's automatic slot
+        # ends. Its named revision alone must preserve the original manifest.
+        self.db.execute(
+            "UPDATE memoriesql.query_checkpoints SET created_at=created_at-interval '31 days',"
+            " expires_at=expires_at-interval '31 days' WHERE checkpoint_id=%s",
+            (second_pin["checkpoint_id"],),
+        )
+        self.r.service().cleanup_expired()
+        self.assertEqual(self.r.send(self.read(fresh, second_pin))["outcome"], "unavailable")
+        current = self.r.send(resolve | {"step_key": str(uuid4())})
+        self.assertEqual(current["outcome"], "available", current)
+        self.assertEqual(current["save"], retarget["save"])
+        self.assertEqual(current["access"]["basis"], {
+            "kind": "named_save", "save_id": binding["save_id"], "revision": "2",
+        })
+        self.assertFalse(current["retention"]["automatic_retained"])
+        retained = self.r.send(self.read(fresh, second_pin) | {"access": current["access"]})
+        self.assertEqual(retained["outcome"], "available", retained)
+        self.assertEqual(retained["checkpoint"], second["checkpoint"])
+        context, = retained["root_contexts"]
+        self.assertEqual(context["basis"], current["access"]["basis"])
+        self.r.expire_refinement_parent(self.pin(result)["result_id"])
+        self.assertEqual(self.r.reuse(fresh, result["result"])["outcome"], "unavailable")
+        reopened = self.r.send(self.read(fresh, second_pin) | {
+            "kind": "reuse_result", "result": self.pin(result), "access": context, "page_size": 1,
+        })
+        self.assertEqual(reopened["outcome"], "available", reopened)
+        self.assertEqual(reopened["access_bases"][0]["end_condition"], "save_release")
+        self.assertIsNone(reopened["access_bases"][0]["valid_until"])
+        self.assertEqual(reopened["access_bases"][0]["hold_ref"], binding["save_id"])
+
+        self.db.execute(
+            "UPDATE memoriesql.protected_resources SET status='revoked',revoked_at=clock_timestamp() "
+            "WHERE resource_kind='source' AND resource_id=(SELECT e.source_object_id FROM memoriesql.beads b "
+            "JOIN memoriesql.source_events e ON e.tenant_id=b.tenant_id AND e.event_id=b.event_id WHERE b.bead_id=%s)",
+            (self.h.normalized,),
+        )
+        denied = self.r.send(resolve | {"step_key": str(uuid4())})
+        unknown = self.r.send(resolve | {"step_key": str(uuid4()), "name": "fictional-unknown"})
+        for refusal in (denied, unknown):
+            self.assertEqual((refusal["outcome"], refusal["error"]), ("unavailable", {"code": "unavailable"}))
+            self.assertEqual(set(refusal), set(unknown))
+            for field in ("save", "access", "retention", "checkpoint"):
+                self.assertNotIn(field, refusal)
+        release = resolve | {"step_key": str(uuid4()), "kind": "release_save", "expected_save_revision": "2"}
+        released = self.r.send(release)
+        self.assertEqual(released["outcome"], "available", released)
+        self.assertEqual(released["released"], {"save_id": binding["save_id"], "revision": "3", "state": "released"})
+        for field in ("save", "access", "retention", "checkpoint"):
+            self.assertNotIn(field, released)
+        self.assertEqual(released["work"]["retained_bytes"], 0)
+        self.assertEqual(
+            self.db.execute(
+                "SELECT manifest_digest,(SELECT count(*) FROM memoriesql.query_checkpoint_holds h "
+                "WHERE h.tenant_id=cp.tenant_id AND h.checkpoint_id=cp.checkpoint_id),"
+                " EXISTS(SELECT 1 FROM memoriesql.result_preparation_artifacts a "
+                "WHERE a.tenant_id=cp.tenant_id AND a.artifact_ref=cp.checkpoint_id) "
+                "FROM memoriesql.query_checkpoints cp WHERE cp.checkpoint_id=%s",
+                (second_pin["checkpoint_id"],),
+            ).fetchone(), (None, 0, False),
+        )
+        self.assertEqual(self.r.send(resolve | {"step_key": str(uuid4())})["outcome"], "unavailable")
+        again = self.r.send(release)
+        self.assertEqual(again["released"], released["released"])
+        self.assertEqual(again["receipt_ref"], released["receipt_ref"])
+        self.assertNotEqual(again["access_receipt_ref"], released["access_receipt_ref"])
+
     def test_revoked_and_unknown_checkpoint_withhold_all_protected_metadata(
         self,
     ) -> None:

@@ -261,6 +261,10 @@
     {
       "filename": "0065_saved_result_join.sql",
       "sha256": "9ba97077b48af4455752ca78402831e61ad2384eaa745bcbac841ccfd53407ac"
+    },
+    {
+      "filename": "0066_named_checkpoints.sql",
+      "sha256": "14380c7cc7c4a6d0593f71eca3701f9e81ff634c2136168b003061781287acf1"
     }
   ]
 }

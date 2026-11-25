@@ -519,6 +519,8 @@ class AutomaticCheckpointExecution(unittest.TestCase):
                     if pending
                     else (packet or self.packet)
                 )
+            elif "prepare_named" in statement:
+                value = packet
             elif "publish_automatic" in statement:
                 value = packet or self.packet
             elif "query_delivery_remaining" in statement:
@@ -680,25 +682,69 @@ class AutomaticCheckpointExecution(unittest.TestCase):
                     self.request, CheckpointManifest.model_validate(data)
                 )
 
-    def test_saved_context_and_mutations_still_have_existing_closed_wire(self) -> None:
-        for kind in ("save_checkpoint", "restore_checkpoint"):
-            data: dict[str, Any] = {
-                "contract_version": 1,
-                "run_ref": self.request.run_ref,
-                "step_key": str(uuid4()),
-                "kind": kind,
-                "access": {"checkpoint": self.pin, "basis": {"kind": "automatic"}},
-            }
-            if kind == "save_checkpoint":
-                data["name"] = "fictional"
-            else:
-                data["selected_roots"] = []
-            parse_investigation_request(json.dumps(data).encode())
-            service: Any = object.__new__(PostgresAgentSqlResults)
-            service._admit = Mock()
-            response = json.loads(service.handle(json.dumps(data).encode()))
-            self.assertEqual(response["outcome"], "unsupported_query")
-            service._admit.assert_not_called()
+    def test_restore_still_refuses_before_admission(self) -> None:
+        data = {
+            "contract_version": 1,
+            "run_ref": self.request.run_ref,
+            "step_key": str(uuid4()),
+            "kind": "restore_checkpoint",
+            "access": {"checkpoint": self.pin, "basis": {"kind": "automatic"}},
+            "selected_roots": [],
+        }
+        parse_investigation_request(json.dumps(data).encode())
+        service: Any = object.__new__(PostgresAgentSqlResults)
+        service._admit = Mock()
+        response = json.loads(service.handle(json.dumps(data).encode()))
+        self.assertEqual(response["outcome"], "unsupported_query")
+        service._admit.assert_not_called()
+
+    def test_named_resolution_binds_exact_context_and_release_excludes_content(self) -> None:
+        save_id = str(uuid4())
+        envelope = {
+            "contract_version": 1,
+            "run_ref": self.request.run_ref,
+            "step_key": str(uuid4()),
+            "investigation_id": self.manifest.investigation_id,
+            "name": "fictional",
+        }
+        entry = {"save_id": save_id, "revision": "1"}
+        access = {"checkpoint": self.pin, "basis": {"kind": "named_save", **entry}}
+        resolved = {
+            "access": access,
+            "save": {
+                **entry, "state": "active", "name": "fictional", "checkpoint": self.pin,
+                "investigation_id": self.manifest.investigation_id,
+                "recorded_at": self.manifest.created_at,
+            },
+            "retention": self.packet["retention"] | {
+                "automatic_retained": False, "named_holds": [entry],
+                "hold_ref": save_id, "context_end": "last_save_release",
+            },
+        }
+        request = parse_investigation_request(result_json_bytes(envelope | {"kind": "resolve_save"}))
+        raw, calls = self.execute(request, packet=resolved)
+        self.assertEqual(json.loads(raw)["access"], access)
+        recorded = next(values for statement, values in calls if "record_named" in statement)
+        self.assertEqual(recorded[1].obj, access)
+        self.assertEqual(recorded[2], hashlib.sha256(raw).hexdigest())
+        for wrong_access in (
+            self.packet["root_contexts"][0],
+            access | {"basis": {"kind": "named_save", "save_id": save_id, "revision": "2"}},
+        ):
+            with self.assertRaises(ValueError):
+                self.execute(request, packet=resolved | {"access": wrong_access})
+
+        release = parse_investigation_request(result_json_bytes(envelope | {
+            "kind": "release_save", "expected_save_revision": "1",
+        }))
+        released = {"released": {"save_id": save_id, "revision": "2", "state": "released"}}
+        raw, calls = self.execute(release, packet=released)
+        body = json.loads(raw)
+        self.assertEqual(body["released"], released["released"])
+        self.assertEqual(body["work"]["retained_bytes"], 0)
+        self.assertIsNone(next(values[1] for statement, values in calls if "record_named" in statement))
+        with self.assertRaises(ValueError):
+            self.execute(release, packet=released | {"access": access})
 
 
 class CheckpointRetentionLifecycle(unittest.TestCase):

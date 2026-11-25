@@ -49,17 +49,26 @@ from memoriesql.application.agent_sql_results import (
 )
 from memoriesql.application.investigation_contracts import (
     AutomaticBasis,
+    CheckpointAccess,
     CheckpointManifest,
     CheckpointRequest,
     CheckpointResultAccess,
+    CheckpointRetention,
     HydrateRequest,
     InputBinding,
     InspectRequest,
     InvestigationRequestError,
+    NamedSaveBasis,
     QueryRequest,
     ReadCheckpointRequest,
     ReadSourceTextRequest,
+    ReleasedSave,
+    ReleaseSaveRequest,
+    ResolveSaveRequest,
     ReuseRequest,
+    SaveBinding,
+    SaveCheckpointRequest,
+    SaveRevision,
     parse_investigation_request,
     request_fingerprint,
     result_json_bytes,
@@ -89,12 +98,13 @@ from memoriesql.infrastructure.postgres.result_preparation import (
 
 ConnectionFactory = Callable[[], Connection[Any]]
 HelperRequest = InspectRequest | HydrateRequest | ReadSourceTextRequest
+NamedCheckpointRequest = SaveCheckpointRequest | ResolveSaveRequest | ReleaseSaveRequest
+CheckpointAction = CheckpointRequest | ReadCheckpointRequest | NamedCheckpointRequest
 AccessRequest = (
     QueryRequest
     | ReuseRequest
     | HelperRequest
-    | CheckpointRequest
-    | ReadCheckpointRequest
+    | CheckpointAction
 )
 # The admitted delivery whose work runs in this context, and the connections
 # opened for it (M0047). They name it for the session; the kernel's audit
@@ -674,8 +684,7 @@ class PostgresAgentSqlResults:
             QueryRequest
             | ReuseRequest
             | HelperRequest
-            | CheckpointRequest
-            | ReadCheckpointRequest,
+            | CheckpointAction,
         ):
             return self._bare(
                 request.run_ref,
@@ -793,7 +802,7 @@ class PostgresAgentSqlResults:
             try:
                 if admission["replay"] and step["state"] == "failed":
                     raise _Failure(step["outcome"], step["error_code"])
-                if isinstance(request, CheckpointRequest | ReadCheckpointRequest):
+                if isinstance(request, CheckpointAction):
                     return self._checkpoint(request, admission, start, deadline, owner)
                 if isinstance(request, HelperRequest):
                     return self._helper(
@@ -831,7 +840,7 @@ class PostgresAgentSqlResults:
 
     def _checkpoint(
         self,
-        request: CheckpointRequest | ReadCheckpointRequest,
+        request: CheckpointAction,
         admission: dict[str, Any],
         start: float,
         deadline: float,
@@ -859,13 +868,16 @@ class PostgresAgentSqlResults:
                     return frame.execute(statement, values)
 
                 body = Jsonb(request.model_dump(mode="json"))
+                named_action = isinstance(request, NamedCheckpointRequest)
                 row = execute(
-                    "SELECT memoriesql.prepare_automatic_checkpoint_v1(%s,%s)",
+                    "SELECT memoriesql.prepare_named_checkpoint_v1(%s,%s)" if named_action
+                    else "SELECT memoriesql.prepare_automatic_checkpoint_v1(%s,%s)",
                     (delivery, body),
                 ).fetchone()
                 if not row or not isinstance(row[0], dict):
                     raise _Failure("unavailable", "unavailable")
                 packet = row[0]
+                manifest: CheckpointManifest | None = None
                 if "pending" in packet:
                     if not isinstance(request, CheckpointRequest):
                         raise ValueError("pending checkpoint read")
@@ -884,7 +896,15 @@ class PostgresAgentSqlResults:
                     if not row or not isinstance(row[0], dict):
                         raise _Failure("unavailable", "unavailable")
                     packet = row[0]
-                manifest, extra = self._checkpoint_payload(request, packet)
+                named_access = None
+                if isinstance(request, NamedCheckpointRequest):
+                    extra, named_access = self._named_checkpoint_payload(request, packet)
+                else:
+                    manifest, extra = self._checkpoint_payload(request, packet)
+                    if isinstance(request, ReadCheckpointRequest) and isinstance(
+                        request.access.basis, NamedSaveBasis
+                    ):
+                        named_access = request.access
                 before = execute(
                     "SELECT memoriesql.query_delivery_remaining_v1(%s)", (delivery,)
                 ).fetchone()
@@ -908,7 +928,7 @@ class PostgresAgentSqlResults:
                                 "charged_ms": observed,
                                 "transport_bytes": transport,
                                 "retained_bytes": int(
-                                    packet["retention"]["unique_bytes"]
+                                    packet["retention"]["unique_bytes"] if "retention" in packet else 0
                                 ),
                                 "allocation_profile_hash": CHECKPOINT_ALLOCATION_PROFILE_HASH,
                                 "measured_physical_bytes": None,
@@ -925,17 +945,25 @@ class PostgresAgentSqlResults:
                     MAX_RESPONSE_BYTES, int(admission["reserved_transport"])
                 ):
                     raise _Failure("budget_exhausted", "transport")
-                execute(
-                    "SELECT memoriesql.record_checkpoint_disclosure_v1(%s,%s,%s,%s,%s,%s)",
-                    (
-                        delivery,
-                        UUID(manifest.checkpoint_id),
-                        manifest.content_digest(),
-                        hashlib.sha256(data).hexdigest(),
-                        transport,
-                        observed,
-                    ),
-                )
+                response_hash = hashlib.sha256(data).hexdigest()
+                if named_action or named_access is not None:
+                    execute(
+                        "SELECT memoriesql.record_named_checkpoint_disclosure_v1(%s,%s,%s,%s,%s)",
+                        (
+                            delivery,
+                            Jsonb(named_access.model_dump(mode="json")) if named_access else None,
+                            response_hash, transport, observed,
+                        ),
+                    )
+                else:
+                    assert manifest is not None
+                    execute(
+                        "SELECT memoriesql.record_checkpoint_disclosure_v1(%s,%s,%s,%s,%s,%s)",
+                        (
+                            delivery, UUID(manifest.checkpoint_id), manifest.content_digest(),
+                            response_hash, transport, observed,
+                        ),
+                    )
                 self._remaining_ms(deadline)
             return data
         except Error as error:
@@ -947,6 +975,8 @@ class PostgresAgentSqlResults:
                 raise _pending() from None
             if error.diag.message_primary == "checkpoint_branch_conflict":
                 raise _Failure("invalid_request", "branch_conflict") from None
+            if error.diag.message_primary == "checkpoint_save_conflict":
+                raise _Failure("invalid_request", "save_conflict") from None
             if error.sqlstate == "22023":
                 raise _Failure("invalid_request", "binding") from None
             raise _disclosure_failure(error) from None
@@ -984,20 +1014,20 @@ class PostgresAgentSqlResults:
         manifest = CheckpointManifest.model_validate(packet["checkpoint"])
         digest = manifest.content_digest()
         pin = {"checkpoint_id": manifest.checkpoint_id, "manifest_digest": digest}
+        basis: AutomaticBasis | NamedSaveBasis = AutomaticBasis(kind="automatic")
         if isinstance(request, CheckpointRequest):
             PostgresAgentSqlResults._check_checkpoint_request(request, manifest)
-        elif (
-            not isinstance(request.access.basis, AutomaticBasis)
-            or request.access.checkpoint.model_dump(mode="json") != pin
-        ):
-            raise ValueError("checkpoint read pin/basis substitution")
+        else:
+            if request.access.checkpoint.model_dump(mode="json") != pin:
+                raise ValueError("checkpoint read pin substitution")
+            basis = request.access.basis
         expected = [
             CheckpointResultAccess(
                 kind="checkpoint",
                 checkpoint_id=manifest.checkpoint_id,
                 manifest_digest=digest,
                 root=root.result,
-                basis=AutomaticBasis(kind="automatic"),
+                basis=basis,
             ).model_dump(mode="json")
             for root in manifest.roots
         ]
@@ -1009,40 +1039,86 @@ class PostgresAgentSqlResults:
             result_json_bytes(c) for c in contexts
         } != {result_json_bytes(c) for c in expected}:
             raise ValueError("checkpoint root context substitution")
-        retention = packet["retention"]
-        if (
-            not isinstance(retention, dict)
-            or set(retention)
-            != {
-                "automatic_until",
-                "automatic_retained",
-                "named_holds",
-                "retained",
-                "hold_ref",
-                "unique_bytes",
-                "context_end",
-            }
-            or retention["automatic_until"] != manifest.automatic_expires_at
-            or retention["automatic_retained"] is not True
-            or retention["retained"] is not True
-            or retention["named_holds"] != []
-            or retention["hold_ref"] != manifest.checkpoint_id
-            or retention["context_end"] != "automatic_expiry_or_prune"
-            or type(retention["unique_bytes"]) is not str
-            or not retention["unique_bytes"].isascii()
-            or not retention["unique_bytes"].isdigit()
-            or int(retention["unique_bytes"]) > 536870912
-        ):
-            raise ValueError("invalid checkpoint retention state")
+        retention = PostgresAgentSqlResults._checkpoint_retention(
+            packet["retention"], basis, manifest.checkpoint_id,
+        )
+        if retention.automatic_until != manifest.automatic_expires_at:
+            raise ValueError("checkpoint automatic expiry substitution")
         extra: dict[str, Any] = {
             "checkpoint": manifest.model_dump(mode="json"),
-            "retention": retention,
+            "retention": retention.model_dump(mode="json"),
         }
         if isinstance(request, CheckpointRequest):
             extra["branch"] = {"branch_id": manifest.branch_id, "head": pin}
         else:
             extra["root_contexts"] = contexts
         return manifest, extra
+
+    @staticmethod
+    def _checkpoint_retention(
+        packet: Any, basis: AutomaticBasis | NamedSaveBasis, checkpoint_id: str,
+    ) -> CheckpointRetention:
+        retention = CheckpointRetention.model_validate(packet)
+        if (
+            not retention.retained or not 0 <= int(retention.unique_bytes) <= 536870912
+            or len(set(retention.named_holds)) != len(retention.named_holds)
+        ):
+            raise ValueError("invalid checkpoint retention state")
+        if isinstance(basis, NamedSaveBasis):
+            if (
+                retention.context_end != "last_save_release"
+                or retention.hold_ref != basis.save_id
+                or SaveRevision(save_id=basis.save_id, revision=basis.revision)
+                not in retention.named_holds
+            ):
+                raise ValueError("checkpoint save hold substitution")
+        elif (
+            not retention.automatic_retained or retention.hold_ref != checkpoint_id
+            or retention.context_end != "automatic_expiry_or_prune"
+        ):
+            raise ValueError("invalid automatic checkpoint retention")
+        return retention
+
+    @staticmethod
+    def _named_checkpoint_payload(
+        request: NamedCheckpointRequest, packet: dict[str, Any],
+    ) -> tuple[dict[str, Any], CheckpointAccess | None]:
+        if isinstance(request, ReleaseSaveRequest):
+            if set(packet) != {"released"}:
+                raise ValueError("unexpected release reply fields")
+            released = ReleasedSave.model_validate(packet["released"])
+            if int(released.revision) != int(request.expected_save_revision) + 1:
+                raise ValueError("release revision substitution")
+            return {"released": released.model_dump(mode="json")}, None
+
+        expected = {"save", "retention", "access"} if isinstance(request, ResolveSaveRequest) else {
+            "save", "retention"
+        }
+        if set(packet) != expected:
+            raise ValueError("unexpected named checkpoint reply fields")
+        binding = SaveBinding.model_validate(packet["save"])
+        if binding.name != request.name or binding.state != "active":
+            raise ValueError("save name or state substitution")
+        basis = NamedSaveBasis(kind="named_save", save_id=binding.save_id, revision=binding.revision)
+        access = CheckpointAccess(checkpoint=binding.checkpoint, basis=basis)
+        if isinstance(request, ResolveSaveRequest):
+            if (
+                binding.investigation_id != request.investigation_id
+                or CheckpointAccess.model_validate(packet["access"]) != access
+            ):
+                raise ValueError("resolved save context substitution")
+        elif (
+            binding.checkpoint != request.access.checkpoint
+            or int(binding.revision) != int(request.expected_save_revision or "0") + 1
+        ):
+            raise ValueError("saved checkpoint or revision substitution")
+        retention = PostgresAgentSqlResults._checkpoint_retention(
+            packet["retention"], basis, binding.checkpoint.checkpoint_id,
+        )
+        extra = {"save": binding.model_dump(mode="json"), "retention": retention.model_dump(mode="json")}
+        if isinstance(request, ResolveSaveRequest):
+            extra["access"] = access.model_dump(mode="json")
+        return extra, access
 
     def _helper(
         self,
@@ -2136,13 +2212,19 @@ class PostgresAgentSqlResults:
             request.access, CheckpointResultAccess
         ):
             access_bases = page["access_bases"]
+            basis = request.access.basis
+            named = isinstance(basis, NamedSaveBasis)
+            expected_end = "save_release" if named else "checkpoint_expiry_or_prune"
+            expected_hold = (
+                basis.save_id if isinstance(basis, NamedSaveBasis) else request.access.checkpoint_id
+            )
             if (
                 not isinstance(access_bases, list)
                 or len(access_bases) != 1
                 or access_bases[0]["context"] != request.access.model_dump(mode="json")
-                or access_bases[0]["end_condition"] != "checkpoint_expiry_or_prune"
-                or access_bases[0]["valid_until"] is None
-                or access_bases[0]["hold_ref"] != request.access.checkpoint_id
+                or access_bases[0]["end_condition"] != expected_end
+                or (access_bases[0]["valid_until"] is None) != named
+                or access_bases[0]["hold_ref"] != expected_hold
             ):
                 raise _Failure("execution_error", "database")
         cursor = str(uuid4())
@@ -2319,7 +2401,7 @@ class PostgresAgentSqlResults:
                 query_access=True,
             ) as frame:
                 checkpoint_access = (
-                    isinstance(request, CheckpointRequest | ReadCheckpointRequest)
+                    isinstance(request, CheckpointAction)
                     or (
                         isinstance(request, ReuseRequest)
                         and isinstance(request.access, CheckpointResultAccess)
@@ -2354,6 +2436,14 @@ class PostgresAgentSqlResults:
                         raise _Failure(
                             "unsupported_query", "feature", feature=request.kind
                         )
+                if isinstance(request, NamedCheckpointRequest):
+                    supported = frame.execute(
+                        "SELECT to_regprocedure('memoriesql.prepare_named_checkpoint_v1(uuid,jsonb)') IS NOT NULL"
+                        " AND to_regprocedure('memoriesql.record_named_checkpoint_disclosure_v1"
+                        "(uuid,jsonb,text,bigint,bigint)') IS NOT NULL"
+                    ).fetchone()
+                    if not supported or supported[0] is not True:
+                        raise _Failure("unsupported_query", "feature", feature=request.kind)
                 if isinstance(request, HelperRequest):
                     supported = frame.execute(_HELPER_BACKEND_CAPABILITY_SQL).fetchone()
                     if supported and isinstance(request, ReadSourceTextRequest):
