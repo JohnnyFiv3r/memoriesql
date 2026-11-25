@@ -70,6 +70,37 @@ LANGUAGE sql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,memoriesql SET
 $$;
 REVOKE ALL ON FUNCTION memoriesql.checkpoint_basis_live_v1(memoriesql.query_checkpoints,jsonb) FROM PUBLIC;
 
+-- The full closure verifier binds these compact source-event pins to the
+-- immutable root artifacts. The allocator and investigation locks hold the
+-- selected roots through disclosure. Recheck only their distinct read scopes
+-- against one current time, within the admitted statement and storage bounds.
+CREATE FUNCTION memoriesql.named_checkpoint_clock_live_v1(cp memoriesql.query_checkpoints,
+ basis jsonb,from_automatic boolean DEFAULT false) RETURNS boolean
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,memoriesql
+ SET row_security=off SET lock_timeout='500ms' AS $$
+DECLARE c memoriesql.authorization_contexts%ROWTYPE; scopes uuid[]; checked_at timestamptz;
+BEGIN
+ c:=memoriesql.result_preparation_authority_v1();
+ SELECT array_agg(DISTINCT e.access_scope_id) INTO scopes
+ FROM memoriesql.query_checkpoint_roots r
+ LEFT JOIN memoriesql.result_preparation_artifacts a
+  ON a.tenant_id=r.tenant_id AND a.artifact_ref=r.result_id
+ CROSS JOIN LATERAL jsonb_array_elements(COALESCE(
+  convert_from(decode((convert_from(a.dependency_bytes,'UTF8')::jsonb)->>'manifest_base64','base64'),'UTF8')::jsonb,
+  '[{"kind":"source_event"}]'::jsonb)) p(pin)
+ LEFT JOIN memoriesql.source_events e ON e.tenant_id=c.tenant_id AND e.workspace_id=c.workspace_id
+  AND e.event_id=CASE WHEN pin->>'kind'='source_event' THEN (pin->>'id')::uuid END
+ WHERE r.tenant_id=c.tenant_id AND r.checkpoint_id=cp.checkpoint_id AND pin->>'kind'='source_event';
+ PERFORM memoriesql.result_preparation_authority_v1();
+ checked_at:=clock_timestamp();
+ RETURN memoriesql.checkpoint_basis_live_v1(cp,basis)
+  AND (NOT from_automatic OR (cp.automatic_retained AND checked_at<cp.expires_at))
+  AND NOT EXISTS(SELECT 1 FROM unnest(scopes) s(scope_id)
+   WHERE memoriesql.current_context_scope_time_authorized(s.scope_id,'read',checked_at) IS DISTINCT FROM true);
+EXCEPTION WHEN data_exception THEN RETURN false;
+END $$;
+REVOKE ALL ON FUNCTION memoriesql.named_checkpoint_clock_live_v1(memoriesql.query_checkpoints,jsonb,boolean) FROM PUBLIC;
+
 ALTER TABLE memoriesql.query_cursors DROP CONSTRAINT query_cursors_access_context_check;
 ALTER TABLE memoriesql.query_disclosures DROP CONSTRAINT query_disclosures_access_context_check;
 ALTER TABLE memoriesql.query_cursors ADD CONSTRAINT query_cursors_access_context_check CHECK(COALESCE(
@@ -275,7 +306,9 @@ BEGIN
   FROM memoriesql.query_named_saves n JOIN memoriesql.result_preparation_operations op USING(tenant_id,operation_ref)
   WHERE n.tenant_id=c.tenant_id AND n.checkpoint_id=cp.checkpoint_id;
  PERFORM memoriesql.result_preparation_authority_v1();
- IF NOT memoriesql.checkpoint_basis_live_v1(cp,access->'basis') THEN
+ IF NOT (CASE WHEN access#>>'{basis,kind}'='named_save'
+  THEN memoriesql.named_checkpoint_clock_live_v1(cp,access->'basis')
+  ELSE memoriesql.checkpoint_basis_live_v1(cp,access->'basis') END) THEN
   RAISE EXCEPTION 'checkpoint_unavailable' USING ERRCODE='42501'; END IF;
  RETURN jsonb_build_object('checkpoint',manifest,'root_contexts',contexts,
   'retention',jsonb_build_object('automatic_until',manifest->'automatic_expires_at',
@@ -315,21 +348,26 @@ GRANT EXECUTE ON FUNCTION memoriesql.query_result_access_v1(uuid,text,jsonb) TO 
 
 CREATE OR REPLACE FUNCTION memoriesql.query_result_context_live_v1(result_ref uuid,digest text,access jsonb) RETURNS boolean
 LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,memoriesql SET row_security=off AS $$
-DECLARE c memoriesql.authorization_contexts%ROWTYPE;
+DECLARE c memoriesql.authorization_contexts%ROWTYPE; checkpoint memoriesql.query_checkpoints%ROWTYPE;
 BEGIN
  c:=memoriesql.result_preparation_authority_v1();
  IF access='{"kind":"standalone"}'::jsonb THEN
   RETURN EXISTS(SELECT 1 FROM memoriesql.query_result_creations q WHERE q.tenant_id=c.tenant_id
    AND q.result_id=result_ref AND q.content_digest=digest AND clock_timestamp()<q.expires_at);
  END IF;
- RETURN access->>'kind'='checkpoint'
-  AND access->'root'=jsonb_build_object('result_id',result_ref,'content_digest',digest)
-  AND EXISTS(SELECT 1 FROM memoriesql.query_checkpoints cp JOIN memoriesql.query_investigations i USING(tenant_id,investigation_id)
+ IF access->>'kind' IS DISTINCT FROM 'checkpoint'
+  OR access->'root' IS DISTINCT FROM jsonb_build_object('result_id',result_ref,'content_digest',digest) THEN
+  RETURN false; END IF;
+ SELECT cp.* INTO checkpoint
+  FROM memoriesql.query_checkpoints cp JOIN memoriesql.query_investigations i USING(tenant_id,investigation_id)
    JOIN memoriesql.query_checkpoint_roots r USING(tenant_id,checkpoint_id)
    WHERE cp.tenant_id=c.tenant_id AND cp.checkpoint_id=(access->>'checkpoint_id')::uuid
     AND cp.manifest_digest=access->>'manifest_digest'
-    AND memoriesql.checkpoint_basis_live_v1(cp,access->'basis')
-    AND i.owner_identity=memoriesql.checkpoint_identity_v1(c) AND r.result_id=result_ref AND r.content_digest=digest);
+    AND i.owner_identity=memoriesql.checkpoint_identity_v1(c) AND r.result_id=result_ref AND r.content_digest=digest;
+ IF NOT FOUND THEN RETURN false; END IF;
+ RETURN CASE WHEN access#>>'{basis,kind}'='named_save'
+  THEN memoriesql.named_checkpoint_clock_live_v1(checkpoint,access->'basis')
+  ELSE memoriesql.checkpoint_basis_live_v1(checkpoint,access->'basis') END;
 END $$;
 REVOKE ALL ON FUNCTION memoriesql.query_result_context_live_v1(uuid,text,jsonb) FROM PUBLIC;
 
@@ -595,7 +633,9 @@ BEGIN
  END IF;
 
  IF s.state='executing' THEN
-  UPDATE memoriesql.query_steps SET named_save_ref=n.save_id,named_save_revision=n.revision
+  UPDATE memoriesql.query_steps SET named_save_ref=n.save_id,named_save_revision=n.revision,
+   checkpoint_pending=CASE WHEN s.kind='save_checkpoint' AND request#>>'{access,basis,kind}'='automatic'
+    THEN '{"named_from_automatic":true}'::jsonb END
    WHERE tenant_id=d.tenant_id AND run_ref=d.run_ref AND step_key=d.step_key;
  END IF;
  IF s.kind='release_save' THEN
@@ -654,10 +694,16 @@ BEGIN
   END IF;
   INSERT INTO memoriesql.query_disclosures VALUES(d.tenant_id,delivery,NULL,cp.manifest_digest,
    access,1,0,response_hash,'[]',clock_timestamp(),c.credential_id);
+  -- The receipt and any save/retarget are tentative until this current-time
+  -- fence passes. An original automatic route cannot expire during conversion.
+  IF NOT memoriesql.named_checkpoint_clock_live_v1(cp,access->'basis',
+   COALESCE(s.kind='save_checkpoint' AND s.checkpoint_pending='{"named_from_automatic":true}'::jsonb,false)) THEN
+   RAISE EXCEPTION 'checkpoint_unavailable' USING ERRCODE='42501'; END IF;
  END IF;
  IF clock_timestamp()>=d.deadline THEN
   RAISE EXCEPTION 'query_delivery_work_exhausted' USING ERRCODE='54000'; END IF;
- UPDATE memoriesql.query_steps SET state='complete',completed_at=COALESCE(completed_at,clock_timestamp())
+ UPDATE memoriesql.query_steps SET state='complete',completed_at=COALESCE(completed_at,clock_timestamp()),
+  checkpoint_pending=NULL
   WHERE tenant_id=d.tenant_id AND run_ref=d.run_ref AND step_key=d.step_key;
  UPDATE memoriesql.query_deliveries SET state='settled',outcome='available',charged_db_ms=observed_ms,
   charged_transport=transport_bytes,response_sha256=response_hash,settled_at=clock_timestamp()

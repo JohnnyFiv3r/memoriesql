@@ -12,18 +12,24 @@ import json
 import os
 import unittest
 from collections import Counter
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
+from unittest.mock import patch
 from uuid import UUID, uuid4
 
 import psycopg
+from psycopg import sql
 from psycopg.conninfo import make_conninfo
 
 from memoriesql.application.agent_sql_catalog import SqlCatalog
 from memoriesql.application.agent_sql_results import POLICY_HASH
 from memoriesql.application.investigation_contracts import CheckpointManifest
+from memoriesql.infrastructure.postgres.agent_sql_results import (
+    CheckpointAction,
+    PostgresAgentSqlResults,
+)
 from memoriesql.infrastructure.postgres.relation_projection import (
     relation_projection_frame,
 )
@@ -34,10 +40,12 @@ from memoriesql.infrastructure.postgres.result_preparation import (
 )
 
 if TYPE_CHECKING:
+    from tests.runtime import agent_relation_fixtures as relation_agents
     from tests.runtime import test_agent_sql_helpers_runtime as helpers
     from tests.runtime import test_query_audit_retention as audit
     from tests.runtime.test_postgres_runtime import migrate
 else:
+    import agent_relation_fixtures as relation_agents
     import test_agent_sql_helpers_runtime as helpers
     import test_query_audit_retention as audit
     from test_postgres_runtime import migrate
@@ -974,12 +982,123 @@ class AutomaticCheckpointRuntime(unittest.TestCase):
         finally:
             reserve_or_discard(discard=True)
 
+    def assert_named_refusal_at_disclosure(
+        self, request: dict[str, Any], arm: Callable[[], None],
+        expires: sql.Composable, valid_at: Callable[[sql.SQL], sql.Composable],
+    ) -> None:
+        step = UUID(request["step_key"])
+        marker = "fictional checkpoint authority crossed receipt fence"
+        self.db.execute(sql.SQL("""
+            CREATE FUNCTION memoriesql.fixture_named_receipt_fence() RETURNS trigger
+            LANGUAGE plpgsql SET search_path=pg_catalog,memoriesql AS $fixture$
+            BEGIN
+              IF NOT EXISTS(SELECT 1 FROM memoriesql.query_deliveries d
+                 WHERE d.tenant_id=NEW.tenant_id AND d.delivery_ref=NEW.delivery_ref
+                  AND d.step_key={step}::uuid) THEN RETURN NEW; END IF;
+              IF ({live_now}) IS DISTINCT FROM true THEN
+                RAISE EXCEPTION 'fictional authority ended before the receipt';
+              END IF;
+              PERFORM pg_sleep_until({expires} + interval '10 milliseconds');
+              IF ({live_at_statement}) IS DISTINCT FROM true
+                 OR ({live_now}) IS DISTINCT FROM false THEN
+                RAISE EXCEPTION 'fictional authority did not cross at the receipt';
+              END IF;
+              RAISE NOTICE USING MESSAGE={marker};
+              RETURN NEW;
+            END $fixture$
+        """).format(
+            step=sql.Literal(step), expires=expires, marker=sql.Literal(marker),
+            live_now=valid_at(sql.SQL("clock_timestamp()")),
+            live_at_statement=valid_at(sql.SQL("statement_timestamp()")),
+        ))
+        self.addCleanup(self.db.execute, "DROP FUNCTION IF EXISTS memoriesql.fixture_named_receipt_fence()")
+        checkpoint = PostgresAgentSqlResults._checkpoint
+        notices: list[str] = []
+
+        def collect(notice: Any) -> None:
+            if notice.message_primary == marker:
+                notices.append(marker)
+
+        def at_disclosure(
+            service: PostgresAgentSqlResults, action: CheckpointAction, admission: dict[str, Any],
+            start: float, deadline: float, owner: psycopg.Connection[Any],
+        ) -> bytes:
+            self.assertEqual(action.step_key, str(step))
+            arm()
+            owner.add_notice_handler(collect)
+            try:
+                return checkpoint(service, action, admission, start, deadline, owner)
+            finally:
+                owner.remove_notice_handler(collect)
+
+        self.db.execute(
+            "CREATE TRIGGER fixture_named_receipt_fence AFTER INSERT ON memoriesql.query_disclosures "
+            "FOR EACH ROW EXECUTE FUNCTION memoriesql.fixture_named_receipt_fence()"
+        )
+        try:
+            with patch.object(PostgresAgentSqlResults, "_checkpoint", at_disclosure):
+                refused = self.r.send(request)
+        finally:
+            self.db.execute("DROP TRIGGER fixture_named_receipt_fence ON memoriesql.query_disclosures")
+            self.db.execute("DROP FUNCTION memoriesql.fixture_named_receipt_fence()")
+        self.assertEqual(notices, [marker], refused)
+        self.assertEqual((refused["outcome"], refused["error"]), ("unavailable", {"code": "unavailable"}))
+        self.assertEqual(
+            self.db.execute(
+                "SELECT state,named_save_ref,named_save_revision,checkpoint_pending,checkpoint_ref "
+                "FROM memoriesql.query_steps WHERE step_key=%s", (step,),
+            ).fetchone(),
+            ("failed", None, None, None, None),
+        )
+        self.assertEqual(
+            self.db.execute(
+                "SELECT (SELECT count(*) FROM memoriesql.result_preparation_operations WHERE step_key=%s),"
+                " (SELECT count(*) FROM memoriesql.query_disclosures q JOIN memoriesql.query_deliveries d"
+                " USING(tenant_id,delivery_ref) WHERE d.step_key=%s)", (step, step),
+            ).fetchone(),
+            (0, 0),
+        )
+
     def test_named_checkpoint_resolves_fresh_revisions_and_releases_after_revocation(self) -> None:
-        migrate(self.db, expected_current_version=51, target_version=66)
-        run, result = self.query_root()
+        scope, source = relation_agents.explicit_scope(self.db, self.fixture)
+        text = "Fictional orchard observation under a leased scope."
+        self.r.normalized_bead(text, "named-orchard", raw=text, source=source, scope=scope)
+        statement = "SELECT s.text FROM memory_v1.statements s WHERE s.text=$1"
+        parameters = [{"position": 1, "type": "text", "value": text}]
+        run = self.r.start()
+        _, result = self.r.query(run, statement, parameters=parameters)
+        self.assertEqual(result["outcome"], "available", result)
+        self.assertEqual([row["values"] for row in result["page"]["rows"]], [[text]])
+        # Use real pre-upgrade artifacts, including a separate automatic
+        # checkpoint whose expiry must prevent conversion at the receipt.
         first = self.r.send(self.append(run, result))
+        expiring = self.r.send(self.append(run, result))
         self.assert_checkpoint(first)
+        self.assert_checkpoint(expiring)
+        migrate(self.db, expected_current_version=51, target_version=66)
         first_pin = first["branch"]["head"]
+        expiring_pin = expiring["branch"]["head"]
+        expiring_id = UUID(expiring_pin["checkpoint_id"])
+        cutoff = sql.SQL("(SELECT expires_at FROM memoriesql.query_checkpoints WHERE checkpoint_id={}::uuid)").format(
+            sql.Literal(expiring_id)
+        )
+
+        def arm_automatic() -> None:
+            updated = self.db.execute(
+                "WITH cutoff AS (SELECT clock_timestamp()+interval '3 seconds' AS at) "
+                "UPDATE memoriesql.query_checkpoints SET expires_at=cutoff.at,"
+                " created_at=cutoff.at-interval '720 hours' FROM cutoff "
+                "WHERE checkpoint_id=%s RETURNING checkpoint_id", (expiring_id,),
+            ).fetchone()
+            self.assertEqual(updated, (expiring_id,))
+
+        self.assert_named_refusal_at_disclosure(
+            self.read(run, expiring_pin) | {"kind": "save_checkpoint", "name": "fictional-expiring-auto"},
+            arm_automatic, cutoff, lambda at: sql.SQL("{} < {}").format(at, cutoff),
+        )
+        self.assertIsNone(self.db.execute(
+            "SELECT save_id FROM memoriesql.query_named_saves WHERE name='fictional-expiring-auto'"
+        ).fetchone())
         save = self.read(run, first_pin) | {"kind": "save_checkpoint", "name": "fictional-orchard"}
         saved = self.r.send(save)
         self.assertEqual(saved["outcome"], "available", saved)
@@ -998,6 +1117,34 @@ class AutomaticCheckpointRuntime(unittest.TestCase):
         )
         conflict = self.r.send(save | {"step_key": str(uuid4())})
         self.assertEqual((conflict["outcome"], conflict["error"]["code"]), ("invalid_request", "save_conflict"))
+
+        _, other_secret = self.fixture.second_human(scope)
+        outsider = self.r.start(other_secret)
+        try:
+            _, own_rows = self.r.query(outsider, statement, parameters=parameters, secret=other_secret)
+            self.assertEqual(own_rows["outcome"], "available", own_rows)
+            self.assertEqual([row["values"] for row in own_rows["page"]["rows"]], [[text]])
+            foreign_name = {
+                "contract_version": 1, "run_ref": outsider["run_ref"],
+                "investigation_id": binding["investigation_id"], "name": binding["name"],
+            }
+            foreign_context = {
+                "checkpoint": first_pin,
+                "basis": {"kind": "named_save", "save_id": binding["save_id"], "revision": "1"},
+            }
+            for action in (
+                self.read(outsider, first_pin) | {"access": foreign_context},
+                self.read(outsider, first_pin) | {"kind": "save_checkpoint", "name": binding["name"]},
+                foreign_name | {"kind": "resolve_save", "step_key": str(uuid4())},
+                foreign_name | {
+                    "kind": "release_save", "step_key": str(uuid4()), "expected_save_revision": "1",
+                },
+            ):
+                denied = self.r.send(action, secret=other_secret)
+                self.assertEqual((denied["outcome"], denied["error"]), ("unavailable", {"code": "unavailable"}))
+                self.assertTrue({"save", "checkpoint", "retention", "released"}.isdisjoint(denied))
+        finally:
+            self.r.close(outsider, other_secret)
 
         fresh = self.r.start()
         self.assertNotEqual(fresh["run_ref"], run["run_ref"])
@@ -1053,6 +1200,25 @@ class AutomaticCheckpointRuntime(unittest.TestCase):
         self.assertEqual(retained["checkpoint"], second["checkpoint"])
         context, = retained["root_contexts"]
         self.assertEqual(context["basis"], current["access"]["basis"])
+
+        lease_cutoff = sql.SQL("""(SELECT v.expires_at FROM memoriesql.access_grants g
+            JOIN memoriesql.access_grant_revisions v USING(tenant_id,workspace_id,access_scope_id,grant_id)
+            WHERE g.tenant_id={}::uuid AND g.access_scope_id={}::uuid AND g.target_principal_id={}::uuid
+            ORDER BY v.revision DESC LIMIT 1)""").format(
+            sql.Literal(self.fixture.tenant), sql.Literal(scope), sql.Literal(self.fixture.principal),
+        )
+
+        def arm_scope() -> None:
+            self.r.set_refinement_scope_lease(scope, 1, timedelta(seconds=3))
+
+        self.assert_named_refusal_at_disclosure(
+            self.read(fresh, second_pin) | {"access": current["access"]},
+            arm_scope, lease_cutoff,
+            lambda at: sql.SQL("memoriesql.current_context_scope_time_authorized({}::uuid,'read',{})").format(
+                sql.Literal(scope), at,
+            ),
+        )
+        self.r.set_refinement_scope_lease(scope, 2, timedelta(hours=1))
         self.r.expire_refinement_parent(self.pin(result)["result_id"])
         self.assertEqual(self.r.reuse(fresh, result["result"])["outcome"], "unavailable")
         reopened = self.r.send(self.read(fresh, second_pin) | {
@@ -1065,9 +1231,8 @@ class AutomaticCheckpointRuntime(unittest.TestCase):
 
         self.db.execute(
             "UPDATE memoriesql.protected_resources SET status='revoked',revoked_at=clock_timestamp() "
-            "WHERE resource_kind='source' AND resource_id=(SELECT e.source_object_id FROM memoriesql.beads b "
-            "JOIN memoriesql.source_events e ON e.tenant_id=b.tenant_id AND e.event_id=b.event_id WHERE b.bead_id=%s)",
-            (self.h.normalized,),
+            "WHERE resource_kind='source' AND resource_id=%s",
+            (source,),
         )
         denied = self.r.send(resolve | {"step_key": str(uuid4())})
         unknown = self.r.send(resolve | {"step_key": str(uuid4()), "name": "fictional-unknown"})
