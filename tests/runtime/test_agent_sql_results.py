@@ -5000,7 +5000,7 @@ class AgentSqlResults(unittest.TestCase):
         refine = request | {
             "run_ref": child_run["run_ref"],
             "step_key": str(uuid4()),
-            "sql": "SELECT q.note FROM input.prior q WHERE q.position >= $1",
+            "sql": "SELECT input.prior.note FROM input.prior WHERE input.prior.position >= $1",
             "parameters": [{"position": 1, "type": "int8", "value": "0"}],
             "inputs": [parent_access | {"alias": "prior"}],
             "parents": [parent_access],

@@ -9,6 +9,8 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
+from sqlglot import exp, parse_one
+
 from memoriesql.application.agent_sql_admission import RecursionBound, admit_query
 from memoriesql.application.agent_sql_catalog import (
     SqlAdmissionError,
@@ -271,6 +273,83 @@ class AgentSqlAdmissionTests(unittest.TestCase):
             SavedQueryRows.from_result(
                 request, metadata, rows[::-1], catalog=catalog,
             )
+
+    def test_saved_input_schema_qualification_survives_lowering(self) -> None:
+        catalog = SqlCatalog.installed()
+        binding = InputBinding.model_validate({
+            "alias": "prior",
+            "result": {"result_id": ANCHOR, "content_digest": "a" * 64},
+            "access": {"kind": "standalone"},
+        })
+        saved = SavedQueryRows(
+            binding, SqlRelation((SqlColumn("number", SqlType("int8")),)), (),
+        )
+
+        def lowered(statement: str) -> tuple[exp.Select, exp.Select]:
+            query = saved.admit(statement, (), catalog=catalog)
+            bound = SavedInputExecution.bind(query, saved, lambda: None)
+            plan = compile_bag_witness(
+                query, {bound.logical_name: bound.schema}, saved_input=bound
+            )
+            native = parse_one(bound.sql(query), dialect="postgres")
+            witness = parse_one(plan.sql, dialect="postgres")
+            assert isinstance(native, exp.Select) and isinstance(witness, exp.Select)
+            return native, witness
+
+        for tree in lowered("SELECT input.prior.number FROM input.prior"):
+            column = tree.selects[0]
+            assert isinstance(column, exp.Column)
+            self.assertFalse(column.db)
+            self.assertEqual(column.table, tree.args["from_"].this.alias_or_name)
+            self.assertEqual(column.name, "number")
+
+        correlated = (
+            "SELECT input.prior.number, prior.number AS same FROM input.prior "
+            "WHERE EXISTS (SELECT prior.number FROM input.prior AS prior "
+            "WHERE prior.number = input.prior.number)"
+        )
+        for tree in lowered(correlated):
+            predicate, = (
+                part for part in tree.find_all(exp.EQ)
+                if isinstance(part.this, exp.Column) and part.this.name == "number"
+            )
+            self.assertEqual(predicate.this.table, "prior")
+            self.assertFalse(predicate.this.db)
+            self.assertIsInstance(predicate.expression, exp.Column)
+            self.assertFalse(predicate.expression.db)
+            self.assertEqual(predicate.expression.name, "number")
+            self.assertNotEqual(predicate.expression.table, "prior")
+            self.assertEqual(
+                {
+                    column.table
+                    for projection in tree.selects[:2]
+                    for column in projection.find_all(exp.Column)
+                },
+                {predicate.expression.table},
+            )
+
+        nested = (
+            'WITH "__memoriesql_input_ref_0" AS '
+            '(SELECT input.prior.number AS "input.prior.number" FROM input.prior) '
+            'SELECT p."input.prior.number" FROM "__memoriesql_input_ref_0" p'
+        )
+        for tree in lowered(nested):
+            self.assertEqual(tree.selects[0].name, "input.prior.number")
+            self.assertTrue(all(not column.db for column in tree.find_all(exp.Column)))
+            number_refs = [
+                column for column in tree.find_all(exp.Column) if column.name == "number"
+            ]
+            self.assertTrue(number_refs)
+            self.assertTrue(all(ref.table != "__memoriesql_input_ref_0" for ref in number_refs))
+
+        for refused in (
+            "SELECT input.prior.number FROM input.prior AS renamed",
+            "SELECT input.wrong.number FROM input.prior AS wrong",
+        ):
+            with self.subTest(sql=refused), self.assertRaisesRegex(
+                SqlAdmissionError, "column_qualification"
+            ):
+                saved.admit(refused, (), catalog=catalog)
 
     def test_saved_witness_ids_bind_the_exact_parent_in_a_shared_frame(self) -> None:
         catalog = SqlCatalog.installed()
