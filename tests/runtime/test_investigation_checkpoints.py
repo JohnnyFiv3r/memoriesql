@@ -1297,11 +1297,12 @@ class AutomaticCheckpointRuntime(unittest.TestCase):
         scope, source = relation_agents.explicit_scope(self.db, self.fixture)
         observation = "Fictional orchard observation available only to the later root."
         self.r.normalized_bead(observation, "restore-orchard", raw=observation, source=source, scope=scope)
+        wide_statement = "Fictional wide harvest of astral and accented pears."
         _, second = self.r.query(
-            run, "SELECT bead_id,bead_version_id,text FROM memory_v1.statements WHERE text=$1 OR text LIKE $2",
+            run, "SELECT bead_id,bead_version_id,text FROM memory_v1.statements WHERE text=$1 OR text=$2",
             parameters=[
                 {"position": 1, "type": "text", "value": observation},
-                {"position": 2, "type": "text", "value": "Fictional wide harvest%"},
+                {"position": 2, "type": "text", "value": wide_statement},
             ],
             known_at=self.h.scalar("SELECT memoriesql.relation_packet_time(clock_timestamp())"),
             page_size=50,
