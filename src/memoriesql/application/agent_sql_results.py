@@ -138,15 +138,21 @@ MAX_RESPONSE_BYTES = 262144
 MAX_PAGE_ROWS = 50
 
 
-def refinement_input(request: QueryRequest) -> InputBinding:
-    """Select the exact declared access context for the single-input cut."""
-    if len(request.inputs) != 1 or len(request.parents) != 1 or request.recursion:
+def refinement_inputs(request: QueryRequest) -> tuple[InputBinding, ...]:
+    """Match each supported input to its distinct exact parent and access context."""
+    if (
+        not 1 <= len(request.inputs) <= 2
+        or len(request.inputs) != len(request.parents)
+        or request.recursion
+    ):
         raise SqlAdmissionError("unsupported", "saved_input_refinement")
-    binding = request.inputs[0]
-    parent = request.parents[0]
-    if binding.result != parent.result or binding.access != parent.access:
+    parents = {parent.result: parent.access for parent in request.parents}
+    if (
+        {binding.result for binding in request.inputs} != parents.keys()
+        or any(parents[binding.result] != binding.access for binding in request.inputs)
+    ):
         raise SqlAdmissionError("invalid_request", "saved_input_binding")
-    return binding
+    return request.inputs
 
 
 @dataclass(frozen=True, slots=True)
@@ -164,9 +170,9 @@ class SavedQueryRows:
         metadata: Mapping[str, Any],
         rows: Sequence[Mapping[str, Any]],
         *,
+        binding: InputBinding,
         catalog: SqlCatalog,
     ) -> SavedQueryRows:
-        binding = refinement_input(request)
         try:
             if metadata["result_id"] != binding.result.result_id:
                 raise ValueError("wrong result")
@@ -239,25 +245,47 @@ class SavedQueryRows:
             raise SqlAdmissionError("unavailable", "saved_result") from None
         return cls(binding, SqlRelation(columns), tuple(native_rows))
 
-    def admit(
-        self, sql: str, parameters: tuple[SqlParameter, ...], *, catalog: SqlCatalog
-    ) -> AdmittedQuery:
-        anchors = frozenset(
-            (kind, str(value))
-            for row in self.rows
-            for column, value in zip(self.relation.columns, row, strict=True)
-            if (kind := column.type.reference_kind) is not None and value is not None
-        )
-        query = admit_query(
-            sql,
-            parameters,
-            inputs={self.binding.alias: self.relation},
-            admitted_anchors=anchors,
-            catalog=catalog,
-        )
-        if query.relations != ("input." + self.binding.alias,):
-            raise SqlAdmissionError("unsupported", "saved_input_only")
-        return query
+
+def admit_saved_query(
+    saved: tuple[SavedQueryRows, ...],
+    sql: str,
+    parameters: tuple[SqlParameter, ...],
+    *,
+    catalog: SqlCatalog,
+) -> AdmittedQuery:
+    anchors = frozenset(
+        (kind, str(value))
+        for source in saved
+        for row in source.rows
+        for column, value in zip(source.relation.columns, row, strict=True)
+        if (kind := column.type.reference_kind) is not None and value is not None
+    )
+    query = admit_query(
+        sql,
+        parameters,
+        inputs={source.binding.alias: source.relation for source in saved},
+        admitted_anchors=anchors,
+        catalog=catalog,
+    )
+    if query.relations != tuple(sorted("input." + source.binding.alias for source in saved)):
+        raise SqlAdmissionError("unsupported", "saved_input_only")
+    if len(saved) == 2:
+        tree = exp.Expr.load(query.execution_tree)
+        source = tree.args.get("from_")
+        joins = tree.args.get("joins") or []
+        if (
+            not isinstance(tree, exp.Select)
+            or not source
+            or not isinstance(source.this, exp.Table)
+            or len(joins) != 1
+            or not isinstance(joins[0].this, exp.Table)
+            or joins[0].side
+            or tree.args.get("with_")
+            or sum(1 for _ in tree.find_all(exp.Table)) != 2
+            or any(tree.find_all(exp.Subquery, exp.Exists))
+        ):
+            raise SqlAdmissionError("unsupported", "saved_input_join")
+    return query
 
 
 def wire_frame(

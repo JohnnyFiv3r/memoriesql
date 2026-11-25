@@ -712,8 +712,14 @@ parent access context. The restricted reader receives the parent's typed
 result rows, and each saved row carries its original result ID and row ordinal
 into the child's provenance. Commit rechecks the parent and accounts for the
 child's immutable bytes and parent hold. Reopen the child through its own
-result pin and current authority. Multi-input composition, expansion, refresh,
-named saves and projection of result-scoped evidence refs remain pending.
+result pin and current authority. The schema-65 path adds a direct inner
+identity join over two distinct saved results from the same frame. Each alias
+uses its explicit parent access context. The child records both join parents
+and the source result and row ordinal for each contributing input row. The
+executor rechecks both contexts and their shared canonical dependencies on
+commit and retains both exact parent artifacts. General multi-input SQL,
+expand, refresh, named saves and projection of result-scoped evidence refs
+remain pending.
 
 Materialize the entire admitted query or return no result. Explicit SQL LIMIT is
 part of the query and labelled limited coverage; delivery page limits never alter

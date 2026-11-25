@@ -33,7 +33,10 @@ from memoriesql.application.agent_sql_catalog import (
     SqlColumn,
     SqlParameter,
 )
-from memoriesql.application.agent_sql_results import PREPARED_RELATIONS
+from memoriesql.application.agent_sql_results import (
+    PREPARED_RELATIONS,
+    admit_saved_query,
+)
 from memoriesql.application.agent_sql_witness import (
     SavedInputExecution,
     compile_bag_witness,
@@ -299,10 +302,10 @@ class PostgresRestrictedQuery:
                 raise _StopQuery("cancelled")
 
         try:
-            saved = population.saved_input
+            saved = population.saved_inputs
             bound = None
             schemas = dict(population.schemas)
-            if saved is None:
+            if not saved:
                 anchors = frozenset(
                     (column.type.reference_kind, str(value))
                     for name, schema in population.schemas.items()
@@ -314,11 +317,11 @@ class PostgresRestrictedQuery:
                     sql, parameters, admitted_anchors=anchors, recursion=recursion
                 )
             else:
-                query = saved.admit(sql, parameters, catalog=SqlCatalog.installed())
+                query = admit_saved_query(saved, sql, parameters, catalog=SqlCatalog.installed())
                 if any(c.type.reference_kind == "evidence_ref" for c in query.columns):
                     raise SqlAdmissionError("unsupported", "saved_evidence_reference")
                 bound = SavedInputExecution.bind(query, saved, check_witness_work)
-                schemas = {bound.logical_name: bound.schema}
+                schemas = bound.schemas
                 assert population.saved_wire_frame is not None
                 frame_ref = UUID(population.saved_wire_frame["frame_ref"])
             if query.catalog_hash != population.catalog_hash:
@@ -441,7 +444,8 @@ class PostgresRestrictedQuery:
                 "issuer_context": json.loads(population.source_context),
             }
             if saved:
-                request["saved_input"] = saved.binding.model_dump(mode="json")
+                bindings = [source.binding.model_dump(mode="json") for source in saved]
+                request["saved_input"] = bindings[0] if len(bindings) == 1 else bindings
                 request["saved_input_bytes"] = population.preparation_bytes
             if time.monotonic() >= deadline:
                 raise _StopQuery("budget_exhausted", "time")

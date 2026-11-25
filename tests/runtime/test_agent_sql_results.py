@@ -4895,13 +4895,76 @@ class AgentSqlResults(unittest.TestCase):
     def refine_across_source_lease_at_seal(
         self, request: dict[str, Any], scope: UUID,
     ) -> tuple[dict[str, Any], UUID]:
-        # Wait for the actual grant to expire inside the child's INSERT. A
-        # notice survives rollback and distinguishes this from an earlier
-        # access refusal or a statement timeout. Only the fixture adds this
-        # trigger, and it can fire only for the selected operation.
         expires = self.set_refinement_scope_lease(scope, 1, timedelta(seconds=10))
+        read_at = sql.SQL(
+            "memoriesql.current_context_scope_time_authorized({scope}::uuid,'read',{clock})"
+        )
+        statement = read_at.format(scope=sql.Literal(scope), clock=sql.SQL("statement_timestamp()"))
+        now = read_at.format(scope=sql.Literal(scope), clock=sql.SQL("clock_timestamp()"))
+
+        def approach_expiry() -> None:
+            clock = self.h.scalar("SELECT clock_timestamp()")
+            delay = (expires - clock).total_seconds() - 1.8
+            if delay > 0:
+                time.sleep(delay)
+
+        return self.refine_at_seal_expiry(
+            request,
+            expiry=sql.Literal(expires),
+            valid_before=now,
+            crossed=sql.SQL("({} IS TRUE AND {} IS FALSE)").format(statement, now),
+            marker="fictional source lease crossed inside saved seal",
+            before_commit=approach_expiry,
+        )
+
+    def join_across_checkpoint_expiry_at_seal(
+        self, request: dict[str, Any], standalone: dict[str, Any], retained: dict[str, Any],
+    ) -> tuple[dict[str, Any], UUID]:
+        checkpoint = UUID(retained["access"]["checkpoint_id"])
+
+        def context_live(binding: dict[str, Any]) -> sql.Composable:
+            return sql.SQL("memoriesql.query_result_context_live_v1({}::uuid,{},{}::jsonb)").format(
+                sql.Literal(binding["result"]["result_id"]),
+                sql.Literal(binding["result"]["content_digest"]),
+                sql.Literal(json.dumps(binding["access"])),
+            )
+
+        standalone_live = context_live(standalone)
+        checkpoint_live = context_live(retained)
+        where_checkpoint = sql.SQL("tenant_id={}::uuid AND checkpoint_id={}::uuid").format(
+            sql.Literal(self.fixture.tenant), sql.Literal(checkpoint),
+        )
+
+        def set_checkpoint_deadline() -> None:
+            # At the commit hook, native work has settled. Arm the fixture
+            # clock here so the seal can cross it within the 2500 ms commit cap.
+            updated = self.db.execute(sql.SQL(
+                "WITH cutoff AS (SELECT clock_timestamp()+interval '1200 milliseconds' AS expires) "
+                "UPDATE memoriesql.query_checkpoints SET expires_at=cutoff.expires,"
+                " created_at=cutoff.expires-interval '720 hours' FROM cutoff "
+                "WHERE {} RETURNING checkpoint_id"
+            ).format(where_checkpoint)).fetchone()
+            self.assertEqual(updated, (checkpoint,))
+
+        return self.refine_at_seal_expiry(
+            request,
+            expiry=sql.SQL("(SELECT expires_at FROM memoriesql.query_checkpoints WHERE {})").format(
+                where_checkpoint
+            ),
+            valid_before=sql.SQL("({} IS TRUE AND {} IS TRUE)").format(standalone_live, checkpoint_live),
+            crossed=sql.SQL("({} IS TRUE AND {} IS FALSE)").format(standalone_live, checkpoint_live),
+            marker="fictional checkpoint expired inside saved seal",
+            before_commit=set_checkpoint_deadline,
+        )
+
+    def refine_at_seal_expiry(
+        self, request: dict[str, Any], *,
+        expiry: sql.Composable, valid_before: sql.Composable, crossed: sql.Composable,
+        marker: str, before_commit: Callable[[], None],
+    ) -> tuple[dict[str, Any], UUID]:
+        # The trigger runs only for the selected operation. Its notice survives
+        # rollback and distinguishes a clock crossing from early refusal or timeout.
         step = UUID(request["step_key"])
-        marker = "fictional source lease crossed inside saved seal"
         self.db.execute(sql.SQL("""
             CREATE FUNCTION memoriesql.fixture_saved_seal_lease() RETURNS trigger
             LANGUAGE plpgsql SET search_path=pg_catalog,memoriesql AS $body$
@@ -4910,23 +4973,19 @@ class AgentSqlResults(unittest.TestCase):
                 SELECT 1 FROM memoriesql.result_preparation_operations o
                 WHERE o.operation_ref=NEW.operation_ref AND o.step_key={step}::uuid
               ) THEN RETURN NEW; END IF;
-              IF memoriesql.current_context_scope_time_authorized(
-                  {scope}::uuid,'read',clock_timestamp()) IS DISTINCT FROM true THEN
-                RAISE EXCEPTION 'fictional lease ended before the child seal';
+              IF ({valid_before}) IS DISTINCT FROM true THEN
+                RAISE EXCEPTION 'fictional authority ended before the child seal';
               END IF;
-              PERFORM pg_sleep_until({expires}::timestamptz + interval '10 milliseconds');
-              IF memoriesql.current_context_scope_time_authorized(
-                  {scope}::uuid,'read',statement_timestamp()) IS DISTINCT FROM true
-                OR memoriesql.current_context_scope_time_authorized(
-                  {scope}::uuid,'read',clock_timestamp()) IS DISTINCT FROM false THEN
-                RAISE EXCEPTION 'fictional lease did not cross during seal';
+              PERFORM pg_sleep_until({expiry}::timestamptz + interval '10 milliseconds');
+              IF ({crossed}) IS DISTINCT FROM true THEN
+                RAISE EXCEPTION 'fictional authority did not cross during seal';
               END IF;
               RAISE NOTICE USING MESSAGE={marker};
               RETURN NEW;
             END
             $body$;
         """).format(
-            step=sql.Literal(step), scope=sql.Literal(scope), expires=sql.Literal(expires),
+            step=sql.Literal(step), expiry=expiry, valid_before=valid_before, crossed=crossed,
             marker=sql.Literal(marker),
         ))
         self.addCleanup(self.db.execute, "DROP FUNCTION IF EXISTS memoriesql.fixture_saved_seal_lease()")
@@ -4943,15 +5002,12 @@ class AgentSqlResults(unittest.TestCase):
             if notice.message_primary == marker:
                 notices.append(marker)
 
-        def commit_before_lease_ends(
+        def commit_with_expiry(
             issuer: PostgresQueryResultCommit, ownership: PreparationReceipt,
             candidate: InternalResultCandidate,
         ) -> dict[str, Any]:
             attempts.append(candidate.result_id)
-            clock = self.h.scalar("SELECT clock_timestamp()")
-            delay = (expires - clock).total_seconds() - 1.8
-            if delay > 0:
-                time.sleep(delay)
+            before_commit()
             issuer.connection.add_notice_handler(capture)
             try:
                 return commit(issuer, ownership, candidate)
@@ -4959,7 +5015,7 @@ class AgentSqlResults(unittest.TestCase):
                 issuer.connection.remove_notice_handler(capture)
 
         try:
-            with patch.object(PostgresQueryResultCommit, "commit", commit_before_lease_ends):
+            with patch.object(PostgresQueryResultCommit, "commit", commit_with_expiry):
                 refused = self.send(request)
         finally:
             self.db.execute(
@@ -4968,6 +5024,24 @@ class AgentSqlResults(unittest.TestCase):
         self.assertEqual(notices, [marker], refused)
         candidate_id, = attempts
         return refused, candidate_id
+
+    def expire_refinement_parent(self, result_id: str) -> None:
+        with self.db.transaction():
+            self.db.execute("SET LOCAL lock_timeout='500ms'")
+            self.db.execute(
+                "ALTER TABLE memoriesql.query_result_creations "
+                "DISABLE TRIGGER query_result_creations_no_update"
+            )
+            self.db.execute(
+                "UPDATE memoriesql.query_result_creations "
+                "SET created_at=created_at-interval '31 days', "
+                "expires_at=expires_at-interval '31 days' WHERE result_id=%s",
+                (result_id,),
+            )
+            self.db.execute(
+                "ALTER TABLE memoriesql.query_result_creations "
+                "ENABLE TRIGGER query_result_creations_no_update"
+            )
 
     def test_saved_query_refinement_pins_parent_and_rechecks_current_access(self) -> None:
         migrate(self.db, expected_current_version=43, target_version=64)
@@ -5092,22 +5166,7 @@ class AgentSqlResults(unittest.TestCase):
             candidate: InternalResultCandidate,
         ) -> dict[str, Any]:
             pending_results.append(candidate.result_id)
-            with self.db.transaction():
-                self.db.execute("SET LOCAL lock_timeout='500ms'")
-                self.db.execute(
-                    "ALTER TABLE memoriesql.query_result_creations "
-                    "DISABLE TRIGGER query_result_creations_no_update"
-                )
-                self.db.execute(
-                    "UPDATE memoriesql.query_result_creations "
-                    "SET created_at=created_at-interval '31 days', "
-                    "expires_at=expires_at-interval '31 days' WHERE result_id=%s",
-                    (parent["result_id"],),
-                )
-                self.db.execute(
-                    "ALTER TABLE memoriesql.query_result_creations "
-                    "ENABLE TRIGGER query_result_creations_no_update"
-                )
+            self.expire_refinement_parent(parent["result_id"])
             return commit(issuer, ownership, candidate)
 
         expiry_step = str(uuid4())
@@ -5176,6 +5235,209 @@ class AgentSqlResults(unittest.TestCase):
         self.assertNotIn("page", withheld)
         self.assertEqual(self.invocations(), invocations + 2)
 
+
+    def test_saved_query_join_pins_two_same_frame_parents_and_checks_both_at_commit(self) -> None:
+        migrate(self.db, expected_current_version=43, target_version=65)
+        text = "Fictional orchard join."
+        self.normalized_bead(text, "joined-pear", raw="Fictional orchard capture.")
+        run = self.start()
+        request, root = self.query(
+            run,
+            "SELECT s.bead_id AS id, s.text AS note, s.sequence AS position "
+            "FROM memory_v1.statements s WHERE s.text = $1",
+            parameters=[{"position": 1, "type": "text", "value": text}],
+        )
+        self.assertEqual(root["outcome"], "available", root)
+        self.assertEqual(root["result"]["total_rows"], "1")
+
+        def pin(reply: dict[str, Any]) -> dict[str, str]:
+            self.assertEqual(reply["outcome"], "available", reply)
+            return {
+                "result_id": reply["result"]["result_id"],
+                "content_digest": reply["result"]["content_digest"],
+            }
+
+        root_access = {"result": pin(root), "access": {"kind": "standalone"}}
+        refine = request | {
+            "parameters": [],
+            "inputs": [root_access | {"alias": "prior"}],
+            "parents": [root_access],
+            "intent": "refine",
+        }
+        left = self.send(refine | {
+            "step_key": str(uuid4()),
+            "sql": "SELECT q.id, q.note FROM input.prior q",
+        })
+        right = self.send(refine | {
+            "step_key": str(uuid4()),
+            "sql": "SELECT q.id, q.position FROM input.prior q",
+        })
+        left_pin, right_pin = pin(left), pin(right)
+        self.assertNotEqual(left_pin["result_id"], right_pin["result_id"])
+        self.assertEqual(left["result"]["frame"], root["result"]["frame"])
+        self.assertEqual(right["result"]["frame"], root["result"]["frame"])
+        left_access = {"result": left_pin, "access": {"kind": "standalone"}}
+        right_access = {"result": right_pin, "access": {"kind": "standalone"}}
+        checkpoint = self.send({
+            "contract_version": 1,
+            "kind": "checkpoint",
+            "run_ref": run["run_ref"],
+            "step_key": str(uuid4()),
+            "question": "Retain the fictional orchard position.",
+            "progress": {"status": "paused", "note": "Retain one exact sibling."},
+            "findings": [],
+            "roots": [right_access],
+        })
+        self.assertEqual(checkpoint["outcome"], "available", checkpoint)
+        self.expire_refinement_parent(right_pin["result_id"])
+        self.assertEqual(self.reuse(run, right_pin)["outcome"], "unavailable")
+        read_checkpoint = {
+            "contract_version": 1,
+            "kind": "read_checkpoint",
+            "run_ref": run["run_ref"],
+            "step_key": str(uuid4()),
+            "access": {"checkpoint": checkpoint["branch"]["head"], "basis": {"kind": "automatic"}},
+        }
+        restored = self.send(read_checkpoint)
+        self.assertEqual(restored["outcome"], "available", restored)
+        right_access = {"result": right_pin, "access": restored["root_contexts"][0]}
+        inputs = [left_access | {"alias": "notes"}, right_access | {"alias": "positions"}]
+
+        # Stage the checkpoint-only input second, with the parents supplied in
+        # the opposite order to exercise exact binding independent of position.
+        join = refine | {
+            "step_key": str(uuid4()),
+            "sql": "SELECT l.note, r.position FROM input.notes l "
+                   "JOIN input.positions r ON l.id = r.id",
+            "inputs": inputs,
+            "parents": [right_access, left_access],
+        }
+        with patch.object(
+            results_module, "prepare_query_population",
+            side_effect=AssertionError("saved join must not prepare a live population"),
+        ):
+            joined = self.send(join)
+        child = pin(joined)
+        self.assertNotIn(child["result_id"], {left_pin["result_id"], right_pin["result_id"]})
+        child_result = joined["result"]
+        expected_parents = [parent | {"edge": "join"} for parent in (right_pin, left_pin)]
+        self.assertEqual(child_result["parents"], expected_parents)
+        self.assertEqual(child_result["frame"], root["result"]["frame"])
+        self.assertEqual(child_result["coverage"]["population_basis"], "retained_subset")
+        row, = joined["page"]["rows"]
+        self.assertEqual(row["values"], [text, root["page"]["rows"][0]["values"][2]])
+        self.assertCountEqual(
+            self.db.execute(
+                "SELECT parent_ref, parent_sha256 FROM memoriesql.result_preparation_parent_holds "
+                "WHERE child_ref = %s", (child["result_id"],),
+            ).fetchall(),
+            self.db.execute(
+                "SELECT artifact_ref, artifact_sha256 FROM memoriesql.result_preparation_artifacts "
+                "WHERE artifact_ref IN (%s, %s)",
+                (left_pin["result_id"], right_pin["result_id"]),
+            ).fetchall(),
+        )
+        ledger = self.db.execute(
+            "SELECT o.state,o.encoded_bytes,o.allocation_bytes,o.new_allocation_bytes,"
+            " octet_length(a.content_bytes)+octet_length(a.witness_bytes)+octet_length(a.dependency_bytes)"
+            " FROM memoriesql.result_preparation_artifacts a "
+            "JOIN memoriesql.result_preparation_operations o USING (tenant_id,operation_ref)"
+            " WHERE a.artifact_ref=%s",
+            (child["result_id"],),
+        ).fetchone()
+        assert ledger is not None
+        encoded = ledger[-1]
+        self.assertEqual(ledger[:-1], ("sealed", encoded, encoded + 8192 + 1024, encoded + 8192 + 1024))
+        inspected = self.send({
+            "contract_version": 1,
+            "kind": "inspect",
+            "run_ref": run["run_ref"],
+            "step_key": str(uuid4()),
+            "observation_refs": [],
+            "relation_refs": [],
+            "result": {"pin": child, "access": {"kind": "standalone"}},
+            "provenance_ref": row["provenance_ref"],
+            "facets": ["provenance"],
+            "view": join["scope"]["view"],
+            "known_at": join["scope"]["known_at"],
+        })
+        self.assertEqual(inspected["outcome"], "available", inspected)
+        self.assertEqual(inspected["inspection"]["result"]["parents"], expected_parents)
+        self.assertCountEqual(
+            [member["parent_fact_ref"] for member in inspected["inspection"]["provenance"]["members"]],
+            [{"result_id": parent["result_id"], "row_ref": "1"} for parent in (left_pin, right_pin)],
+        )
+
+        independent = self.send(request | {"step_key": str(uuid4())})
+        independent_access = {"result": pin(independent), "access": {"kind": "standalone"}}
+        self.assertNotEqual(independent["result"]["frame"]["frame_ref"], child_result["frame"]["frame_ref"])
+        self.assertEqual(independent["result"]["frame"]["known_at"], child_result["frame"]["known_at"])
+        invocations = self.invocations()
+        mismatched = self.send(join | {
+            "step_key": str(uuid4()),
+            "inputs": [
+                independent_access | {"alias": "positions"}, left_access | {"alias": "notes"},
+            ],
+            "parents": [left_access, independent_access],
+        })
+        self.assertEqual(mismatched["outcome"], "unsupported_query", mismatched)
+        self.assertNotIn("result", mismatched)
+        self.assertEqual(self.send(join)["result"], child_result)
+        self.assertEqual(self.invocations(), invocations)
+
+        commit = PostgresQueryResultCommit.commit
+        attempted: list[UUID] = []
+
+        def expire_one_parent(
+            issuer: PostgresQueryResultCommit,
+            ownership: PreparationReceipt,
+            candidate: InternalResultCandidate,
+        ) -> dict[str, Any]:
+            attempted.append(candidate.result_id)
+            self.expire_refinement_parent(left_pin["result_id"])
+            return commit(issuer, ownership, candidate)
+
+        blocked_step = str(uuid4())
+        invocations = self.invocations()
+        with patch.object(PostgresQueryResultCommit, "commit", expire_one_parent):
+            denied = self.send(join | {"step_key": blocked_step, "inputs": inputs[::-1]})
+        self.assertEqual(denied["outcome"], "unavailable", denied)
+        self.assertNotIn("result", denied)
+        artifact, = attempted
+        self.assert_refinement_rollback(blocked_step, artifact)
+        self.assertEqual(self.invocations(), invocations + 1)
+        retained = self.send(read_checkpoint | {"step_key": str(uuid4())})
+        self.assertEqual(retained["outcome"], "available", retained)
+        self.assertEqual(retained["root_contexts"], [right_access["access"]])
+        self.assertEqual(self.reuse(run, child)["outcome"], "available")
+        denied_read = self.send(join | {"step_key": str(uuid4())})
+        self.assertEqual(denied_read["outcome"], "unavailable", denied_read)
+        self.assertNotIn("result", denied_read)
+        self.assertEqual(self.invocations(), invocations + 1)
+
+        # Reuse the still-live original root for notes after the left sibling's
+        # earlier refusal. The same checkpoint-only pin still supplies position.
+        seal_step = str(uuid4())
+        seal_join = join | {
+            "step_key": seal_step,
+            "inputs": [root_access | {"alias": "notes"}, inputs[1]],
+            "parents": [right_access, root_access],
+        }
+        sealed_refusal, artifact = self.join_across_checkpoint_expiry_at_seal(
+            seal_join, root_access, right_access,
+        )
+        self.assertEqual(sealed_refusal["outcome"], "unavailable", sealed_refusal)
+        self.assertNotIn("result", sealed_refusal)
+        self.assert_refinement_rollback(seal_step, artifact)
+        self.assertEqual(self.invocations(), invocations + 2)
+        self.assertEqual(self.reuse(run, root_access["result"])["outcome"], "available")
+        self.assertEqual(self.reuse(run, child)["outcome"], "available")
+        expired_checkpoint = self.send(read_checkpoint | {"step_key": str(uuid4())})
+        self.assertEqual(expired_checkpoint["outcome"], "unavailable", expired_checkpoint)
+        denied_read = self.send(seal_join | {"step_key": str(uuid4())})
+        self.assertEqual(denied_read["outcome"], "unavailable", denied_read)
+        self.assertNotIn("result", denied_read)
+        self.assertEqual(self.invocations(), invocations + 2)
 
 if __name__ == "__main__":
     unittest.main()
