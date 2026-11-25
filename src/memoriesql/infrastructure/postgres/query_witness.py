@@ -46,21 +46,27 @@ class NativeWitnessBuilder:
         self.plan = plan
         self.frame_ref = frame_ref
         self.check_work = check_work
-        parent = population.saved_input.binding.result if population.saved_input else None
-        self.namespace = (
-            uuid5(
+        parents = {"input." + source.binding.alias: source.binding.result for source in population.saved_inputs}
+        input_namespaces = {
+            name: uuid5(
                 frame_ref,
-                f"saved-input:{parent.result_id}:{parent.content_digest}:{saved_input.logical_name}",
+                f"saved-input:{parent.result_id}:{parent.content_digest}:{name}",
             )
-            if saved_input is not None and parent is not None
-            else frame_ref
-        )
-        if saved_input is not None and saved_program_sha256 is None:
+            for name, parent in parents.items()
+        }
+        if saved_input is not None and (
+            saved_program_sha256 is None or parents.keys() != saved_input.tables.keys()
+        ):
             raise ValueError("saved witness requires an exact child program")
+        namespace = next(iter(input_namespaces.values()), frame_ref)
+        if len(input_namespaces) > 1:
+            namespace = uuid5(
+                frame_ref, "saved-inputs:" + ":".join(str(input_namespaces[name]) for name in sorted(parents))
+            )
         self.node_namespace = (
-            uuid5(self.namespace, "saved-query:" + saved_program_sha256)
+            uuid5(namespace, "saved-query:" + saved_program_sha256)
             if saved_program_sha256 is not None
-            else self.namespace
+            else namespace
         )
         self.members: dict[tuple[str, bytes], UUID] = {}
         members: list[dict[str, Any]] = []
@@ -72,8 +78,9 @@ class NativeWitnessBuilder:
             }
         )
         for name in used:
-            schema = saved_input.schema if saved_input else population.schemas[name]
-            rows = saved_input.rows if saved_input else population.rows[name]
+            source = saved_input.tables[name] if saved_input else None
+            schema = source.schema if source else population.schemas[name]
+            rows = source.rows if source else population.rows[name]
             keys = schema.unique_keys[0]
             indices = [
                 next(i for i, c in enumerate(schema.columns) if c.name == k)
@@ -84,7 +91,7 @@ class NativeWitnessBuilder:
                     check_work()
                 values = [encode_result_scalar(row[i]) for i in indices]
                 encoded = result_json_bytes(values)
-                ref = uuid5(self.namespace, name + ":" + encoded.decode("ascii"))
+                ref = uuid5(input_namespaces.get(name, frame_ref), name + ":" + encoded.decode("ascii"))
                 if (name, encoded) in self.members:
                     raise ValueError("duplicate frozen logical key")
                 self.members[name, encoded] = ref
@@ -100,16 +107,15 @@ class NativeWitnessBuilder:
                     "frame_ref": str(frame_ref),
                     "evidence_refs": evidence,
                 }
-                if saved_input:
-                    assert parent is not None
+                if source:
                     member["evidence_refs"] = []
                     member["parent_fact_ref"] = {
-                        "result_id": parent.result_id,
+                        "result_id": parents[name].result_id,
                         "row_ref": values[0],
                     }
                 members.append(member)
         self.population_ref = uuid5(
-            self.namespace, "searched-population:" + population.dependency_manifest_sha256
+            namespace, "searched-population:" + population.dependency_manifest_sha256
         )
         self.program_sha256 = hashlib.sha256(result_json_bytes(plan.stages)).hexdigest()
         self.base: dict[str, Any] = {

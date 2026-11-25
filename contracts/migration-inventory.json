@@ -257,6 +257,10 @@
     {
       "filename": "0064_saved_result_refinement.sql",
       "sha256": "6e7a9339272edcf9a98a9821514f05c4d6b5a876bcc51cddb9ca49250f0c4a4d"
+    },
+    {
+      "filename": "0065_saved_result_join.sql",
+      "sha256": "9ba97077b48af4455752ca78402831e61ad2384eaa745bcbac841ccfd53407ac"
     }
   ]
 }

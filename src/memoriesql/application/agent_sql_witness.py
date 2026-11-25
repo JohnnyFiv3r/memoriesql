@@ -41,47 +41,66 @@ class WitnessPlan:
 
 
 @dataclass(frozen=True, slots=True)
-class SavedInputExecution:
-    """One admitted input lowered to a trusted typed VALUES relation.
-
-    The reader needs no additional view, temporary table or function grant.
-    The extra ordinal is private to the witness compiler.
-    """
-
-    logical_name: str
-    name: str
+class _SavedInputTable:
     cte: exp.CTE
-    parameters: dict[str, Any]
     schema: SqlRelation
     rows: tuple[tuple[Any, ...], ...]
+
+
+@dataclass(frozen=True, slots=True)
+class SavedInputExecution:
+    """Admitted inputs lowered to private typed VALUES relations."""
+
+    tables: dict[str, _SavedInputTable]
+    parameters: dict[str, Any]
+
+    @property
+    def schemas(self) -> dict[str, SqlRelation]:
+        return {name: source.schema for name, source in self.tables.items()}
 
     @classmethod
     def bind(
         cls,
         query: AdmittedQuery,
-        saved: SavedQueryRows,
+        saved: tuple[SavedQueryRows, ...],
         check_work: Callable[[], None],
     ) -> SavedInputExecution:
-        logical_name = "input." + saved.binding.alias
-        if query.relations != (logical_name,):
+        sources = {"input." + source.binding.alias: source for source in saved}
+        if tuple(sorted(sources)) != query.relations:
             raise SqlAdmissionError("unsupported", "saved_input_only")
-        columns = saved.relation.columns
         # PostgreSQL's extended-query Bind message has a 16-bit parameter count.
-        if len(saved.rows) * len(columns) + len(query.parameters) > 65535:
+        if sum(len(source.rows) * len(source.relation.columns) for source in saved) + len(
+            query.parameters
+        ) > 65535:
             raise SqlAdmissionError("budget_exhausted", "storage")
         tree = exp.Expr.load(query.execution_tree)
         used = {identifier.name for identifier in tree.find_all(exp.Identifier)}
-        name = next(
-            label for i in count() if (label := f"__memoriesql_saved_{i}") not in used
-        )
-        used.update(column.name for column in columns)
-        ordinal = next(
-            label for i in count() if (label := f"__memoriesql_ordinal_{i}") not in used
-        )
+        used.update(column.name for source in saved for column in source.relation.columns)
+        parameters = dict(query.parameters)
+        tables = {}
+        names = (f"__memoriesql_saved_{index}" for index in count())
+        for index, (logical_name, source) in enumerate(sorted(sources.items())):
+            name = next(name for name in names if name not in used)
+            ordinal = next(
+                label for i in count() if (label := f"__memoriesql_ordinal_{i}") not in used
+            )
+            prefix = "saved_" if len(sources) == 1 else f"saved_{index}_"
+            tables[logical_name] = cls._table(source, name, ordinal, prefix, parameters, check_work)
+        return cls(tables, parameters)
+
+    @staticmethod
+    def _table(
+        saved: SavedQueryRows,
+        name: str,
+        ordinal: str,
+        prefix: str,
+        parameters: dict[str, Any],
+        check_work: Callable[[], None],
+    ) -> _SavedInputTable:
+        columns = saved.relation.columns
         schema = SqlRelation(
             (*columns, SqlColumn(ordinal, SqlType("int8"))), ((ordinal,),)
         )
-        parameters = dict(query.parameters)
 
         def cast(value: exp.Expr, column: SqlColumn) -> exp.Expr:
             typed: exp.Expr = exp.Cast(
@@ -98,7 +117,7 @@ class SavedInputExecution:
             check_work()
             expressions = []
             for col_index, (column, cell) in enumerate(zip(columns, row, strict=True)):
-                key = f"saved_{index}_{col_index}"
+                key = f"{prefix}{index}_{col_index}"
                 parameters[key] = cell
                 expressions.append(cast(exp.Placeholder(this=key), column))
             expressions.append(cast(exp.Literal.number(index), schema.columns[-1]))
@@ -118,22 +137,24 @@ class SavedInputExecution:
                 columns=[exp.to_identifier(col.name, quoted=True) for col in schema.columns],
             ),
         )
-        return cls(logical_name, name, cte, parameters, schema, tuple(rows))
+        return _SavedInputTable(cte, schema, tuple(rows))
 
     def attach(self, tree: exp.Expr) -> exp.Expr:
         """Rewrite only AST table references in the already-checked statement."""
         for table in tree.find_all(exp.Table):
-            if f"{table.db}.{table.name}" != self.logical_name:
+            source = self.tables.get(f"{table.db}.{table.name}")
+            if source is None:
                 continue
             if not table.alias:
                 table.set("alias", exp.TableAlias(this=table.this.copy()))
             table.set("db", None)
-            table.set("this", exp.to_identifier(self.name, quoted=True))
+            table.set("this", source.cte.args["alias"].this.copy())
+        ctes = [source.cte.copy() for source in self.tables.values()]
         existing = tree.args.get("with_")
         if existing:
-            existing.set("expressions", [self.cte.copy(), *existing.expressions])
+            existing.set("expressions", [*ctes, *existing.expressions])
         else:
-            tree.set("with_", exp.With(expressions=[self.cte.copy()]))
+            tree.set("with_", exp.With(expressions=ctes))
         return tree
 
     def sql(self, query: AdmittedQuery) -> str:

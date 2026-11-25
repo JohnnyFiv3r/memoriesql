@@ -42,7 +42,7 @@ from memoriesql.application.agent_sql_results import (
     EvidenceIndex,
     SavedQueryRows,
     ref_key,
-    refinement_input,
+    refinement_inputs,
     remaining_after,
     reply,
     stable_reply_bytes,
@@ -53,6 +53,7 @@ from memoriesql.application.investigation_contracts import (
     CheckpointRequest,
     CheckpointResultAccess,
     HydrateRequest,
+    InputBinding,
     InspectRequest,
     InvestigationRequestError,
     QueryRequest,
@@ -1453,7 +1454,7 @@ class PostgresAgentSqlResults:
         try:
             with self._control() as source:
                 preparation = (
-                    self._prepare_saved_input(source, request, admission, deadline)
+                    self._prepare_saved_inputs(source, request, admission, deadline)
                     if request.intent == "refine"
                     else prepare_query_population(
                         source,
@@ -1593,7 +1594,7 @@ class PostgresAgentSqlResults:
             raise _pending() from None
 
     @contextmanager
-    def _prepare_saved_input(
+    def _prepare_saved_inputs(
         self,
         connection: Connection[Any],
         request: QueryRequest,
@@ -1605,9 +1606,12 @@ class PostgresAgentSqlResults:
         End the source read transaction before staging. Checkpoint access
         takes its own ledger lock, which staging and commit must reacquire.
         """
-        binding = refinement_input(request)
-        rows: list[dict[str, Any]] = []
+        bindings = refinement_inputs(request)
+        catalog = SqlCatalog.installed()
         encoded_bytes = 8192
+        saved = []
+        wire_frame = None
+        coverage = None
         try:
             with relation_projection_frame(
                 connection,
@@ -1615,55 +1619,42 @@ class PostgresAgentSqlResults:
                 workspace_id=self._workspace,
                 statement_timeout_ms=self._remaining_ms(deadline),
             ) as frame:
+                interface = (
+                    "memoriesql.saved_query_parent_v1(jsonb)" if len(bindings) == 1
+                    else "memoriesql.saved_query_inputs_v1(jsonb)"
+                )
                 support = frame.execute(
-                    "SELECT to_regprocedure('memoriesql.saved_query_parent_v1(jsonb)') IS NOT NULL"
+                    "SELECT to_regprocedure(%s) IS NOT NULL", (interface,)
                 ).fetchone()
                 if not support or not support[0]:
                     raise _Failure(
                         "unsupported_query", "feature", feature="saved_input_refinement"
                     )
-                arguments = (
-                    UUID(admission["delivery_ref"]),
-                    UUID(binding.result.result_id),
-                    binding.result.content_digest,
-                )
-                access = Jsonb(binding.access.model_dump(mode="json"))
-                metadata = None
-                total = None
-                while total is None or len(rows) < total:
-                    frame.execute(
-                        "SELECT set_config('statement_timeout',%s,true)",
-                        (f"{self._remaining_ms(deadline)}ms",),
+                for binding in bindings:
+                    metadata, rows, used_bytes = self._read_saved_rows(
+                        frame, UUID(admission["delivery_ref"]), binding,
+                        request.max_result_bytes - encoded_bytes, deadline,
                     )
-                    reply_row = frame.execute(
-                        "SELECT jsonb_build_object('metadata',page->'metadata',"
-                        " 'total_rows',page->'total_rows','rows',page->'rows')"
-                        " FROM memoriesql.read_query_result_page_v2(%s,%s,%s,%s,%s,%s) p(page)",
-                        (*arguments, len(rows) + 1, MAX_PAGE_ROWS, access),
-                    ).fetchone()
-                    if reply_row is None:
-                        raise _Failure("unavailable", "unavailable")
-                    page = reply_row[0]
-                    if metadata is None:
-                        metadata = page["metadata"]
-                        total = page["total_rows"]
-                    items = page["rows"]
-                    if (
-                        type(total) is not int
-                        or total < 0
-                        or page["total_rows"] != total
-                        or page["metadata"] != metadata
-                        or len(items) != min(MAX_PAGE_ROWS, total - len(rows))
-                    ):
-                        raise _Failure("unavailable", "unavailable")
-                    encoded_bytes += len(result_json_bytes(items))
-                    if encoded_bytes > request.max_result_bytes:
-                        raise _Failure("budget_exhausted", "storage")
-                    rows.extend(items)
-            assert metadata is not None
-            saved = SavedQueryRows.from_result(
-                request, metadata, rows, catalog=SqlCatalog.installed()
-            )
+                    encoded_bytes += used_bytes
+                    saved.append(SavedQueryRows.from_result(
+                        request, metadata, rows, binding=binding, catalog=catalog
+                    ))
+                    if wire_frame is None:
+                        wire_frame = metadata["wire_frame"]
+                        coverage = metadata["coverage"]
+                    else:
+                        if wire_frame != metadata["wire_frame"]:
+                            raise SqlAdmissionError("unsupported", "saved_input_frame")
+                        assert coverage is not None
+                        other = metadata["coverage"]
+                        gaps = list(coverage["gaps"])
+                        gaps.extend(gap for gap in other["gaps"] if gap not in gaps)
+                        limits = (coverage["truncation"], other["truncation"])
+                        coverage = coverage | {
+                            "gaps": gaps,
+                            "truncation": "explicit_limit" if "explicit_limit" in limits
+                            else "explicit_depth" if "explicit_depth" in limits else None,
+                        }
         except SqlAdmissionError as error:
             outcome = "unsupported_query" if error.code == "unsupported" else error.code
             code, feature = _admission_error(outcome, error.construct)
@@ -1671,7 +1662,7 @@ class PostgresAgentSqlResults:
         except Error as error:
             raise _disclosure_failure(error) from None
 
-        wire_frame = metadata["wire_frame"]
+        assert wire_frame is not None and coverage is not None
         with relation_projection_frame(
             connection,
             credential_sha256=self._credential,
@@ -1697,10 +1688,53 @@ class PostgresAgentSqlResults:
                 source_context=context[0].encode("utf-8"),
                 revision=2,
                 view=wire_frame["view"],
-                saved_input=saved,
+                saved_inputs=tuple(saved),
                 saved_wire_frame=wire_frame,
-                saved_coverage=metadata["coverage"],
+                saved_coverage=coverage,
             )
+
+    def _read_saved_rows(
+        self, frame: Connection[Any], delivery: UUID, binding: InputBinding,
+        byte_budget: int, deadline: float,
+    ) -> tuple[dict[str, Any], list[dict[str, Any]], int]:
+        arguments = (delivery, UUID(binding.result.result_id), binding.result.content_digest)
+        access = Jsonb(binding.access.model_dump(mode="json"))
+        rows: list[dict[str, Any]] = []
+        metadata = None
+        total = None
+        used_bytes = 0
+        while total is None or len(rows) < total:
+            frame.execute(
+                "SELECT set_config('statement_timeout',%s,true)",
+                (f"{self._remaining_ms(deadline)}ms",),
+            )
+            reply_row = frame.execute(
+                "SELECT jsonb_build_object('metadata',page->'metadata',"
+                " 'total_rows',page->'total_rows','rows',page->'rows')"
+                " FROM memoriesql.read_query_result_page_v2(%s,%s,%s,%s,%s,%s) p(page)",
+                (*arguments, len(rows) + 1, MAX_PAGE_ROWS, access),
+            ).fetchone()
+            if reply_row is None:
+                raise _Failure("unavailable", "unavailable")
+            page = reply_row[0]
+            if metadata is None:
+                metadata = page["metadata"]
+                total = page["total_rows"]
+            items = page["rows"]
+            if (
+                type(total) is not int
+                or total < 0
+                or page["total_rows"] != total
+                or page["metadata"] != metadata
+                or len(items) != min(MAX_PAGE_ROWS, total - len(rows))
+            ):
+                raise _Failure("unavailable", "unavailable")
+            used_bytes += len(result_json_bytes(items))
+            if used_bytes > byte_budget:
+                raise _Failure("budget_exhausted", "storage")
+            rows.extend(items)
+        assert metadata is not None
+        return metadata, rows, used_bytes
 
     @staticmethod
     def _parameters(request: QueryRequest) -> tuple[Any, ...]:
@@ -1744,7 +1778,7 @@ class PostgresAgentSqlResults:
         """Refuse what this cut does not run, before any reservation."""
         if request.intent == "refine" and not request.candidate_profile_ref:
             try:
-                refinement_input(request)
+                refinement_inputs(request)
             except SqlAdmissionError as error:
                 outcome = "unsupported_query" if error.code == "unsupported" else error.code
                 code, feature = _admission_error(outcome, error.construct)

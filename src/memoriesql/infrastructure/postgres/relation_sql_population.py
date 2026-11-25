@@ -145,7 +145,7 @@ class PreparedRelationPopulation:
     visible_relation_manifest_sha256: str | None = None
     # Saved-input execution uses only typed result rows and the original frame.
     # Its protected canonical records remain in PostgreSQL.
-    saved_input: SavedQueryRows | None = None
+    saved_inputs: tuple[SavedQueryRows, ...] = ()
     saved_wire_frame: Mapping[str, Any] | None = None
     saved_coverage: Mapping[str, Any] | None = None
 

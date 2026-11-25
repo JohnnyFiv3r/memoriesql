@@ -65,7 +65,7 @@ class InternalResultCandidate:
         policy_hash: str,
     ) -> InternalResultCandidate:
         witness = execution.witnesses
-        saved = population.saved_input
+        saved = population.saved_inputs
         if (
             execution.deadline_monotonic is None
             or time.monotonic() >= execution.deadline_monotonic
@@ -82,13 +82,14 @@ class InternalResultCandidate:
             or datetime.fromisoformat(request.scope.known_at) != population.known_at
             or request.catalog_hash != population.catalog_hash
             or (
-                saved is None
+                not saved
                 and (request.inputs or request.parents or request.scope.source_refs
                      or request.intent not in {"discover", "enumerate"})
             )
             or (
-                saved is not None
-                and (request.inputs != (saved.binding,) or request.intent != "refine")
+                saved
+                and (request.inputs != tuple(source.binding for source in saved)
+                     or request.intent != "refine")
             )
         ):
             raise ValueError("internal result qualification unavailable")
@@ -183,7 +184,7 @@ class InternalResultCandidate:
             },
         }
         internal: dict[str, Any] = {}
-        if saved is not None:
+        if saved:
             if (
                 request.scope.view != population.view
                 or population.saved_wire_frame is None
@@ -196,7 +197,9 @@ class InternalResultCandidate:
             body["frame"].pop("projection_manifest_sha256")
             body["wire_frame"] = dict(population.saved_wire_frame)
             body["parents"] = [
-                saved.binding.result.model_dump(mode="json") | {"edge": "refine"}
+                parent.result.model_dump(mode="json")
+                | {"edge": "refine" if len(saved) == 1 else "join"}
+                for parent in request.parents
             ]
             body["coverage"] = dict(population.saved_coverage) | {
                 "population_basis": "limited_query" if limited else "retained_subset",
@@ -292,7 +295,7 @@ class InternalResultCandidate:
             result_json_bytes(body), witness.bytes, result_json_bytes(dependencies)
         )
         content.validate()
-        if content.encoded_bytes + 8192 + (512 if saved else 0) > request.max_result_bytes:
+        if content.encoded_bytes + 8192 + 512 * len(saved) > request.max_result_bytes:
             raise ValueError("internal result storage exhausted")
         if time.monotonic() >= execution.deadline_monotonic:
             raise ValueError("internal result work exhausted")
