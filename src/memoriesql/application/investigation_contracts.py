@@ -166,6 +166,33 @@ class CheckpointAccess(FrozenContractModel):
     basis: RetentionBasis
 
 
+class SaveRevision(FrozenContractModel):
+    save_id: Ref
+    revision: PositiveInt8
+
+
+class SaveBinding(SaveRevision):
+    investigation_id: Ref
+    name: SaveName
+    checkpoint: CheckpointPin
+    state: Literal["active", "released"]
+    recorded_at: StoredTimestamp
+
+
+class ReleasedSave(SaveRevision):
+    state: Literal["released"]
+
+
+class CheckpointRetention(FrozenContractModel):
+    automatic_until: StoredTimestamp
+    automatic_retained: StrictBool
+    named_holds: tuple[SaveRevision, ...]
+    retained: StrictBool
+    hold_ref: Ref | None
+    unique_bytes: Annotated[Text, AfterValidator(_int8)]
+    context_end: Literal["automatic_expiry_or_prune", "last_save_release"]
+
+
 class ResultAccess(FrozenContractModel):
     result: ResultPin
     access: AccessContext

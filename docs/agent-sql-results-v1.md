@@ -718,7 +718,7 @@ uses its explicit parent access context. The child records both join parents
 and the source result and row ordinal for each contributing input row. The
 executor rechecks both contexts and their shared canonical dependencies on
 commit and retains both exact parent artifacts. General multi-input SQL,
-expand, refresh, named saves and projection of result-scoped evidence refs
+expand, refresh and projection of result-scoped evidence refs
 remain pending.
 
 Materialize the entire admitted query or return no result. Explicit SQL LIMIT is
@@ -826,6 +826,9 @@ receipt; it cannot resurrect a released binding. New save/update is a new step.
 resolve_save is the cross-run/restart name-to-pin lookup; missing, released or
 denied names share unavailable. It discloses no protected name/checkpoint metadata
 before the active binding's whole closure is reauthorized.
+Schema 66 adds save, resolve and release through the existing query-access
+delivery ledger. A name retains the existing checkpoint and its root closure
+without duplicating the artifacts.
 Its available response must bind `access.checkpoint=save.checkpoint` and
 `access.basis={kind:named_save,save_id:save.save_id,revision:save.revision}` from
 the same locked read. It must never return an automatic or another save's basis,
