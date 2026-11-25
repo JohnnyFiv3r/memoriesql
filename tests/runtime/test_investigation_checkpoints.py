@@ -982,14 +982,14 @@ class AutomaticCheckpointRuntime(unittest.TestCase):
         finally:
             reserve_or_discard(discard=True)
 
-    def assert_named_refusal_at_disclosure(
+    def assert_checkpoint_refusal_at_disclosure(
         self, request: dict[str, Any], arm: Callable[[], None],
         expires: sql.Composable, valid_at: Callable[[sql.SQL], sql.Composable],
     ) -> None:
         step = UUID(request["step_key"])
         marker = "fictional checkpoint authority crossed receipt fence"
         self.db.execute(sql.SQL("""
-            CREATE FUNCTION memoriesql.fixture_named_receipt_fence() RETURNS trigger
+            CREATE FUNCTION memoriesql.fixture_checkpoint_receipt_fence() RETURNS trigger
             LANGUAGE plpgsql SET search_path=pg_catalog,memoriesql AS $fixture$
             BEGIN
               IF NOT EXISTS(SELECT 1 FROM memoriesql.query_deliveries d
@@ -1011,7 +1011,7 @@ class AutomaticCheckpointRuntime(unittest.TestCase):
             live_now=valid_at(sql.SQL("clock_timestamp()")),
             live_at_statement=valid_at(sql.SQL("statement_timestamp()")),
         ))
-        self.addCleanup(self.db.execute, "DROP FUNCTION IF EXISTS memoriesql.fixture_named_receipt_fence()")
+        self.addCleanup(self.db.execute, "DROP FUNCTION IF EXISTS memoriesql.fixture_checkpoint_receipt_fence()")
         checkpoint = PostgresAgentSqlResults._checkpoint
         notices: list[str] = []
 
@@ -1032,15 +1032,15 @@ class AutomaticCheckpointRuntime(unittest.TestCase):
                 owner.remove_notice_handler(collect)
 
         self.db.execute(
-            "CREATE TRIGGER fixture_named_receipt_fence AFTER INSERT ON memoriesql.query_disclosures "
-            "FOR EACH ROW EXECUTE FUNCTION memoriesql.fixture_named_receipt_fence()"
+            "CREATE TRIGGER fixture_checkpoint_receipt_fence AFTER INSERT ON memoriesql.query_disclosures "
+            "FOR EACH ROW EXECUTE FUNCTION memoriesql.fixture_checkpoint_receipt_fence()"
         )
         try:
             with patch.object(PostgresAgentSqlResults, "_checkpoint", at_disclosure):
                 refused = self.r.send(request)
         finally:
-            self.db.execute("DROP TRIGGER fixture_named_receipt_fence ON memoriesql.query_disclosures")
-            self.db.execute("DROP FUNCTION memoriesql.fixture_named_receipt_fence()")
+            self.db.execute("DROP TRIGGER fixture_checkpoint_receipt_fence ON memoriesql.query_disclosures")
+            self.db.execute("DROP FUNCTION memoriesql.fixture_checkpoint_receipt_fence()")
         self.assertEqual(notices, [marker], refused)
         self.assertEqual((refused["outcome"], refused["error"]), ("unavailable", {"code": "unavailable"}))
         self.assertEqual(
@@ -1092,7 +1092,7 @@ class AutomaticCheckpointRuntime(unittest.TestCase):
             ).fetchone()
             self.assertEqual(updated, (expiring_id,))
 
-        self.assert_named_refusal_at_disclosure(
+        self.assert_checkpoint_refusal_at_disclosure(
             self.read(run, expiring_pin) | {"kind": "save_checkpoint", "name": "fictional-expiring-auto"},
             arm_automatic, cutoff, lambda at: sql.SQL("{} < {}").format(at, cutoff),
         )
@@ -1211,7 +1211,7 @@ class AutomaticCheckpointRuntime(unittest.TestCase):
         def arm_scope() -> None:
             self.r.set_refinement_scope_lease(scope, 1, timedelta(seconds=3))
 
-        self.assert_named_refusal_at_disclosure(
+        self.assert_checkpoint_refusal_at_disclosure(
             self.read(fresh, second_pin) | {"access": current["access"]},
             arm_scope, lease_cutoff,
             lambda at: sql.SQL("memoriesql.current_context_scope_time_authorized({}::uuid,'read',{})").format(
@@ -1263,6 +1263,197 @@ class AutomaticCheckpointRuntime(unittest.TestCase):
         self.assertEqual(again["released"], released["released"])
         self.assertEqual(again["receipt_ref"], released["receipt_ref"])
         self.assertNotEqual(again["access_receipt_ref"], released["access_receipt_ref"])
+
+    def test_restore_and_branch_pin_only_selected_roots_and_keep_working_state_authorized(
+        self,
+    ) -> None:
+        run, first = self.query_root()
+        scope, source = relation_agents.explicit_scope(self.db, self.fixture)
+        observation = "Fictional orchard observation available only to the later root."
+        self.r.normalized_bead(observation, "restore-orchard", raw=observation, source=source, scope=scope)
+        _, second = self.r.query(
+            run, "SELECT text FROM memory_v1.statements WHERE text=$1",
+            parameters=[{"position": 1, "type": "text", "value": observation}],
+            known_at=self.h.scalar("SELECT memoriesql.relation_packet_time(clock_timestamp())"),
+        )
+        self.assertEqual(second["outcome"], "available", second)
+        self.assertEqual([r["values"] for r in second["page"]["rows"]], [[observation]])
+        first_pin, second_pin = self.pin(first), self.pin(second)
+        append = self.append(run, first)
+        append["roots"].append({"result": second_pin, "access": {"kind": "standalone"}})
+        append["findings"] = [
+            {"text": label, "facts": [
+                {"result_id": pin["result_id"], "row_ref": "1"} for pin in pins
+            ], "evidence_refs": []}
+            for label, pins in (
+                ("selected finding", (first_pin,)),
+                ("unselected finding", (second_pin,)),
+                ("mixed finding", (first_pin, second_pin)),
+            )
+        ]
+        original = self.r.send(append)
+        self.assert_checkpoint(original)
+        original_pin = original["branch"]["head"]
+        original_id = original_pin["checkpoint_id"]
+        migrate(self.db, expected_current_version=51, target_version=67)
+        fresh = self.r.start()
+        restored_request = self.read(fresh, original_pin) | {
+            "kind": "restore_checkpoint", "selected_roots": [first_pin],
+        }
+        # Arm the original automatic route after admission. The shared
+        # fixture marker proves expiry crossed inside the settlement statement
+        # and that the staged branch, allocation, and receipt all roll back.
+        predicate = sql.SQL("(SELECT expires_at FROM memoriesql.query_checkpoints WHERE checkpoint_id={}::uuid)").format(
+            sql.Literal(UUID(original_id))
+        )
+
+        def arm_original() -> None:
+            self.db.execute(
+                "WITH cutoff AS (SELECT clock_timestamp()+interval '3 seconds' AS at)"
+                " UPDATE memoriesql.query_checkpoints SET expires_at=cutoff.at,"
+                " created_at=cutoff.at-interval '720 hours' FROM cutoff WHERE checkpoint_id=%s",
+                (original_id,),
+            )
+
+        self.assert_checkpoint_refusal_at_disclosure(
+            restored_request | {"step_key": str(uuid4())}, arm_original, predicate,
+            lambda checked_at: sql.SQL("{} < {}").format(checked_at, predicate),
+        )
+        self.assertEqual(self.h.scalar("SELECT count(*) FROM memoriesql.query_investigation_branches"), 1)
+        self.assertEqual(self.h.scalar("SELECT count(*) FROM memoriesql.result_preparation_parent_holds"), 0)
+        self.db.execute(
+            "UPDATE memoriesql.query_checkpoints SET created_at=%s,expires_at=%s WHERE checkpoint_id=%s",
+            (original["checkpoint"]["created_at"], original["checkpoint"]["automatic_expires_at"], original_id),
+        )
+
+        visible = self.h.scalar("SELECT count(*) FROM memoriesql.query_visible_refs")
+        restored = self.r.send(restored_request)
+        self.assert_checkpoint(restored)
+        self.assertEqual(self.h.scalar("SELECT count(*) FROM memoriesql.query_visible_refs"), visible)
+        head = restored["branch"]["head"]
+        manifest = restored["checkpoint"]
+        self.assertNotEqual(manifest["branch_id"], original["checkpoint"]["branch_id"])
+        self.assertEqual(restored["branch"], {
+            "branch_id": manifest["branch_id"], "investigation_id": original["checkpoint"]["investigation_id"],
+            "head": head, "fork_origin": original_pin, "created_at": manifest["created_at"],
+        })
+        self.assertEqual((manifest["sequence"], manifest["predecessor"]), ("1", None))
+        self.assertEqual((manifest["fork_origin"], manifest["working_state_source"]), (original_pin, original_pin))
+        for field in ("question", "progress"):
+            self.assertEqual(manifest[field], original["checkpoint"][field])
+        self.assertEqual(manifest["findings"], append["findings"][:1])
+        self.assertEqual(manifest["roots"], original["checkpoint"]["roots"][:1])
+        context = {"kind": "checkpoint", **head, "basis": {"kind": "automatic"}, "root": first_pin}
+        self.assertEqual(restored["root_contexts"], [context])
+        cp_id = head["checkpoint_id"]
+        op = self.db.execute(
+            "SELECT o.encoded_bytes,o.allocation_bytes,o.new_allocation_bytes,"
+            " (SELECT count(*) FROM memoriesql.query_checkpoint_holds h WHERE h.checkpoint_id=cp.checkpoint_id),"
+            " (SELECT parent_ref::text FROM memoriesql.result_preparation_parent_holds h WHERE h.child_ref=cp.checkpoint_id)"
+            " FROM memoriesql.query_checkpoints cp JOIN memoriesql.result_preparation_operations o USING(tenant_id,operation_ref)"
+            " WHERE cp.checkpoint_id=%s", (cp_id,),
+        ).fetchone()
+        self.assertIsNotNone(op)
+        assert op is not None
+        encoded, charged, new_charge, holds, parent = op
+        self.assertEqual((charged, new_charge, holds, parent),
+                         (encoded + 8192 + 512 + 32768 + 1024, encoded + 8192 + 512 + 32768 + 1024, 1, original_id))
+
+        reuse = self.read(fresh, head) | {
+            "kind": "reuse_result", "result": first_pin, "access": context, "page_size": 1,
+        }
+        reused = self.r.send(reuse)
+        self.assertEqual(reused["outcome"], "available", reused)
+        self.assertEqual(reused["page"]["rows"], first["page"]["rows"])
+        self.assertEqual(reused["access_bases"][0]["context"], context)
+        excluded = self.r.send(reuse | {
+            "step_key": str(uuid4()), "result": second_pin, "access": context | {"root": second_pin},
+        })
+        self.assertEqual((excluded["outcome"], excluded["error"]), ("unavailable", {"code": "unavailable"}))
+        conflict = self.r.send(restored_request | {"selected_roots": []})
+        self.assertEqual(conflict["outcome"], "idempotency_conflict", conflict)
+        invalid_selection = self.r.send(restored_request | {
+            "step_key": str(uuid4()), "selected_roots": [second_pin | {"content_digest": "f" * 64}],
+        })
+        self.assertEqual((invalid_selection["outcome"], invalid_selection["error"]),
+                         ("unavailable", {"code": "unavailable"}))
+
+        name = "fictional-restore-origin"
+        saved = self.r.send(self.read(run, original_pin) | {"kind": "save_checkpoint", "name": name})
+        self.assertEqual(saved["outcome"], "available", saved)
+
+        def expire(checkpoint_id: str) -> None:
+            # Fixture clock control. Artifact and its exact pin stay untouched.
+            self.db.execute(
+                "UPDATE memoriesql.query_checkpoints SET created_at=created_at-interval '744 hours',"
+                " expires_at=expires_at-interval '744 hours' WHERE checkpoint_id=%s", (checkpoint_id,),
+            )
+
+        expire(original_id)
+        self.r.service().cleanup_expired()
+        source_read = self.r.send(self.read(fresh, original_pin))
+        self.assertEqual(source_read["outcome"], "unavailable", source_read)
+        resolve = {
+            "contract_version": 1, "kind": "resolve_save", "run_ref": fresh["run_ref"],
+            "step_key": str(uuid4()), "investigation_id": manifest["investigation_id"], "name": name,
+        }
+        named = self.r.send(resolve)
+        self.assertEqual(named["outcome"], "available", named)
+        self.assertEqual(named["access"]["checkpoint"], original_pin)
+        fork_request = restored_request | {
+            "kind": "branch_investigation", "step_key": str(uuid4()), "access": named["access"],
+            "selected_roots": [],
+        }
+        empty = self.r.send(fork_request)
+        self.assert_checkpoint(empty)
+        self.assertEqual((empty["root_contexts"], empty["checkpoint"]["findings"], empty["checkpoint"]["roots"]), ([], [], []))
+        self.assertEqual(empty["checkpoint"]["working_state_source"], original_pin)
+        self.assertEqual(empty["checkpoint"]["question"], original["checkpoint"]["question"])
+        self.assertNotIn(empty["branch"]["branch_id"], {manifest["branch_id"], original["checkpoint"]["branch_id"]})
+        self.assertEqual(empty["checkpoint"]["investigation_sequence"], "3")
+
+        released = self.r.send(resolve | {
+            "kind": "release_save", "step_key": str(uuid4()), "expected_save_revision": "1",
+        })
+        self.assertEqual(released["outcome"], "available", released)
+        stale = self.r.send(fork_request | {"step_key": str(uuid4())})
+        self.assertEqual((stale["outcome"], stale["error"]), ("unavailable", {"code": "unavailable"}))
+        for original_reply, request in ((restored, restored_request), (empty, fork_request)):
+            replay = self.r.send(request)
+            self.assertEqual(replay["checkpoint"], original_reply["checkpoint"])
+            self.assertEqual(replay["receipt_ref"], original_reply["receipt_ref"])
+            self.assertNotEqual(replay["access_receipt_ref"], original_reply["access_receipt_ref"])
+        self.assertEqual(self.h.scalar("SELECT count(*) FROM memoriesql.query_investigation_branches"), 3)
+        self.assert_checkpoint(original)  # The working holds still pin the pre-upgrade bytes.
+
+        self.db.execute(
+            "UPDATE memoriesql.protected_resources SET status='revoked',revoked_at=clock_timestamp()"
+            " WHERE resource_kind='source' AND resource_id=%s", (source,),
+        )
+        standalone = self.r.reuse(fresh, first["result"], page_size=1)
+        self.assertEqual(standalone["outcome"], "available", standalone)
+        empty_head = empty["branch"]["head"]
+        for request in (self.read(fresh, head), self.read(fresh, empty_head), restored_request, fork_request,
+                        reuse | {"step_key": str(uuid4())}):
+            denied = self.r.send(request)
+            self.assertEqual((denied["outcome"], denied["error"]), ("unavailable", {"code": "unavailable"}))
+            self.assertTrue({"checkpoint", "branch", "root_contexts", "page"}.isdisjoint(denied))
+
+        expire(cp_id)
+        self.r.service().cleanup_expired()
+        self.assert_checkpoint(original)  # The empty branch is the final holder.
+        expire(empty_head["checkpoint_id"])
+        self.r.service().cleanup_expired()
+        self.assertEqual(self.h.scalar(
+            "SELECT count(*) FROM memoriesql.result_preparation_artifacts WHERE artifact_ref=ANY(%s)",
+            ([UUID(pin) for pin in (original_id, cp_id, empty_head["checkpoint_id"])],),
+        ), 0)
+        self.assertEqual(self.h.scalar(
+            "SELECT count(*) FROM memoriesql.result_preparation_parent_holds WHERE parent_ref=%s", (original_id,),
+        ), 0)
+        self.assertEqual(self.h.scalar(
+            "SELECT count(*) FROM memoriesql.query_checkpoint_holds WHERE checkpoint_id=%s", (original_id,),
+        ), 0)
 
     def test_revoked_and_unknown_checkpoint_withhold_all_protected_metadata(
         self,

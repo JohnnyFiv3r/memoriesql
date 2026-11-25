@@ -509,7 +509,7 @@ class AutomaticCheckpointExecution(unittest.TestCase):
 
         def sql(statement: str, values: tuple[Any, ...] = ()) -> Any:
             calls.append((statement, values))
-            if "prepare_automatic" in statement:
+            if "prepare_automatic" in statement or "prepare_restore" in statement:
                 value = (
                     {
                         "pending": pending_manifest
@@ -682,21 +682,60 @@ class AutomaticCheckpointExecution(unittest.TestCase):
                     self.request, CheckpointManifest.model_validate(data)
                 )
 
-    def test_restore_still_refuses_before_admission(self) -> None:
-        data = {
-            "contract_version": 1,
-            "run_ref": self.request.run_ref,
-            "step_key": str(uuid4()),
-            "kind": "restore_checkpoint",
-            "access": {"checkpoint": self.pin, "basis": {"kind": "automatic"}},
-            "selected_roots": [],
-        }
-        parse_investigation_request(json.dumps(data).encode())
-        service: Any = object.__new__(PostgresAgentSqlResults)
-        service._admit = Mock()
-        response = json.loads(service.handle(json.dumps(data).encode()))
-        self.assertEqual(response["outcome"], "unsupported_query")
-        service._admit.assert_not_called()
+    def test_restore_dispatches_and_returns_only_exact_new_branch_contexts(self) -> None:
+        for kind in ("restore_checkpoint", "branch_investigation"):
+            data = {
+                "contract_version": 1,
+                "run_ref": self.request.run_ref,
+                "step_key": str(uuid4()),
+                "kind": kind,
+                "access": {"checkpoint": self.pin, "basis": {"kind": "automatic"}},
+                "selected_roots": [self.context["root"]],
+            }
+            request = parse_investigation_request(json.dumps(data).encode())
+            service: Any = object.__new__(PostgresAgentSqlResults)
+            service._admit = Mock(return_value=self.admission | {"refused": False})
+            service._deliver = Mock(return_value=b"dispatched")
+            self.assertEqual(service.handle(json.dumps(data).encode()), b"dispatched")
+            service._admit.assert_called_once()
+            self.assertEqual(service._deliver.call_args.args[:2], (request, kind))
+
+            manifest = CheckpointManifest.model_validate(
+                self.packet["checkpoint"] | {
+                    "checkpoint_id": str(uuid4()),
+                    "branch_id": str(uuid4()),
+                    "investigation_sequence": "2",
+                    "fork_origin": self.pin,
+                    "working_state_source": self.pin,
+                }
+            )
+            new_pin = {
+                "checkpoint_id": manifest.checkpoint_id,
+                "manifest_digest": manifest.content_digest(),
+            }
+            context = self.context | new_pin
+            packet = self.packet | {
+                "checkpoint": manifest.model_dump(mode="json"),
+                "root_contexts": [context],
+                "retention": self.packet["retention"] | {"hold_ref": manifest.checkpoint_id},
+            }
+            raw, calls = self.execute(request, packet=packet, pending_manifest=packet["checkpoint"])
+            response = json.loads(raw)
+            self.assertEqual(response["branch"], {
+                "branch_id": manifest.branch_id,
+                "investigation_id": manifest.investigation_id,
+                "fork_origin": self.pin,
+                "head": new_pin,
+                "created_at": manifest.created_at,
+            })
+            self.assertEqual(response["root_contexts"], [context])
+            self.assertTrue(any("prepare_restore" in statement for statement, _ in calls))
+            for field in ("result", "page", "visibility", "retention"):
+                self.assertNotIn(field, response)
+            with self.assertRaisesRegex(ValueError, "substitution"):
+                self.execute(request, packet=packet | {"root_contexts": [self.context]}, pending=False)
+            with self.assertRaisesRegex(ValueError, "substitution"):
+                self.execute(request, pending_manifest=packet["checkpoint"] | {"roots": []})
 
     def test_named_resolution_binds_exact_context_and_release_excludes_content(self) -> None:
         save_id = str(uuid4())
