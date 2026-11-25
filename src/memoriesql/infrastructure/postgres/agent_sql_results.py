@@ -16,7 +16,8 @@ import hashlib
 import importlib.util
 import math
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import datetime
 from typing import Any
@@ -34,11 +35,14 @@ from memoriesql.application.agent_sql_catalog import SqlAdmissionError, SqlCatal
 from memoriesql.application.agent_sql_results import (
     ALLOCATION_PROFILE_HASH,
     CONTRACT_VERSION,
+    MAX_PAGE_ROWS,
     MAX_RESPONSE_BYTES,
     POLICY_HASH,
     PREPARED_RELATIONS,
     EvidenceIndex,
+    SavedQueryRows,
     ref_key,
+    refinement_input,
     remaining_after,
     reply,
     stable_reply_bytes,
@@ -72,6 +76,7 @@ from memoriesql.infrastructure.postgres.relation_projection import (
     relation_projection_frame,
 )
 from memoriesql.infrastructure.postgres.relation_sql_population import (
+    PreparedRelationPopulation,
     RelationPopulationError,
     prepare_query_population,
 )
@@ -1447,15 +1452,20 @@ class PostgresAgentSqlResults:
         committed = False
         try:
             with self._control() as source:
-                with prepare_query_population(
-                    source,
-                    credential_sha256=self._credential,
-                    workspace_id=self._workspace,
-                    known_at=known_at,
-                    view=request.scope.view,
-                    byte_budget=_POPULATION_BYTES,
-                    statement_timeout_ms=self._remaining_ms(deadline),
-                ) as population:
+                preparation = (
+                    self._prepare_saved_input(source, request, admission, deadline)
+                    if request.intent == "refine"
+                    else prepare_query_population(
+                        source,
+                        credential_sha256=self._credential,
+                        workspace_id=self._workspace,
+                        known_at=known_at,
+                        view=request.scope.view,
+                        byte_budget=_POPULATION_BYTES,
+                        statement_timeout_ms=self._remaining_ms(deadline),
+                    )
+                )
+                with preparation as population:
                     execution = self._executor.execute(
                         source,
                         population,
@@ -1582,6 +1592,116 @@ class PostgresAgentSqlResults:
         except Exception:
             raise _pending() from None
 
+    @contextmanager
+    def _prepare_saved_input(
+        self,
+        connection: Connection[Any],
+        request: QueryRequest,
+        admission: dict[str, Any],
+        deadline: float,
+    ) -> Iterator[PreparedRelationPopulation]:
+        """Load only authorized saved rows and retain a fresh issuer epoch.
+
+        End the source read transaction before staging. Checkpoint access
+        takes its own ledger lock, which staging and commit must reacquire.
+        """
+        binding = refinement_input(request)
+        rows: list[dict[str, Any]] = []
+        encoded_bytes = 8192
+        try:
+            with relation_projection_frame(
+                connection,
+                credential_sha256=self._credential,
+                workspace_id=self._workspace,
+                statement_timeout_ms=self._remaining_ms(deadline),
+            ) as frame:
+                support = frame.execute(
+                    "SELECT to_regprocedure('memoriesql.saved_query_parent_v1(jsonb)') IS NOT NULL"
+                ).fetchone()
+                if not support or not support[0]:
+                    raise _Failure(
+                        "unsupported_query", "feature", feature="saved_input_refinement"
+                    )
+                arguments = (
+                    UUID(admission["delivery_ref"]),
+                    UUID(binding.result.result_id),
+                    binding.result.content_digest,
+                )
+                access = Jsonb(binding.access.model_dump(mode="json"))
+                metadata = None
+                total = None
+                while total is None or len(rows) < total:
+                    frame.execute(
+                        "SELECT set_config('statement_timeout',%s,true)",
+                        (f"{self._remaining_ms(deadline)}ms",),
+                    )
+                    reply_row = frame.execute(
+                        "SELECT jsonb_build_object('metadata',page->'metadata',"
+                        " 'total_rows',page->'total_rows','rows',page->'rows')"
+                        " FROM memoriesql.read_query_result_page_v2(%s,%s,%s,%s,%s,%s) p(page)",
+                        (*arguments, len(rows) + 1, MAX_PAGE_ROWS, access),
+                    ).fetchone()
+                    if reply_row is None:
+                        raise _Failure("unavailable", "unavailable")
+                    page = reply_row[0]
+                    if metadata is None:
+                        metadata = page["metadata"]
+                        total = page["total_rows"]
+                    items = page["rows"]
+                    if (
+                        type(total) is not int
+                        or total < 0
+                        or page["total_rows"] != total
+                        or page["metadata"] != metadata
+                        or len(items) != min(MAX_PAGE_ROWS, total - len(rows))
+                    ):
+                        raise _Failure("unavailable", "unavailable")
+                    encoded_bytes += len(result_json_bytes(items))
+                    if encoded_bytes > request.max_result_bytes:
+                        raise _Failure("budget_exhausted", "storage")
+                    rows.extend(items)
+            assert metadata is not None
+            saved = SavedQueryRows.from_result(
+                request, metadata, rows, catalog=SqlCatalog.installed()
+            )
+        except SqlAdmissionError as error:
+            outcome = "unsupported_query" if error.code == "unsupported" else error.code
+            code, feature = _admission_error(outcome, error.construct)
+            raise _Failure(outcome, code, feature=feature) from None
+        except Error as error:
+            raise _disclosure_failure(error) from None
+
+        wire_frame = metadata["wire_frame"]
+        with relation_projection_frame(
+            connection,
+            credential_sha256=self._credential,
+            workspace_id=self._workspace,
+            statement_timeout_ms=self._remaining_ms(deadline),
+        ) as source:
+            context = source.execute(
+                "SELECT to_jsonb(c)::text FROM memoriesql.current_authorization_context() c"
+            ).fetchone()
+            if context is None or context[0] is None:
+                raise _Failure("unavailable", "unavailable")
+            yield PreparedRelationPopulation(
+                known_at=datetime.fromisoformat(wire_frame["known_at"]),
+                snapshot_at=datetime.fromisoformat(wire_frame["snapshot_at"]),
+                catalog_hash=request.catalog_hash,
+                schemas={},
+                rows={},
+                evidence_bindings={},
+                dependency_records=b"",
+                dependency_manifest=b"",
+                dependency_manifest_sha256=wire_frame["snapshot_digest"],
+                preparation_bytes=encoded_bytes,
+                source_context=context[0].encode("utf-8"),
+                revision=2,
+                view=wire_frame["view"],
+                saved_input=saved,
+                saved_wire_frame=wire_frame,
+                saved_coverage=metadata["coverage"],
+            )
+
     @staticmethod
     def _parameters(request: QueryRequest) -> tuple[Any, ...]:
         catalog = SqlCatalog.installed()
@@ -1622,6 +1742,14 @@ class PostgresAgentSqlResults:
 
     def _refuse_unsupported(self, request: QueryRequest) -> None:
         """Refuse what this cut does not run, before any reservation."""
+        if request.intent == "refine" and not request.candidate_profile_ref:
+            try:
+                refinement_input(request)
+            except SqlAdmissionError as error:
+                outcome = "unsupported_query" if error.code == "unsupported" else error.code
+                code, feature = _admission_error(outcome, error.construct)
+                raise _Failure(outcome, code, feature=feature) from None
+            return
         feature = (
             "saved_input_refinement"
             if request.inputs
@@ -1954,7 +2082,7 @@ class PostgresAgentSqlResults:
             "policy_hash": meta["policy_hash"],
             "result_schema": schema,
             "frame": meta["wire_frame"],
-            "parents": [],
+            "parents": meta["parents"],
             "query_ref": meta["query_ref"],
             "lineage_ref": meta["lineage_ref"],
             "coverage": meta["coverage"],

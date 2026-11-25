@@ -7,10 +7,11 @@ complete provenance/admission. This internal kernel alone publishes no results.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from enum import Enum, auto
 from importlib.metadata import PackageNotFoundError, distribution, version
 from importlib.util import find_spec
+from itertools import count
 from typing import Any, NoReturn
 
 from sqlglot import ErrorLevel, exp, tokenizer_core
@@ -90,17 +91,24 @@ class AdmittedQuery:
 
 
 @dataclass
+class _SavedInputSource:
+    table: exp.Table
+    columns: list[exp.Column] = field(default_factory=list)
+
+
+@dataclass
 class _Scope:
     sources: dict[str, SqlRelation]
     parent: _Scope | None = None
-    origins: dict[str, str] | None = None
+    origins: dict[str, str] = field(default_factory=dict)
+    saved_sources: dict[str, _SavedInputSource] = field(default_factory=dict)
 
     def column(self, node: exp.Column) -> SqlType:
         if node.args.get("catalog"):
             _refuse(node, "column_qualification")
         if node.args.get("db"):
             qualified = node.db + "." + node.table
-            if self.origins and self.origins.get(node.table) == qualified:
+            if self.origins.get(node.table) == qualified:
                 return self.member(node)
             if self.parent:
                 return self.parent.column(node)
@@ -129,6 +137,8 @@ class _Scope:
         """The type of a column qualified by one of this scope's own sources."""
         for column in self.sources[node.table].columns:
             if column.name == node.name:
+                if source := self.saved_sources.get(node.table):
+                    source.columns.append(node)
                 return column.type
         _refuse(node, "unknown_column", "invalid_request")
 
@@ -486,6 +496,7 @@ class _Binder:
         self.recursion = recursion
         self.used_parameters: set[int] = set()
         self.used_relations: set[str] = set()
+        self.saved_sources: list[_SavedInputSource] = []
         self.structural: set[int] = set()
         self.recursion_seen = False
         self.operators: dict[str, int | None] = {}
@@ -691,29 +702,49 @@ class _Binder:
             )
         _refuse(node, "from_source")
 
+    def record_origin(self, scope: _Scope, alias: str, source: exp.Expr) -> None:
+        if not isinstance(source, exp.Table) or not source.db or source.alias:
+            return
+        scope.origins[alias] = source.db + "." + source.name
+        if source.db == "input":
+            saved = _SavedInputSource(source)
+            scope.saved_sources[alias] = saved
+            self.saved_sources.append(saved)
+
+    def lower_saved_input_qualifiers(self, tree: exp.Expr) -> None:
+        qualified = [
+            source for source in self.saved_sources if any(col.db for col in source.columns)
+        ]
+        if not qualified:
+            return
+        used = {identifier.name for identifier in tree.find_all(exp.Identifier)}
+        candidates = (f"__memoriesql_input_ref_{i}" for i in count())
+        for source in qualified:
+            # A nested query may shadow the table name and still explicitly
+            # address this outer input. Keep both bindings with a fresh alias.
+            name = next(name for name in candidates if name not in used)
+            alias = exp.to_identifier(name, quoted=True)
+            source.table.set("alias", exp.TableAlias(this=alias))
+            for column in source.columns:
+                column.set("db", None)
+                column.set("table", alias.copy())
+
     def projection(
         self, node: exp.Select, outer: _Scope | None, ctes: dict[str, SqlRelation]
     ) -> SqlRelation:
         scope = _Scope({}, outer)
-        scope.origins = {}
         if node.args.get("from_"):
             source = node.args["from_"].this
             alias, relation = self.source(source, ctes)
             scope.sources[alias] = relation
-            if isinstance(source, exp.Table) and source.db and not source.alias:
-                scope.origins[alias] = source.db + "." + source.name
+            self.record_origin(scope, alias, source)
         for join in node.args.get("joins") or []:
             alias, relation = self.source(join.this, ctes)
             if alias in scope.sources or not scope.sources:
                 _refuse(join, "join_source", "invalid_request")
             prior = set(scope.sources)
             scope.sources[alias] = relation
-            if (
-                isinstance(join.this, exp.Table)
-                and join.this.db
-                and not join.this.alias
-            ):
-                scope.origins[alias] = join.this.db + "." + join.this.name
+            self.record_origin(scope, alias, join.this)
             if join.args.get("kind") not in (None, "INNER", "OUTER") or join.args.get(
                 "side"
             ) not in (None, "LEFT", "RIGHT", "FULL"):
@@ -1620,6 +1651,9 @@ def admit_query(
         },
         "coverage": {"explicit_depth": recursion.max_depth} if recursion else {},
     }
+    # Keep logical source names in the derivation. Execution will replace the
+    # saved table with a private CTE while retaining the resolved range alias.
+    binder.lower_saved_input_qualifiers(tree)
     values = _lower(tree, bound)
     try:
         emitted = tree.sql(

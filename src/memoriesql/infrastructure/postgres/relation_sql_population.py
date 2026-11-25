@@ -31,6 +31,7 @@ from psycopg.errors import (
 )
 
 from memoriesql.application.agent_sql_catalog import SqlCatalog, SqlRelation
+from memoriesql.application.agent_sql_results import SavedQueryRows
 from memoriesql.infrastructure.postgres.relation_projection import (
     relation_projection_frame,
 )
@@ -142,6 +143,11 @@ class PreparedRelationPopulation:
     # invalidation. None only for populations never committed as a result.
     visible_manifest_sha256: str | None = None
     visible_relation_manifest_sha256: str | None = None
+    # Saved-input execution uses only typed result rows and the original frame.
+    # Its protected canonical records remain in PostgreSQL.
+    saved_input: SavedQueryRows | None = None
+    saved_wire_frame: Mapping[str, Any] | None = None
+    saved_coverage: Mapping[str, Any] | None = None
 
 
 def _time(value: str) -> datetime:

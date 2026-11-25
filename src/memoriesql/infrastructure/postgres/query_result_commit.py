@@ -65,6 +65,7 @@ class InternalResultCandidate:
         policy_hash: str,
     ) -> InternalResultCandidate:
         witness = execution.witnesses
+        saved = population.saved_input
         if (
             execution.deadline_monotonic is None
             or time.monotonic() >= execution.deadline_monotonic
@@ -77,13 +78,18 @@ class InternalResultCandidate:
             or execution.query_metadata is None
             or execution.invocation_ref is None
             or execution.authority_profile_sha256 is None
-            or request.inputs
-            or request.parents
             or request.candidate_profile_ref
-            or request.scope.source_refs
             or datetime.fromisoformat(request.scope.known_at) != population.known_at
             or request.catalog_hash != population.catalog_hash
-            or request.intent not in {"discover", "enumerate"}
+            or (
+                saved is None
+                and (request.inputs or request.parents or request.scope.source_refs
+                     or request.intent not in {"discover", "enumerate"})
+            )
+            or (
+                saved is not None
+                and (request.inputs != (saved.binding,) or request.intent != "refine")
+            )
         ):
             raise ValueError("internal result qualification unavailable")
         expected_query = {
@@ -177,7 +183,35 @@ class InternalResultCandidate:
             },
         }
         internal: dict[str, Any] = {}
-        if population.revision == 2:
+        if saved is not None:
+            if (
+                request.scope.view != population.view
+                or population.saved_wire_frame is None
+                or population.saved_coverage is None
+            ):
+                raise ValueError("internal result qualification unavailable")
+            limited = any(s["operation"] == "limit" for s in witness_graph["stages"])
+            body["population_revision"] = 2
+            body["frame"].pop("snapshot_digest")
+            body["frame"].pop("projection_manifest_sha256")
+            body["wire_frame"] = dict(population.saved_wire_frame)
+            body["parents"] = [
+                saved.binding.result.model_dump(mode="json") | {"edge": "refine"}
+            ]
+            body["coverage"] = dict(population.saved_coverage) | {
+                "population_basis": "limited_query" if limited else "retained_subset",
+                "truncation": (
+                    "explicit_limit" if limited else population.saved_coverage["truncation"]
+                ),
+            }
+            body["order_basis"] = order_basis(
+                actual["derivation_program"]["tree"], [c.name for c in execution.columns]
+            )
+            body["total_rows"] = str(len(rows))
+            # PostgreSQL verifies the exact parent and fills the sealed
+            # dependency partition from its protected artifact at commit.
+            internal = {"witness_sha256": body.pop("witness_sha256")}
+        elif population.revision == 2:
             # Revision 2 seals the exact disclosed metadata into the digest: the
             # wire frame, coverage and order basis never change after commit.
             if request.scope.view != population.view:
@@ -228,7 +262,7 @@ class InternalResultCandidate:
                 },
                 "witness_sha256": body.pop("witness_sha256"),
             }
-        dependencies = {
+        dependencies = internal if saved else {
             # Lifecycle records have their own exact numeric encoding. Preserve
             # bytes rather than round-trip accepted values through JSON floats.
             "manifest_base64": base64.b64encode(population.dependency_manifest).decode(
@@ -258,7 +292,7 @@ class InternalResultCandidate:
             result_json_bytes(body), witness.bytes, result_json_bytes(dependencies)
         )
         content.validate()
-        if content.encoded_bytes + 8192 > request.max_result_bytes:
+        if content.encoded_bytes + 8192 + (512 if saved else 0) > request.max_result_bytes:
             raise ValueError("internal result storage exhausted")
         if time.monotonic() >= execution.deadline_monotonic:
             raise ValueError("internal result work exhausted")

@@ -20,6 +20,10 @@ FUNCTION = re.compile(
     r"(.*?)AS \$\$(.*?)\$\$;",
     re.DOTALL,
 )
+FUNCTION_RENAME = re.compile(
+    r"ALTER FUNCTION memoriesql\.([a-z0-9_]+)\([^;\n]*\)"
+    r"\s+RENAME TO ([a-z0-9_]+);"
+)
 NORMALIZED = (
     "p.sealed_receipt_id IS NOT NULL "
     "AND m.package_pin->>'inventory_sha256'=p.inventory_hash "
@@ -44,8 +48,20 @@ def latest() -> dict[str, tuple[str, str]]:
     """Each function's installed definition: its last migration and body."""
     found: dict[str, tuple[str, str]] = {}
     for path in sorted(MIGRATIONS.glob("*.sql")):
-        for name, (_, _, body) in functions(path.read_text()).items():
-            found[name] = (path.name, body)
+        source = path.read_text()
+        definitions = [
+            (match.start(), match[1], None, match[4])
+            for match in FUNCTION.finditer(source)
+        ]
+        renames = [
+            (match.start(), match[1], match[2], "")
+            for match in FUNCTION_RENAME.finditer(source)
+        ]
+        for _, name, target, body in sorted(definitions + renames):
+            if target is None:
+                found[name] = (path.name, body)
+            else:
+                found[target] = found.pop(name)
     return found
 
 
@@ -147,7 +163,7 @@ class HiddenPackageLengthMigration(unittest.TestCase):
             {
                 "query_unit_records_v1",
                 # 0046 helper frames: a {kind,id,content_sha256} pin and its read.
-                "prepare_query_inspection_v1",
+                "prepare_live_query_inspection_v1",
                 "read_query_helper_artifact_v1",
                 # The source text view: it compares the delivering result's
                 # unit_package record with the current one (both digests) and
@@ -155,6 +171,10 @@ class HiddenPackageLengthMigration(unittest.TestCase):
                 "bind_query_source_text_v1",
                 "prepare_query_source_text_v1",
             },
+        )
+        self.assertIn(
+            "memoriesql.prepare_live_query_inspection_v1(delivery,request)",
+            installed["prepare_query_inspection_v1"][1],
         )
         # The full record is only ever hashed, or gates the population's text.
         builders = {

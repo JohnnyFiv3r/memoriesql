@@ -707,6 +707,14 @@ access. New children are distinct, currently authorized and fully charged result
 After all disclosure contexts end, only independent live discovery can produce
 new accessible results; it cannot claim reuse of unavailable original bytes.
 
+The schema-64 refinement path accepts one declared input alias and its exact
+parent access context. The restricted reader receives the parent's typed
+result rows, and each saved row carries its original result ID and row ordinal
+into the child's provenance. Commit rechecks the parent and accounts for the
+child's immutable bytes and parent hold. Reopen the child through its own
+result pin and current authority. Multi-input composition, expansion, refresh,
+named saves and projection of result-scoped evidence refs remain pending.
+
 Materialize the entire admitted query or return no result. Explicit SQL LIMIT is
 part of the query and labelled limited coverage; delivery page limits never alter
 SQL. Timeout, allocation overflow or incomplete provenance yields a terminal
