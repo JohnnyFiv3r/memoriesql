@@ -1267,29 +1267,70 @@ class AutomaticCheckpointRuntime(unittest.TestCase):
     def test_restore_and_branch_pin_only_selected_roots_and_keep_working_state_authorized(
         self,
     ) -> None:
-        run, first = self.query_root()
+        # Deliver the witness root in a separate run. The authored checkpoint
+        # learns this source handle only through an exact-origin hydration.
+        origin_run = self.r.start()
+        _, witness_root = self.r.query(origin_run, STATEMENTS, page_size=50)
+        self.assertEqual(witness_root["outcome"], "available", witness_root)
+        self.r.close(origin_run)
+
+        run = self.r.start()
+        _, first = self.r.query(
+            run, "SELECT bead_id,bead_version_id FROM memory_v1.statements WHERE text=$1",
+            parameters=[{"position": 1, "type": "text", "value": self.h.TEXT}],
+        )
+        self.assertEqual(first["outcome"], "available", first)
+        first_row, = first["page"]["rows"]
+        selected_observation, = first_row["evidence_refs"]
+
+        witness_pin = self.pin(witness_root)
+        witness_ref, part, _ = self.normalized_evidence(run, witness_root, witness_root)
+        hydration = self.h.hydration(run, part)
+        hydration["selections"][0].update(
+            evidence_ref=witness_ref["ref"],
+            origin={"result": witness_pin, "access": {"kind": "standalone"}},
+        )
+        raw, hydrated = self.h.send(hydration)
+        self.h.available(raw, hydrated)
+        self.assertEqual(hydrated["hydration"]["slices"][0]["content"], self.h.TEXT[:512])
+
         scope, source = relation_agents.explicit_scope(self.db, self.fixture)
         observation = "Fictional orchard observation available only to the later root."
         self.r.normalized_bead(observation, "restore-orchard", raw=observation, source=source, scope=scope)
         _, second = self.r.query(
-            run, "SELECT text FROM memory_v1.statements WHERE text=$1",
-            parameters=[{"position": 1, "type": "text", "value": observation}],
+            run, "SELECT bead_id,bead_version_id,text FROM memory_v1.statements WHERE text=$1 OR text LIKE $2",
+            parameters=[
+                {"position": 1, "type": "text", "value": observation},
+                {"position": 2, "type": "text", "value": "Fictional wide harvest%"},
+            ],
             known_at=self.h.scalar("SELECT memoriesql.relation_packet_time(clock_timestamp())"),
+            page_size=50,
         )
         self.assertEqual(second["outcome"], "available", second)
-        self.assertEqual([r["values"] for r in second["page"]["rows"]], [[observation]])
+        self.assertIn(observation, [r["values"][2] for r in second["page"]["rows"]])
+        wide = next(row for row in second["page"]["rows"] if row["values"][0] == str(self.h.wide))
+        unselected_observation, = wide["evidence_refs"]
         first_pin, second_pin = self.pin(first), self.pin(second)
+        self.assertTrue(self.h.scalar(
+            "SELECT EXISTS(SELECT 1 FROM memoriesql.result_preparation_artifacts a"
+            " CROSS JOIN LATERAL jsonb_array_elements(convert_from(decode("
+            " (convert_from(a.dependency_bytes,'UTF8')::jsonb)->>'records_base64','base64'),'UTF8')::jsonb) r(record)"
+            " WHERE a.artifact_ref=%s AND record->>'kind'='accepted_bead' AND record->>'id'=%s)",
+            (first_pin["result_id"], unselected_observation["version_ref"]),
+        ))
         append = self.append(run, first)
-        append["roots"].append({"result": second_pin, "access": {"kind": "standalone"}})
+        append["roots"].extend([
+            {"result": witness_pin, "access": {"kind": "standalone"}},
+            {"result": second_pin, "access": {"kind": "standalone"}},
+        ])
         append["findings"] = [
-            {"text": label, "facts": [
-                {"result_id": pin["result_id"], "row_ref": "1"} for pin in pins
-            ], "evidence_refs": []}
-            for label, pins in (
-                ("selected finding", (first_pin,)),
-                ("unselected finding", (second_pin,)),
-                ("mixed finding", (first_pin, second_pin)),
-            )
+            {"text": "selected delivered fact", "facts": [first_row["fact_ref"]], "evidence_refs": []},
+            {"text": "selected delivered evidence", "facts": [], "evidence_refs": [selected_observation]},
+            {"text": "selected exact-origin witness", "facts": [], "evidence_refs": [witness_ref]},
+            {"text": "unselected fact", "facts": [wide["fact_ref"]], "evidence_refs": []},
+            {"text": "unselected searched evidence", "facts": [], "evidence_refs": [unselected_observation]},
+            {"text": "mixed finding", "facts": [first_row["fact_ref"]], "evidence_refs": [unselected_observation]},
+            {"text": "unattributed narrative", "facts": [], "evidence_refs": []},
         ]
         original = self.r.send(append)
         self.assert_checkpoint(original)
@@ -1298,7 +1339,7 @@ class AutomaticCheckpointRuntime(unittest.TestCase):
         migrate(self.db, expected_current_version=51, target_version=67)
         fresh = self.r.start()
         restored_request = self.read(fresh, original_pin) | {
-            "kind": "restore_checkpoint", "selected_roots": [first_pin],
+            "kind": "restore_checkpoint", "selected_roots": [first_pin, witness_pin],
         }
         # Arm the original automatic route after admission. The shared
         # fixture marker proves expiry crossed inside the settlement statement
@@ -1326,6 +1367,34 @@ class AutomaticCheckpointRuntime(unittest.TestCase):
             (original["checkpoint"]["created_at"], original["checkpoint"]["automatic_expires_at"], original_id),
         )
 
+        # The later root's source lease expires at the receipt while both
+        # selected roots and the source checkpoint's automatic slot stay live.
+        scope_cutoff = sql.SQL("""(SELECT v.expires_at FROM memoriesql.access_grants g
+            JOIN memoriesql.access_grant_revisions v USING(tenant_id,workspace_id,access_scope_id,grant_id)
+            WHERE g.tenant_id={}::uuid AND g.access_scope_id={}::uuid AND g.target_principal_id={}::uuid
+            ORDER BY v.revision DESC LIMIT 1)""").format(
+            sql.Literal(self.fixture.tenant), sql.Literal(scope), sql.Literal(self.fixture.principal),
+        )
+        def arm_unselected_scope() -> None:
+            self.r.set_refinement_scope_lease(scope, 1, timedelta(seconds=3))
+
+        self.assert_checkpoint_refusal_at_disclosure(
+            restored_request | {"step_key": str(uuid4())}, arm_unselected_scope, scope_cutoff,
+            lambda checked_at: sql.SQL("memoriesql.current_context_scope_time_authorized({}::uuid,'read',{})").format(
+                sql.Literal(scope), checked_at,
+            ),
+        )
+        self.assertEqual(self.h.scalar("SELECT count(*) FROM memoriesql.query_investigation_branches"), 1)
+        self.assertEqual(self.h.scalar("SELECT count(*) FROM memoriesql.result_preparation_parent_holds"), 0)
+        self.assertTrue(self.h.scalar(
+            "SELECT automatic_retained AND expires_at>clock_timestamp() FROM memoriesql.query_checkpoints "
+            "WHERE checkpoint_id=%s", (original_id,),
+        ))
+        self.assertEqual(self.r.reuse(fresh, first["result"], page_size=1)["outcome"], "available")
+        self.assertEqual(self.r.reuse(fresh, witness_root["result"], page_size=1)["outcome"], "available")
+        self.assertEqual(self.r.reuse(fresh, second["result"], page_size=1)["outcome"], "unavailable")
+        self.r.set_refinement_scope_lease(scope, 2, timedelta(hours=1))
+
         visible = self.h.scalar("SELECT count(*) FROM memoriesql.query_visible_refs")
         restored = self.r.send(restored_request)
         self.assert_checkpoint(restored)
@@ -1341,10 +1410,10 @@ class AutomaticCheckpointRuntime(unittest.TestCase):
         self.assertEqual((manifest["fork_origin"], manifest["working_state_source"]), (original_pin, original_pin))
         for field in ("question", "progress"):
             self.assertEqual(manifest[field], original["checkpoint"][field])
-        self.assertEqual(manifest["findings"], append["findings"][:1])
-        self.assertEqual(manifest["roots"], original["checkpoint"]["roots"][:1])
+        self.assertEqual(manifest["findings"], append["findings"][:3])
+        self.assertEqual(manifest["roots"], original["checkpoint"]["roots"][:2])
         context = {"kind": "checkpoint", **head, "basis": {"kind": "automatic"}, "root": first_pin}
-        self.assertEqual(restored["root_contexts"], [context])
+        self.assertEqual(restored["root_contexts"], [context, context | {"root": witness_pin}])
         cp_id = head["checkpoint_id"]
         op = self.db.execute(
             "SELECT o.encoded_bytes,o.allocation_bytes,o.new_allocation_bytes,"
@@ -1356,8 +1425,8 @@ class AutomaticCheckpointRuntime(unittest.TestCase):
         self.assertIsNotNone(op)
         assert op is not None
         encoded, charged, new_charge, holds, parent = op
-        self.assertEqual((charged, new_charge, holds, parent),
-                         (encoded + 8192 + 512 + 32768 + 1024, encoded + 8192 + 512 + 32768 + 1024, 1, original_id))
+        expected_charge = encoded + 8192 + 512 + 32768 + 2 * 1024
+        self.assertEqual((charged, new_charge, holds, parent), (expected_charge, expected_charge, 2, original_id))
 
         reuse = self.read(fresh, head) | {
             "kind": "reuse_result", "result": first_pin, "access": context, "page_size": 1,

@@ -330,43 +330,59 @@ BEGIN
 END $$;
 REVOKE ALL ON FUNCTION memoriesql.purge_checkpoint_step_v1() FROM PUBLIC;
 
--- The source checkpoint already proved original delivery. For a subset keep a
--- finding only when each reference survives in the selected roots or their
--- verified records. A source handle needs its exact selected result binding.
-CREATE FUNCTION memoriesql.checkpoint_selected_findings_v1(t uuid,findings jsonb,roots jsonb) RETURNS jsonb
-LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog,memoriesql SET row_security=off AS $$
- WITH selected AS MATERIALIZED (
-  SELECT convert_from(a.dependency_bytes,'UTF8')::jsonb AS deps
-  FROM jsonb_array_elements(roots) r(pin)
-  JOIN memoriesql.result_preparation_artifacts a ON a.tenant_id=t AND a.artifact_ref=(pin#>>'{result,result_id}')::uuid
- ), records AS MATERIALIZED (
-  SELECT v FROM selected s CROSS JOIN LATERAL jsonb_array_elements(
-   convert_from(decode(s.deps->>'records_base64','base64'),'UTF8')::jsonb) x(v)
- )
- SELECT CASE WHEN jsonb_array_length(roots)=0 THEN '[]'::jsonb ELSE COALESCE((
-  SELECT jsonb_agg(f ORDER BY sequence) FROM jsonb_array_elements(findings) WITH ORDINALITY cell(f,sequence)
-  WHERE NOT EXISTS(
-   SELECT 1 FROM (
+-- A subset can copy a finding only when every reference was positively
+-- attributed to a selected result before the finding's original checkpoint
+-- was authored. Read the existing delivery receipts without extending their
+-- retention. A helper receipt alone is insufficient: its sealed request must
+-- bind that individual evidence handle to the exact selected result pin.
+CREATE FUNCTION memoriesql.checkpoint_selected_findings_v1(t uuid,checkpoint uuid,findings jsonb,roots jsonb)
+RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog,memoriesql SET row_security=off AS $$
+ WITH authored AS (
+  SELECT op.run_ref,cp.created_at
+  FROM memoriesql.checkpoint_working_chain_v1(t,checkpoint) chain
+  JOIN memoriesql.query_checkpoints cp ON cp.tenant_id=t AND cp.checkpoint_id=chain.checkpoint_id
+  JOIN memoriesql.result_preparation_operations op USING(tenant_id,operation_ref)
+  ORDER BY cp.investigation_sequence LIMIT 1
+ ), selected AS (
+  SELECT pin->'result' AS result FROM jsonb_array_elements(roots) r(pin)
+ ), receipts AS MATERIALIZED (
+  SELECT r.result_id,r.content_digest,r.delivered_refs,d.run_ref,d.step_key
+  FROM authored a JOIN memoriesql.query_deliveries d ON d.tenant_id=t AND d.run_ref=a.run_ref
+  JOIN memoriesql.query_disclosures r USING(tenant_id,delivery_ref)
+  WHERE d.state='settled' AND d.outcome='available' AND d.settled_at<=a.created_at
+ ), helpers AS (
+  SELECT r.delivered_refs,convert_from(h.witness_bytes,'UTF8')::jsonb->'request' AS request
+  FROM receipts r JOIN memoriesql.query_steps s ON s.tenant_id=t AND s.run_ref=r.run_ref AND s.step_key=r.step_key
+  JOIN memoriesql.result_preparation_artifacts h ON h.tenant_id=s.tenant_id AND h.artifact_ref=s.helper_artifact_ref
+  WHERE r.result_id IS NULL AND s.content_digest=r.content_digest AND s.kind IN ('read_source_text','hydrate_source')
+ ), anchors AS MATERIALIZED (
+  SELECT f,sequence,ARRAY(
+   SELECT memoriesql.lifecycle_canonical_json_v1(ref)
+   FROM (
     SELECT ref FROM jsonb_array_elements(f->'evidence_refs') refs(ref)
     UNION ALL SELECT jsonb_build_object('kind','result_fact','fact',fact)
      FROM jsonb_array_elements(f->'facts') facts(fact)
-   ) anchors
-   WHERE CASE ref->>'kind'
-    -- The original receipt proved the row ordinal. Sealed root IDs cannot
-    -- change their contents; the caller already matched each pin and digest.
-    WHEN 'result_fact' THEN NOT EXISTS(SELECT 1 FROM jsonb_array_elements(roots) r(pin)
-     WHERE pin#>>'{result,result_id}'=ref#>>'{fact,result_id}')
-    WHEN 'observation' THEN NOT EXISTS(SELECT 1 FROM records
-     WHERE v->>'kind'='accepted_bead' AND v->>'id'=ref->>'version_ref' AND v#>>'{row,bead_id}'=ref->>'ref')
-    WHEN 'statement' THEN NOT EXISTS(SELECT 1 FROM records
-     WHERE v->>'kind'='statement' AND v->>'id'=ref->>'ref' AND v#>>'{row,bead_version_id}'=ref->>'version_ref')
-    WHEN 'source' THEN NOT EXISTS(SELECT 1 FROM selected s
-     CROSS JOIN LATERAL (SELECT s.deps->'evidence_bindings'->(ref->>'ref') AS pin) exact
-     WHERE exact.pin->>'source_unit_id'=ref->>'unit_ref' AND exact.pin->>'content_sha256'=ref->>'content_sha256')
-    ELSE true END)
- ),'[]'::jsonb) END
+   ) refs
+  ) AS keys
+  FROM jsonb_array_elements(findings) WITH ORDINALITY cell(f,sequence)
+ ), attributed AS MATERIALIZED (
+  SELECT ref FROM receipts r JOIN selected x ON r.result_id=(x.result->>'result_id')::uuid
+   AND r.content_digest=x.result->>'content_digest'
+  CROSS JOIN LATERAL jsonb_array_elements_text(r.delivered_refs) refs(ref)
+  UNION
+  SELECT ref FROM helpers h CROSS JOIN LATERAL jsonb_array_elements_text(h.delivered_refs) refs(ref)
+  JOIN selected x ON ref::jsonb->>'kind'='source' AND (
+   EXISTS(SELECT 1 FROM jsonb_array_elements(h.request->'entries') e(entry)
+    WHERE entry->'source'=ref::jsonb AND entry#>'{origin,result}'=x.result)
+   OR EXISTS(SELECT 1 FROM jsonb_array_elements(h.request->'selections') e(selection)
+    WHERE selection->>'evidence_ref'=ref::jsonb->>'ref' AND selection#>'{origin,result}'=x.result))
+ )
+ SELECT COALESCE(jsonb_agg(f ORDER BY sequence),'[]'::jsonb)
+ FROM anchors a WHERE cardinality(a.keys)>0 AND NOT EXISTS(
+  SELECT 1 FROM unnest(a.keys) k(key) WHERE NOT EXISTS(SELECT 1 FROM attributed WHERE ref=k.key)
+ )
 $$;
-REVOKE ALL ON FUNCTION memoriesql.checkpoint_selected_findings_v1(uuid,jsonb,jsonb) FROM PUBLIC;
+REVOKE ALL ON FUNCTION memoriesql.checkpoint_selected_findings_v1(uuid,uuid,jsonb,jsonb) FROM PUBLIC;
 
 CREATE FUNCTION memoriesql.prepare_restore_checkpoint_v1(delivery uuid,request jsonb) RETURNS jsonb
 LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,memoriesql
@@ -409,9 +425,10 @@ BEGIN
    RAISE EXCEPTION 'idempotency_conflict' USING ERRCODE='23505'; END IF;
   RETURN jsonb_build_object('pending',s.checkpoint_pending->'manifest');
  END IF;
- findings:=CASE WHEN jsonb_array_length(roots)>0 AND jsonb_array_length(roots)=jsonb_array_length(source_manifest->'roots')
-  THEN source_manifest->'findings'
-  ELSE memoriesql.checkpoint_selected_findings_v1(c.tenant_id,source_manifest->'findings',roots) END;
+ findings:=CASE WHEN jsonb_array_length(roots)=0 THEN '[]'::jsonb
+  WHEN jsonb_array_length(roots)=jsonb_array_length(source_manifest->'roots') THEN source_manifest->'findings'
+  ELSE memoriesql.checkpoint_selected_findings_v1(c.tenant_id,
+   (source_pin->>'checkpoint_id')::uuid,source_manifest->'findings',roots) END;
 
  WITH RECURSIVE closure(artifact_ref) AS (
   SELECT (value#>>'{result,result_id}')::uuid FROM jsonb_array_elements(roots)
